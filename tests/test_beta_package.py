@@ -13,7 +13,8 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_beta_entry_documents_and_their_local_links_ship_together():
     payload = collect_payload(ROOT)
     entry_points = ["README.md", "README_HE.md", "docs/BETA_STATUS.md",
-                    "docs/BETA_FEEDBACK.md", "docs/MODELS.md", "docs/INDEPENDENT_TRACKS.md"]
+                    "docs/BETA_FEEDBACK.md", "docs/MODELS.md", "docs/INDEPENDENT_TRACKS.md",
+                    "docs/CONTRIBUTING.md"]
     for name in entry_points:
         content = payload[name].decode("utf-8")
         assert len(content) > 200
@@ -24,7 +25,12 @@ def test_beta_entry_documents_and_their_local_links_ship_together():
             local = posixpath.normpath(posixpath.join(posixpath.dirname(name), unquote(target.path)))
             assert local in payload, (name, local)
     assert "MIT" in payload["README.md"].decode()
-    assert "Codex" in payload["START_TESTING.txt"].decode()
+    assert "run_windows.bat" in payload["START_TESTING.txt"].decode()
+    assert "README.md" in payload["START_TESTING.txt"].decode()
+    for name in ("README.md", "README_HE.md", "START_HERE_HE.txt", "START_TESTING.txt"):
+        text = payload[name].decode("utf-8").lower()
+        for infrastructure_detail in ("127.0.0.1", "localhost", "nvidia", "cuda", "ollama", "ctranslate2"):
+            assert infrastructure_detail not in text, (name, infrastructure_detail)
 
 
 def test_beta_payload_contains_all_local_frontend_modules_and_assets():

@@ -29,35 +29,32 @@ DOC_FILES = (
     "docs/CREATOR_EDITING_RESEARCH.md", "docs/TEST_ON_ANOTHER_PC.md",
     "docs/TRANSCRIPT_EVALUATION.md", "docs/QUALITY_AND_LIMITS.md", "docs/UIUX_SKILL_CSS.md",
     "docs/INDEPENDENT_TRACKS.md", "docs/BETA_FEEDBACK.md", "docs/BETA_STATUS.md", "docs/MODELS.md",
+    "docs/CONTRIBUTING.md",
 )
-START_TEXT = """CUTROOM - PRIVATE WINDOWS BETA TEST BUILD
+START_TEXT = """CUTROOM
+Your footage. Your edit.
 
-Free and open source (MIT). No subscription, paid API key or CUTROOM watermark.
-Source included. Third-party tools and models have separate licenses.
+Free and open source (MIT). No subscription. No CUTROOM watermark.
 
-1. Extract the entire ZIP first (do not run inside the ZIP).
-2. Open the extracted CUTROOM folder and double-click run_windows.bat.
-3. Allow the one-time setup to finish; keep its terminal open while using CUTROOM.
-4. The browser opens automatically. Default address: http://127.0.0.1:8765
+GET STARTED
+1. Extract the entire ZIP into a folder.
+2. Open it and double-click run_windows.bat.
+3. Follow the setup prompts. CUTROOM opens in your browser when ready.
 
-Codex is NOT needed. Use the same launcher for future sessions.
-First setup needs internet. It installs/reuses Python, Python packages, FFmpeg
-and attempts to install Ollama. Missing FFmpeg requires working winget or a
-separate installation. External installers may need administrator approval.
-AI models are NOT bundled. Speech models download on first use; a missing Story
-model is a separate confirmed download in the app and can require several GB.
-Offline use needs the required software/models downloaded on that PC first.
+First setup needs internet. Some AI features need an additional download
+before first use. Keep the launch window open while editing, and use
+the same launcher next time.
 
-Read docs/TEST_ON_ANOTHER_PC.md for prerequisites, the test checklist and a
-bug-report template. Start with short clips, Lite, 720p and Fast export.
-Read README.md for editing; docs/BETA_FEEDBACK.md for private feedback.
-docs/BETA_STATUS.md explains verified checks and unverified quality/PC support.
+Start with a short recording you know well. This is a closed beta:
+review the draft and exported video before sharing.
 
-This is an experimental source package, not a signed standalone EXE or a
-release-readiness guarantee. Clean-machine installation has not been verified.
-No original media, projects, logs, installed runtimes or personal config included.
-New projects/cache/exports are stored in this extracted folder's data directory.
-The server binds only to this PC's loopback address. Do not expose it to the web.
+Your guide: README.md
+Setup help: docs/TEST_ON_ANOTHER_PC.md
+Feedback: docs/BETA_FEEDBACK.md
+
+What saved you time? What got in your way?
+Send feedback privately to whoever shared CUTROOM with you.
+Please leave out private client footage and personal information.
 """
 
 
