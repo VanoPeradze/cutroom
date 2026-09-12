@@ -1,0 +1,62 @@
+{
+  "host": "127.0.0.1",
+  "port": 8765,
+  "open_browser": true,
+  "data_dir": "data",
+  "max_upload_gb": 40,
+  "job_workers": 1,
+  "max_pending_jobs": 8,
+  "job_retention_seconds": 86400,
+  "ffmpeg_threads": 4,
+  "proxy_height": 720,
+  "proxy_crf": 27,
+  "ai": {
+    "enabled": true,
+    "ollama_url": "http://127.0.0.1:11434",
+    "editor_model": "qwen3.5:4b",
+    "editor_fallback_models": [
+      "qwen3.5:9b",
+      "qwen3:8b"
+    ],
+    "whisper_model": "base",
+    "whisper_device": "auto",
+    "whisper_compute_type": "auto",
+    "whisper_isolate_process": true,
+    "whisper_worker_stall_seconds": 120,
+    "whisper_worker_model_load_timeout_seconds": 900,
+    "whisper_cpu_lite_threshold_seconds": 600,
+    "whisper_cuda_min_free_mb": {
+      "lite": 2048,
+      "balanced": 4096,
+      "quality": 6144
+    },
+    "download_models_on_setup": false,
+    "max_llm_segments": 180,
+    "whisper_models": {
+      "lite": "base",
+      "balanced": "small",
+      "quality": "turbo"
+    },
+    "performance_mode": "auto",
+    "hebrew_whisper_model": "ivrit-ai/whisper-large-v3-turbo-ct2",
+    "hebrew_auto_gpu_max_seconds": 3600,
+    "max_story_beats": 72,
+    "editor_quality_model": "qwen3.5:9b",
+    "editor_lite_model": "qwen3.5:2b"
+  },
+  "render": {
+    "default_quality": "balanced",
+    "prefer_hardware": true,
+    "default_resolution": "1080",
+    "audio_bitrate": "192k"
+  },
+  "background_workers": 1,
+  "audio_analysis_sample_rate": 8000,
+  "audio_analysis_window_seconds": 0.2,
+  "scene_analysis_fps": 1.5,
+  "vision_samples": {
+    "lite": 12,
+    "balanced": 20,
+    "quality": 32
+  }
+}

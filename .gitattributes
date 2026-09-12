@@ -1,0 +1,6 @@
+# Keep portable shell scripts LF, and preserve Windows installer bytes even
+# in Git archives. The bootstrap validator requires ASCII + CRLF for these.
+* text=auto
+*.sh text eol=lf
+*.bat -text
+*.ps1 -text

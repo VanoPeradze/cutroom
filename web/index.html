@@ -1,0 +1,679 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#081013">
+  <meta name="color-scheme" content="dark">
+  <title>CUTROOM AI Director</title>
+  <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/assets/styles.css?v=561-ui-refresh-78">
+  <link rel="stylesheet" href="/assets/workspace.css?v=561-ui-refresh-75">
+</head>
+<body class="welcome-mode">
+  <a class="skip-link" href="#main" data-i18n="skip">Skip to content</a>
+  <header class="topbar">
+      <button class="brand" id="homeButton" aria-label="CUTROOM AI home">
+        <span class="brand-mark" aria-hidden="true"><i></i><i></i></span>
+        <span><strong>CUTROOM</strong><small>AI VIDEO STUDIO</small></span>
+    </button>
+    <div class="project-head" id="projectHead" hidden>
+      <input id="projectName" dir="auto" class="project-name" value="" maxlength="120" aria-label="Project name">
+      <span class="save-state" id="saveState" role="status" aria-live="polite" aria-atomic="true" data-i18n="saved">Saved</span>
+    </div>
+    <nav class="top-actions" aria-label="Primary actions">
+      <button class="button ghost compact" id="projectsButton" data-i18n="projects">Projects</button>
+      <span class="local-status"><i aria-hidden="true"></i><span data-i18n="localMode">Runs locally</span></span>
+      <button class="button ghost compact" id="advancedButton" aria-expanded="false" data-i18n="studio">Studio</button>
+      <button class="button render compact" id="renderButton" disabled>
+        <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 15V3m-4 4 4-4 4 4M5 14v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5"/></svg><span data-i18n="render">Export</span>
+      </button>
+    </nav>
+  </header>
+
+  <aside class="active-job-bar" id="activeJobBar" hidden aria-live="polite" aria-atomic="true">
+    <span class="active-job-pulse" aria-hidden="true"></span>
+    <div class="active-job-copy">
+      <strong id="activeJobLabel" data-i18n="activeDirector">Director is working</strong>
+      <small id="activeJobDetail" data-i18n="directorPreparing">Preparing your edit</small>
+    </div>
+    <button class="button danger compact" id="globalCancelJobButton" type="button" data-i18n="stopProcess">Stop process</button>
+  </aside>
+
+  <main id="main">
+    <section class="welcome-shell" id="welcomeView">
+      <div class="welcome-copy">
+        <div class="welcome-kicker">
+          <p class="eyebrow" data-i18n="welcomeBadge">LOCAL AI VIDEO EDITOR</p>
+          <span>v5.6.1</span>
+        </div>
+        <h1 data-i18n="welcomeTitle">What will you create today?</h1>
+        <p class="welcome-lead" data-i18n="welcomeLead">Start with your footage. Let Director build a first cut, then make it yours in the editor.</p>
+        <div class="welcome-actions">
+          <button class="button primary large" id="newProjectButton">
+            <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 5v14M5 12h14"/></svg>
+            <span data-i18n="newProject">Create project</span>
+            <span class="new-project-arrow" aria-hidden="true">↗</span>
+          </button>
+          <span class="welcome-privacy"><i aria-hidden="true"></i><span data-i18n="privateWorkspace">Your footage stays on this computer</span></span>
+        </div>
+        <ul class="welcome-benefits">
+          <li><i aria-hidden="true">✓</i><span data-i18n="trustOpen">Free & open source</span></li>
+          <li><i aria-hidden="true">✓</i><span data-i18n="trustLocal">Local-first processing</span></li>
+          <li><i aria-hidden="true">✓</i><span data-i18n="trustFormats">Reels & YouTube</span></li>
+        </ul>
+        <ol class="welcome-workflow" aria-label="Your editing workflow">
+          <li><b aria-hidden="true">01</b><div><strong>Bring your footage</strong><p>A recording, or a screen and camera together.</p></div></li>
+          <li><b aria-hidden="true">02</b><div><strong>Shape your edit</strong><p>Choose a direction, then refine every cut.</p></div></li>
+          <li><b aria-hidden="true">03</b><div><strong>Make it ready</strong><p>Set your format, captions and frame rate.</p></div></li>
+        </ol>
+      </div>
+      <div class="welcome-film" aria-hidden="true">
+        <div class="studio-demo">
+          <div class="studio-demo-bar">
+            <span class="window-controls"><i></i><i></i><i></i></span>
+            <span class="demo-project">creator_session_01</span>
+            <span class="demo-online"><i></i>AI READY</span>
+          </div>
+          <div class="studio-demo-main">
+            <div class="demo-preview">
+              <div class="demo-preview-head"><span>PREVIEW</span><b>9:16 AUTO</b></div>
+              <div class="demo-frame">
+                <span class="demo-frame-glow"></span>
+                <span class="demo-focus-box"><i></i><i></i><i></i><i></i></span>
+                <span class="demo-caption">THE STRONGEST MOMENT</span>
+              </div>
+              <div class="demo-player"><b>▶</b><span>00:42</span><i></i><span>01:00</span></div>
+            </div>
+            <div class="demo-director">
+              <span class="demo-label">AI DIRECTOR</span>
+              <strong>First cut ready</strong>
+              <small>Storyline · Pace · Framing</small>
+              <div class="demo-workflow"><b>01</b><span>Your footage<small>One or two sources</small></span></div>
+              <div class="demo-workflow"><b>02</b><span>Your direction<small>Choose a style</small></span></div>
+              <div class="demo-workflow"><b>03</b><span>Your final say<small>Every cut is editable</small></span></div>
+              <div class="demo-ready"><i></i><span>Ready to refine</span></div>
+            </div>
+          </div>
+          <div class="demo-timeline">
+            <div class="demo-timeline-head"><span>TIMELINE</span><b>01:00</b></div>
+            <div class="demo-ruler"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+            <div class="demo-track video-track"><span>V1</span><b></b><b></b><b></b><b></b></div>
+            <div class="demo-track audio-track"><span>A1</span><b></b><b></b><b></b></div>
+            <div class="demo-playhead"><i></i></div>
+          </div>
+        </div>
+        <div class="draft-ready-card"><i>✓</i><span><small>YOUR CREATIVE SPACE</small><strong>Make it yours</strong></span><b>100% local</b></div>
+      </div>
+      <div class="recent-strip" id="recentProjects" hidden>
+        <div class="section-label"><span data-i18n="recent">Recent projects</span><b id="recentCount">0</b></div>
+        <div class="recent-list" id="recentList"></div>
+      </div>
+    </section>
+
+    <section class="workspace" id="workspaceView" hidden>
+      <ol class="director-steps" aria-label="Workflow">
+        <li class="active" data-step="1"><b>01</b><span data-i18n="stepFootage">Preparation</span></li>
+        <li data-step="2"><b>02</b><span data-i18n="stepBrief">Director</span></li>
+        <li data-step="3"><b>03</b><span data-i18n="stepDraft">Draft</span></li>
+      </ol>
+
+      <section class="director-panel" id="setupPanel">
+        <div class="panel-heading">
+          <div><p class="eyebrow" data-i18n="director">AI Director</p><h2 data-i18n="setupTitle">What are we editing today?</h2></div>
+          <p data-i18n="setupHelp">Add one or two sources. With two, choose the screen, camera and audio before Director starts.</p>
+        </div>
+        <div id="setupRuntimeDock" class="runtime-status-dock">
+          <div class="model-status partial" id="modelStatus" role="status" aria-live="polite">
+            <span class="status-light" aria-hidden="true"></span>
+            <div><b>Checking local AI…</b><small>Story AI downloads need your confirmation.</small></div>
+            <button class="button ghost compact" id="retryAIButton" type="button">Retry AI</button>
+            <button class="button ghost compact" id="modelButton" type="button" hidden>Download model…</button>
+          </div>
+        </div>
+
+        <div class="source-bay">
+          <article class="source-slot primary-source" id="sourceSlotA" data-slot="A" role="button" tabindex="0" aria-describedby="sourceSlotAHelp">
+            <input type="file" id="sourceInputA" accept="video/*,.mkv,.m4v,.mts,.m2ts" hidden>
+            <div class="source-index">A</div>
+            <div class="source-empty">
+              <span class="source-icon" aria-hidden="true">＋</span>
+              <strong data-i18n="addMain">Add main recording</strong>
+              <small id="sourceSlotAHelp" data-i18n="dropVideo">Click or drop a video</small>
+              <small class="source-limit" data-upload-limit>Up to 40 GB per video</small>
+            </div>
+            <div class="source-loaded" hidden>
+              <video muted playsinline preload="metadata"></video>
+              <div class="source-meta"><strong></strong><small></small></div>
+              <button class="icon-button remove-source" type="button" aria-label="Remove">×</button>
+            </div>
+            <div class="source-upload" hidden role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span></span><b>0%</b><button id="cancelUploadA" class="source-upload-cancel" type="button" data-i18n="stopProcess">Stop process</button></div>
+          </article>
+
+          <div class="source-link" aria-hidden="true"><span></span><b data-i18n="autoSync">Automatic sync</b><span></span></div>
+
+          <article class="source-slot" id="sourceSlotB" data-slot="B" role="button" tabindex="0" aria-describedby="sourceSlotBHelp">
+            <input type="file" id="sourceInputB" accept="video/*,.mkv,.m4v,.mts,.m2ts" hidden>
+            <div class="source-index">B</div>
+            <div class="source-empty">
+              <span class="source-icon" aria-hidden="true">＋</span>
+              <strong data-i18n="addSecond">Add second recording</strong>
+              <small id="sourceSlotBHelp" data-i18n="optionalCamera">Optional — camera, screen or second angle</small>
+              <small class="source-limit" data-upload-limit>Up to 40 GB per video</small>
+            </div>
+            <div class="source-loaded" hidden>
+              <video muted playsinline preload="metadata"></video>
+              <div class="source-meta"><strong></strong><small></small></div>
+              <button class="icon-button remove-source" type="button" aria-label="Remove">×</button>
+            </div>
+            <div class="source-upload" hidden role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span></span><b>0%</b><button id="cancelUploadB" class="source-upload-cancel" type="button" data-i18n="stopProcess">Stop process</button></div>
+          </article>
+        </div>
+
+        <div class="setup-source-mixer-dock" id="setupSourceMixerDock" hidden></div>
+
+
+
+          <fieldset class="brief-group goal-group setup-goal-group">
+            <legend data-i18n="resultType">What is the result?</legend>
+            <div class="choice-grid outcome-grid" id="goalChoices">
+              <button class="choice outcome-primary active" data-value="short"><span class="format-glyph portrait"></span><span class="choice-copy"><strong data-i18n="short">Short / Reel</strong><small data-i18n="shortPromise">Coherent story · 9:16 · automatic framing</small></span><b>9:16</b></button>
+              <button class="choice outcome-primary" data-value="youtube"><span class="format-glyph landscape"></span><span class="choice-copy"><strong>YouTube</strong><small data-i18n="youtubePromise">Preserves structure · removes long dead air</small></span><b>16:9</b></button>
+              <button class="choice outcome-secondary" data-value="podcast"><span class="format-glyph split"></span><span class="choice-copy"><strong data-i18n="podcastClip">Conversation clip</strong><small data-i18n="speakerFocus">Speaker focus</small></span></button>
+              <button class="choice outcome-secondary" data-value="clean"><span class="format-glyph source"></span><span class="choice-copy"><strong data-i18n="cleanCut">Full clean-up</strong><small data-i18n="keepOriginal">Preserve structure</small></span></button>
+            </div>
+            <div class="goal-explainer" id="goalExplainer"><span class="goal-spark">✦</span><div><strong id="goalExplainerTitle" data-i18n="shortModeTitle">CUTROOM builds the Short for you</strong><p id="goalExplainerText" data-i18n="shortModeText">Director chooses the strongest moments, preserves context and frames automatically. Screen + camera is used only after you confirm it.</p></div></div>
+          </fieldset>
+
+        <fieldset class="edit-style-section">
+          <legend data-i18n="editStyleTitle">Choose an edit style</legend>
+          <p data-i18n="editStyleHelp">Choose the editing rhythm. Your goal, output format and target length stay under your control.</p>
+          <div class="edit-style-grid" id="editStyleChoices" role="radiogroup" aria-label="Edit style">
+            <button class="edit-style-card active" type="button" data-value="smart" role="radio" aria-checked="true" tabindex="0">
+              <span><strong>CUTROOM Smart</strong><small>Balanced automatic edit</small></span><b>Recommended</b>
+            </button>
+          </div>
+          <small class="edit-style-note" id="editStyleNote" data-i18n="editStyleEvidence">Each style changes moment selection, pacing and duration. Screen + camera is never enabled without explicit confirmation.</small>
+        </fieldset>
+
+        <div class="brief-grid">
+
+
+          <fieldset class="brief-group duration-group" id="durationGroup">
+            <legend data-i18n="targetLength">Target length</legend>
+            <div class="duration-control">
+              <input id="targetDuration" type="range" min="15" max="180" step="5" value="60">
+              <output id="durationOutput">60s</output>
+            </div>
+            <div class="quick-values">
+              <button data-seconds="30">30s</button><button class="active" data-seconds="60">60s</button><button data-seconds="90">90s</button><button data-seconds="180">3m</button>
+            </div>
+          </fieldset>
+
+          <label class="brief-group instruction-group">
+            <span data-i18n="directionNote">Director instruction <small>Optional</small></span>
+            <textarea id="directorInstruction" dir="auto" rows="3" data-i18n-placeholder="instructionPlaceholder" placeholder="Example: keep the pricing explanation and open with the result."></textarea>
+          </label>
+
+          <label class="brief-group burn-caption-choice">
+            <span class="caption-choice-copy"><b data-i18n="burnCaptions">Burn captions into video</b><small data-i18n="burnCaptionsHelp">CUTROOM retimes the transcript after cuts and renders it directly into the MP4.</small></span>
+            <input id="burnCaptionsToggle" type="checkbox" checked>
+          </label>
+        </div>
+
+        <details class="audio-calibration setup-audio-disclosure" id="audioCalibration" hidden>
+          <summary><span><strong>Fine-tune silence detection</strong><small>Optional · automatic settings are already applied</small></span></summary>
+          <div class="audio-calibration-head">
+            <div><p class="eyebrow" data-i18n="audioCutSetup">Audio cut line</p><h3 data-i18n="audioCutTitle">Choose what counts as silence before Director starts</h3><p data-i18n="audioCutHelp">This is the real level map from your selected audio source. Audio below the yellow line is only a silence candidate when it stays there long enough.</p></div>
+            <div class="audio-profile-chip"><span data-i18n="recommended">Recommended</span><strong id="recommendedThreshold">—</strong><button class="button ghost compact" id="useRecommendedThreshold" data-i18n="useRecommended">Use recommended</button></div>
+          </div>
+          <div class="audio-meter-shell">
+            <canvas id="audioMeterCanvas" height="174" aria-label="Audio dB waveform"></canvas>
+            <div class="audio-meter-legend"><span class="active-audio"><i></i><b data-i18n="activeAudio">Speech / active audio</b></span><span class="quiet-audio"><i></i><b data-i18n="belowThreshold">Below threshold — cut candidate</b></span><span class="threshold-audio"><i></i><b data-i18n="thresholdLine">Cut line</b></span><small class="audio-meter-hint" data-i18n="audioGraphClick">Click the graph to audition that moment. Detected speech is protected from automatic silence cuts.</small></div>
+          </div>
+          <div class="audio-calibration-controls">
+            <label class="threshold-control"><span><b data-i18n="silenceBelow">Silence below</b><small data-i18n="silenceBelowHelp">Move the line until only regions you genuinely want shortened remain below it.</small></span><div><input id="silenceThreshold" type="range" min="-60" max="-20" step="1" value="-42"><output id="silenceThresholdOut">−42 dB</output></div></label>
+            <label><span data-i18n="silenceMinimum">Handle silence longer than</span><div class="value-range"><input id="preSilenceMin" type="range" min="0.25" max="3" step="0.05" value="0.75"><output id="preSilenceMinOut">0.75s</output></div></label>
+            <label><span data-i18n="silenceKeep">Silence to keep</span><div class="value-range"><input id="preSilenceKeep" type="range" min="0.08" max="1" step="0.02" value="0.30"><output id="preSilenceKeepOut">0.30s</output></div></label>
+            <div class="audio-estimate"><span data-i18n="estimatedAudioCut">With your settings</span><strong id="audioCutEstimate">—</strong><small id="audioProfileSummary">—</small></div>
+          </div>
+        </details>
+
+        <div class="director-action">
+          <div class="readiness" id="readiness"><span></span><p data-i18n="waitingForVideo">Waiting for the main recording</p></div>
+          <button class="button primary director-button" id="generateButton" disabled>
+            <span class="button-symbol" aria-hidden="true">✦</span>
+            <span><strong data-i18n="makeEdit">Make my edit</strong><small data-i18n="oneDraft">One main edit plus ranked Reel options from the same analysis</small></span>
+          </button>
+        </div>
+      </section>
+
+      <section class="analysis-stage" id="analysisPanel" hidden aria-live="polite">
+        <div class="analysis-orbit" aria-hidden="true"><i></i><i></i><i></i><b>✦</b></div>
+        <p class="eyebrow" data-i18n="directorWorking">Director is working</p>
+        <h2 id="jobMessage" data-i18n="directorPreparing">Preparing your edit</h2>
+        <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="jobProgress"></span></div>
+        <ol class="analysis-checks">
+          <li data-threshold="0.10"><i></i><span data-i18n="taskListen">Transcription and chapters</span></li>
+          <li data-threshold="0.58"><i></i><span data-i18n="taskStory">Whole-video story outline</span></li>
+          <li data-threshold="0.70"><i></i><span data-i18n="taskSync">Selecting moments and framing</span></li>
+          <li data-threshold="0.86"><i></i><span data-i18n="taskDraft">Continuity check and final draft</span></li>
+        </ol>
+        <div class="analysis-error" id="analysisError" role="alert" hidden>
+          <strong id="analysisErrorTitle">The edit was not completed</strong>
+          <p id="analysisErrorMessage"></p>
+          <div>
+            <button class="button primary compact" id="retryDirectorButton" type="button" data-i18n="retry">Try again</button>
+            <button class="button ghost compact" id="backFromErrorButton" type="button" data-i18n="backToSettings">Back to settings</button>
+          </div>
+        </div>
+        <button class="button danger" id="cancelJobButton" data-i18n="stopProcess">Stop process</button>
+      </section>
+
+      <section class="result-panel" id="resultPanel" hidden>
+        <div class="result-header">
+          <div><p class="eyebrow" data-i18n="firstDraft">First edit</p><span id="draftEngineBadge" class="engine-badge"></span><h2 id="draftTitle">CUTROOM Draft</h2><p id="draftSummary"></p></div>
+          <div class="duration-verdict"><span id="beforeDuration">00:00</span><i>→</i><strong id="afterDuration">00:00</strong><small data-i18n="beforeAfter">Before / after</small></div>
+        </div>
+
+        <section class="reel-candidates" id="reelCandidates" aria-labelledby="reelCandidatesTitle" hidden>
+          <div class="reel-candidates-head"><div><p class="eyebrow">REEL OPTIONS</p><h3 id="reelCandidatesTitle">Three edits from one analysis</h3></div><span>No retranscription or reanalysis</span></div>
+          <div class="reel-candidate-list" id="reelCandidateList"></div>
+        </section>
+
+        <div class="result-grid" id="resultGrid">
+          <div class="preview-column" id="previewColumn">
+            <div class="preview-stage" id="previewStage" data-aspect="9:16">
+              <div class="preview-pane" id="previewPaneA"><video id="previewA" playsinline preload="metadata"></video></div>
+              <div class="preview-pane" id="previewPaneB" hidden><video id="previewB" playsinline preload="metadata" hidden></video></div>
+              <div class="safe-lines" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+              <div class="preview-badge" id="cameraBadge">A</div>
+              <div class="preview-caption" id="previewCaption" hidden></div>
+              <button class="preview-play" id="previewPlay" aria-label="Play"><span>▶</span></button>
+            </div>
+            <div class="preview-controls">
+              <button class="icon-button" id="playButton" aria-label="Play">▶</button>
+              <span id="previewTime">00:00 / 00:00</span>
+              <input id="previewSeek" type="range" min="0" max="1000" value="0" aria-label="Seek">
+              <label class="preview-mode-label"><select id="previewMode" aria-label="Preview playback mode"><option value="edit">Edited video</option><option value="source">Full source</option></select></label>
+              <button class="button ghost compact" id="restartPreview" data-i18n="restart">Restart</button>
+            </div>
+            <p class="preview-shortcut"><kbd>Space</kbd> Play / pause <span id="previewModeHint">Your original footage stays untouched</span></p>
+          </div>
+
+          <aside class="verdict-column" id="verdictColumn">
+            <div class="verdict-block draft-warning" id="draftWarning" role="status" hidden>
+              <p id="draftWarningText"></p>
+              <button class="button ghost compact" id="reviewSpeechSettings" type="button" data-i18n="reviewSpeechSettings">Review speech settings</button>
+            </div>
+            <div class="draft-tools" role="group" aria-label="Fine-tune your draft">
+              <div class="section-label"><span>Make it yours</span><small>Open Studio</small></div>
+              <div class="draft-tool-grid">
+                <button type="button" data-open-studio-tab="timeline"><b aria-hidden="true">✂</b><span>Adjust cuts</span><small>Timeline</small></button>
+                <button type="button" data-open-studio-tab="framing"><b aria-hidden="true">▣</b><span>Frame it</span><small>Sources &amp; layout</small></button>
+                <button type="button" data-open-studio-tab="transcript"><b aria-hidden="true">Cc</b><span>Captions</span><small>Language &amp; text</small></button>
+              </div>
+            </div>
+            <details class="verdict-block decision-details">
+              <summary class="section-label"><span data-i18n="whatChanged">What changed</span><b id="decisionCount">0</b></summary>
+              <div class="decision-list" id="decisionList"></div>
+            </details>
+            <div class="verdict-block">
+              <div class="section-label"><span data-i18n="adjust">Refine the edit</span><b data-i18n="oneClick">One click</b></div>
+              <div class="refine-grid">
+                <button class="refine-wide" data-command="new_variation"><b>↝</b><span data-i18n="anotherCut">Try another cut</span></button>
+                <button data-command="shorter"><b>−</b><span data-i18n="shorter">Shorter</span></button>
+                <button data-command="keep_more"><b>＋</b><span data-i18n="keepMore">Keep more</span></button>
+                <button data-command="more_energy"><b>↗</b><span data-i18n="moreEnergy">More energy</span></button>
+                <button data-command="fewer_switches"><b>≈</b><span data-i18n="fewerSwitches">Fewer switches</span></button>
+                <button data-command="focus_speaker"><b>◎</b><span data-i18n="focusSpeaker">Focus speaker</span></button>
+              </div>
+            </div>
+            <button class="button render result-render" id="resultRenderButton"><span class="render-dot"></span><span data-i18n="renderFinal">Export video</span></button>
+            <button class="button ghost full" id="backToBriefButton" data-i18n="changeBrief">Change target or pace</button>
+          </aside>
+        </div>
+      </section>
+
+      <section class="advanced-panel studio-workspace" id="advancedPanel" hidden>
+        <div class="advanced-header studio-header">
+          <div><p class="eyebrow">CUTROOM STUDIO</p><h2>Your creative workspace</h2></div>
+          <div class="studio-header-actions">
+            <span class="studio-draft-status" id="studioDraftStatus"></span>
+            <button class="button render compact" id="studioRenderButton"><span class="render-dot" aria-hidden="true"></span><span data-i18n="render">Export</span></button>
+            <button class="button ghost compact" id="closeAdvanced" data-i18n="backToDirector">Project overview</button>
+          </div>
+        </div>
+        <aside class="studio-preview-dock" id="studioPreviewDock" aria-label="Live preview"></aside>
+        <div class="advanced-tabs" role="tablist" aria-label="Studio workflow" aria-orientation="vertical">
+          <button id="studioTabTimeline" class="active" role="tab" aria-selected="true" aria-controls="studioPanelTimeline" tabindex="0" data-tab="timeline"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="m8 8 13 13M8 16 21 3"/></svg><span>Edit</span><small>Director</small></button>
+          <button id="studioTabFraming" role="tab" aria-selected="false" aria-controls="studioPanelFraming" tabindex="-1" data-tab="framing"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M3 9h18"/></svg><span>Layout</span><small>Sources</small></button>
+          <button id="studioTabTranscript" role="tab" aria-selected="false" aria-controls="studioPanelTranscript" tabindex="-1" data-tab="transcript"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M6 14h5m3 0h4M6 10h12"/></svg><span>Captions</span><small>Language &amp; text</small></button>
+          <button id="studioTabSettings" role="tab" aria-selected="false" aria-controls="studioPanelSettings" tabindex="-1" data-tab="settings"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="2" fill="var(--surface-chrome)"/><circle cx="15" cy="17" r="2" fill="var(--surface-chrome)"/></svg><span>Output</span><small>Audio &amp; export</small></button>
+        </div>
+        <div class="advanced-content">
+          
+          <div class="tab-panel active" id="studioPanelTimeline" role="tabpanel" aria-labelledby="studioTabTimeline" tabindex="0" data-panel="timeline">
+            <section id="emptyTimeline" class="empty-timeline" hidden><h3>Your timeline is empty</h3><p>Your original recordings are safe. Add footage or Undo to bring your edit back.</p><button id="emptyTimelineAdd" class="button primary" type="button">Add source footage</button></section>
+            <header class="studio-tool-intro"><div><p>CLIP INSPECTOR</p><h3>Make it yours</h3></div><span>Select to move a clip. Range to remove a section. Together keeps A and B in sync; choose A only or B only for independent changes.</span></header>
+            <form class="clip-trim-bar" id="clipTrimForm" hidden><strong id="clipTrimTitle">Selected clip</strong><label>Timeline start <input id="clipTrimIn" type="number" step="0.001" min="0" required></label><label>Timeline end <input id="clipTrimOut" type="number" step="0.001" min="0" required></label><label id="clipSourceField" hidden>Source in <input id="clipSourceIn" type="number" step="0.001" min="0"></label><span>seconds</span><button id="clipTrimApply" type="submit">Apply trim</button><button id="clipMove" type="button" hidden>Move to start</button><span id="clipTrimStatus" role="status"></span></form>
+            <form class="clip-trim-bar" id="sourceInsertForm" hidden><strong id="sourceInsertTitle">Add source footage</strong><label>Source <select id="sourceInsertSlot" aria-label="Footage source"><option value="A">A</option><option value="B">B</option></select></label><label>Source in <input id="sourceInsertIn" type="text" inputmode="decimal" value="0" required></label><label>Source out <input id="sourceInsertOut" type="text" inputmode="decimal" required></label><label>Insert at (edit time) <input id="sourceInsertAt" type="text" inputmode="decimal" value="0" required></label><button type="submit">Insert footage</button><button type="button" id="sourceInsertCancel">Cancel</button><span id="sourceInsertStatus" role="status">Original source times · seconds or mm:ss.mmm. Inserts on this track only.</span></form>
+            <details class="editor-more" id="editorMoreTools"><summary>More editing tools</summary><div class="editor-more-panel">
+              <button id="manualSplit" type="button" disabled>Split at playhead</button><button id="manualRestore" type="button" disabled>Add to edit</button><button id="manualClear" type="button" disabled>Clear selection</button>
+              <button id="clipDuplicate" type="button" disabled>Duplicate clip</button><button id="manualRange" type="button" aria-expanded="false" aria-controls="timelineRangeForm">Range…</button><button id="manualLayout" type="button" disabled>Layout…</button>
+              <button type="button" data-timeline-tool="remove_between" aria-pressed="false">Cut out</button><button type="button" data-timeline-tool="move" aria-pressed="false" disabled hidden>Move clip</button><button type="button" id="trackReset" hidden>Reset track</button>
+              <button id="timelineZoomSelection" type="button" disabled>Zoom to selection</button><button id="timelineSnap" type="button" aria-pressed="false">Snap: off</button>
+              <label class="keyboard-profile-label">Keys <select id="keyboardProfile" aria-label="Keyboard shortcut profile"><option value="cutroom">CUTROOM</option></select></label><button type="button" id="keyboardHelp">Shortcuts</button>
+            </div></details>
+          <form id="timelineRangeForm" class="source-range-form timeline-range-form" novalidate hidden>
+            <label>From<input id="timelineRangeStart" type="text" inputmode="decimal" placeholder="00:00.000" aria-describedby="timelineRangeStatus" autocomplete="off"></label>
+            <label>To<input id="timelineRangeEnd" type="text" inputmode="decimal" placeholder="00:10.000" aria-describedby="timelineRangeStatus" autocomplete="off"></label>
+            <button class="button primary compact" id="timelineRangeSubmit" type="submit">Select range</button>
+            <span id="timelineRangeStatus" class="source-range-status" role="status">Source timeline time · seconds or mm:ss.mmm</span>
+            <div class="source-range-actions"><button type="button" data-range-point="timeline:start">Start at playhead</button><button type="button" data-range-point="timeline:end">End at playhead</button></div>
+          </form>
+            <details class="editor-ai-suggestions"><summary>AI suggestions</summary><div id="studioDirectorDock"></div></details>
+          </div>
+          <div class="tab-panel" id="studioPanelFraming" role="tabpanel" aria-labelledby="studioTabFraming" tabindex="0" data-panel="framing">
+            <header class="studio-tool-intro"><div><p>02 · LAYOUT</p><h3>Control every source</h3></div><span>Choose screen, camera, audio and composition. AI can suggest; your routing always wins.</span></header>
+            <section class="source-mixer" id="sourceMixer" aria-labelledby="sourceMixerTitle">
+              <div class="source-mixer-head">
+                <div><p class="eyebrow">SOURCE MIXER</p><h3 id="sourceMixerTitle">Source control</h3><p id="sourceMixerHelp">AI suggests a layout; your choice always wins.</p></div>
+                <span class="source-mixer-status" id="sourceMixerStatus" role="status"></span>
+              </div>
+              <div class="source-mixer-empty" id="sourceMixerEmpty">
+                <b>Add a video first</b><span>After upload, choose whether the camera is embedded in the recording or supplied as source B.</span>
+              </div>
+              <section class="embedded-camera-editor" id="embeddedCameraEditor" aria-labelledby="embeddedCameraTitle" hidden>
+                <div class="embedded-camera-head">
+                  <div><b id="embeddedCameraTitle">Screen and camera in one recording</b><span id="embeddedCameraHelp">If the camera is already embedded in the recording, mark its area here. Do not upload the same video again as source B.</span></div>
+                  <span class="embedded-camera-state" id="embeddedCameraState" role="status"></span>
+                </div>
+                <div class="embedded-camera-workspace">
+                  <div class="embedded-camera-canvas" id="embeddedCameraCanvas" aria-label="Embedded camera area preview">
+                    <video id="embeddedCameraVideo" muted playsinline preload="metadata"></video>
+                    <div class="embedded-camera-rect" id="embeddedCameraRect"><span>CAMERA</span><i data-embedded-resize aria-hidden="true"></i></div>
+                  </div>
+                  <div class="embedded-camera-controls">
+                    <label class="embedded-camera-seek"><span>Choose a frame</span><input id="embeddedCameraSeek" type="range" min="0" max="1000" step="1" value="0" aria-label="Choose embedded camera reference frame"><output id="embeddedCameraSeekOut">00:00</output></label>
+                    <div class="embedded-camera-presets" id="embeddedCameraPresets" role="group" aria-label="Camera position presets">
+                      <button type="button" data-embedded-preset="top-left">↖ <span>Top left</span></button>
+                      <button type="button" data-embedded-preset="top-right">↗ <span>Top right</span></button>
+                      <button type="button" data-embedded-preset="bottom-left">↙ <span>Bottom left</span></button>
+                      <button type="button" data-embedded-preset="bottom-right">↘ <span>Bottom right</span></button>
+                    </div>
+                    <div class="embedded-camera-sliders">
+                      <label><span>Horizontal position</span><input id="embeddedCameraX" type="range" min="0" max="94" step="1" value="70"><output id="embeddedCameraXOut">70%</output></label>
+                      <label><span>Vertical position</span><input id="embeddedCameraY" type="range" min="0" max="94" step="1" value="5"><output id="embeddedCameraYOut">5%</output></label>
+                      <label><span>Camera width</span><input id="embeddedCameraW" type="range" min="6" max="100" step="1" value="25"><output id="embeddedCameraWOut">25%</output></label>
+                      <label><span>Camera height</span><input id="embeddedCameraH" type="range" min="6" max="100" step="1" value="30"><output id="embeddedCameraHOut">30%</output></label>
+                    </div>
+                    <details class="embedded-content-focus">
+                      <summary>Main screen focus</summary>
+                      <p>Move the focus within the remaining camera-free screen area when the important content is off-center.</p>
+                      <label><span>Horizontal</span><input id="embeddedContentX" type="range" min="0" max="100" step="1" value="50"><output id="embeddedContentXOut">50%</output></label>
+                      <label><span>Vertical</span><input id="embeddedContentY" type="range" min="0" max="100" step="1" value="50"><output id="embeddedContentYOut">50%</output></label>
+                    </details>
+                    <div class="embedded-camera-actions">
+                      <button class="button primary" id="saveEmbeddedCamera" type="button">Save and use layout</button>
+                      <button class="button ghost" id="disableEmbeddedCamera" type="button">Disable embedded camera</button>
+                    </div>
+                    <p class="embedded-camera-note">Move or resize the camera frame, then save. Camera fills the top 30%; the camera-free screen fills the bottom 70%.</p>
+                  </div>
+                </div>
+              </section>
+              <div class="source-mixer-body" id="sourceMixerBody" hidden>
+                <section class="layout-range-panel" aria-labelledby="layoutRangeTitle">
+                  <div class="source-section-heading"><h4 id="layoutRangeTitle">1. Choose where</h4><span id="layoutScopeBadge">Entire edit</span></div>
+                  <p id="layoutScopeHelp">No range selected. A layout choice changes the entire edit.</p>
+                  <button type="button" id="layoutWholeEdit" class="button ghost compact">Entire edit</button>
+                  <details class="layout-exact-range"><summary>Exact range…</summary>
+                  <form id="layoutRangeForm" class="source-range-form" novalidate>
+                    <label>From<input id="layoutRangeStart" type="text" inputmode="decimal" placeholder="00:00.000" aria-describedby="layoutRangeStatus" autocomplete="off"></label>
+                    <label>To<input id="layoutRangeEnd" type="text" inputmode="decimal" placeholder="00:10.000" aria-describedby="layoutRangeStatus" autocomplete="off"></label>
+                    <button class="button primary compact" id="layoutRangeSubmit" type="submit">Select range</button>
+                    <span id="layoutRangeStatus" class="source-range-status" role="status">Source timeline time · seconds or mm:ss.mmm</span>
+                    <div class="source-range-actions"><button type="button" data-range-point="layout:start">Start at playhead</button><button type="button" data-range-point="layout:end">End at playhead</button><button type="button" id="layoutCurrentScene">Current layout block</button></div>
+                  </form>
+                  </details>
+                </section>
+                <fieldset class="source-layout-fieldset">
+                  <legend>2. Choose what appears · saves immediately</legend>
+                  <div class="source-layout-choices" id="sourceLayoutChoices">
+                    <button type="button" data-layout="auto"><i>AI</i><span>AI choice</span></button>
+                    <button type="button" data-layout="screen"><i>▣</i><span>Screen only</span></button>
+                    <button type="button" data-layout="camera"><i>●</i><span>Camera only</span></button>
+                    <button type="button" data-layout="stacked" class="active" aria-pressed="true"><i>▰</i><span>Stacked</span></button>
+                    <button type="button" data-layout="side_by_side"><i>▥</i><span>Side by side</span></button>
+                    <button type="button" data-layout="pip"><i>◩</i><span>Picture in picture</span></button>
+                  </div>
+                </fieldset>
+                <div class="source-mixer-actions">
+                  <button hidden class="button primary" id="applyLayoutSelection" type="button" disabled>Apply to selection</button>
+                  <button hidden class="button ghost" id="applyLayoutAll" type="button">Apply to entire edit</button>
+                  <span id="sourceMixerRange">Select a Timeline range to change only part of the video.</span>
+                </div>
+                <button class="creator-frame-preset" id="creatorFramePreset" type="button"><i aria-hidden="true"><span>CAM</span><span>SCREEN</span></i><span><b>Creator frame</b><small>Camera 30% on top · screen 70% below · keeps your output format</small></span></button>
+                <button class="button ghost compact" id="swapSourceOrder" type="button">Swap top / bottom · whole edit</button>
+                <details class="source-setup-disclosure" id="sourceSetupDisclosure">
+                  <summary>Source setup <small>Roles, audio &amp; sync · whole edit</small></summary>
+                  <button class="button ghost compact" id="resetSourceLayout" type="button">Reset next-build layout default</button>
+                  <p class="source-global-note">These settings affect the whole edit, even with a range selected. To change what appears during a section, use the layout choices above.</p>
+                  <div id="sourceIdentityCards" class="source-identity-cards" aria-label="Available sources"></div>
+                <div class="source-role-grid">
+                  <div class="source-role-pair">
+                    <label><span>Screen recording</span><select id="screenSourceSelect" aria-label="Screen recording source"><option value="A">A</option><option value="B">B</option></select><small id="screenSourceName"></small></label>
+                    <button class="source-swap" id="swapSourceRoles" type="button" aria-label="Swap screen and camera sources">⇄<span>Swap</span></button>
+                    <label><span>Camera</span><select id="cameraSourceSelect" aria-label="Camera source"><option value="A">A</option><option value="B">B</option></select><small id="cameraSourceName"></small></label>
+                  </div>
+                  <div class="source-routing-grid">
+                    <label><span>Primary source</span><select id="primaryRoleSelect" aria-label="Primary source"><option value="screen">Screen recording</option><option value="camera">Camera</option></select><small>Controls sizing and picture in picture</small></label>
+                    <label><span>Audio source</span><select id="audioSourceSelect" aria-label="Audio source"><option value="A">A</option><option value="B">B</option></select><small>The source used for exported audio</small></label>
+                    <label><span>First in layout</span><select id="firstSlotSelect" aria-label="First source in stacked and split layouts"><option value="A">A</option><option value="B">B</option></select><small id="firstSlotName">Top in stacked · left in split</small></label>
+                    <label><span>Stack framing</span><select id="stackFitSelect"><option value="cover">Fill frame (crop edges)</option><option value="contain">Fit entire source (allow bars)</option></select><small>Fill crops edges using the framing controls below. Fit keeps the whole source with bars and ignores zoom.</small></label>
+                  </div>
+                </div>
+                <div class="source-sync-control">
+                  <label><span>Source B offset (seconds)</span><input id="sourceSyncOffset" type="number" min="-600" max="600" step="0.001" value="0" inputmode="decimal"><small id="sourceSyncStatus">Automatic sync</small></label>
+                  <div class="source-sync-nudges" role="group" aria-label="Adjust source B sync"><button type="button" id="sourceBEarlier">B earlier · 1 frame</button><button type="button" id="sourceBLater">B later · 1 frame</button></div>
+                  <p>Positive offset starts B later on A's timeline; negative starts it earlier. One-frame steps use source A's frame rate.</p>
+                  <span id="sourceBCoverage" role="status"></span>
+                  <button class="button ghost compact" id="resetSourceSync" type="button">Reset to automatic sync</button>
+                </div>
+                </details>
+                <details class="source-composition-preview layout-disclosure" id="sourceCompositionPreview">
+                  <summary>Source order preview</summary>
+                  <span class="source-composition-mode" id="sourceCompositionMode"></span>
+                  <div class="source-composition-canvas" id="sourceCompositionCanvas">
+                    <figure class="source-composition-slot slot-a" data-source-preview-slot="A">
+                      <video id="sourceCompositionA" muted playsinline preload="metadata"></video>
+                      <figcaption><b id="sourceCompositionRoleA">A</b><small id="sourceCompositionNameA"></small></figcaption>
+                    </figure>
+                    <figure class="source-composition-slot slot-b" data-source-preview-slot="B">
+                      <video id="sourceCompositionB" muted playsinline preload="metadata"></video>
+                      <figcaption><b id="sourceCompositionRoleB">B</b><small id="sourceCompositionNameB"></small></figcaption>
+                    </figure>
+                  </div>
+                  <p>Live source-order preview. This is the exact order saved in the edit.</p>
+                </details>
+                <details class="scene-layout-editor layout-disclosure" id="sceneLayoutEditor" aria-labelledby="sceneLayoutTitle" hidden>
+                  <summary id="sceneLayoutTitle">Layout by section</summary>
+                  <div class="scene-layout-head">
+                    <div><small>Select a clip in the timeline, then choose its layout above. Open this list only for a section-by-section overview.</small></div>
+                    <span id="sceneLayoutSummary"></span>
+                  </div>
+                  <div class="scene-layout-list" id="sceneLayoutList"></div>
+                </details>
+              </div>
+            </section>
+            <details class="framing-layout framing-disclosure layout-disclosure" open>
+              <summary>Clip framing</summary>
+              <p id="cropScopeStatus" role="status">Select a clip to frame it independently.</p>
+              <div class="crop-preview" id="cropPreview"><video id="cropVideo" muted playsinline></video><div class="crop-thirds"><i></i><i></i><i></i><i></i></div></div>
+              <div class="framing-controls">
+                <label><span>Frame source</span><select id="cropSourceSelect"><option value="A">A</option><option value="B">B</option></select></label>
+                <label><span data-i18n="horizontalFocus">Horizontal focus</span><input id="cropX" type="range" min="0" max="100" value="50"></label>
+                <label><span data-i18n="verticalFocus">Vertical focus</span><input id="cropY" type="range" min="0" max="100" value="50"></label>
+                <label><span data-i18n="zoom">Zoom</span><input id="cropZoom" type="range" min="100" max="220" value="100"></label>
+                <button class="button ghost" id="resetCrop" data-i18n="resetFraming">Reset framing</button>
+                <details class="layout-default-disclosure"><summary>Next Director build default</summary><label><span>Default layout <small class="rebuild-chip" data-rebuild-chip>Draft rebuild</small></span><select id="layoutSelect"><option value="auto" data-i18n="auto">Automatic</option><option value="A">A only</option><option value="B">B only</option><option value="stacked" data-i18n="stacked">Stacked</option><option value="side_by_side" data-i18n="sideBySide">Side by side</option><option value="pip">Picture in Picture</option><option value="embedded_stack" data-i18n="embeddedCamera">Screen + embedded camera</option></select></label></details>
+                <p class="embedded-crop-help" id="embeddedCropHelp" hidden>Camera + screen layout is active here. Use the camera area and Main screen focus controls above, then apply the layout. General source crop controls do not affect this composition.</p>
+                <div class="camera-detection" id="cameraDetection" hidden><b data-i18n="cameraFound">Camera window found</b><p data-i18n="cameraFoundHelp">A stable face area was found. Confirm it before using this composition.</p><button class="button ghost compact" id="useEmbeddedCamera" data-i18n="useLayout">Use layout</button></div>
+              </div>
+            </details>
+          </div>
+          <div class="tab-panel" id="studioPanelTranscript" role="tabpanel" aria-labelledby="studioTabTranscript" tabindex="0" data-panel="transcript">
+            <header class="studio-tool-intro"><div><p>03 · TEXT EDITOR</p><h3>Edit the words. Shape the story.</h3></div><span>Select a line, Shift-click to select a passage, then remove or restore its footage.</span></header>
+            <details class="caption-settings-disclosure"><summary>Subtitle style &amp; speech language</summary>
+            <section class="caption-control-panel" aria-labelledby="captionControlTitle">
+              <div class="caption-control-head">
+                <div><h4 id="captionControlTitle">Subtitle output</h4><p id="captionControlStatus">Burned captions are enabled.</p></div>
+                <span class="caption-live-badge">LIVE PREVIEW</span>
+              </div>
+              <div class="caption-switch-grid">
+                <label class="caption-toggle-card"><span><b>Burn into video</b><small>Render captions directly into the MP4.</small></span><input id="studioBurnCaptionsToggle" type="checkbox" checked></label>
+                <label class="caption-toggle-card"><span><b>Export SRT file</b><small>Save an editable subtitle file beside the video.</small></span><input id="captionsToggle" type="checkbox"></label>
+              </div>
+              <div class="caption-option-grid">
+                <label class="caption-language-control"><span><b>Speech language</b><small>Auto-detect checks evidence across the recording.</small><small class="rebuild-chip" data-rebuild-chip>Draft rebuild</small></span><select id="spokenLanguageSelect"><option value="auto">Auto-detect</option><option value="he">Hebrew</option><option value="en">English</option><option value="ar">Arabic</option><option value="es">Spanish</option><option value="fr">French</option><option value="ru">Russian</option></select><em id="captionLanguageStatus">Detected after analysis</em></label>
+                <label><span><b>Style</b><small>Visual treatment in the final video.</small></span><select id="captionStyleSelect"><option value="clean">Clean</option><option value="bold" selected>Bold</option><option value="boxed">Boxed</option></select></label>
+                <label><span><b>Position</b><small>Auto avoids faces in stacked layouts.</small></span><select id="captionPositionSelect"><option value="auto" selected>Automatic safe area</option><option value="top">Top</option><option value="center">Center</option><option value="bottom">Bottom</option></select></label>
+                <label><span><b>Size</b><small>Scale relative to the output frame.</small></span><div class="caption-range"><input id="captionScale" type="range" min="75" max="150" step="5" value="100"><output id="captionScaleOut">100%</output></div></label>
+                <label><span><b>Words per caption</b><small>Fewer words create faster, punchier captions.</small></span><div class="caption-range"><input id="captionWordsPerLine" type="range" min="2" max="12" step="1" value="9"><output id="captionWordsPerLineOut">9</output></div></label>
+              </div>
+            </section></details>
+            <section class="transcript-editor-card" aria-labelledby="transcriptEditorTitle">
+              <div class="transcript-editor-head"><div><h4 id="transcriptEditorTitle">Transcript</h4><p>Select to seek. Editing text never deletes footage.</p></div><span id="transcriptLanguage"></span></div>
+              <div class="transcript-toolbar"><input id="transcriptSearch" dir="auto" type="search" data-i18n-placeholder="searchTranscript" placeholder="Search transcript"><select id="transcriptFilter" aria-label="Transcript filter"><option value="all">All lines</option><option value="kept">In the edit</option><option value="removed">Removed</option></select></div>
+              <div class="transcript-actions"><button type="button" id="transcriptRemove">Remove passage</button><button type="button" id="transcriptRestore">Restore passage</button><span id="transcriptResults" role="status"></span></div>
+              <div class="transcript-list" id="transcriptList" role="group" aria-label="Transcript lines"></div>
+              <form id="transcriptEditForm" class="transcript-detail-editor" hidden>
+                <div class="transcript-detail-heading"><label for="transcriptEditText">Correct selected line</label><span id="transcriptEditTime"></span></div>
+                <textarea id="transcriptEditText" dir="auto" rows="5" maxlength="4000" placeholder="Correct the transcript here…"></textarea>
+                <div class="transcript-detail-footer"><span id="transcriptEditStatus" role="status">Saved</span><button id="transcriptDiscard" type="button">Discard changes</button><button id="transcriptSave" class="button primary compact" type="submit">Save text</button></div>
+                <div class="transcript-line-navigation"><button id="transcriptPrevious" type="button">← Previous line</button><button id="transcriptNext" type="button">Next line →</button><button id="transcriptSaveAll" type="button">Save all changes</button></div>
+              </form>
+            </section>
+          </div>
+          <div class="tab-panel" id="studioPanelSettings" role="tabpanel" aria-labelledby="studioTabSettings" tabindex="0" data-panel="settings">
+            <header class="studio-tool-intro"><div><p>04 · OUTPUT</p><h3>Finish and export</h3></div><span>Tune pace, sound, format and performance. Rebuild only when an AI edit decision must change.</span></header>
+            <div class="draft-rebuild-notice" id="draftRebuildNotice" role="status" hidden>
+              <div><b id="draftRebuildTitle">Draft rebuild required</b><span id="draftRebuildText">These editorial changes apply after rebuilding the Draft.</span></div>
+              <button class="button primary compact" id="rebuildDraftButton" type="button">Rebuild Draft</button>
+            </div>
+            <div class="settings-grid">
+              <section class="studio-section output-format-section">
+                <div class="studio-section-head"><b>Output format</b><small>Changes here apply on export.</small></div>
+                <div class="output-control-grid">
+                  <label><span data-i18n="aspect">Aspect ratio</span><select id="aspectSelect"><option>9:16</option><option>16:9</option><option>1:1</option><option>4:5</option><option value="source" data-i18n="sourceRatio">Source</option></select></label>
+                  <label><span data-i18n="resolution">Resolution</span><select id="resolutionSelect"><option value="720">720p</option><option value="1080">1080p</option></select></label>
+                  <label class="fps-field"><span id="fpsLabel">Frame rate</span><select id="fpsSelect" aria-labelledby="fpsLabel" aria-describedby="fpsHelp"><option value="24">24 FPS</option><option value="25">25 FPS</option><option value="30" selected>30 FPS</option><option value="50">50 FPS</option><option value="60">60 FPS</option></select><small id="fpsHelp">30 FPS balances smooth playback and render time.</small></label>
+                  <label><span data-i18n="quality">Export quality</span><select id="qualitySelect"><option value="fast" data-i18n="fast">Fast</option><option value="balanced" data-i18n="balanced">Balanced</option><option value="quality" data-i18n="highQuality">High</option></select></label>
+
+                </div>
+              </section>
+              <section class="studio-section finishing-section">
+                <div class="studio-section-head"><b>Automatic finishing</b><small>Safe, deterministic finishing tools.</small></div>
+                <div class="finishing-control-grid">
+                  <label class="toggle-row"><span><b data-i18n="autoReframe">Automatic framing</b><small data-i18n="autoReframeHelp">Uses the detected speaker center</small><small class="rebuild-chip" data-rebuild-chip>Draft rebuild</small></span><input id="autoReframe" type="checkbox" checked></label>
+                  <label class="toggle-row"><span><b data-i18n="editorialEffects">Smart editorial effects</b><small data-i18n="editorialEffectsHelp">Subtle, bounded emphasis at story peaks; no extra model and no free-form AI commands.</small></span><input id="effectsToggle" type="checkbox" checked></label>
+                </div>
+              </section>
+              <details class="ai-draft-settings"><summary>AI draft settings <small>Changes require rebuilding the draft</small></summary>
+                <div id="studioRuntimeDock" class="runtime-status-dock"></div>
+                  <label><span><span data-i18n="performanceMode">Performance mode</span><small class="rebuild-chip" data-rebuild-chip>Draft rebuild</small></span><select id="performanceModeSelect"><option value="auto" data-i18n="auto">Automatic</option><option value="lite" data-i18n="liteMode">Lite</option><option value="balanced" data-i18n="balanced">Balanced</option><option value="quality" data-i18n="qualityMode">Quality</option></select></label>
+              <div class="studio-section intent-tuning">
+                <div class="studio-section-head"><b data-i18n="editCharacter">Edit character</b><small data-i18n="editCharacterHelp">Only change this if you want to override the smart defaults</small></div>
+                <fieldset class="brief-group pace-group compact-control">
+                  <legend><span data-i18n="pace">Pace</span><small class="rebuild-chip" data-rebuild-chip>Draft rebuild</small></legend>
+                  <div class="segmented" id="paceChoices">
+                    <button data-value="gentle" data-i18n="gentle">Natural</button>
+                    <button class="active" data-value="balanced" data-i18n="balanced">Balanced</button>
+                    <button data-value="dynamic" data-i18n="dynamic">Fast</button>
+                  </div>
+                  <p class="field-note" id="paceNote" data-i18n="balancedHelp">Removes clear repetition and pauses without making speech mechanical.</p>
+                </fieldset>
+                <fieldset class="brief-group audio-preset-group compact-control">
+                  <legend><span data-i18n="audioCleanup">Sound cleanup</span><small class="rebuild-chip" data-rebuild-chip>Draft rebuild</small></legend>
+                  <div class="segmented audio-presets" id="audioPresetChoices">
+                    <button data-value="natural" data-i18n="audioNatural">Natural</button>
+                    <button class="active" data-value="clean" data-i18n="audioClean">Clean</button>
+                    <button data-value="tight" data-i18n="audioTight">Tight</button>
+                  </div>
+                  <p class="field-note" id="audioPresetNote" data-i18n="audioCleanHelp">Shortens clear silence and balances quiet or loud speech from measured audio.</p>
+                </fieldset>
+              </div>
+              <details class="audio-custom-settings">
+                <summary><span data-i18n="customizeAudio">Customize sound cleanup</span><small class="rebuild-chip" data-rebuild-chip>Draft rebuild</small></summary>
+                <div class="audio-control-grid">
+                  <label><span data-i18n="silenceAction">Silence</span><select id="silenceAction"><option value="keep" data-i18n="keep">Keep</option><option value="shorten" data-i18n="shortenSilence">Shorten</option><option value="remove" data-i18n="removeSilence">Remove</option></select></label>
+                  <label><span data-i18n="silenceMinimum">Handle silence longer than</span><div class="value-range"><input id="silenceMin" type="range" min="0.25" max="3" step="0.05" value="0.75"><output id="silenceMinOut">0.75s</output></div></label>
+                  <label><span data-i18n="silenceKeep">Silence to keep</span><div class="value-range"><input id="silenceKeep" type="range" min="0.08" max="1" step="0.02" value="0.30"><output id="silenceKeepOut">0.30s</output></div></label>
+                  <label><span data-i18n="maxRemoval">Maximum removal</span><div class="value-range"><input id="maxRemoveRatio" type="range" min="5" max="60" step="1" value="28"><output id="maxRemoveOut">28%</output></div></label>
+                  <label><span data-i18n="quietSpeech">Quiet speech</span><div class="inline-audio"><select id="quietAction"><option value="keep" data-i18n="keep">Keep</option><option value="boost" data-i18n="boost">Boost</option></select><input id="quietGain" type="range" min="0" max="8" step="0.5" value="3"><output id="quietGainOut">+3dB</output></div></label>
+                  <label><span data-i18n="loudSpeech">Loud speech</span><div class="inline-audio"><select id="loudAction"><option value="keep" data-i18n="keep">Keep</option><option value="lower" data-i18n="lower">Lower</option></select><input id="loudGain" type="range" min="0" max="8" step="0.5" value="3"><output id="loudGainOut">−3dB</output></div></label>
+                  <label class="toggle-row"><span><b data-i18n="normalizeSpeech">Final loudness balance</b><small data-i18n="normalizeSpeechHelp">Lightweight loudness normalization on export</small></span><input id="normalizeAudio" type="checkbox" checked></label>
+                </div>
+              </details>
+              </details>
+            </div>
+          </div>
+        </div>
+        <section class="studio-timeline-dock" id="studioTimelineDock" aria-label="Timeline and manual editing">
+          <div class="editor-tools editor-toolbar-main">
+            <div class="timeline-tools" role="group" aria-label="Timeline tools"><button type="button" data-timeline-tool="select" aria-pressed="true" title="Drag a clip to reorder; select it and drag its white edges to trim or extend into a gap">Select / Move</button><button type="button" data-timeline-tool="range" aria-pressed="false" title="Drag to select a time range">Range</button><button type="button" data-timeline-tool="blade" aria-pressed="false" title="Click to cut; drag to move a cut">Cut</button></div>
+            <label class="keyboard-profile-label" id="timelineTargetField" hidden>Edit <select id="timelineTarget" aria-label="Edit target"><option value="edit">Together (A+B)</option><option value="A">A only</option><option value="B">B only</option></select></label>
+            <button id="manualDelete" type="button" disabled>Remove</button>
+            <button id="reviewSourceButton" type="button" disabled title="See the entire original video and restore removed footage">Original footage</button>
+            <button id="closeTimelineGaps" type="button" hidden>Close gaps</button>
+            <span class="manual-history-actions"><button id="manualUndo" type="button" disabled aria-label="Undo manual correction" title="Undo">↶</button><button id="manualRedo" type="button" disabled aria-label="Redo manual correction" title="Redo">↷</button></span>
+            <div class="timeline-zoom-controls"><button id="timelineZoomOut" aria-label="Zoom out" title="Zoom out around the yellow playhead">−</button><span id="timelineZoomLabel">100%</span><button id="timelineZoomIn" aria-label="Zoom in" title="Zoom in around the yellow playhead">＋</button><button id="timelineFit" data-i18n="fit">Fit</button></div>
+            <button id="editorMoreButton" type="button" aria-controls="editorMoreTools">More tools</button>
+          </div>
+          <div id="timelineCutStatus" class="timeline-cut-status" hidden><span id="timelineCutHint" role="status" aria-live="polite"></span><button type="button" id="cancelTimelineCut" hidden>Cancel cut</button></div>
+          <div class="timeline-context"><span class="manual-selection-label" id="manualSelectionLabel" aria-live="polite">Select a clip to edit it</span><span id="timelineSelectionHint">Drag a clip to move · Range to select</span><span id="trackHelp" hidden></span></div>
+
+          <div class="timeline-scroll" id="timelineScroll"><canvas id="timelineCanvas" height="180" role="slider" data-editor-shortcuts="on" tabindex="0" aria-label="Edit timeline" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"></canvas></div>
+          <p class="advanced-note" data-i18n="timelineHelp">Click to move the playhead. Red ranges are not included in the output.</p>
+        </section>
+      </section>
+    </section>
+  </main>
+
+  <dialog id="keyboardDialog" class="sheet-dialog keyboard-dialog"><form method="dialog" class="dialog-shell"><header><div><p class="eyebrow">YOUR WORKSPACE</p><h2>Keyboard shortcuts</h2></div><button class="icon-button" value="cancel" aria-label="Close shortcuts">×</button></header><p id="keyboardDescription"></p><div id="keyboardShortcutList"></div><p>These profiles cover CUTROOM's supported editing actions, not every command in another editor. Shortcuts stay inactive while typing.</p></form></dialog>
+  <dialog id="sourceReviewDialog" class="source-review-dialog" aria-labelledby="sourceReviewTitle">
+    <div class="source-review-shell">
+      <header><div><h2 id="sourceReviewTitle">Original footage</h2><p data-review="summary"></p></div><button type="button" data-review="close" aria-label="Close original footage">Done</button></header>
+      <div class="source-review-player"><video data-review="video" controls playsinline preload="metadata" aria-label="Original source preview"></video><p data-review="quote" dir="auto"></p></div>
+      <div class="source-review-toolbar"><label>View <select data-review="slot" aria-label="Original recording"><option value="A">Source A</option><option value="B">Source B</option></select></label><span class="source-review-legend"><span>■ In edit</span><span>▧ Removed</span></span><button data-review="previous" type="button">← Previous removed</button><button data-review="next" type="button">Next removed →</button><div><button data-review="zoomOut" type="button" aria-label="Zoom out original timeline">−</button><button data-review="zoomIn" type="button" aria-label="Zoom in original timeline">＋</button><button data-review="fit" type="button">Fit</button></div></div>
+      <div class="timeline-scroll source-review-timeline" data-review="scroll"><canvas data-review="canvas" height="180" tabindex="0" role="slider" aria-label="Original footage timeline" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"></canvas></div>
+      <div class="source-review-actions"><p data-review="selection" aria-live="polite"></p><div><select data-review="scope" aria-label="Original footage edit scope"><option value="edit">Together (A+B)</option><option value="source">This source only</option></select><button class="button primary" data-review="restore" type="button">Restore to edit</button><button data-review="remove" type="button">Remove from edit</button><button data-review="undo" type="button">Undo</button><button class="source-review-exact" data-review="exact" type="button">Insert a copy by time…</button></div><p data-review="effect"></p><p data-review="status" role="status">Click a section to preview it. Drag to select your own range. Use the ruler to seek anywhere.</p></div>
+    </div>
+  </dialog>
+  <dialog id="projectsDialog" class="sheet-dialog">
+    <form method="dialog" class="dialog-shell">
+      <header><div><p class="eyebrow">CUTROOM</p><h2 data-i18n="projects">Projects</h2></div><button class="icon-button" value="cancel" aria-label="Close">×</button></header>
+      <div class="dialog-projects" id="dialogProjects"></div>
+      <button class="button primary full" type="button" id="dialogNewProject" data-i18n="newProject">Create project</button>
+    </form>
+  </dialog>
+
+  <dialog id="exportDialog" class="export-dialog">
+    <div class="dialog-shell export-shell">
+      <button class="icon-button dialog-close" id="closeExportDialog" aria-label="Close">×</button>
+      <div class="export-icon" aria-hidden="true">↗</div>
+      <p class="eyebrow" data-i18n="export">Export</p>
+      <h2 id="exportTitle" data-i18n="readyToExport">Ready to export?</h2>
+      <p id="exportDescription" data-i18n="exportHelp">Export uses the original full-quality files, not a proxy.</p>
+      <div class="export-summary" id="exportSummary"></div>
+      <label class="export-fps-field" id="exportFrameRateField"><span id="exportFpsLabel">Frame rate</span><select id="exportFpsSelect" aria-labelledby="exportFpsLabel" aria-describedby="exportFpsHelp"><option value="24">24 FPS</option><option value="25">25 FPS</option><option value="30" selected>30 FPS</option><option value="50">50 FPS</option><option value="60">60 FPS</option></select><small id="exportFpsHelp">30 FPS balances smooth playback and render time.</small></label>
+      <div class="export-progress" id="exportProgress" hidden><span></span><b>0%</b><small></small><button class="button danger compact" id="cancelExportJobButton" type="button" data-i18n="stopProcess">Stop process</button></div>
+      <div class="export-actions" id="exportActions"><button class="button ghost" id="cancelExport" data-i18n="cancel">Cancel</button><button class="button render" id="confirmExport" data-i18n="startExport">Start export</button></div>
+      <a class="button primary full" id="downloadExport" hidden data-i18n="downloadVideo">Download video</a>
+    </div>
+  </dialog>
+
+  <div class="toast-region" id="toastRegion" aria-live="polite"></div>
+  <script type="module" src="/assets/app.js?v=561-ui-refresh-82"></script>
+</body>
+</html>

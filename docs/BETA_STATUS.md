@@ -1,0 +1,30 @@
+# Closed beta status — 2026-09-12
+
+**Suitable for a small, private, exploratory test with video editors. Not a production release, security certification or promise of professional-quality automatic edits.**
+
+## Evidence
+
+- All 1,087 Python regression tests and all 324 frontend regression tests passed in this packaging pass, including 16 package/document checks.
+- Windows installer scripts passed static verification: files, syntax and bootstrap guards. This is not a fresh-PC installation test.
+- Recent isolated browser checks covered linked/independent editing, original-footage restore, gap closing, edge trims, clip moves, saved state and playhead-centered zoom.
+- Synthetic FFmpeg tests cover actual rendering, output shape, captions and 30/60 FPS sequence behavior. They do not benchmark real speech/story quality.
+- Packaging uses an allowlist and fresh defaults, excluding personal projects, recordings, logs, runtimes and weights. TEST_BUILD.json lists per-file SHA-256 hashes.
+- The extracted source package passed isolated HTTP startup, a horizontal YouTube cleanup/export, a vertical embedded-camera export with pixel checks, 70 targeted Python checks and all 324 frontend tests. These reused this PC's existing Python dependencies and FFmpeg; they are not proof of clean-machine setup.
+
+## Still unverified
+
+- Clean Windows first installation without the developer's environment, including external installers/download services.
+- Transcription and editorial quality across languages, accents, noise and overlapping speech. No multilingual WER/CER acceptance benchmark is complete.
+- Quality on representative editor-owned gameplay, explanations and long-form footage; no blind professional-editor comparison.
+- Long/reordered 4K sessions, low-memory machines, non-NVIDIA performance and broad codec/hardware coverage.
+- Usability and real time saved for new users.
+
+## Boundaries
+
+Default YouTube cleanup is chronological, not a full narrative rewrite. Styles are pacing/selection presets, not creator replicas or reliable visual gameplay-event detectors. Camera proposals need confirmation. There are two sources, not unlimited NLE tracks. Source-only edits may intentionally leave gaps or change synchronization. Lower-rate footage exported at 60 FPS repeats frames.
+
+Keep backups and use copies, not urgent client deliveries. Review the exported file. Do not expose the server publicly. This is not a frozen offline executable: allowed dependency versions can change between installations.
+
+Start with a few editors across different PCs, including CPU-only and NVIDIA systems. Separate installation problems from editing and AI-quality feedback. Use the [feedback form](BETA_FEEDBACK.md), measure correction time and fix repeatable blockers before expanding.
+
+Older validation notes describe historical checks, not certification of this build. This document and the current package manifest are the beta entry points.
