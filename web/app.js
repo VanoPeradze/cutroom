@@ -4,6 +4,8 @@ import { SourceReview } from "./source-review.js?v=561-ui-refresh-82";
 import { initWorkspace } from "./workspace.js?v=561-ui-refresh-80";
 import { KEYBOARD_PROFILES, resolveEditorShortcut, isEditorTransportSpace, shortcutRows } from "./keyboard.js?v=561-ui-refresh-61";
 import { AudioThresholdView } from "./audio-meter.js?v=561-ui-refresh-45";
+import { initWelcome, workflowSettings } from "./welcome.js?v=563-setup-2";
+import { initLocalModels } from "./local-models.js?v=563-setup-2";
 import { trackClips, trackAt, hasSourceTracks, SourceTimelineClock } from "./source-tracks.js?v=561-ui-refresh-59";
 
 const $ = (selector, root = document) => root.querySelector(selector);
@@ -65,6 +67,7 @@ const state = {
   audioMeter: null,
   studio: { open: false, scrollY: 0 },
   system: null,
+  welcome: null,
   projectsLoaded: false,
 };
 
@@ -300,9 +303,23 @@ function setStep(step) {
 }
 
 async function boot() {
+  const initialViewToken = state.projectViewToken;
   cacheElements();
   state.dictionary = applyTranslations("en");
   bindEvents();
+  const localModels = initLocalModels({ document, api, busy: foregroundBusy,
+    changed: async () => { state.runtimeGeneration += 1; await loadSystem(); },
+  });
+  state.welcome = initWelcome({ document, api,
+    models: localModels,
+    createProject: (options) => runUiAction(() => createProject(options)), goHome,
+    pause: pauseAllMedia, busy: foregroundBusy,
+    changed: async (connection) => {
+      state.system = { ...(state.system || {}), ai_connection: connection };
+      state.runtimeGeneration += 1;
+      await loadSystem();
+    },
+  });
   initWorkspace({ document, window, onResize: () => state.timeline?.scheduleDraw(), openShortcuts: () => { renderKeyboardHelp(); elements.keyboardDialog.showModal(); } });
   state.timeline = new TimelineView(elements.timelineCanvas, elements.timelineScroll,
     (time) => { pauseAllMedia(); seekSourcePreview(time); }, setManualSelection, handleTimelineEdit,
@@ -316,6 +333,9 @@ async function boot() {
     if (Number.isFinite(time)) seekPreview(time);
   });
   await Promise.allSettled([loadProjects(), loadSystem()]);
+  // A slow hardware check must not send someone back home after they have
+  // already chosen a workflow or opened a project during startup.
+  if (state.projectViewToken !== initialViewToken) return;
 
   // Older CUTROOM builds stored one global project id for every folder because all
   // releases share 127.0.0.1:8765. Migrate it only when that project actually exists
@@ -335,21 +355,23 @@ async function boot() {
     if (state.projectsLoaded && !state.projects.some((project) => project.id === lastProject)) {
       clearRememberedProject(lastProject);
     } else {
+      // The welcome page must not hide a render/Director job after a refresh.
       try {
-        await openProject(lastProject);
-        return;
-      } catch (error) {
-        if (error?.status === 404) clearRememberedProject(lastProject);
-        else console.warn("Could not restore last CUTROOM project", error);
-      }
+        const recovery = await api(`/api/projects/${encodeURIComponent(lastProject)}/jobs/active`);
+        if (state.projectViewToken !== initialViewToken) return;
+        if (recovery.jobs?.some(job => ["queued", "running", "cancelling"].includes(job.status))) {
+          await openProject(lastProject);
+          return;
+        }
+      } catch (error) { console.warn("Could not check active project work", error); }
     }
   }
-  showWelcome();
+  if (state.projectViewToken === initialViewToken) showWelcome();
 }
 
 function bindEvents() {
-  elements.newProjectButton.addEventListener("click", () => runUiAction(createProject));
-  elements.dialogNewProject.addEventListener("click", () => runUiAction(async () => { elements.projectsDialog.close(); await createProject(); }));
+  elements.newProjectButton.addEventListener("click", () => state.welcome?.chooseService());
+  elements.dialogNewProject.addEventListener("click", () => runUiAction(async () => { elements.projectsDialog.close(); await goHome(); state.welcome?.chooseService(); }));
   elements.homeButton.addEventListener("click", () => runUiAction(goHome));
   elements.projectsButton.addEventListener("click", openProjectsDialog);
   elements.projectName.addEventListener("input", () => {
@@ -451,7 +473,7 @@ function bindEvents() {
     scheduleSettingsPatch({ requiresRebuild: true, reason: "duration" });
   }));
 
-  elements.generateButton.addEventListener("click", generateDraft);
+  elements.generateButton.addEventListener("click", () => state.project?.settings?.workflow === "manual" ? runUiAction(openManualDraft) : generateDraft());
   elements.cancelJobButton.addEventListener("click", cancelActiveJob);
   elements.globalCancelJobButton.addEventListener("click", cancelActiveJob);
   elements.retryDirectorButton.addEventListener("click", generateDraft);
@@ -798,6 +820,7 @@ async function loadSystem() {
   }
   renderModelStatus();
   renderUploadLimits();
+  state.welcome?.setConnection(state.system?.ai_connection);
   renderEditStyleChoices();
   scheduleRuntimeRefresh();
 }
@@ -842,13 +865,34 @@ function showWorkspace() {
   elements.renderButton.disabled = !state.project?.draft || foregroundBusy() || state.draftDirtyReasons.size > 0;
 }
 
-async function createProject() {
+async function createProject({ workflow = "short" } = {}) {
   pauseAllMedia();
   if (!(await flushCurrentProjectSaves())) return;
-  const payload = await api("/api/projects", { method: "POST", body: JSON.stringify({ name: "New project" }) });
+  const initialSettings = workflowSettings(workflow);
+  const payload = await api("/api/projects", { method: "POST", body: JSON.stringify({ name: "New project", initial_settings: initialSettings }) });
   state.projects.unshift(payload.project);
   await openProject(payload.project.id);
+  if (state.project?.id === payload.project.id) window.scrollTo({ top: 0 });
   toast(t("projectCreated"), "success");
+}
+
+async function openManualDraft() {
+  if (!state.project?.sources?.A || foregroundBusy()) return;
+  pauseAllMedia();
+  const projectId = state.project.id;
+  if (!(await flushCurrentProjectSaves())) return;
+  const lock = acquireJobStartLock("manual_start", projectId);
+  if (!lock) return;
+  try {
+    const result = await api(`/api/projects/${encodeURIComponent(projectId)}/manual-draft`, {
+      method: "POST", body: JSON.stringify({ expected_revision: state.project.revision }),
+    });
+    if (state.project?.id !== projectId) return;
+    state.project = result.project;
+    rememberProjectRevision(result.project);
+    hydrateProject();
+    setAdvanced(true);
+  } finally { releaseJobStartLock(lock); renderReadiness(); }
 }
 
 async function openProject(projectId, { skipFlush = false } = {}) {
@@ -1410,7 +1454,7 @@ function renderReadiness() {
   const ready = Boolean(source);
   const audioSlot = sourceMixerSettings().audioSlot;
   const selectedAudioSource = state.project?.sources?.[audioSlot];
-  const audioMeasured = !selectedAudioSource?.has_audio || Boolean(preAudioProfile());
+  const audioMeasured = state.project?.settings?.workflow === "manual" || !selectedAudioSource?.has_audio || Boolean(preAudioProfile());
   const directorReady = ready && audioMeasured;
   const busy = foregroundBusy();
   elements.readiness.classList.toggle("ready", directorReady);
@@ -1418,6 +1462,7 @@ function renderReadiness() {
   elements.exportFpsSelect.disabled = busy;
   $("p", elements.readiness).textContent = !ready ? t("waitingForVideo") : !audioMeasured ? t("measuringAudio") : t("ready");
   elements.generateButton.disabled = !directorReady || busy;
+  state.welcome?.updateProject(state.project);
   const renderDisabled = !state.project?.draft || !hasTimelineFootage() || busy || state.draftDirtyReasons.size > 0;
   [elements.renderButton, elements.resultRenderButton, elements.studioRenderButton].forEach((button) => {
     if (button) button.disabled = renderDisabled;
@@ -2019,6 +2064,11 @@ async function generateDraft() {
 }
 
 async function ensureStoryAIReady(requestedGoal = null) {
+  if (state.system?.ai_connection?.mode && state.system.ai_connection.mode !== "local") {
+    if (!state.system.ai_connection.configured) throw new Error("Connect your Groq API key in AI connection before starting cloud AI.");
+    assertJobStartNotCancelled();
+    return true;
+  }
   const goal = requestedGoal || $("button.active", elements.goalChoices)?.dataset.value || state.project?.settings?.goal || "short";
   if (!["short", "podcast"].includes(goal)) return true;
   const projectId = state.project?.id;
@@ -5792,6 +5842,16 @@ function dockRuntimeStatus() {
 
 function renderModelStatus() {
   if (!elements.modelStatus) return;
+  const connection = state.system?.ai_connection;
+  if (connection?.mode && connection.mode !== "local") {
+    elements.modelStatus.className = `model-status ${connection.configured ? "ready" : "partial"}`;
+    elements.modelStatus.dataset.state = "cloud";
+    $("b", elements.modelStatus).textContent = connection.configured ? "Groq cloud AI selected" : "Connect your cloud AI account";
+    $("small", elements.modelStatus).textContent = connection.configured ? "Audio + transcript sent to Groq when you start AI. Provider quotas and billing apply." : "Open AI connection to enter your key. Manual editing remains available.";
+    elements.modelButton.hidden = true;
+    elements.retryAIButton.hidden = true;
+    return;
+  }
   const models = state.system?.models;
   const runtime = state.system?.runtime;
   const installed = Boolean(models?.story_ai_ready);

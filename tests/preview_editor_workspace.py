@@ -70,6 +70,10 @@ def main():
                 "layout": "embedded_stack", "embedded_layout_confirmed": True,
                 "camera_plan": [{**item, "camera": "embedded_stack"} for item in keeps],
             })
+        if "--onboarding" in sys.argv:
+            project["draft"] = None
+            project["analysis"] = None
+            project["settings"].update(workflow="manual", goal="youtube", aspect="16:9")
         store.save(project)
         try:
             app.run(host="127.0.0.1", port=8766, debug=False, use_reloader=False)

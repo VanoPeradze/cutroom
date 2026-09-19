@@ -493,6 +493,9 @@ def _model_preferences(settings: Settings, brief: dict[str, Any]) -> list[str]:
 
 
 def _select_editor_model(settings: Settings, brief: dict[str, Any]) -> str:
+    from .cloud_ai import enabled, connection
+    if enabled(settings):
+        return str(connection(settings)["model"])
     installed = _installed_models(settings)
     preferred = _model_preferences(settings, brief)
     if installed:
@@ -504,6 +507,13 @@ def _select_editor_model(settings: Settings, brief: dict[str, Any]) -> str:
 
 def story_ai_status(settings: Settings, brief: dict[str, Any] | None = None) -> dict[str, Any]:
     brief = brief or {}
+    from .cloud_ai import enabled, connection
+    if enabled(settings):
+        selected = connection(settings)
+        ready = bool(selected.get("api_key")) and settings.ai.get("enabled", True)
+        return {"ready": bool(ready), "provider": "groq", "ollama_available": False,
+                "installed_models": [], "selected_model": selected["model"] if ready else None,
+                "recommended_model": selected["model"], "reason": None if ready else "cloud_key_required"}
     if not settings.ai.get("enabled", True):
         return {
             "ready": False, "ollama_available": False, "installed_models": [], "selected_model": None,
@@ -531,6 +541,9 @@ def story_ai_status(settings: Settings, brief: dict[str, Any] | None = None) -> 
 
 
 def _call_ollama(settings: Settings, payload: dict[str, Any], timeout: int = 180) -> dict[str, Any] | None:
+    from .cloud_ai import enabled, chat
+    if enabled(settings):
+        return chat(settings, payload, timeout=timeout)
     endpoint = str(settings.ai.get("ollama_url", "http://127.0.0.1:11434")).rstrip("/") + "/api/chat"
     clean_payload = dict(payload)
     clean_payload.pop("_performance_mode", None)
@@ -713,6 +726,9 @@ def _call_ollama_strict(
     timeout: int = 180,
     cancel_check: Callable[[], None] | None = None,
 ) -> dict[str, Any]:
+    from .cloud_ai import enabled, chat
+    if enabled(settings):
+        return chat(settings, payload, cancel_check=cancel_check, timeout=timeout)
     # The hierarchy preflights Ollama/model availability once before the first pass.
     # Do not re-query /api/tags before every pass; that adds latency without adding safety.
     clean_payload = copy.deepcopy(payload)
@@ -2054,6 +2070,8 @@ def hierarchical_story_edit(
     status = story_ai_status(settings, brief)
     if not status["ready"]:
         recommended = status["recommended_model"]
+        if status["reason"] == "cloud_key_required":
+            raise StoryAIUnavailableError("Connect your Groq account in AI connection before creating a cloud edit.")
         if status["reason"] == "ollama_unavailable":
             raise StoryAIUnavailableError("Story AI requires Ollama to be running before a semantic edit can be created.")
         raise StoryAIUnavailableError(f"Story AI model {recommended} must be installed before creating a semantic edit.")
@@ -2216,7 +2234,7 @@ def hierarchical_story_edit(
     return decision, hierarchy
 
 
-def _ollama_chat(settings: Settings, segments: list[dict[str, Any]], brief: dict[str, Any]) -> dict[str, Any] | None:
+def _ollama_chat(settings: Settings, segments: list[dict[str, Any]], brief: dict[str, Any], cancel_check: Callable[[], None] | None = None) -> dict[str, Any] | None:
     if not settings.ai.get("enabled", True):
         return None
     max_segments = int(settings.ai.get("max_llm_segments", 180))
@@ -2252,6 +2270,9 @@ def _ollama_chat(settings: Settings, segments: list[dict[str, Any]], brief: dict
             {"role": "user", "content": json.dumps({"brief": brief, "segments": compact}, ensure_ascii=False)},
         ],
     }
+    from .cloud_ai import enabled, chat
+    if enabled(settings):
+        return chat(settings, payload, cancel_check=cancel_check)
     return _call_ollama(settings, payload)
 
 
@@ -2341,13 +2362,15 @@ def plan_edit(
             "decision": decision,
             "story_beats": beats,
             "story_hierarchy": hierarchy,
-        }, "ollama_hierarchical_story"
+        }, "groq_hierarchical_story" if settings.ai.get("cloud_connection", {}).get("mode", "local") != "local" else "ollama_hierarchical_story"
 
     _check_cancelled(cancel_check)
-    llm = _validate_llm_result(_ollama_chat(settings, enriched, brief), enriched)
+    from .cloud_ai import enabled
+    response = _ollama_chat(settings, enriched, brief, cancel_check=cancel_check) if enabled(settings) else _ollama_chat(settings, enriched, brief)
+    llm = _validate_llm_result(response, enriched)
     _check_cancelled(cancel_check)
     if llm:
-        return {"segments": enriched, "decision": llm, "story_beats": [], "story_hierarchy": None}, "ollama"
+        return {"segments": enriched, "decision": llm, "story_beats": [], "story_hierarchy": None}, "groq" if settings.ai.get("cloud_connection", {}).get("mode", "local") != "local" else "ollama"
     return {"segments": enriched, "decision": deterministic_edit(enriched, brief), "story_beats": [], "story_hierarchy": None}, "deterministic"
 
 def language_from_text(text: str, fallback: str = "en") -> str:

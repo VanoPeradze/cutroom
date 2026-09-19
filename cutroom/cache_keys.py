@@ -95,6 +95,7 @@ def build_analysis_cache_fingerprints(
         "project_language": project.get("language"),
         "requested_language": brief.get("spoken_language") or project.get("language") or "auto",
         "performance_mode": brief.get("performance_mode") or ai.get("performance_mode", "auto"),
+        "ai_connection": {key: (ai.get("cloud_connection") or {}).get(key) for key in ("mode", "provider", "model")},
     }
     scenes_required = bool(identities.get("B")) and goal != "youtube"
     vision_required = bool(

@@ -34,6 +34,12 @@ from cutroom.editing import ManualEditError, apply_manual_edit, strip_private_ed
 from cutroom.sequence import SEQUENCE_ACTION_FIELDS, editor_sequence_snapshot
 from cutroom.source_tracks import SourceTrackError
 from cutroom.intelligence import story_ai_status
+from cutroom.cloud_ai import ConnectionStore, CloudAIError, enabled as cloud_enabled, require_connection
+from cutroom.manual_start import start_manual_draft
+from cutroom.local_models import (
+    OLLAMA_INSTALL_URL, catalog as local_model_catalog,
+    install_transcription, supported_install,
+)
 from cutroom.audio import analyze_audio
 from cutroom.captions import (
     CAPTION_POSITION_CHOICES,
@@ -79,6 +85,7 @@ INSTANCE_PROTOCOL_VERSION = 1
 INSTANCE_RESPONSE_LIMIT = 4 * 1024
 LEGACY_SYSTEM_RESPONSE_LIMIT = 256 * 1024
 SETTINGS_FIELDS = {
+    "workflow",
     "edit_style",
     "goal",
     "aspect",
@@ -121,6 +128,7 @@ AUDIO_CLEANUP_FIELDS = {
 class ServerStartupError(RuntimeError):
     """A local server startup failure that should be shown without a traceback."""
 SETTING_CHOICES = {
+    "workflow": {"ai", "manual"},
     "goal": {"short", "youtube", "podcast", "clean"},
     "aspect": {"9:16", "16:9", "1:1", "4:5", "source"},
     "pace": {"gentle", "balanced", "dynamic"},
@@ -287,6 +295,7 @@ def _validate_settings_payload(payload: dict[str, Any]) -> None:
         except ValueError as exc:
             raise APIInputError("invalid_field", str(exc)) from exc
     string_limits = {
+        "workflow": 16,
         "edit_style": 40,
         "goal": 24,
         "pace": 24,
@@ -620,6 +629,8 @@ def create_app(settings: Settings | None = None) -> Flask:
     app.extensions["cutroom_jobs"] = jobs
     ai_runtime = AIRuntime(settings)
     app.extensions["cutroom_ai_runtime"] = ai_runtime
+    connections = ConnectionStore(settings)
+    app.extensions["cutroom_connections"] = connections
     configured_loopback = True
     # Source mutations, project deletion and job admission share one small gate.
     # This closes races where two requests both saw an idle project, or where a
@@ -699,6 +710,12 @@ def create_app(settings: Settings | None = None) -> Flask:
         **kwargs,
     ):
         with project_job_gate:
+            downloading = jobs.active(kind="model_install", limit=1)
+            if downloading and kind in FOREGROUND_JOB_KINDS:
+                raise JobAdmissionError(
+                    "Finish or cancel the model download before starting AI processing or export. You can continue editing manually.",
+                    code="job_conflict", active_job_id=downloading[0].id,
+                )
             latest_project = store.load(project_id)
             if validate_project is not None:
                 validate_project(latest_project)
@@ -724,7 +741,7 @@ def create_app(settings: Settings | None = None) -> Flask:
     def protect_local_api():
         if not request.path.startswith("/api/"):
             return None
-        if request.endpoint in JSON_BODY_ENDPOINTS:
+        if request.endpoint in JSON_BODY_ENDPOINTS or request.endpoint in {"save_ai_connection", "manual_draft"}:
             request.max_content_length = JSON_BODY_LIMIT
             if request.content_length is not None and request.content_length > JSON_BODY_LIMIT:
                 raise RequestEntityTooLarge()
@@ -750,6 +767,10 @@ def create_app(settings: Settings | None = None) -> Flask:
     @app.errorhandler(APIInputError)
     def handle_api_input(error: APIInputError):
         return jsonify({"error": error.code, "message": error.message}), error.status
+
+    @app.errorhandler(CloudAIError)
+    def handle_cloud_error(error):
+        return jsonify({"error": "cloud_ai_unavailable", "message": str(error)}), 409
 
     @app.errorhandler(JobAdmissionError)
     def handle_job_admission(error: JobAdmissionError):
@@ -859,8 +880,9 @@ def create_app(settings: Settings | None = None) -> Flask:
             "python": sys.version.split()[0],
             "platform": sys.platform,
             "encoders": sorted(available_encoders(settings)),
-            "models": _model_status(settings),
-            "runtime": ai_runtime.snapshot(),
+            "models": _model_status(connections.job_settings(settings)),
+            "runtime": {"state": "cloud", "available": connections.public()["configured"]} if connections.public()["mode"] != "local" else ai_runtime.snapshot(),
+            "ai_connection": connections.public(),
             "edit_styles": public_edit_styles(),
             "data_dir": str(settings.data_dir),
             "limits": {
@@ -873,11 +895,31 @@ def create_app(settings: Settings | None = None) -> Flask:
             },
         })
 
+    @app.get("/api/ai/connection")
+    def ai_connection():
+        return jsonify({"connection": connections.public()})
+
+    @app.post("/api/ai/connection")
+    def save_ai_connection():
+        payload = _json_object()
+        with project_job_gate:
+            if jobs.active():
+                raise APIInputError("project_busy", "Wait for active processing to finish before changing AI connection.", 409)
+            try:
+                selected = connections.update(payload)
+            except ValueError as error:
+                raise APIInputError("invalid_connection", str(error)) from error
+        return jsonify({"connection": selected})
+
     @app.post("/api/runtime/prepare")
     def prepare_ai_runtime():
         payload = _json_object()
         _reject_unknown_fields(payload, {"performance_mode"})
         _validate_settings_payload(payload)
+        selected_settings = connections.job_settings(settings)
+        if cloud_enabled(selected_settings):
+            require_connection(selected_settings)
+            return jsonify({"runtime": {"state": "cloud", "available": True}, "story_ai": story_ai_status(selected_settings, payload)})
         # This explicit action only starts/checks the engine. Downloading a model
         # remains a separate, user-approved action through /api/models/install.
         runtime = ai_runtime.ensure_ready(timeout=30, retry=True)
@@ -891,9 +933,13 @@ def create_app(settings: Settings | None = None) -> Flask:
     @app.post("/api/projects")
     def create_project():
         payload = _json_object()
-        _reject_unknown_fields(payload, {"name"})
+        _reject_unknown_fields(payload, {"name", "initial_settings"})
         _require_optional_string(payload, "name", max_length=120)
-        return jsonify({"project": store.create(payload.get("name") or "Untitled project")}), 201
+        initial = payload.get("initial_settings", {})
+        if not isinstance(initial, dict):
+            raise APIInputError("invalid_field", "Initial settings must be an object.")
+        _validate_settings_payload(initial)
+        return jsonify({"project": store.create(payload.get("name") or "Untitled project", initial_settings=initial)}), 201
 
     @app.get("/api/projects/<project_id>")
     def get_project(project_id: str):
@@ -1494,6 +1540,22 @@ def create_app(settings: Settings | None = None) -> Flask:
                 raise
         return jsonify({"project": _public_project(project), "job": job.public()}), 202
 
+    @app.post("/api/projects/<project_id>/manual-draft")
+    def manual_draft(project_id: str):
+        payload = _json_object()
+        _reject_unknown_fields(payload, {"expected_revision"})
+        revision = payload.get("expected_revision")
+        if isinstance(revision, bool) or not isinstance(revision, int) or revision < 1:
+            raise APIInputError("invalid_revision", "Refresh the project before starting your timeline.")
+        with project_job_gate:
+            if jobs.active(project_id=project_id) or active_uploads.get(project_id, 0):
+                raise APIInputError("project_busy", "Wait for your recordings to finish preparing.", 409)
+            try:
+                project = store.update(project_id, start_manual_draft, expected_revision=revision)
+            except ManualEditError as error:
+                raise APIInputError("invalid_manual_edit", str(error)) from error
+        return jsonify({"project": _public_project(project)})
+
     @app.post("/api/projects/<project_id>/director")
     def run_director(project_id: str):
         payload = _json_object()
@@ -1504,8 +1566,11 @@ def create_app(settings: Settings | None = None) -> Flask:
         effective = dict(project.get("settings", {}))
         effective.update(payload)
         goal = str(effective.get("goal") or "short")
+        selected_settings = connections.job_settings(settings)
+        if cloud_enabled(selected_settings):
+            require_connection(selected_settings)
         if goal in {"short", "podcast"}:
-            status = story_ai_status(settings, effective)
+            status = story_ai_status(selected_settings, effective)
             if not status["ready"]:
                 return jsonify({
                     "error": "story_ai_required",
@@ -1530,7 +1595,7 @@ def create_app(settings: Settings | None = None) -> Flask:
             analyze_project,
             project_id,
             store,
-            settings,
+            selected_settings,
             payload,
             validate_project=require_source,
             job_identity=payload,
@@ -1562,7 +1627,7 @@ def create_app(settings: Settings | None = None) -> Flask:
             refine_project,
             project_id,
             store,
-            settings,
+            connections.job_settings(settings),
             command,
             validate_project=require_draft,
             job_identity={"command": command},
@@ -1683,6 +1748,14 @@ def create_app(settings: Settings | None = None) -> Flask:
             return jsonify({"error": "not_found", "message": "Export not found."}), 404
         return send_file(path, conditional=True, as_attachment=True, download_name=safe)
 
+    @app.get("/api/models/local")
+    def local_models():
+        # Disk/cached status only: opening the setup panel must not download,
+        # launch a daemon, contact model hosts, or load inference libraries.
+        result = local_model_catalog(settings, ai_runtime.snapshot(), engine_installed=bool(resolve_ollama_executable()))
+        result["jobs"] = [job.public() for job in jobs.list(kind="model_install", limit=30)]
+        return jsonify(result)
+
     @app.post("/api/models/install")
     def install_model():
         payload = _json_object()
@@ -1690,24 +1763,48 @@ def create_app(settings: Settings | None = None) -> Flask:
         _require_optional_string(payload, "kind", max_length=24)
         _require_optional_string(payload, "model", max_length=120)
         kind = payload.get("kind") or "editor"
-        model = str(payload.get("model") or settings.ai.get("editor_model", "qwen3.5:4b"))
-        if kind != "editor":
-            return jsonify({"error": "unsupported_kind", "message": "Whisper models are downloaded automatically on first use."}), 400
+        default_model = settings.ai.get("whisper_model", "base") if kind == "transcription" else settings.ai.get("editor_model", "qwen3.5:4b")
+        model = str(payload.get("model") or default_model)
+        if kind not in {"editor", "transcription"}:
+            return jsonify({"error": "unsupported_kind", "message": "Choose Story AI or speech transcription from Local models."}), 400
         if not re_safe_model(model):
-            return jsonify({"error": "invalid_model", "message": "Invalid Ollama model name."}), 400
-        runtime = ai_runtime.ensure_ready(timeout=30, retry=True)
-        if not runtime["available"]:
-            return jsonify({
-                "error": "ai_runtime_unavailable", "message": runtime["message"], "runtime": runtime,
-            }), 409
-        job = jobs.submit(
-            "model_install",
-            None,
-            _install_ollama_model,
-            model,
-            settings,
-            dedupe_key=model,
-        )
+            return jsonify({"error": "invalid_model", "message": "Invalid model name."}), 400
+        if not supported_install(kind, model):
+            return jsonify({"error": "unsupported_model", "message": "Choose a supported model from Local models. Custom model downloads are not accepted here."}), 400
+        dedupe_key = model if kind == "editor" else f"transcription:{model}"
+
+        def check_download_admission():
+            active_processing = next((job for job in jobs.active() if job.kind in FOREGROUND_JOB_KINDS), None)
+            if active_processing:
+                raise JobAdmissionError("Finish or cancel active AI processing or export before downloading models.",
+                                        code="job_conflict", active_job_id=active_processing.id)
+            active_downloads = jobs.active(kind="model_install")
+            conflicting = next((job for job in active_downloads if job.dedupe_key != dedupe_key), None)
+            if conflicting:
+                raise JobAdmissionError("One model is already downloading. Finish or cancel it before starting another.",
+                                        code="job_conflict", active_job_id=conflicting.id)
+            return next((job for job in active_downloads if job.dedupe_key == dedupe_key), None)
+
+        with project_job_gate:
+            existing_download = check_download_admission()
+            if existing_download:
+                return jsonify({"job": existing_download.public()}), 202
+        if kind == "editor":
+            # A slow daemon start must not lock the manual editor. Recheck
+            # admission after the probe so competing requests cannot overlap.
+            runtime = ai_runtime.ensure_ready(timeout=30, retry=True)
+            if not runtime["available"]:
+                return jsonify({
+                    "error": "ai_runtime_unavailable", "message": runtime["message"], "runtime": runtime,
+                    "install_url": OLLAMA_INSTALL_URL,
+                }), 409
+        with project_job_gate:
+            check_download_admission()
+            job = jobs.submit(
+                "model_install", None,
+                _install_ollama_model if kind == "editor" else install_transcription,
+                model, settings, dedupe_key=dedupe_key,
+            )
         return jsonify({"job": job.public()}), 202
 
     return app
@@ -1865,7 +1962,7 @@ def _model_status(settings: Settings) -> dict[str, Any]:
         whisper_installed = True
     except ImportError:
         whisper_installed = False
-    ollama = _ollama_status(settings)
+    ollama = {"available": False, "models": []} if cloud_enabled(settings) else _ollama_status(settings)
     configured = str(settings.ai.get("editor_model", "qwen3.5:4b"))
     story = story_ai_status(settings, {})
     return {
@@ -1942,10 +2039,15 @@ def _install_ollama_model(context: JobContext, model: str, settings: Settings) -
             output.append(line.rstrip())
             if len(output) > 40:
                 del output[:20]
-            context.update(min(0.94, context.job.progress + 0.01), line.strip()[-120:] or f"Installing {model}")
+            clean_line = re.sub(r"\x1b\[[0-9;?]*[A-Za-z]", "", line).strip()
+            percent = re.search(r"(?:^|\s)(\d{1,3})%", clean_line)
+            # Ollama reports each layer separately; this is current-layer
+            # progress, never a fabricated overall download percentage.
+            progress = min(0.94, max(0.02, int(percent.group(1)) / 100 * 0.94)) if percent else context.job.progress
+            context.update(progress, (f"Current layer: {clean_line}" if percent else clean_line)[-160:] or f"Installing {model}")
         context.checkpoint()
         if process.wait() != 0:
-            raise RuntimeError("Ollama could not install the selected model")
+            raise RuntimeError("Ollama could not download the selected model. Check your internet connection, free disk space, and Ollama version, then retry.")
         context.update(1.0, f"{model} is ready")
         return {"model": model, "installed": True, "log": output[-20:]}
     finally:
@@ -2257,7 +2359,8 @@ def main() -> None:
         jobs = app.extensions["cutroom_jobs"]
         # Start only after owning the CUTROOM port; re-opening the launcher must
         # reuse an existing instance instead of creating another AI supervisor.
-        app.extensions["cutroom_ai_runtime"].start_background()
+        if app.extensions["cutroom_connections"].public()["mode"] == "local":
+            app.extensions["cutroom_ai_runtime"].start_background()
         if settings.raw.get("open_browser", True) and os.environ.get("CUTROOM_NO_BROWSER") != "1":
             threading.Timer(1.2, lambda: webbrowser.open(url)).start()
         try:

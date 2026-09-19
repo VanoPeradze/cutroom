@@ -15,7 +15,7 @@ from pathlib import Path, PurePosixPath
 ROOT = Path(__file__).resolve().parents[1]
 ROOT_FILES = (
     ".gitignore", ".gitattributes", "server.py", "requirements.txt", "requirements-dev.txt", "pytest.ini",
-    "run_windows.bat", "repair_windows.bat", "setup_windows.ps1",
+    "run_windows.bat", "repair_windows.bat", "setup_windows.ps1", "PUBLISH.bat",
     "verify_windows_installer.ps1", "run_linux.sh", "setup_linux.sh",
     "README.md", "README_HE.md", "START_HERE_HE.txt", "CHANGELOG.md",
     "LICENSE", "THIRD_PARTY_NOTICES.md", "UPGRADE_HE.md",
@@ -29,7 +29,13 @@ DOC_FILES = (
     "docs/CREATOR_EDITING_RESEARCH.md", "docs/TEST_ON_ANOTHER_PC.md",
     "docs/TRANSCRIPT_EVALUATION.md", "docs/QUALITY_AND_LIMITS.md", "docs/UIUX_SKILL_CSS.md",
     "docs/INDEPENDENT_TRACKS.md", "docs/BETA_FEEDBACK.md", "docs/BETA_STATUS.md", "docs/MODELS.md",
-    "docs/CONTRIBUTING.md",
+    "docs/CONTRIBUTING.md", "docs/AI_CONNECTIONS.md", "docs/PUBLISHING.md",
+    "docs/USER_GUIDE_EN.md", "docs/USER_GUIDE_HE.md", "docs/SHOWCASE_EN.md", "docs/SHOWCASE_HE.md",
+)
+# Only reviewed, purpose-made app screenshots belong in the tester package.
+# Missing captures fail the build rather than silently shipping broken guide links.
+IMAGE_FILES = (
+    "docs/images/welcome.png", "docs/images/editor.png", "docs/images/ai-options.png",
 )
 START_TEXT = """CUTROOM
 Your footage. Your edit.
@@ -94,7 +100,7 @@ def _literal(source: bytes, name: str) -> object:
 
 def collect_payload(root: Path) -> dict[str, bytes]:
     root = root.resolve()
-    payload = {name: _read_source(root, name) for name in (*ROOT_FILES, *DOC_FILES)}
+    payload = {name: _read_source(root, name) for name in (*ROOT_FILES, *DOC_FILES, *IMAGE_FILES)}
 
     def walk(directory: Path, suffixes: set[str]) -> None:
         if _is_link(directory):

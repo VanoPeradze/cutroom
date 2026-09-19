@@ -1478,6 +1478,7 @@ def test_server_reserves_the_port_before_app_creation_and_hands_socket_to_waitre
         extensions={
             "cutroom_jobs": jobs,
             "cutroom_ai_runtime": SimpleNamespace(start_background=lambda: events.append("start-ai")),
+            "cutroom_connections": SimpleNamespace(public=lambda: {"mode": "local"}),
         },
         config={"MAX_CONTENT_LENGTH": 1024},
     )

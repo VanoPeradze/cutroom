@@ -5,10 +5,11 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#081013">
   <meta name="color-scheme" content="dark">
-  <title>CUTROOM AI Director</title>
+  <title>CUTROOM — Your editing workspace</title>
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/assets/styles.css?v=561-ui-refresh-78">
   <link rel="stylesheet" href="/assets/workspace.css?v=561-ui-refresh-75">
+  <link rel="stylesheet" href="/assets/welcome.css?v=563-setup-2">
 </head>
 <body class="welcome-mode">
   <a class="skip-link" href="#main" data-i18n="skip">Skip to content</a>
@@ -22,8 +23,10 @@
       <span class="save-state" id="saveState" role="status" aria-live="polite" aria-atomic="true" data-i18n="saved">Saved</span>
     </div>
     <nav class="top-actions" aria-label="Primary actions">
+      <button class="button ghost compact" id="welcomeHelpButton" type="button">Help & guide</button>
+      <button class="button ghost compact" id="aiConnectionButton" type="button">AI connection</button>
       <button class="button ghost compact" id="projectsButton" data-i18n="projects">Projects</button>
-      <span class="local-status"><i aria-hidden="true"></i><span data-i18n="localMode">Runs locally</span></span>
+      <span class="local-status"><i aria-hidden="true"></i><span id="processingBadge">Local AI</span></span>
       <button class="button ghost compact" id="advancedButton" aria-expanded="false" data-i18n="studio">Studio</button>
       <button class="button render compact" id="renderButton" disabled>
         <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 15V3m-4 4 4-4 4 4M5 14v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5"/></svg><span data-i18n="render">Export</span>
@@ -41,78 +44,74 @@
   </aside>
 
   <main id="main">
-    <section class="welcome-shell" id="welcomeView">
+    <section class="welcome-shell home-hub" id="welcomeView" aria-label="Welcome to CUTROOM">
       <div class="welcome-copy">
         <div class="welcome-kicker">
-          <p class="eyebrow" data-i18n="welcomeBadge">LOCAL AI VIDEO EDITOR</p>
-          <span>v5.6.1</span>
+          <p class="eyebrow">YOUR EDITING WORKSPACE</p>
+          <span>OPEN-SOURCE BETA</span>
         </div>
-        <h1 data-i18n="welcomeTitle">What will you create today?</h1>
-        <p class="welcome-lead" data-i18n="welcomeLead">Start with your footage. Let Director build a first cut, then make it yours in the editor.</p>
+        <h1>Less busywork.<br><em>More creating.</em></h1>
+        <p class="welcome-lead">Turn your recordings into Shorts, YouTube videos and stories worth sharing. Start with an AI draft or edit by hand. You control the final cut.</p>
         <div class="welcome-actions">
           <button class="button primary large" id="newProjectButton">
             <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 5v14M5 12h14"/></svg>
-            <span data-i18n="newProject">Create project</span>
+            <span>Choose what to create</span>
             <span class="new-project-arrow" aria-hidden="true">↗</span>
           </button>
-          <span class="welcome-privacy"><i aria-hidden="true"></i><span data-i18n="privateWorkspace">Your footage stays on this computer</span></span>
+          <button type="button" class="home-text-link" id="welcomeTourButton">First time? Start here <span aria-hidden="true">↗</span></button>
         </div>
         <ul class="welcome-benefits">
           <li><i aria-hidden="true">✓</i><span data-i18n="trustOpen">Free & open source</span></li>
-          <li><i aria-hidden="true">✓</i><span data-i18n="trustLocal">Local-first processing</span></li>
-          <li><i aria-hidden="true">✓</i><span data-i18n="trustFormats">Reels & YouTube</span></li>
+          <li><i aria-hidden="true">✓</i><span>No CUTROOM watermark</span></li>
+          <li><i aria-hidden="true">✓</i><span>Your final say</span></li>
         </ul>
-        <ol class="welcome-workflow" aria-label="Your editing workflow">
-          <li><b aria-hidden="true">01</b><div><strong>Bring your footage</strong><p>A recording, or a screen and camera together.</p></div></li>
-          <li><b aria-hidden="true">02</b><div><strong>Shape your edit</strong><p>Choose a direction, then refine every cut.</p></div></li>
-          <li><b aria-hidden="true">03</b><div><strong>Make it ready</strong><p>Set your format, captions and frame rate.</p></div></li>
-        </ol>
       </div>
-      <div class="welcome-film" aria-hidden="true">
-        <div class="studio-demo">
-          <div class="studio-demo-bar">
-            <span class="window-controls"><i></i><i></i><i></i></span>
-            <span class="demo-project">creator_session_01</span>
-            <span class="demo-online"><i></i>AI READY</span>
-          </div>
-          <div class="studio-demo-main">
-            <div class="demo-preview">
-              <div class="demo-preview-head"><span>PREVIEW</span><b>9:16 AUTO</b></div>
-              <div class="demo-frame">
-                <span class="demo-frame-glow"></span>
-                <span class="demo-focus-box"><i></i><i></i><i></i><i></i></span>
-                <span class="demo-caption">THE STRONGEST MOMENT</span>
-              </div>
-              <div class="demo-player"><b>▶</b><span>00:42</span><i></i><span>01:00</span></div>
-            </div>
-            <div class="demo-director">
-              <span class="demo-label">AI DIRECTOR</span>
-              <strong>First cut ready</strong>
-              <small>Storyline · Pace · Framing</small>
-              <div class="demo-workflow"><b>01</b><span>Your footage<small>One or two sources</small></span></div>
-              <div class="demo-workflow"><b>02</b><span>Your direction<small>Choose a style</small></span></div>
-              <div class="demo-workflow"><b>03</b><span>Your final say<small>Every cut is editable</small></span></div>
-              <div class="demo-ready"><i></i><span>Ready to refine</span></div>
-            </div>
-          </div>
-          <div class="demo-timeline">
-            <div class="demo-timeline-head"><span>TIMELINE</span><b>01:00</b></div>
-            <div class="demo-ruler"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
-            <div class="demo-track video-track"><span>V1</span><b></b><b></b><b></b><b></b></div>
-            <div class="demo-track audio-track"><span>A1</span><b></b><b></b><b></b></div>
-            <div class="demo-playhead"><i></i></div>
-          </div>
+      <aside class="home-setup" aria-labelledby="homeSetupTitle">
+        <div class="home-setup-heading"><span class="setup-symbol" aria-hidden="true">✦</span><div><p class="eyebrow">BEFORE YOUR FIRST AI EDIT</p><h2 id="homeSetupTitle">Your setup, made clear.</h2></div></div>
+        <div class="setup-check"><span aria-hidden="true">01</span><div><strong id="homeConnectionStatus">Choose your AI connection</strong><p id="homeConnectionDetail">Local for privacy. Cloud for less AI processing on your computer.</p></div></div>
+        <div class="setup-check"><span aria-hidden="true">02</span><div><strong id="homeLocalStatus">Local models are separate downloads</strong><p id="homeLocalDetail">Transcription understands speech. Story AI plans the draft. Check what you need before downloading.</p></div></div>
+        <div class="home-setup-actions"><button type="button" class="button primary" id="homeModelsButton">Set up local models</button><button type="button" class="button ghost" id="homeConnectionButton">Compare AI options</button></div>
+        <p class="setup-free-note">Just want to edit? Choose Manual below. No AI account or model needed.</p>
+      </aside>
+      <section class="home-services" id="welcomeServices" aria-labelledby="welcomeServicesTitle" tabindex="-1">
+        <div class="home-section-head"><div><p class="eyebrow">START A PROJECT</p><h2 id="welcomeServicesTitle">What are we making?</h2></div><p>Choose the result. Keep control of the details.</p></div>
+        <div class="service-grid">
+          <button class="service-card" type="button" data-start-workflow="short">
+            <span class="service-art short-art" aria-hidden="true"><span class="mini-phone"><i></i><b>MAKE IT<br>COUNT.</b><small>SHORT / REEL</small></span><span class="art-orbit"></span><span class="art-tag">9:16</span></span>
+            <span class="service-copy"><strong>Create a Short / Reel <i aria-hidden="true">↗</i></strong><span>Find a focused story in your recording. Frame it vertically for Shorts, Reels or TikTok.</span><small>AI draft · Vertical video · Editable captions</small></span>
+          </button>
+          <button class="service-card" type="button" data-start-workflow="youtube">
+            <span class="service-art youtube-art" aria-hidden="true"><span class="mini-landscape"><i>▶</i><b>THE FULL STORY</b><small>YOUR CHANNEL. YOUR VOICE.</small></span><span class="art-tag">16:9</span></span>
+            <span class="service-copy"><strong>Edit a YouTube video <i aria-hidden="true">↗</i></strong><span>Clean up pauses and shape a longer recording while keeping its original sequence.</span><small>AI-assisted cleanup · Horizontal video</small></span>
+          </button>
+          <button class="service-card" type="button" data-start-workflow="manual">
+            <span class="service-art manual-art" aria-hidden="true"><span class="mini-editor"><i></i><span><b></b><b></b><b></b></span><span><b></b><b></b></span><em></em></span><span class="art-tag">YOU DIRECT</span></span>
+            <span class="service-copy"><strong>Edit it yourself <i aria-hidden="true">↗</i></strong><span>Start with your full recording. Split, move and trim individual clips on your own timeline.</span><small>No AI required · Full manual control</small></span>
+          </button>
         </div>
-        <div class="draft-ready-card"><i>✓</i><span><small>YOUR CREATIVE SPACE</small><strong>Make it yours</strong></span><b>100% local</b></div>
-      </div>
+      </section>
       <div class="recent-strip" id="recentProjects" hidden>
         <div class="section-label"><span data-i18n="recent">Recent projects</span><b id="recentCount">0</b></div>
         <div class="recent-list" id="recentList"></div>
       </div>
+      <section class="home-workflow" aria-labelledby="homeWorkflowTitle">
+        <div class="home-section-head"><div><p class="eyebrow">A SIMPLE WORKFLOW</p><h2 id="homeWorkflowTitle">From recording to ready.</h2></div></div>
+        <ol class="home-steps">
+          <li><b>1</b><div><h3>Bring your footage</h3><p>Add a recording, or a screen and camera separately. Choose the spoken language and your layout.</p></div></li>
+          <li><b>2</b><div><h3>Shape your edit</h3><p>Let AI prepare a draft, or start manually. Review the transcript, move clips and adjust each frame.</p></div></li>
+          <li><b>3</b><div><h3>Make it ready</h3><p>Check the preview, style your captions and export. Choose your resolution and frame rate, up to 60 FPS.</p></div></li>
+        </ol>
+      </section>
+      <section class="home-processing" aria-labelledby="homeProcessingTitle">
+        <div class="home-section-head"><div><p class="eyebrow">NO HIDDEN TRADE-OFFS</p><h2 id="homeProcessingTitle">Same editor. Your choice of AI.</h2></div></div>
+        <div class="processing-overview"><article><h3>Local AI</h3><p><strong>You get:</strong> private, on-device transcription and Story AI.</p><p><strong>You need:</strong> model downloads, disk space and processing time. No AI provider fee.</p></article><article><h3>Cloud · Free tier</h3><p><strong>You get:</strong> Groq transcription and Story AI, with less local AI work.</p><p><strong>You need:</strong> internet, your own Free account and API key. Quotas apply; not unlimited.</p></article><article><h3>Your own API plan</h3><p><strong>You get:</strong> the same Groq integration using your account's limits.</p><p><strong>You need:</strong> your own key and a plan you manage. Provider charges may apply.</p></article></div>
+        <p class="home-processing-note" id="homePrivacyNote">Local AI selected. Your footage stays on this computer. Online AI is optional; editing and export still run locally.</p>
+      </section>
+      <footer class="home-footer"><strong>CUTROOM <span>Free to create. Open to build on.</span></strong><p>Open-source beta · AI drafts need your review · No CUTROOM subscription</p></footer>
     </section>
 
     <section class="workspace" id="workspaceView" hidden>
-      <ol class="director-steps" aria-label="Workflow">
+      <ol class="director-steps" id="setupWorkflowSteps" aria-label="Workflow">
         <li class="active" data-step="1"><b>01</b><span data-i18n="stepFootage">Preparation</span></li>
         <li data-step="2"><b>02</b><span data-i18n="stepBrief">Director</span></li>
         <li data-step="3"><b>03</b><span data-i18n="stepDraft">Draft</span></li>
@@ -120,9 +119,11 @@
 
       <section class="director-panel" id="setupPanel">
         <div class="panel-heading">
-          <div><p class="eyebrow" data-i18n="director">AI Director</p><h2 data-i18n="setupTitle">What are we editing today?</h2></div>
-          <p data-i18n="setupHelp">Add one or two sources. With two, choose the screen, camera and audio before Director starts.</p>
+          <div><p class="eyebrow" id="setupEyebrow" data-i18n="director">AI Director</p><h2 data-i18n="setupTitle">What are we editing today?</h2></div>
+          <p id="setupInstructions" data-i18n="setupHelp">Add one or two sources. With two, choose the screen, camera and audio before Director starts.</p>
         </div>
+        <div class="setup-intent" id="setupIntent"><span id="setupIntentCopy">Add your footage to get started.</span><button type="button" class="home-text-link" id="changeWorkflowButton">Back to home</button></div>
+        <details class="context-help setup-help"><summary>How to set up this project</summary><p><strong>One recording:</strong> add it as A. If it already contains a camera, mark the camera area in Layout; CUTROOM cannot recover pixels hidden in the original.</p><p><strong>Two recordings:</strong> add your screen and camera, then assign their roles and choose the audio source. Check synchronization before building.</p><p><strong>AI draft:</strong> choose your output, style and spoken language. The quality profile controls local models, not your export resolution. Manual editing skips AI setup.</p></details>
         <div id="setupRuntimeDock" class="runtime-status-dock">
           <div class="model-status partial" id="modelStatus" role="status" aria-live="polite">
             <span class="status-light" aria-hidden="true"></span>
@@ -194,6 +195,7 @@
             </button>
           </div>
           <small class="edit-style-note" id="editStyleNote" data-i18n="editStyleEvidence">Each style changes moment selection, pacing and duration. Screen + camera is never enabled without explicit confirmation.</small>
+          <details class="context-help"><summary>What does an editing style change?</summary><p>Styles guide moment selection, pacing and story structure. They do not clone a particular creator or guarantee a finished edit. Your output format and length stay under your control; review the draft before exporting.</p></details>
         </fieldset>
 
         <div class="brief-grid">
@@ -674,6 +676,50 @@
   </dialog>
 
   <div class="toast-region" id="toastRegion" aria-live="polite"></div>
-  <script type="module" src="/assets/app.js?v=561-ui-refresh-82"></script>
+  <dialog id="welcomeGuideDialog" class="welcome-dialog" aria-labelledby="welcomeGuideTitle">
+    <form method="dialog" class="dialog-shell"><header><div><p class="eyebrow">THE CUTROOM GUIDE</p><h2 id="welcomeGuideTitle">A little direction. You're in control.</h2></div><button class="icon-button" aria-label="Close quick tour">×</button></header>
+      <p>New to CUTROOM? Follow the four steps, then open a topic below. You can return here from any screen.</p>
+      <ol class="tour-steps"><li><h3>Pick the video you want to make</h3><p>Short / Reel creates a vertical draft. YouTube keeps a horizontal, chronological edit. Manual starts with the whole recording and needs no AI.</p></li><li><h3>Add one or two recordings</h3><p>Use one recording, including one with an embedded camera, or add your screen and camera as separate sources. Check which source supplies the audio.</p></li><li><h3>Choose your AI connection, if needed</h3><p>Local AI may need a one-time model download. Online AI needs your own Groq key and consent to send audio and transcript text. Free-tier quotas apply; paid accounts may incur charges.</p></li><li><h3>Review, refine, export</h3><p>AI is a starting point. Correct the transcript, split and move clips, adjust the camera framing and check captions. Use “How to edit” in the editor for timeline controls and shortcuts.</p></li></ol>
+      <label class="guide-search">Find an explanation<input id="guideSearch" type="search" placeholder="Try models, layout, captions, cuts or export" autocomplete="off"></label>
+      <div class="guide-topics">
+        <details data-help-topic><summary>Local AI: what to download and why</summary><p>Open <strong>AI connection → On my computer</strong>. Local transcription turns speech into text. Local Story AI uses that text to plan an edit. Download one suitable model for each job; you do not need every model.</p><p>Story AI also needs the Ollama engine. If it is missing, use the official installation link, install it yourself, then return and Refresh. CUTROOM shows estimated download sizes and asks you to confirm before downloading a model. Progress and Cancel remain available in the same panel.</p><p>Balanced is a starting point, Lite uses smaller models, and Quality needs more resources. The available choices and approximate requirements appear beside each model. Downloading a model does not change a project's quality profile. For Hebrew speech, choose Hebrew explicitly; the configured Hebrew model is listed separately.</p></details>
+        <details data-help-topic><summary>Cloud AI: free accounts, paid plans and privacy</summary><p>Both online options use your own Groq account. A Free account has provider quotas; a paid account may incur charges, even when you select “Free tier” here. CUTROOM does not upgrade accounts or switch plans. It sends selected audio, transcript and editing instructions only when you start AI processing. Video frames are not sent.</p><p>Your pasted API key lives in the running CUTROOM session. Reconnect after restarting. Choosing cloud AI reduces local AI work, but previews and video export still run on your computer. The app is not a hosted cloud renderer.</p></details>
+        <details data-help-topic><summary>Sources A and B, camera layouts and synchronization</summary><p>A is your main recording and defines the starting timeline. B is an optional second recording. In Layout, assign which is the screen, which is the camera and which supplies the audio. Inspect sync and adjust its offset if the sources do not line up.</p><p>Stacked puts camera and screen into separate parts of the frame. Side by side, picture-in-picture and single-source options give different compositions. A camera embedded in a single file is cropped from that file; it is not a recovered independent source. Select a clip to adjust its framing only, or choose Entire edit to apply your next layout throughout.</p></details>
+        <details data-help-topic><summary>Spoken language, transcript and captions</summary><p>Spoken language means the language actually spoken, not the language you want as an output. Automatic detection can be wrong on short or noisy audio. Set the exact language when you know it. Transcription is not automatic translation.</p><p>Review the transcript after AI analysis. Select a line, correct the text, and Save. Text correction changes captions; timeline tools change the video. Caption appearance and placement are in Captions. Burned captions are permanent pixels in the exported video. Manual starts do not create a transcript or captions automatically.</p></details>
+        <details data-help-topic><summary>Timeline: select, cut, remove, move and restore</summary><p><strong>Select / Move:</strong> select a clip and drag its middle to reorder it. <strong>Cut:</strong> click at the split point. <strong>Range:</strong> drag across a section, then remove it. These are different tools, so check the active tool before dragging.</p><p><strong>Together</strong> edits A and B as a pair. A only or B only changes that source and may leave gaps. Trim a clip's white edges to reveal available original footage; Close gaps removes existing empty timeline time. Undo reverses an edit.</p><p><strong>Original footage</strong> shows the complete source with included and removed areas, so you can preview a missing section and restore it. Full source preview does not switch your editing target. Zoom follows the yellow playhead. “How to edit” inside Studio has detailed controls.</p></details>
+        <details data-help-topic><summary>Keyboard shortcuts and the editing workspace</summary><p>Space plays and pauses when you are not typing. Shortcut profiles adapt CUTROOM's supported actions to familiar editing habits; they are not a complete copy of another program. Open Keyboard shortcuts to choose a profile and see its exact commands.</p><p>Use the video/timeline divider to change the space each gets. Full screen shows just the composed video. Escape returns to the editor. Tool explanations stay available in Help & guide.</p></details>
+        <details data-help-topic><summary>Output format, resolution, frame rate and export</summary><p>Short / Reel starts at 9:16. YouTube starts at 16:9. Output settings control the actual export format, resolution and frame rate. Selecting a style does not replace those choices.</p><p>60 FPS is supported. It does not invent new motion detail when your original footage is lower-frame-rate. Larger resolutions and frame rates need more processing and produce larger files. Watch the full preview, then Export and check the exported file before sharing.</p></details>
+        <details data-help-topic><summary>Saving, rebuilds, cancellation and recovery</summary><p>Project edits save automatically; check the Saved indicator before closing. Original recordings are not overwritten. A draft rebuild runs AI again and may replace its earlier choices, so review the confirmation and preserve work you care about.</p><p>Stop process cancels an edit or export. Model downloads have their own Cancel button in local setup. Closing a model panel does not cancel its download. Cloud cancellation cannot reverse provider usage already accepted.</p><p>If AI fails, read the stage and error, check the selected connection, language, available model and account quota. Do not keep retrying a paid request blindly. You can still choose a manual project. This is beta software: keep copies of important footage.</p></details>
+      </div>
+      <p id="guideEmpty" hidden>No matching topic. Try “models”, “timeline” or “export”.</p>
+      <p class="connection-note">Your originals stay untouched. Export is local, and CUTROOM adds no watermark. Full English and Hebrew user guides are included in the docs folder.</p><button class="button primary" value="done">Got it — let's create</button>
+    </form>
+  </dialog>
+  <dialog id="aiConnectionDialog" class="welcome-dialog connection-dialog" aria-labelledby="aiConnectionTitle">
+    <form id="aiConnectionForm" class="dialog-shell"><header><div><p class="eyebrow">AI, ON YOUR TERMS</p><h2 id="aiConnectionTitle">Choose your AI setup.</h2></div><button type="button" id="closeAIConnection" class="icon-button" aria-label="Close AI connection">×</button></header>
+      <p class="connection-intro">Choose where transcription and Story AI run. Your editor, timeline and exports stay on this computer in every option.</p>
+      <fieldset class="connection-modes"><legend>Compare your options</legend><label><input type="radio" name="connectionMode" value="local" checked><span><strong>On my computer</strong><small class="connection-cost">No provider fees</small><small>Private, local transcription + Story AI.</small><small>Needs model downloads, disk space and processing power. No AI account.</small></span></label><label><input type="radio" name="connectionMode" value="free"><span><strong>Online — Free tier</strong><small class="connection-cost">Your Groq Free account</small><small>Cloud transcription + Story AI.</small><small>Needs internet and your API key. Provider quotas apply; not unlimited.</small></span></label><label><input type="radio" name="connectionMode" value="own"><span><strong>My own API account</strong><small class="connection-cost">Provider charges may apply</small><small>The same Groq integration, with your plan.</small><small>You manage billing and limits. No automatic plan upgrades.</small></span></label></fieldset>
+      <section id="localModelsPanel" class="local-models-panel" aria-labelledby="localModelsTitle">
+        <div class="local-models-heading"><div><h3 id="localModelsTitle">Prepare local AI</h3><p>Download once, reuse in your projects. Start with one transcription model and one Story model.</p></div><button id="refreshLocalModels" type="button" class="button ghost compact">Refresh status</button></div>
+        <div class="local-runtime"><div><strong id="localRuntimeTitle">Checking the Story engine…</strong><p id="localRuntimeDetail">Story AI uses Ollama; transcription has a separate model.</p></div><a id="localRuntimeInstall" class="button ghost compact" href="https://ollama.com/download" target="_blank" rel="noopener noreferrer" hidden>Get Ollama ↗</a><button type="button" id="startLocalEngine" class="button ghost compact" hidden>Start local engine</button></div>
+        <div id="localModelCards" class="local-model-grid"></div>
+        <div id="modelDownloadConfirm" class="download-confirm" hidden><p id="modelDownloadSummary"></p><div><button type="button" class="button primary" id="confirmModelDownload">Confirm download</button><button type="button" class="button ghost" id="dismissModelDownload">Not now</button></div></div>
+        <div id="localDownloadJob" class="local-download-job" hidden><div><strong id="localDownloadLabel">Preparing download…</strong><button type="button" id="cancelLocalDownload" class="button danger compact">Cancel download</button></div><progress id="localDownloadProgress" max="1" value="0" aria-label="Model download progress"></progress></div>
+        <p id="localModelsStatus" class="local-models-status" role="status" aria-live="polite">Open local setup to check available models.</p>
+        <details class="context-help"><summary>Which models do I need?</summary><p><strong>Transcription</strong> creates text and timed captions. <strong>Story AI</strong> plans the draft from that text. A manual edit needs neither. Local Shorts need both.</p><p>Model choices follow your project's <strong>quality profile</strong>. Lite uses smaller models; Balanced is a starting point; Quality needs more memory and time. Choosing Hebrew explicitly can use its dedicated model. Downloading a model does not change those project settings.</p><p>Sizes are estimates for model files, not the full installation. Leave additional space for downloads, source videos, previews and exports. Installed status is not a guarantee that your computer has enough memory to run a model. Downloading shares no footage.</p></details>
+      </section>
+      <section id="cloudConnectionFields" hidden aria-label="Groq connection details"><div class="connection-provider"><strong>Groq</strong><span>Cloud transcription + Story AI</span><a href="https://console.groq.com/keys" target="_blank" rel="noopener noreferrer">Get an API key ↗</a></div>
+        <label class="connection-field">API key<input id="cloudAPIKey" type="password" autocomplete="off" spellcheck="false" maxlength="512" placeholder="Paste your Groq API key" aria-describedby="cloudKeyHelp"></label>
+        <p id="cloudKeyHelp">Your key stays in memory for this CUTROOM session, never in your projects or browser storage. Reconnect after restarting CUTROOM.</p>
+        <details class="connection-advanced"><summary>Model settings</summary><label class="connection-field">Story model ID<input id="cloudStoryModel" type="text" value="openai/gpt-oss-120b" maxlength="128" spellcheck="false"></label><p>Transcription uses Whisper Large V3 with word timings. Check model availability and limits in your Groq account. Advanced users can provide the key through CUTROOM_GROQ_API_KEY instead of entering it each session.</p></details>
+        <p class="connection-note">Only the selected audio track, transcript and editing instructions are sent to Groq — not the video frames. Provider terms apply. CUTROOM cannot verify your billing plan: even a “Free tier” selection can incur charges if you connect a paid account. No automatic provider or plan switching.</p>
+        <label class="connection-consent"><input id="cloudConsent" type="checkbox"><span>I agree to send this content to Groq when I start AI processing. I have checked my account's plan and limits.</span></label>
+      </section>
+      <p id="localConnectionHelp" class="connection-note">Local AI keeps your content on this computer. Downloading requires internet; cached models can then run offline. Manual editing stays available without models. Save this choice to select local AI; downloading alone does not switch your connection.</p>
+      <p id="connectionStatus" class="connection-status" role="status" aria-live="polite"></p>
+      <footer class="connection-actions"><button class="button ghost" id="forgetCloudKey" type="button">Forget session key</button><button class="button primary" id="saveAIConnection" type="submit">Use this connection</button></footer>
+    </form>
+  </dialog>
+  <script type="module" src="/assets/app.js?v=563-setup-2"></script>
 </body>
 </html>

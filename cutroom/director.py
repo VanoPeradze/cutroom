@@ -18,6 +18,7 @@ from .projects import ProjectStore
 from .source_tracks import source_sync_offset
 from .sync import MIN_AUTOMATIC_SYNC_CONFIDENCE, synchronize_sources
 from .transcription import cuda_available, transcribe, transcript_quality_report
+from .cloud_ai import CloudAIError, enabled as cloud_enabled
 from .vision import VISION_ANALYSIS_VERSION, analyze_faces_and_embedded_camera, normalized_vision_sample_count
 from .utils import clamp, invert_ranges, merge_ranges, range_duration
 
@@ -316,7 +317,7 @@ def _transcribe_safely(
         normalized, changed = _normalize_transcript(result, language, duration)
         warning = "Transcription returned incomplete data and was safely normalized." if changed else None
         return normalized, warning
-    except JobCancelled:
+    except (JobCancelled, CloudAIError):
         raise
     except Exception as exc:  # Director must remain usable without transcription.
         fallback, _ = _normalize_transcript({}, language, duration)
@@ -2018,7 +2019,7 @@ def analyze_project(
         upgrade_mode, retry_language = _transcript_upgrade_request(
             performance_mode, spoken_language, transcript, transcript_quality,
         )
-        if cuda_available(settings) and upgrade_mode:
+        if not cloud_enabled(settings) and cuda_available(settings) and upgrade_mode:
             retry_start = max(0.20 if reusable_context else 0.44, float(context.job.progress))
             retry_span = max(0.005, 0.575 - retry_start)
             context.update(retry_start, "Improving a low-confidence transcript on GPU")
