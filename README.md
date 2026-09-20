@@ -1,77 +1,140 @@
-# CUTROOM
+<p align="center">
+  <img src="docs/images/readme-banner.svg" alt="CUTROOM — Your footage. Your edit." width="100%">
+</p>
 
-### Your footage. Your edit.
+<p align="center">
+  <strong>A free, local-first video editor for creators.</strong><br>
+  Get a head start with AI. Keep control of the final cut.
+</p>
 
-CUTROOM helps creators turn recordings into an editable first cut. Bring in your camera footage, screen recording or gameplay, let AI help with the draft, and shape the result your way.
+<p align="center">
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-5.6.1-7459a3?style=flat-square" alt="Application version 5.6.1"></a>
+  <a href="docs/BETA_STATUS.md"><img src="https://img.shields.io/badge/status-beta-c9b62c?style=flat-square" alt="Status: beta"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-44b9c6?style=flat-square" alt="MIT license"></a>
+  <a href="https://cutroom-studio.expo.app/#download"><img src="https://img.shields.io/badge/download-Windows%20beta-7459a3?style=flat-square" alt="Download the Windows beta"></a>
+  <a href="#choose-how-ai-works"><img src="https://img.shields.io/badge/AI-optional-44b9c6?style=flat-square" alt="AI is optional"></a>
+</p>
 
-**Free and open source. No CUTROOM subscription or watermark.** Optional online AI uses your own provider account; its limits and charges are separate.
-
-[Visit the website and download the Windows beta](https://cutroom-studio.expo.app/) · [עברית](https://cutroom-studio.expo.app/?lang=he)
-
-## Made for the videos you create
-
-- **YouTube videos** — clean up a recording while keeping its original sequence.
-- **Shorts and Reels** — build a vertical edit with captions and camera/screen layouts.
-- **Gaming and explanations** — work with one recording, two separate sources or a camera embedded in your video.
-
-Choose an editing style to guide the draft's pacing and selection. Then take control of the details.
-
-## Get started
-
-1. Extract the entire ZIP into a folder.
-2. Open the folder and double-click **`run_windows.bat`**.
-3. Follow the setup prompts. CUTROOM opens in your browser when it is ready.
-
-The first setup needs an internet connection and may take a little time. Some AI features need an additional download before their first use. Keep the launch window open while editing, and use the same launcher next time.
-
-Need a hand? [Complete user guide](docs/USER_GUIDE_EN.md) · [Setup help](docs/TEST_ON_ANOTHER_PC.md).
-
-## Make your first edit
-
-**Choose a starting point.** The welcome screen explains the workflow and offers three paths: **Short / Reel**, **YouTube video**, or **Manual edit**. YouTube starts horizontal; Shorts start vertical.
-
-**Add your footage.** Use a single recording, or add your camera and screen as separate sources. For an AI draft, check the spoken language and choose your editing style.
-
-**Build a draft, or start editing.** Let AI prepare a starting point, then review the transcript and selected moments. Choose Manual edit to open the whole recording without AI processing or an AI account.
-
-**Make it yours.** Adjust the timeline, captions and framing, then export. Output options include up to **60 FPS**; footage recorded at a lower frame rate does not gain new motion detail.
-
-For your first session, try a short recording you know well. It makes it easier to judge the choices and find your way around.
-
-## Choose how AI works for you
-
-Open **AI connection** to check readiness, download local models or change your setup. Local models are not bundled in the ZIP; choosing local mode alone does not download everything.
-
-- **On my computer** — local models, with no AI provider fees. Models need storage and processing power.
-- **Online — Free tier** — connect your own Groq Free account. Internet access, an API key and available provider quota are required.
-- **My own API account** — connect your Groq account under the plan you choose. Your provider may charge you.
-
-Cloud AI is optional. It sends the selected audio and transcript/editing context to Groq only when you start AI processing; video editing and export remain on your computer. Selecting “Free tier” does not change a paid account into a free one. CUTROOM never switches providers or billing plans automatically.
-
-Keys entered in the app last for the current CUTROOM session. Reconnect after restarting. [Connection guide and limitations](docs/AI_CONNECTIONS.md).
-
-## You stay in control
-
-Split and move individual clips. Remove an unwanted section or restore it from the original footage. Trim clip edges, change framing for a particular moment, and edit your camera and screen together or independently.
-
-Manual edits save automatically, and Undo lets you step back. Use **How to edit** inside the app, or open the [editing guide](docs/INDEPENDENT_TRACKS.md) when you need a little direction.
-
-## A beta shaped by editors
-
-CUTROOM is in **beta**. We welcome exploratory feedback, but AI drafts and transcripts still need your review. Results vary with the footage and language; this is not a promise of a finished edit in one click.
-
-Use copies of your footage and watch the exported video before sharing it. [Current beta limitations](docs/BETA_STATUS.md).
-
-We would love to know: **What saved you time? What got in your way?**
-
-Send your feedback privately to the person who shared CUTROOM with you. The [short feedback form](docs/BETA_FEEDBACK.md) helps capture the useful details. Please leave out private client footage and personal information.
-
-## Free to use. Open to build on.
-
-CUTROOM is free, open-source software under the [MIT License](LICENSE). The source code is included, so you can explore it, improve it and make it your own.
-
-Third-party tools and models have their own [licenses and notices](THIRD_PARTY_NOTICES.md).
+<p align="center">
+  <a href="https://cutroom-studio.expo.app/">Website &amp; download</a> ·
+  <a href="docs/USER_GUIDE_EN.md">User guide</a> ·
+  <a href="https://github.com/VanoPeradze/cutroom/issues/new/choose">Report an issue</a> ·
+  <a href="CONTRIBUTING.md">Contribute</a>
+</p>
 
 ---
 
-[User guide](docs/USER_GUIDE_EN.md) · [מדריך בעברית](docs/USER_GUIDE_HE.md) · [A quick look](docs/SHOWCASE_EN.md) · [Keyboard shortcuts](docs/KEYBOARD_SHORTCUTS.md) · [Contributor guide](docs/CONTRIBUTING.md) · [עברית](README_HE.md)
+CUTROOM helps turn camera recordings, screen captures and gameplay into an **editable first cut** for YouTube, Shorts and Reels. Start with an AI-assisted draft or open the full recording and edit by hand. Move the clips, correct the captions and frame each moment your way.
+
+**No CUTROOM subscription. No CUTROOM watermark. MIT-licensed source.** Optional cloud AI uses your own provider account; its quotas and charges are separate.
+
+> **This is a beta, not a one-click promise.** AI selections and transcripts need review. Start with a short recording, keep your originals, and watch the exported file before sharing it.
+
+## A look inside
+
+![CUTROOM welcome screen with Shorts, YouTube and manual editing workflows](docs/images/welcome.png)
+
+*The real CUTROOM interface. Choose your output, prepare your AI setup, or start editing without AI.*
+
+<details>
+<summary><strong>Explore the editor and AI options</strong></summary>
+
+### Your clips, your decisions
+
+![CUTROOM editor with independent A and B tracks and layout controls](docs/images/editor.png)
+
+*An actual editor screenshot using synthetic test footage. The color bars demonstrate the interface and are not an example of AI editing quality.*
+
+### AI on your terms
+
+![CUTROOM setup showing local models and optional online AI choices](docs/images/ai-options.png)
+
+*The setup panel explains downloads and provider choices. This example shows local Story AI still needing setup; models are not bundled with CUTROOM.*
+
+</details>
+
+## Built around your footage
+
+| What you want to do | What CUTROOM offers |
+| --- | --- |
+| Make a YouTube video | Start in 16:9 and clean up a recording while keeping its original sequence. |
+| Create Shorts or Reels | Start in 9:16, review AI-selected moments, adjust framing and add captions. |
+| Combine camera and screen | Use two recordings or define an embedded-camera region; review roles, layout and sync. |
+| Make the edit your own | Split, move, trim and restore independent clips; edit A/B together or separately, with Undo/Redo. |
+| Finish the details | Correct the transcript, style captions and export subtitles as SRT. |
+| Export your video | Create 720p or 1080p MP4s, with frame-rate options up to 60 FPS. |
+
+Lower-frame-rate footage does not gain new motion detail when exported at 60 FPS.
+
+## Get started
+
+1. **[Download the Windows beta](https://cutroom-studio.expo.app/#download)** and extract the entire ZIP.
+2. **Double-click `run_windows.bat`** and follow the setup prompts. The editor opens in your browser when ready.
+3. **Choose a workflow.** Start with **Manual edit**, or prepare AI and choose **Short / Reel** or **YouTube video**.
+
+The ZIP contains source code, not an all-in-one offline installer. First setup needs internet and downloads dependencies; local AI models are additional, optional downloads. Keep the launch window open while editing and use the same launcher next time.
+
+**First edit:** add footage → review or build a draft → refine clips and captions → export and check the result.
+
+[Complete walkthrough](docs/USER_GUIDE_EN.md) · [Installation help](docs/TEST_ON_ANOTHER_PC.md) · [Keyboard shortcuts](docs/KEYBOARD_SHORTCUTS.md)
+
+## Choose how AI works
+
+The editor and rendering stay on your computer in every mode. Open **AI connection** to see what is ready and what needs setup.
+
+| Mode | What you need | What to expect |
+| --- | --- | --- |
+| **Manual editing** | Your footage | No AI models or AI account. Open the recording and start cutting. |
+| **Local AI** | Downloaded models and enough computer resources | Transcription and Story AI on your machine, with no provider fees. |
+| **Optional cloud AI** | Your own supported Groq account and API key | Provider limits apply. A free-tier account has quotas; a paid account may incur charges. |
+
+Local models download only after you choose and confirm them. Selecting local mode alone does not install them. When you opt into cloud processing, selected audio and transcript/editing context are sent to the provider. CUTROOM does not automatically switch your provider or billing plan. Keys entered in the application last for the current session.
+
+[AI setup and privacy](docs/AI_CONNECTIONS.md) · [Model choices and download sizes](docs/MODELS.md)
+
+## Where the beta stands
+
+The workflow is available to try; the quality still needs real-world feedback.
+
+- Transcription and draft quality vary with language, noise, overlapping voices and recording length.
+- Camera detection, source roles, synchronization and suggested cuts may need manual correction.
+- Editing styles are pacing and selection presets, not replicas of individual creators.
+- There are two video sources, not unlimited professional editing tracks.
+- Fresh-computer installation and broad hardware coverage are still being validated.
+
+Use copies of your footage, not your only originals or an urgent client delivery. Automated tests and synthetic renders do not establish professional editorial quality.
+
+[Detailed beta status](docs/BETA_STATUS.md) · [Known quality limits](docs/QUALITY_AND_LIMITS.md) · [Changelog](CHANGELOG.md)
+
+## Help shape CUTROOM
+
+**Creators:** try one short project and tell us where the workflow helped or got in your way. [Report a reproducible bug](https://github.com/VanoPeradze/cutroom/issues/new/choose) or use the [tester feedback guide](docs/BETA_FEEDBACK.md). If the repository is not accessible yet, send feedback to the person who shared your beta download.
+
+**Contributors:** help improve timeline interactions, setup, accessibility, transcript evaluation, documentation or tests. Start with the [contribution guide](CONTRIBUTING.md). Discuss larger changes before building them.
+
+**Security reports:** follow the [security policy](SECURITY.md). Keep credentials, client footage, transcripts and personal file paths out of public issues.
+
+<details>
+<summary><strong>For developers</strong></summary>
+
+The editor uses a Python backend, a plain JavaScript frontend and FFmpeg rendering. AI integrations are optional. See the [developer setup and checks](docs/CONTRIBUTING.md) before making changes.
+
+```text
+cutroom/       Editing, transcription, jobs and rendering
+web/           Local editor interface and timeline
+tests/         Backend, frontend and synthetic-render regression tests
+scripts/       Validation and privacy-conscious packaging tools
+docs/          User guides, limitations and contributor documentation
+website/       Separate Expo-hosted presentation and download site
+marketing/     Draft presentation materials, not application assets
+```
+
+Repository checks cover documentation, frontend regressions and the website download helper. Full backend tests, synthetic renders and clean-machine testing are separate checks; none proves real-world AI quality.
+
+</details>
+
+## License
+
+CUTROOM is released under the **[MIT License](LICENSE)**. You can use it, study it, modify it and redistribute it under that license. Third-party tools and AI models retain their own licenses; see [Third-party notices](THIRD_PARTY_NOTICES.md).
+
+<p align="center"><strong>Built for creators. Shaped by the people who use it.</strong></p>

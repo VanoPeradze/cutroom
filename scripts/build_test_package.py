@@ -18,7 +18,7 @@ ROOT_FILES = (
     "run_windows.bat", "repair_windows.bat", "setup_windows.ps1", "PUBLISH.bat",
     "verify_windows_installer.ps1", "run_linux.sh", "setup_linux.sh",
     "README.md", "README_HE.md", "START_HERE_HE.txt", "CHANGELOG.md",
-    "LICENSE", "THIRD_PARTY_NOTICES.md", "UPGRADE_HE.md",
+    "LICENSE", "THIRD_PARTY_NOTICES.md", "UPGRADE_HE.md", "CONTRIBUTING.md", "SECURITY.md",
 )
 SOURCE_TREES = {
     "cutroom": {".py"}, "web": {".html", ".css", ".js", ".svg"},
@@ -36,6 +36,7 @@ DOC_FILES = (
 # Missing captures fail the build rather than silently shipping broken guide links.
 IMAGE_FILES = (
     "docs/images/welcome.png", "docs/images/editor.png", "docs/images/ai-options.png",
+    "docs/images/readme-banner.svg",
 )
 START_TEXT = """CUTROOM
 Your footage. Your edit.

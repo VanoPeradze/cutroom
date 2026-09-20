@@ -12,14 +12,16 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_beta_entry_documents_and_their_local_links_ship_together():
     payload = collect_payload(ROOT)
-    entry_points = ["README.md", "README_HE.md", "docs/BETA_STATUS.md",
+    entry_points = ["README.md", "README_HE.md", "CONTRIBUTING.md", "SECURITY.md", "docs/BETA_STATUS.md",
                     "docs/BETA_FEEDBACK.md", "docs/MODELS.md", "docs/INDEPENDENT_TRACKS.md",
                     "docs/CONTRIBUTING.md", "docs/PUBLISHING.md", "docs/AI_CONNECTIONS.md",
                     "docs/USER_GUIDE_EN.md", "docs/USER_GUIDE_HE.md", "docs/SHOWCASE_EN.md", "docs/SHOWCASE_HE.md"]
     for name in entry_points:
         content = payload[name].decode("utf-8")
         assert len(content) > 200
-        for href in re.findall(r"\]\(([^)]+)\)", content):
+        resources = re.findall(r"\]\(([^)]+)\)", content)
+        resources += re.findall(r'(?:src|href)="([^"]+)"', content)
+        for href in resources:
             target = urlsplit(href)
             if target.scheme or not target.path:
                 continue

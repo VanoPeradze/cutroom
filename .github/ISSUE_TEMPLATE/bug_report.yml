@@ -1,0 +1,64 @@
+name: Bug report
+description: Report a reproducible problem with the CUTROOM beta.
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Search existing issues before reporting. For suspected vulnerabilities, follow [SECURITY.md](https://github.com/VanoPeradze/cutroom/blob/HEAD/SECURITY.md) and report privately.
+        Use synthetic or non-sensitive examples. Never attach private footage, transcripts, client data, API keys, or an entire project/data folder.
+  - type: input
+    id: version
+    attributes:
+      label: CUTROOM version / beta build
+      description: Include the version, exact downloaded ZIP filename, or Git commit. Avoid just "latest".
+      placeholder: "5.6.1 / CUTROOM-…-test-….zip / commit SHA"
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Operating system and environment
+      description: Include OS version and architecture, browser version, and whether this is a fresh setup. Add CPU, RAM, and GPU details if relevant.
+      placeholder: "Windows 11 x64; browser/version; fresh install or existing environment"
+    validations:
+      required: true
+  - type: textarea
+    id: workflow
+    attributes:
+      label: Workflow and settings
+      description: For editing issues, include source setup (single, separate camera/screen, or embedded camera), media format/duration, spoken language, edit style, performance profile, and output settings. State manual, local AI, or online AI; never include a key.
+    validations:
+      required: false
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Give the smallest repeatable example and note whether retrying or restarting changes the result.
+      placeholder: |
+        1. Open …
+        2. Choose …
+        3. Observe …
+    validations:
+      required: true
+  - type: textarea
+    id: expected_actual
+    attributes:
+      label: Expected and actual behavior
+      description: Explain what you expected and what happened. Include the exact error if there is one.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Sanitized logs or screenshots (optional)
+      description: Share only the smallest relevant excerpt. Remove keys, usernames, local paths, identifying filenames, faces, private video frames, and transcript text. Do not upload full browser/network dumps.
+    validations:
+      required: false
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues and reviewed my report and attachments for private information and credentials.
+          required: true

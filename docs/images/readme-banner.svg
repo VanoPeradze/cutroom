@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="340" viewBox="0 0 1200 340" role="img" aria-labelledby="title desc">
+  <title id="title">CUTROOM — Your footage. Your edit.</title>
+  <desc id="desc">CUTROOM brand banner in violet and cyan, with an abstract arrangement of independent video clips. Free, open-source video editing for creators.</desc>
+  <defs>
+    <linearGradient id="backdrop" x2="1" y2="1"><stop stop-color="#081013"/><stop offset="1" stop-color="#171625"/></linearGradient>
+    <linearGradient id="violet" x2="1" y2="1"><stop stop-color="#9c81ce"/><stop offset="1" stop-color="#7459a3"/></linearGradient>
+    <linearGradient id="cyan" x2="1" y2="1"><stop stop-color="#71d5df"/><stop offset="1" stop-color="#44b9c6"/></linearGradient>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0H0V40" fill="none" stroke="#b7b5d0" stroke-opacity=".035"/></pattern>
+  </defs>
+  <rect width="1200" height="340" rx="20" fill="url(#backdrop)"/>
+  <rect width="1200" height="340" rx="20" fill="url(#grid)"/>
+  <path d="M54 45h23l-6 45H48z" fill="url(#violet)"/>
+  <path d="M84 45h18c5 0 8 4 7 9l-5 36H78z" fill="url(#cyan)"/>
+  <text x="126" y="78" fill="#f4f1f8" font-family="Segoe UI,Arial,sans-serif" font-size="31" font-weight="750" letter-spacing="4">CUTROOM</text>
+  <text x="52" y="164" fill="#f4f1f8" font-family="Segoe UI,Arial,sans-serif" font-size="58" font-weight="750" letter-spacing="-2">Your footage.</text>
+  <text x="52" y="228" fill="#b598e1" font-family="Segoe UI,Arial,sans-serif" font-size="58" font-weight="750" letter-spacing="-2">Your edit.</text>
+  <text x="54" y="285" fill="#b5bfca" font-family="Segoe UI,Arial,sans-serif" font-size="17" letter-spacing=".3">Free, open-source video editing for creators.</text>
+  <g transform="translate(663 54)">
+    <rect x="0" y="21" width="282" height="158" rx="13" fill="#182831" stroke="#44b9c6" stroke-opacity=".55"/>
+    <path d="M24 145l55-59 43 35 49-69 87 93" fill="none" stroke="#44b9c6" stroke-opacity=".35" stroke-width="2"/>
+    <circle cx="213" cy="61" r="13" fill="#44b9c6" fill-opacity=".2"/>
+    <rect x="305" y="0" width="121" height="179" rx="13" fill="#272139" stroke="#9c81ce" stroke-opacity=".65"/>
+    <rect x="319" y="15" width="93" height="47" rx="6" fill="#7459a3" fill-opacity=".7"/>
+    <rect x="319" y="69" width="93" height="95" rx="6" fill="#44b9c6" fill-opacity=".13"/>
+    <path d="M354 101l25 15-25 15z" fill="#b598e1"/>
+    <rect y="205" width="426" height="1" fill="#ffffff" fill-opacity=".1"/>
+    <rect y="222" width="114" height="27" rx="5" fill="url(#violet)"/>
+    <rect x="121" y="222" width="184" height="27" rx="5" fill="#7459a3" fill-opacity=".4"/>
+    <rect x="312" y="222" width="114" height="27" rx="5" fill="url(#cyan)"/>
+    <path d="M187 194v66" stroke="#efe2a7" stroke-width="2"/>
+    <path d="M181 189h12l-6 8z" fill="#efe2a7"/>
+  </g>
+</svg>

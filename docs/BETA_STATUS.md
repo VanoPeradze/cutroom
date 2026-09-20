@@ -1,8 +1,10 @@
-# Closed beta status — 2026-09-12
+# Beta status and limitations
 
-**Suitable for a small, private, exploratory test with video editors. Not a production release, security certification or promise of professional-quality automatic edits.**
+**An exploratory Windows beta for feedback from creators and editors. Not a production release, security certification or promise of professional-quality automatic edits.** Public access to a download does not change those quality boundaries.
 
-## Evidence
+## Historical validation record — 2026-09-12
+
+The results below describe that packaging pass, not a continuously updated test counter or certification of the latest source. The website identifies its specific downloadable build; source changes may be newer than that archive.
 
 - All 1,087 Python regression tests and all 324 frontend regression tests passed in this packaging pass, including 16 package/document checks.
 - Windows installer scripts passed static verification: files, syntax and bootstrap guards. This is not a fresh-PC installation test.

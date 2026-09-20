@@ -1,0 +1,44 @@
+name: Feature request
+description: Suggest an improvement to an editing workflow or the CUTROOM experience.
+title: "[Feature]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Search existing requests first. Describe the editing problem and who it affects.
+        CUTROOM is in beta; a request does not imply a delivery date. Use non-sensitive examples and do not attach private footage, transcripts, client data, or API keys.
+  - type: input
+    id: environment
+    attributes:
+      label: Version / beta build and operating system
+      description: Include your CUTROOM version or ZIP filename and OS. If you have not tried CUTROOM yet, say so.
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: Describe your current workflow and where you get stuck. Include the steps leading to the problem when relevant.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed improvement
+      description: Explain the behavior you would like and what a successful result would look like.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives or workarounds (optional)
+      description: Describe anything you have tried, or other approaches that could solve the same problem.
+    validations:
+      required: false
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing requests and reviewed my report and attachments for private information and credentials.
+          required: true

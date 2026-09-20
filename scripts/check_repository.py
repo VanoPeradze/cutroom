@@ -1,0 +1,62 @@
+"""Lightweight repository presentation checks; no network or third-party packages."""
+from __future__ import annotations
+
+import ast
+from html.parser import HTMLParser
+from pathlib import Path
+import re
+from urllib.parse import unquote, urlsplit
+import xml.etree.ElementTree as ET
+
+ROOT = Path(__file__).resolve().parents[1]
+DOCUMENTS = ("README.md", "CONTRIBUTING.md", "SECURITY.md", "docs/CONTRIBUTING.md")
+
+
+class Resources(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.links = []
+
+    def handle_starttag(self, tag, attrs):
+        self.links.extend(value for key, value in attrs if key in {"src", "href"} and value)
+
+
+def check_document(name: str) -> None:
+    source = ROOT / name
+    text = source.read_text(encoding="utf-8")
+    parser = Resources()
+    parser.feed(text)
+    links = parser.links + re.findall(r"\]\(([^\s)]+)\)", text)
+    for link in links:
+        target = urlsplit(link)
+        if target.scheme or target.netloc or not target.path:
+            continue
+        local = (source.parent / unquote(target.path)).resolve()
+        if not local.is_relative_to(ROOT) or not local.is_file():
+            raise ValueError(f"{name}: missing or unsafe local resource {link!r}")
+    if name == "README.md":
+        if re.search(r"[\u0590-\u05ff]", text):
+            raise ValueError("The main README must stay English-only")
+        tree = ast.parse((ROOT / "cutroom/__init__.py").read_text(encoding="utf-8"))
+        version = next(ast.literal_eval(node.value) for node in tree.body if isinstance(node, ast.Assign)
+                       and any(isinstance(target, ast.Name) and target.id == "__version__" for target in node.targets))
+        if f"badge/version-{version}-" not in text:
+            raise ValueError("README version badge must match the application version")
+        if "MIT" not in text or "beta" not in text.lower():
+            raise ValueError("README must identify the license and beta status")
+
+
+def main() -> None:
+    for name in DOCUMENTS:
+        check_document(name)
+    if not (ROOT / "LICENSE").read_text(encoding="utf-8").startswith("MIT License"):
+        raise ValueError("Expected the project's MIT license")
+    ET.parse(ROOT / "docs/images/readme-banner.svg")
+    for name in ("bug_report.yml", "feature_request.yml"):
+        if not (ROOT / ".github/ISSUE_TEMPLATE" / name).is_file():
+            raise ValueError(f"Missing issue template: {name}")
+    print("PASS: English README, version, local assets/links, brand SVG, license and community files.")
+
+
+if __name__ == "__main__":
+    main()
