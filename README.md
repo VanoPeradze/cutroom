@@ -126,7 +126,6 @@ tests/         Backend, frontend and synthetic-render regression tests
 scripts/       Validation and privacy-conscious packaging tools
 docs/          User guides, limitations and contributor documentation
 website/       Separate Expo-hosted presentation and download site
-marketing/     Draft presentation materials, not application assets
 ```
 
 Repository checks cover documentation, frontend regressions and the website download helper. Full backend tests, synthetic renders and clean-machine testing are separate checks; none proves real-world AI quality.

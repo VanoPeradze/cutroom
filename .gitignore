@@ -27,3 +27,6 @@ VALIDATION_REPORT_HE.md
 *.pem
 *.key
 *.log
+
+# Local-only campaign drafts and social artwork are not project source.
+/marketing/

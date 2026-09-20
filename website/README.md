@@ -14,8 +14,7 @@ The previous separate website checkout is not needed for future updates.
 - `release.json`: the approved Windows beta download's exact filename, size and checksum.
 - `prepare-download.mjs`: restores that approved ZIP locally without committing it to Git.
 
-The screenshot in the editor tour uses synthetic test footage. Campaign art and draft
-social copy live separately in `../marketing/`; they are not uploaded by this website.
+The screenshot in the editor tour uses synthetic test footage.
 Only `public/` is deployed. Never put recordings, project files, keys or model weights there.
 
 ## Publish a website update

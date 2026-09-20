@@ -45,13 +45,9 @@ Verify both badges anonymously before adding them. Do not expose credentials in 
 show a passing badge before a successful run, or advertise a release that does not exist.
 Use a prerelease tag for beta packages and keep source-version and packaged-build labels distinct.
 
-## Website and Reddit handoff
+## Website and repository publishing
 
 - Website publishing stays in `website/`; opening GitHub does not move the editor to the cloud.
 - Update private-repository wording in website and maintainer docs only after visibility changes.
 - `PUBLISH.bat git` intentionally refuses public repositories. Do not disable its safeguards;
   review and explicitly choose a public Git workflow before using it after opening the repo.
-- The draft in `marketing/REDDIT_POST.md` includes the repository URL. Verify it in a signed-out
-  browser before sharing. Do not post a private link as though it were publicly accessible.
-- Recheck the selected community's live rules and disclose that you are the creator.
-  Do not mass-post, solicit coordinated votes, or try to bypass new-account restrictions.

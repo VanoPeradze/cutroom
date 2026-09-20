@@ -22,7 +22,6 @@ Use synthetic or non-sensitive test media. Keep credentials, personal configurat
 | `scripts/` | Runtime checks, transcript evaluation, validation, and packaging tools. |
 | `docs/` | User guides, developer notes, screenshots, and beta validation records. |
 | `website/` | Separate static introduction/download website and its checks. |
-| `marketing/` | Presentation assets and draft copy; not part of the app package or website deployment. |
 
 ## Local development
 
