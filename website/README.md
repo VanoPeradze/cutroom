@@ -3,7 +3,7 @@
 The public introduction and beta-download website lives at **https://cutroom-studio.expo.app/**.
 For Hebrew, use **https://cutroom-studio.expo.app/?lang=he**.
 
-This folder is the maintained website source inside the private CUTROOM repository.
+This folder is the maintained website source inside the public [CUTROOM repository](https://github.com/VanoPeradze/cutroom).
 It does not run the editor, receive footage, process video, or handle user API keys.
 The previous separate website checkout is not needed for future updates.
 
