@@ -16,7 +16,7 @@ SPEC.loader.exec_module(builder)
 @pytest.fixture
 def source(tmp_path):
     root = tmp_path / "source"
-    for name in (*builder.ROOT_FILES, *builder.DOC_FILES):
+    for name in (*builder.ROOT_FILES, *builder.DOC_FILES, *builder.IMAGE_FILES):
         path = root / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("source", encoding="utf-8")
@@ -35,6 +35,7 @@ def test_only_source_is_packaged_and_configuration_is_fresh(source):
         "validation-report.json", "data/projects/test.json", "data/logs/test.log",
         ".venv/private.py", ".tools/private.py", ".git/config", "dist/old.zip",
         "web/video.mp4", "tests/__pycache__/test.py", "scripts/.env",
+        "docs/images/private.png",
     ]
     for name in private:
         path = source / name
@@ -57,6 +58,8 @@ def test_archive_hashes_inventory_and_first_run_files(source, tmp_path):
     assert "START_TESTING.txt" in manifest["files"]
     assert "LICENSE" in manifest["files"]
     assert "run_windows.bat" in manifest["files"]
+    assert "PUBLISH.bat" in manifest["files"]
+    assert set(builder.IMAGE_FILES) <= manifest["files"].keys()
     assert target.with_suffix(".zip.sha256").read_text().split()[0] == builder.hashlib.sha256(target.read_bytes()).hexdigest()
 
 
@@ -78,6 +81,18 @@ def test_missing_required_input_fails_closed(source):
     (source / "LICENSE").unlink()
     with pytest.raises((OSError, ValueError)):
         builder.collect_payload(source)
+
+
+def test_missing_showcase_capture_fails_closed(source):
+    (source / builder.IMAGE_FILES[0]).unlink()
+    with pytest.raises((OSError, ValueError)):
+        builder.collect_payload(source)
+
+
+def test_reviewed_showcase_images_remain_binary(source):
+    sample = b"\x89PNG\r\n\x1a\n\x00\xff\x80synthetic-test"
+    (source / builder.IMAGE_FILES[0]).write_bytes(sample)
+    assert builder.collect_payload(source)[builder.IMAGE_FILES[0]] == sample
 
 
 def test_linked_source_tree_is_rejected(source, monkeypatch):

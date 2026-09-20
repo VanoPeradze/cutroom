@@ -1304,6 +1304,9 @@ def transcribe(
     duration: float = 0.0,
     cancel_check: Callable[[], None] | None = None,
 ) -> dict[str, Any]:
+    from .cloud_ai import enabled, transcribe_cloud
+    if enabled(settings):
+        return transcribe_cloud(media_path, settings, language, progress, duration, cancel_check)
     isolate = bool(settings.ai.get("whisper_isolate_process", True))
     can_isolate = all(hasattr(settings, name) for name in ("raw", "root", "data_dir", "cache_dir"))
     if (

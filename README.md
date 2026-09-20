@@ -4,7 +4,9 @@
 
 CUTROOM helps creators turn recordings into an editable first cut. Bring in your camera footage, screen recording or gameplay, let AI help with the draft, and shape the result your way.
 
-**Free and open source. No subscription. No CUTROOM watermark.**
+**Free and open source. No CUTROOM subscription or watermark.** Optional online AI uses your own provider account; its limits and charges are separate.
+
+[Visit the website and download the Windows beta](https://cutroom-studio.expo.app/) · [עברית](https://cutroom-studio.expo.app/?lang=he)
 
 ## Made for the videos you create
 
@@ -22,19 +24,31 @@ Choose an editing style to guide the draft's pacing and selection. Then take con
 
 The first setup needs an internet connection and may take a little time. Some AI features need an additional download before their first use. Keep the launch window open while editing, and use the same launcher next time.
 
-Need a hand? [Setup help](docs/TEST_ON_ANOTHER_PC.md).
+Need a hand? [Complete user guide](docs/USER_GUIDE_EN.md) · [Setup help](docs/TEST_ON_ANOTHER_PC.md).
 
 ## Make your first edit
 
-**Add your footage.** Use a single recording, or add your camera and screen as separate sources.
+**Choose a starting point.** The welcome screen explains the workflow and offers three paths: **Short / Reel**, **YouTube video**, or **Manual edit**. YouTube starts horizontal; Shorts start vertical.
 
-**Choose your output.** Pick YouTube for a horizontal video or Short / Reel for a vertical one. Set the spoken language and choose your editing style.
+**Add your footage.** Use a single recording, or add your camera and screen as separate sources. For an AI draft, check the spoken language and choose your editing style.
 
-**Build a draft.** Let CUTROOM prepare a starting point, then review the transcript and selected moments.
+**Build a draft, or start editing.** Let AI prepare a starting point, then review the transcript and selected moments. Choose Manual edit to open the whole recording without AI processing or an AI account.
 
 **Make it yours.** Adjust the timeline, captions and framing, then export. Output options include up to **60 FPS**; footage recorded at a lower frame rate does not gain new motion detail.
 
 For your first session, try a short recording you know well. It makes it easier to judge the choices and find your way around.
+
+## Choose how AI works for you
+
+Open **AI connection** to check readiness, download local models or change your setup. Local models are not bundled in the ZIP; choosing local mode alone does not download everything.
+
+- **On my computer** — local models, with no AI provider fees. Models need storage and processing power.
+- **Online — Free tier** — connect your own Groq Free account. Internet access, an API key and available provider quota are required.
+- **My own API account** — connect your Groq account under the plan you choose. Your provider may charge you.
+
+Cloud AI is optional. It sends the selected audio and transcript/editing context to Groq only when you start AI processing; video editing and export remain on your computer. Selecting “Free tier” does not change a paid account into a free one. CUTROOM never switches providers or billing plans automatically.
+
+Keys entered in the app last for the current CUTROOM session. Reconnect after restarting. [Connection guide and limitations](docs/AI_CONNECTIONS.md).
 
 ## You stay in control
 
@@ -44,7 +58,7 @@ Manual edits save automatically, and Undo lets you step back. Use **How to edit*
 
 ## A beta shaped by editors
 
-CUTROOM is in **closed beta**. The workflow is ready for feedback, but AI drafts and transcripts still need your review. Results vary with the footage and language; this is not a promise of a finished edit in one click.
+CUTROOM is in **beta**. We welcome exploratory feedback, but AI drafts and transcripts still need your review. Results vary with the footage and language; this is not a promise of a finished edit in one click.
 
 Use copies of your footage and watch the exported video before sharing it. [Current beta limitations](docs/BETA_STATUS.md).
 
@@ -60,4 +74,4 @@ Third-party tools and models have their own [licenses and notices](THIRD_PARTY_N
 
 ---
 
-[Editing guide](docs/INDEPENDENT_TRACKS.md) · [Keyboard shortcuts](docs/KEYBOARD_SHORTCUTS.md) · [Contributor guide](docs/CONTRIBUTING.md) · [עברית](README_HE.md)
+[User guide](docs/USER_GUIDE_EN.md) · [מדריך בעברית](docs/USER_GUIDE_HE.md) · [A quick look](docs/SHOWCASE_EN.md) · [Keyboard shortcuts](docs/KEYBOARD_SHORTCUTS.md) · [Contributor guide](docs/CONTRIBUTING.md) · [עברית](README_HE.md)

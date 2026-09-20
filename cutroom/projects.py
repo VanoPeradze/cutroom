@@ -54,7 +54,7 @@ class ProjectStore:
         with self._locks_guard:
             return self._project_locks.setdefault(project_id, threading.RLock())
 
-    def create(self, name: str = "Untitled project") -> dict[str, Any]:
+    def create(self, name: str = "Untitled project", *, initial_settings: dict[str, Any] | None = None) -> dict[str, Any]:
         project_id = new_id("project")
         directory = self.project_dir(project_id)
         (directory / "media").mkdir(parents=True)
@@ -116,6 +116,7 @@ class ProjectStore:
             },
             "exports": [],
         }
+        project["settings"].update(copy.deepcopy(initial_settings or {}))
         try:
             return self.save(project)
         except Exception:

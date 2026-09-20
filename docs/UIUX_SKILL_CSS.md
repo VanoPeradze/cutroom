@@ -56,3 +56,56 @@ with 600 frames at 60/1 FPS, verified by FFprobe. Additional FFmpeg tests cover
 mixed source rates, A/B stacking, timing, audio and captions. No real user media
 or AI inference was used for these checks. These changes do not claim better
 transcription or story quality. Existing distribution ZIPs were not rebuilt.
+
+## Welcome and connection redesign
+
+The follow-up onboarding pass applies the same hierarchy, disclosure, stable
+controls and responsive-layout principles to the entry screen. It uses the
+skill's guidance as a reference; it did not run a new skill database search.
+
+The welcome screen now explains CUTROOM before asking for files. Three explicit
+starting points separate vertical Shorts, horizontal YouTube edits and full-length
+manual editing. A short tour explains the sequence and where to find editing help.
+AI accounts and advanced model IDs stay in a dedicated connection dialog rather
+than competing with the upload and timeline controls. Privacy copy describes the
+selected connection instead of claiming all processing is always local.
+
+`welcome.css` introduces shared ink, violet and cyan surfaces and control styling
+without changing the timeline's geometry. Illustrations use lightweight CSS, not
+downloaded media, libraries or paid assets. Manual setup hides AI-only style and
+runtime preparation controls. Project creation saves the chosen starting format
+atomically, and refresh still restores active processing jobs.
+
+Onboarding QA used an isolated synthetic project at the normal desktop viewport,
+1024px and 390px widths. The Short, YouTube and Manual starting points were checked
+in the browser; a manual two-source timeline opened with AI disabled. The new
+connection dialog remained inside the narrow viewport, and Escape closed the
+quick tour and returned keyboard focus to its trigger. No browser console errors
+were observed in the checked flows. A separate FFmpeg smoke check exported edited
+manual footage with audio in 1280×720 and 720×1280 at 60 FPS. These are targeted
+checks, not an exhaustive accessibility or real-footage quality audit.
+
+## Local setup and guided onboarding follow-up
+
+The home screen now pairs project choices with a visible setup checklist. The
+AI dialog compares local processing, a user's Groq Free account and a user's
+own API plan, without implying unlimited free cloud usage. Local model cards
+show their purpose, profile, estimated download size and cached installation
+status. Downloads require confirmation; progress, cancellation and recovery
+stay in the same panel. An explicit engine check is separate from cached status.
+
+The searchable in-app guide covers models, privacy, sources, layouts, transcripts,
+captions, timeline editing, shortcuts, export and recovery. English and Hebrew
+guides and short showcase pages ship with actual screenshots of the application.
+The editor screenshot uses synthetic test footage, not a claimed AI result.
+
+Targeted browser checks covered 1440×1000, 1280×720, 1024×768 and 390×844 viewports,
+guide search and its empty state, keyboard dismissal, unsaved cloud selection,
+local inventory and creator framing in an isolated synthetic project. No page
+horizontal overflow was observed in the checked home/setup views, and no browser
+console warnings or errors were observed. A fresh FFmpeg manual-workflow check
+exported horizontal and vertical 720p files with audio at 60 FPS.
+
+Automated model tests use simulated network responses and subprocesses. No
+multi-gigabyte model download, real cloud inference, clean-PC installation or
+real-footage editorial-quality assessment was performed for this follow-up.

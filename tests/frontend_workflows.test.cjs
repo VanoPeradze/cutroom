@@ -170,6 +170,31 @@ function settingsApp() {
   return fixture;
 }
 
+test("late startup checks do not override a project opened from the welcome screen", async () => {
+  const {run} = app();
+  run(`
+    state.project = null;
+    state.projectViewToken = 0;
+    bindEvents = () => {};
+    applyTranslations = () => ({});
+    initWelcome = () => ({});
+    initLocalModels = () => null;
+    initWorkspace = () => {};
+    initializeKeyboardProfile = () => {};
+    TimelineView = class {};
+    AudioThresholdView = class {};
+    loadProjects = async () => {};
+    loadSystem = () => new Promise(resolve => { globalThis.releaseStartup = resolve; });
+    globalThis.welcomed = false;
+    showWelcome = () => { welcomed = true; };
+  `);
+  const starting = run("boot()");
+  run(`state.project = {id: "chosen-project"}; state.projectViewToken += 1; releaseStartup();`);
+  await starting;
+  assert.equal(run("welcomed"), false);
+  assert.equal(run("state.project.id"), "chosen-project");
+});
+
 test("generation hint follows the goal and remains correct after a style change", () => {
   const { run } = settingsApp();
   run(`
