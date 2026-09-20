@@ -69,10 +69,14 @@ Lower-frame-rate footage does not gain new motion detail when exported at 60 FPS
 ## Get started
 
 1. **[Download the Windows beta](https://cutroom-studio.expo.app/#download)** and extract the entire ZIP.
-2. **Double-click `run_windows.bat`** and follow the setup prompts. The editor opens in your browser when ready.
+2. **Double-click `START CUTROOM.bat`** in the extracted folder and follow the setup prompts. The editor opens in your browser when ready.
 3. **Choose a workflow.** Start with **Manual edit**, or prepare AI and choose **Short / Reel** or **YouTube video**.
 
 The ZIP contains source code, not an all-in-one offline installer. First setup needs internet and downloads dependencies; local AI models are additional, optional downloads. Keep the launch window open while editing and use the same launcher next time.
+
+The download opens to just three items: **START CUTROOM.bat** to launch, **START HERE.html** for a readable offline guide, and **App** for the technical files and saved work. Keep them together; no need to open App for everyday use. If Windows hides extensions, the launcher appears as **START CUTROOM**.
+
+Using a GitHub source checkout or an older flat-folder download? Its developer launcher remains `run_windows.bat`. The new folder layout does not move or modify existing installations.
 
 **First edit:** add footage → review or build a draft → refine clips and captions → export and check the result.
 

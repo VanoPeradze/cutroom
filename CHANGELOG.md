@@ -2,6 +2,7 @@
 
 ## 1.1 Beta — 2026-09-20
 
+- Simplified the Windows download to one launcher, an offline quick-start guide and an App folder. Existing source checkouts and installations retain their original layout.
 - Established **1.1 Beta** as the current public release label and `1.1-beta` as its technical version identifier.
 - Updated launchers, setup markers, package filenames, source manifests and documentation to use the current version consistently.
 - Added a compatible cloud API connection alongside Groq, with explicit destination consent and session keys bound to the selected provider and endpoint.

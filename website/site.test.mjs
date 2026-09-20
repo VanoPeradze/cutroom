@@ -56,3 +56,10 @@ test('AI choices explain compatibility, Groq Free limits and independent credit'
   assert.ok(linksTo(html, 'https://console.groq.com/docs/rate-limits').length);
   assert.doesNotMatch(html, /Currently supports Groq only|This integration currently supports Groq only/);
 });
+
+test('download instructions identify the single launcher and simple folder layout', () => {
+  assert.match(html, /Double-click START CUTROOM\.bat/);
+  assert.match(html, /Just three items: START CUTROOM\.bat/);
+  assert.match(html, /START HERE\.html for help, and App for technical files/);
+  assert.doesNotMatch(html, /Double-click run_windows\.bat/);
+});

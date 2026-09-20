@@ -2,7 +2,13 @@
 
 **An exploratory Windows beta for feedback from creators and editors. Not a production release, security certification or promise of professional-quality automatic edits.** Public access to a download does not change those quality boundaries.
 
-## 1.1 Beta validation — 2026-09-20
+## Simplified Windows download — 2026-09-20
+
+- The ZIP now opens to only `START CUTROOM.bat`, `START HERE.html`, and `App/`. Complete source, guides, tests and license files remain in App; the existing editor and installer are unchanged.
+- All 1,260 Python regressions and 10 website tests passed. Windows launcher tests used harmless stubs to check normal/error exit codes, a folder name containing spaces and special characters, and clear help when App is missing. Offline guide links and legacy ZIP verification are covered.
+- This layout change does not reorganize an existing installation or migrate its projects. New first-run installation still requires separate clean-PC testing.
+
+## Initial 1.1 Beta validation — 2026-09-20
 
 - 1,238 Python regression tests, 369 frontend tests and 9 website tests passed. The final cloud-transport cleanup also passed 121 focused cloud, cache and publishing checks.
 - Real synthetic FFmpeg exports passed for horizontal and vertical output, 60 FPS, two separate sources, and a single recording with an embedded camera. Pixel checks confirmed camera above gameplay in the embedded layout.

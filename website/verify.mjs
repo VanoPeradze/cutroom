@@ -17,6 +17,8 @@ const zip = release.filename;
 assert.match(zip, /^CUTROOM-[A-Za-z0-9.-]+\.zip$/, 'Unsafe release filename');
 assert.equal(release.version, '1.1-beta');
 assert.equal(release.label, '1.1 Beta');
+assert.equal(release.layout, 'windows-app-folder-v1');
+assert.ok(html.includes('Double-click START CUTROOM.bat'), 'The page must explain the single download launcher');
 assert.equal(JSON.parse(readFileSync(resolve(root,'package.json'),'utf8')).version, '1.1.0-beta');
 assert.ok(html.includes('WINDOWS · 1.1 BETA'), 'The download must display 1.1 Beta');
 assert.ok(html.includes('/downloads/'+zip+'"'), 'The download must match the release manifest');

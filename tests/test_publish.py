@@ -204,10 +204,15 @@ def test_git_plan_checks_exact_target_and_fast_forward(tmp_path, monkeypatch, co
     assert not any(command[0] in {"push", "fetch", "add", "commit", "merge"} for command in calls)
 
 
-def test_package_scans_exact_archive_snapshot_before_copy(tmp_path, monkeypatch):
+@pytest.mark.parametrize("envelope", [False, True])
+def test_package_scans_exact_archive_snapshot_before_copy(tmp_path, monkeypatch, envelope):
     monkeypatch.setattr(publish, "local_plan", lambda root: {})
     monkeypatch.setattr(publish.builder, "build_package", lambda root, output: output / "candidate.zip")
-    monkeypatch.setattr(publish.builder, "verify_package", lambda path: {"build_id": "CUTROOM-test", "files": {"source.py": "unused"}})
+    manifest = {"build_id": "CUTROOM-test", "files": {"App/source.py" if envelope else "source.py": "unused"}}
+    if envelope:
+        manifest.update(archive_root="", layout=publish.builder.WINDOWS_LAYOUT)
+    monkeypatch.setattr(publish.builder, "verify_package", lambda path: manifest)
+    reads = []
 
     class Archive:
         def __init__(self, path):
@@ -220,10 +225,40 @@ def test_package_scans_exact_archive_snapshot_before_copy(tmp_path, monkeypatch)
             pass
 
         def read(self, name):
+            reads.append(name)
             return ("gsk_" + "A" * 40).encode()
 
     monkeypatch.setattr(publish.zipfile, "ZipFile", Archive)
     with pytest.raises(publish.PublishError, match="API key"):
+        publish.package(tmp_path)
+    assert not (tmp_path / "dist").exists()
+    assert reads == ["App/source.py" if envelope else "CUTROOM-test/source.py"]
+
+
+def test_package_checks_config_defaults_inside_windows_app_folder(tmp_path, monkeypatch):
+    monkeypatch.setattr(publish, "local_plan", lambda root: {})
+    monkeypatch.setattr(publish.builder, "build_package", lambda root, output: output / "candidate.zip")
+    monkeypatch.setattr(publish.builder, "verify_package", lambda path: {
+        "build_id": "CUTROOM-test", "archive_root": "", "layout": publish.builder.WINDOWS_LAYOUT,
+        "files": {"App/config.json": "unused"},
+    })
+
+    class Archive:
+        def __init__(self, path):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def read(self, name):
+            assert name == "App/config.json"
+            return b'{"host":"0.0.0.0","data_dir":"data","ai":{"ollama_url":"http://127.0.0.1:11434"}}'
+
+    monkeypatch.setattr(publish.zipfile, "ZipFile", Archive)
+    with pytest.raises(publish.PublishError, match="config.json"):
         publish.package(tmp_path)
     assert not (tmp_path / "dist").exists()
 

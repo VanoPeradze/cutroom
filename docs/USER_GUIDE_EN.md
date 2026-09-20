@@ -6,7 +6,7 @@ Start with the short path below. The later sections explain the controls when yo
 
 ## The quick path
 
-1. Extract the complete ZIP and run **`run_windows.bat`**. Let first-time setup finish and keep the launch window open.
+1. Use **Extract All** on the ZIP and double-click **`START CUTROOM.bat`** in the extracted folder. Let first-time setup finish and keep the launch window open. The other two items are **START HERE.html** (offline help) and **App** (technical files and saved work); leave them beside the launcher. Older flat packages and GitHub source checkouts still use `run_windows.bat`.
 2. Choose **Manual edit** and add a short, non-sensitive recording as source A. This lets you learn the editor without waiting for AI models or inference.
 3. Choose **Open manual editor**. Click the timeline ruler to seek. **Space** plays or pauses.
 4. Choose **Range**, drag over an unwanted passage and select **Remove from video**. Try **Undo**. Then select **Cut** and click once to split a clip.

@@ -14,6 +14,8 @@ The previous separate website checkout is not needed for future updates.
 - `release.json`: the approved Windows beta download's exact filename, size and checksum.
 - `prepare-download.mjs`: restores that approved ZIP locally without committing it to Git.
 
+The Windows ZIP has three top-level entries: `START CUTROOM.bat`, `START HERE.html`, and `App/`. Windows **Extract All** supplies the enclosing destination folder. Full source and the package manifest are inside `App`; never remove or rename that folder independently of the launcher.
+
 The screenshot in the editor tour uses synthetic test footage.
 Only `public/` is deployed. Never put recordings, project files, keys or model weights there.
 
@@ -47,7 +49,7 @@ The ZIP is downloaded from the existing public Expo website. If that site is una
 provide the already-approved local archive instead:
 
 ```sh
-node prepare-download.mjs ../dist/CUTROOM-1.1-beta-20260920-131622.zip
+node prepare-download.mjs ../dist/CUTROOM-1.1-beta-20260920-132911.zip
 ```
 
 An existing ZIP with the wrong checksum is rejected, not overwritten. Review and move it

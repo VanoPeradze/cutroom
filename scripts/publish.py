@@ -166,9 +166,14 @@ def package(root: Path) -> Path:
     with tempfile.TemporaryDirectory(prefix="cutroom-publish-") as temporary:
         staged = builder.build_package(root, Path(temporary))
         manifest = builder.verify_package(staged)
+        archive_root = manifest.get("archive_root", manifest["build_id"])
+        archive_prefix = archive_root + "/" if archive_root else ""
         with zipfile.ZipFile(staged) as archive:
-            payload = {name: archive.read(manifest["build_id"] + "/" + name) for name in manifest["files"]}
+            payload = {name: archive.read(archive_prefix + name) for name in manifest["files"]}
         scan_payload(payload)
+        if manifest.get("layout") == builder.WINDOWS_LAYOUT:
+            # Envelope paths still need the same source-config privacy check.
+            validate_config(payload[builder.WINDOWS_SOURCE_DIRECTORY + "/config.json"])
         output.mkdir(exist_ok=True)
         target = output / staged.name
         checksum = target.with_suffix(".zip.sha256")

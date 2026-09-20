@@ -4,12 +4,14 @@ This is CUTROOM 1.1 Beta. It runs on the receiving PC and opens in a browser. Th
 
 ## First run
 
-1. Copy the supplied test ZIP to the other PC and use **Extract All**. Open the extracted folder that contains `run_windows.bat`. Do not run files inside the ZIP or extract over an existing CUTROOM installation.
+1. Copy the supplied beta ZIP to the other PC and use **Extract All**. The extracted folder has three items: **START CUTROOM.bat**, **START HERE.html**, and **App**. Do not run files inside the ZIP or extract over an existing CUTROOM installation.
 2. Use a writable local folder owned by your Windows user, with enough free space for dependencies, models, input copies, previews and exports. Keep the folder in the same location after setup; its Python environment and saved runtime paths are tied to that PC and location.
-3. Connect to the internet and double-click **run_windows.bat**. Keep its console window open. The launcher checks the included installer files, performs first-time setup, checks the runtime, then starts CUTROOM.
+3. Connect to the internet and double-click **START CUTROOM.bat**. Keep its console window open. It runs the existing setup/startup flow from App: checking installer files, performing first-time setup, checking the runtime, then starting CUTROOM. No separate installer needs to be chosen.
 4. Allow setup time to finish. It can download Python, Python packages, FFmpeg and Ollama. An external installer or your PC's policies may require administrator approval; CUTROOM's script does not grant or arrange those permissions. If an installer is blocked, record the error rather than disabling security controls.
 5. The browser should open at **http://127.0.0.1:8765**. If it does not, open that address manually after the console says CUTROOM is running. Keep the default local host setting for this private test.
-6. Begin with a short, non-sensitive recording and **Lite**, **720p**, **Fast** output. After the first successful export, try the checklist below. Later launches use the same `run_windows.bat` and normally reuse the environment. Save transcript corrections and finish or stop jobs before closing the server console.
+6. Begin with a short, non-sensitive recording and **Lite**, **720p**, **Fast** output. After the first successful export, try the checklist below. Later launches use the same **START CUTROOM.bat** and normally reuse the environment. Save transcript corrections and finish or stop jobs before closing the server console.
+
+The rest of this technical guide names paths relative to **App**: for example, `data/logs` means `App/data/logs` in the new download. In a GitHub checkout or older flat-folder package, use `run_windows.bat` and the original paths instead. Do not reorganize an already-installed environment to match the new ZIP; its existing runtime paths may stop working.
 
 The browser is the interface; the console hosts the application. Closing only the browser does not stop the server. Starting the launcher again reopens an existing matching instance. If it reports that another CUTROOM version or data folder owns the port, close that other instance first.
 

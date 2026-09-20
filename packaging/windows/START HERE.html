@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Start here — CUTROOM 1.1 Beta</title>
+  <style>
+    :root{color-scheme:dark;--bg:#101419;--card:#1a2029;--text:#f3f4f8;--muted:#bdc4d0;--accent:#c6adeb;--line:#39424e;--teal:#83d1d8}
+    *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:16px/1.65 system-ui,-apple-system,"Segoe UI",sans-serif}main{max-width:880px;margin:auto;padding:52px 24px}header{margin-bottom:32px}.brand{letter-spacing:.2em;font-weight:800}.badge{display:inline-block;color:var(--teal);font-size:13px;margin-left:14px}h1{font-size:clamp(32px,6vw,52px);line-height:1.15;letter-spacing:-.04em;margin:24px 0 16px}h2{font-size:21px;margin:0 0 12px}p{margin:8px 0;color:var(--muted)}strong{color:var(--text)}.launch{background:linear-gradient(120deg,#322743,var(--card));border:1px solid #80669e;border-radius:18px;padding:28px;margin:24px 0}.filename{display:block;font:700 clamp(20px,4vw,30px)/1.3 ui-monospace,Consolas,monospace;color:var(--accent);overflow-wrap:anywhere;margin:12px 0}.steps{padding-left:24px}.steps li{padding:6px 0}.files{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:24px 0}.file{padding:20px;background:var(--card);border:1px solid var(--line);border-radius:14px}.file code{color:var(--teal);font-size:17px}details{border-bottom:1px solid var(--line);padding:17px 0}summary{cursor:pointer;font-weight:650}details p{margin:12px 0}a{color:var(--teal);text-underline-offset:4px}a:focus-visible,summary:focus-visible{outline:3px solid var(--accent);outline-offset:5px}footer{margin-top:34px;font-size:14px;color:var(--muted)}.links{display:flex;flex-wrap:wrap;gap:12px 24px;margin-top:16px}code{overflow-wrap:anywhere}small{color:var(--muted)}@media(max-width:560px){main{padding:30px 18px}.files{grid-template-columns:1fr}.launch{padding:20px}.badge{display:block;margin:6px 0 0}}
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <span class="brand">CUTROOM</span><span class="badge">1.1 BETA · FREE &amp; OPEN SOURCE</span>
+    <h1>One file to start.<br>Your edit is next.</h1>
+    <p>Turn recordings into Shorts and YouTube videos, or edit them yourself. No CUTROOM subscription. No CUTROOM watermark.</p>
+  </header>
+  <section class="launch" aria-labelledby="start-title">
+    <h2 id="start-title">Open CUTROOM</h2>
+    <ol class="steps">
+      <li>Right-click the downloaded ZIP and choose <strong>Extract All</strong>.</li>
+      <li>Open the extracted folder in Windows File Explorer and double-click:
+        <code class="filename">START CUTROOM.bat</code>
+        <small>If Windows hides extensions, it appears as <strong>START CUTROOM</strong>.</small>
+      </li>
+      <li>Let setup finish. The editor opens in your browser. <strong>Keep the launch window open while editing.</strong></li>
+    </ol>
+    <p>Use this same file every time. It handles first-time setup and normal launches. There is no need to choose an installer or open the App folder.</p>
+  </section>
+  <div class="files" aria-label="The other two items in your download">
+    <section class="file"><h2><code>START HERE.html</code></h2><p>This quick guide. Read it whenever you need help; it works offline.</p></section>
+    <section class="file"><h2><code>App</code></h2><p>CUTROOM's source code, technical files and saved work. <strong>Keep this folder beside the launcher.</strong> You do not need to open it for everyday use.</p></section>
+  </div>
+  <h2>Good to know</h2>
+  <details open><summary>What happens on the first launch?</summary><p>Setup needs internet and downloads the components needed to run CUTROOM. It can take several minutes and may show installation or permission prompts. Later launches reuse the installed components. Do not close the launch window before setup finishes.</p><p>The ZIP is a small source package, not the complete installation. Dependencies, optional AI models and your footage need additional disk space. Keep the extracted folder in the same location after setup.</p></details>
+  <details><summary>Do I need an AI account?</summary><p><strong>No, for manual editing.</strong> Choose “Edit it yourself” to start without an AI account or model.</p><p><strong>Local AI</strong> needs separate models. Open “AI connection” to review their sizes and confirm downloads. <strong>Online AI</strong> needs your own API key and consent to send audio and transcript context. Groq offers a free tier within its quotas; paid accounts and other providers may charge. Editing and export still run on your computer.</p></details>
+  <details><summary>What should I make first?</summary><p>Try a short, non-sensitive recording you know well. Choose Short / Reel for vertical video, YouTube for horizontal cleanup, or manual editing for full control. Review your transcript, cuts, layout and exported video. This is a beta, and AI drafts need your review.</p></details>
+  <details><summary>It does not open. What should I do?</summary><p>Make sure you used <strong>Extract All</strong>, not a file preview inside the ZIP. The launcher and the complete App folder must stay together. Use a writable local folder and check the error shown in the launch window. Do not disable your computer's security protections.</p><p>If setup was interrupted, run <strong>START CUTROOM.bat</strong> again. For further help, see <a href="App/docs/TEST_ON_ANOTHER_PC.md">setup troubleshooting</a>. Advanced repair is available at <code>App/repair_windows.bat</code>; it is not the normal launcher.</p></details>
+  <details><summary>Where is my work? How do I update?</summary><p>With the default settings, projects and copied footage are in <code>App/data</code>. Exports are also saved there and can be downloaded from the editor. <strong>Do not delete the App folder or share it as a clean download.</strong> It can contain your private recordings and transcripts.</p><p>Back up your work before updating. Extract a new version into a separate folder, not over an existing installation. Older flat-folder installations keep working from their original <code>run_windows.bat</code>; do not move their files into this package. See <a href="App/UPGRADE_HE.md">upgrade notes (Hebrew)</a> or <a href="App/docs/TEST_ON_ANOTHER_PC.md">setup help (English)</a>.</p></details>
+  <footer>
+    <p>Free and open source under the <a href="App/LICENSE">MIT license</a>. Full source remains available in the App folder and on GitHub.</p>
+    <nav class="links" aria-label="Guides and feedback">
+      <a href="App/docs/USER_GUIDE_EN.md">Full English guide</a>
+      <a href="App/docs/USER_GUIDE_HE.md" lang="he" dir="rtl">מדריך מלא בעברית</a>
+      <a href="https://github.com/VanoPeradze/cutroom">Source on GitHub</a>
+      <a href="https://github.com/VanoPeradze/cutroom/issues">Report a problem</a>
+    </nav>
+    <p>Never include API keys, private footage or your entire App folder in a bug report.</p>
+  </footer>
+</main>
+</body>
+</html>

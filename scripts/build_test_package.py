@@ -38,6 +38,14 @@ IMAGE_FILES = (
     "docs/images/welcome.png", "docs/images/editor.png", "docs/images/ai-options.png",
     "docs/images/readme-banner.svg",
 )
+PACKAGING_FILES = (
+    "packaging/windows/START CUTROOM.bat",
+    "packaging/windows/START HERE.html",
+)
+WINDOWS_LAYOUT = "windows-app-folder-v1"
+WINDOWS_LAUNCHER = "START CUTROOM.bat"
+WINDOWS_HELP = "START HERE.html"
+WINDOWS_SOURCE_DIRECTORY = "App"
 START_TEXT = """CUTROOM {version_label}
 Your footage. Your edit.
 
@@ -101,7 +109,8 @@ def _literal(source: bytes, name: str) -> object:
 
 def collect_payload(root: Path) -> dict[str, bytes]:
     root = root.resolve()
-    payload = {name: _read_source(root, name) for name in (*ROOT_FILES, *DOC_FILES, *IMAGE_FILES)}
+    payload = {name: _read_source(root, name)
+               for name in (*ROOT_FILES, *DOC_FILES, *IMAGE_FILES, *PACKAGING_FILES)}
 
     def walk(directory: Path, suffixes: set[str]) -> None:
         if _is_link(directory):
@@ -131,30 +140,82 @@ def collect_payload(root: Path) -> dict[str, bytes]:
     return payload
 
 
+def _check_archive_path(name: str) -> None:
+    if not isinstance(name, str) or not name:
+        raise ValueError("Unsafe archive path")
+    path = PurePosixPath(name)
+    if (path.is_absolute() or "\\" in name or ":" in name or ".." in path.parts
+            or "." in name.split("/") or any(ord(char) < 32 for char in name)):
+        raise ValueError("Unsafe archive path")
+    if name != path.as_posix():
+        raise ValueError("Non-canonical archive path")
+
+
 def verify_package(archive: Path) -> dict:
     with zipfile.ZipFile(archive) as bundle:
         names = bundle.namelist()
-        if len(names) != len(set(names)) or not names:
+        if len(names) != len({name.casefold() for name in names}) or not names:
             raise ValueError("Duplicate/empty package entries")
-        roots = {name.split("/")[0] for name in names}
-        if len(roots) != 1:
-            raise ValueError("Package must have one top-level folder")
-        prefix = roots.pop()
-        if not re.fullmatch(r"CUTROOM-[A-Za-z0-9.-]+", prefix):
-            raise ValueError("Unsafe package folder")
         for name in names:
-            parts = PurePosixPath(name).parts
-            if "\\" in name or ":" in name or ".." in parts or "." in name.split("/"):
-                raise ValueError("Unsafe archive path")
-            if name != PurePosixPath(name).as_posix() or len(parts) < 2:
-                raise ValueError("Non-canonical archive path")
-        manifest_name = prefix + "/TEST_BUILD.json"
+            _check_archive_path(name)
+            mode = bundle.getinfo(name).external_attr >> 16
+            if stat.S_IFMT(mode) not in (0, stat.S_IFREG):
+                raise ValueError("Linked or non-file archive entry")
+        folded_names = {name.casefold() for name in names}
+        if any(parent.as_posix().casefold() in folded_names
+               for name in names for parent in PurePosixPath(name).parents if parent.as_posix() != "."):
+            raise ValueError("Archive path is both a file and a directory")
+        manifest_name = WINDOWS_SOURCE_DIRECTORY + "/TEST_BUILD.json"
+        envelope = manifest_name in names
+        if envelope:
+            archive_prefix = ""
+        else:
+            roots = {name.split("/")[0] for name in names}
+            if len(roots) != 1:
+                raise ValueError("Legacy package must have one top-level folder")
+            prefix = roots.pop()
+            if not re.fullmatch(r"CUTROOM-[A-Za-z0-9.-]+", prefix):
+                raise ValueError("Unsafe package folder")
+            archive_prefix = prefix + "/"
+            manifest_name = archive_prefix + "TEST_BUILD.json"
+        if manifest_name not in names:
+            raise ValueError("Missing package manifest")
         manifest = json.loads(bundle.read(manifest_name))
-        expected = {prefix + "/" + name for name in manifest["files"]} | {manifest_name}
+        if not isinstance(manifest, dict) or not isinstance(manifest.get("files"), dict) or not manifest["files"]:
+            raise ValueError("Invalid package manifest")
+        if not isinstance(manifest.get("build_id"), str) or not re.fullmatch(r"CUTROOM-[A-Za-z0-9.-]+", manifest["build_id"]):
+            raise ValueError("Unsafe manifest build identifier")
+        for name, digest in manifest["files"].items():
+            _check_archive_path(name)
+            if not isinstance(digest, str) or not re.fullmatch(r"[a-f0-9]{64}", digest):
+                raise ValueError("Invalid manifest checksum")
+        expected = {archive_prefix + name for name in manifest["files"]} | {manifest_name}
+        if manifest_name in {archive_prefix + name for name in manifest["files"]}:
+            raise ValueError("Manifest must not inventory itself")
         if set(names) != expected:
             raise ValueError("Package file inventory mismatch")
+        if envelope:
+            if any(manifest.get(key) != value for key, value in {
+                "layout": WINDOWS_LAYOUT, "archive_root": "",
+                "source_directory": WINDOWS_SOURCE_DIRECTORY,
+                "launcher": WINDOWS_LAUNCHER, "help": WINDOWS_HELP,
+            }.items()):
+                raise ValueError("Invalid Windows package layout metadata")
+            roots = {name.split("/")[0] for name in names}
+            if roots != {WINDOWS_LAUNCHER, WINDOWS_HELP, WINDOWS_SOURCE_DIRECTORY}:
+                raise ValueError("Windows package must contain only its launcher, help and App folder")
+            required = {WINDOWS_SOURCE_DIRECTORY + "/" + name for name in (
+                "server.py", "config.json", "run_windows.bat", "LICENSE", *PACKAGING_FILES,
+            )} | {WINDOWS_LAUNCHER, WINDOWS_HELP}
+            if not required <= manifest["files"].keys():
+                raise ValueError("Windows package is missing required application files")
+            for source_name in PACKAGING_FILES:
+                if bundle.read(PurePosixPath(source_name).name) != bundle.read(WINDOWS_SOURCE_DIRECTORY + "/" + source_name):
+                    raise ValueError("Windows entry point differs from its source asset")
+        elif manifest["build_id"] != prefix or manifest.get("archive_root", prefix) != prefix or "layout" in manifest:
+            raise ValueError("Invalid legacy package layout metadata")
         for name, digest in manifest["files"].items():
-            if hashlib.sha256(bundle.read(prefix + "/" + name)).hexdigest() != digest:
+            if hashlib.sha256(bundle.read(archive_prefix + name)).hexdigest() != digest:
                 raise ValueError(f"Package checksum mismatch: {name}")
         if bundle.testzip() is not None:
             raise ValueError("ZIP integrity check failed")
@@ -162,16 +223,21 @@ def verify_package(archive: Path) -> dict:
 
 
 def build_package(root: Path, output_dir: Path, *, build_id: str | None = None) -> Path:
-    payload = collect_payload(root)
-    version = _literal(payload["cutroom/__init__.py"], "__version__")
-    version_label = _literal(payload["cutroom/__init__.py"], "__version_label__")
+    source_payload = collect_payload(root)
+    version = _literal(source_payload["cutroom/__init__.py"], "__version__")
+    version_label = _literal(source_payload["cutroom/__init__.py"], "__version_label__")
     stamp = build_id or datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     folder = f"CUTROOM-{version}-{stamp}"
     if not re.fullmatch(r"CUTROOM-[A-Za-z0-9.-]+", folder):
         raise ValueError("Unsafe build identifier")
+    payload = {WINDOWS_SOURCE_DIRECTORY + "/" + name: data for name, data in source_payload.items()}
+    payload.update({PurePosixPath(name).name: source_payload[name] for name in PACKAGING_FILES})
     manifest = {
         "build_id": folder, "app_version": version, "app_version_label": version_label,
         "kind": "public-source-beta",
+        "layout": WINDOWS_LAYOUT, "archive_root": "",
+        "source_directory": WINDOWS_SOURCE_DIRECTORY,
+        "launcher": WINDOWS_LAUNCHER, "help": WINDOWS_HELP,
         "created_utc": datetime.now(timezone.utc).isoformat(),
         "target": "Windows x64 first-run testing; no bundled runtime",
         "clean_machine_install_verified": False,
@@ -179,7 +245,7 @@ def build_package(root: Path, output_dir: Path, *, build_id: str | None = None) 
         "not_included": ["user media", "projects", "logs", "local config", "runtimes", "models"],
         "files": {name: hashlib.sha256(data).hexdigest() for name, data in sorted(payload.items())},
     }
-    payload["TEST_BUILD.json"] = _bytes_json(manifest)
+    payload[WINDOWS_SOURCE_DIRECTORY + "/TEST_BUILD.json"] = _bytes_json(manifest)
     output_dir.mkdir(parents=True, exist_ok=True)
     target = output_dir / (folder + ".zip")
     checksum = target.with_suffix(".zip.sha256")
@@ -190,7 +256,7 @@ def build_package(root: Path, output_dir: Path, *, build_id: str | None = None) 
         staging = Path(scratch) / "package.zip"
         with zipfile.ZipFile(staging, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as bundle:
             for name, data in sorted(payload.items()):
-                info = zipfile.ZipInfo(folder + "/" + name)
+                info = zipfile.ZipInfo(name)
                 info.compress_type = zipfile.ZIP_DEFLATED
                 info.create_system = 3
                 info.external_attr = (0o100755 if name.endswith(".sh") else 0o100644) << 16
