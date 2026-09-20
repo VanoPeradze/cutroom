@@ -1,4 +1,4 @@
-import { TimelineView, formatTime } from "./timeline.js?v=561-ui-refresh-82";
+import { TimelineView, formatTime } from "./timeline.js?v=1.1-beta-1";
 
 // Project current edit clips onto the original recording, including copies.
 // The original draft's keep mask is intentionally not authoritative anymore.

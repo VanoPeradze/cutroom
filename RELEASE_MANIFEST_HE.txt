@@ -1,4 +1,4 @@
-CUTROOM AI Director 5.6.1 — Release Manifest
+CUTROOM 1.1 Beta — Release Manifest
 ================================================
 
 מטרה: גרסת פיתוח מקומית מהודקת של CUTROOM, עם תהליך Director, שני מקורות, עריכה ידנית, ביטול וייצוא אמין.

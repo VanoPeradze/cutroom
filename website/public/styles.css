@@ -3,6 +3,7 @@
 .source-link{width:100%;justify-content:space-between;margin-top:24px;background:transparent;border-color:#75638d;color:#ddcaff;gap:14px}
 .source-link:hover{background:#b696ff18}
 .footer-links{display:flex;flex-wrap:wrap;gap:12px 22px}
+.footer{flex-wrap:wrap}.footer .provider-credit{flex-basis:100%;font-size:13px;line-height:1.8;margin:0;max-width:900px}
 .site-header nav{flex-wrap:wrap;align-items:center}
 @media(min-width:801px) and (max-width:1100px){.site-header{flex-wrap:wrap}.site-header nav{order:3;width:100%;justify-content:center;border-top:1px solid #ffffff14;padding-top:15px}}
 /* Product tour, practical guidance and bilingual reading. */

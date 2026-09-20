@@ -1,6 +1,6 @@
 # Editing quality: current safeguards and remaining work
 
-Historical engineering notes. For this private beta's readiness and limitations, start with [Beta status](BETA_STATUS.md) and the [current editing guide](INDEPENDENT_TRACKS.md).
+Historical engineering notes. For CUTROOM 1.1 Beta's readiness and limitations, start with [Beta status](BETA_STATUS.md) and the [current editing guide](INDEPENDENT_TRACKS.md).
 
 This development pass fixes specific correctness and evidence-handling failures. It is not a claim of equal transcription accuracy across languages, professional editorial judgment, or release readiness. No new model was downloaded or benchmarked during implementation.
 

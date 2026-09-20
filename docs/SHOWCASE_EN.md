@@ -10,7 +10,7 @@ We're inviting editors to try the beta and tell us what actually saves time. AI 
 
 Extract the full package, run **`run_windows.bat`**, and follow setup. Choose **Short / Reel**, **YouTube video** or **Manual edit**, add your footage, review the edit and export. Start with a short recording you can safely share feedback about.
 
-Local AI needs model downloads and suitable computer resources. Optional online AI uses your own Groq account; provider quotas and possible charges apply. Manual editing needs no AI account. [Start-to-finish guide](USER_GUIDE_EN.md)
+Local AI needs model downloads and suitable computer resources. Optional online AI uses your own Groq account or a compatible provider for chat and timed transcription; provider quotas and possible charges apply. Manual editing needs no AI account. [Start-to-finish guide](USER_GUIDE_EN.md)
 
 ## A look inside
 

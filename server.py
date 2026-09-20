@@ -25,7 +25,7 @@ from typing import Any
 from flask import Flask, Response, jsonify, request, send_file, send_from_directory
 from werkzeug.exceptions import BadRequest, HTTPException, RequestEntityTooLarge
 
-from cutroom import __version__
+from cutroom import __version__, __version_label__
 from cutroom.config import ROOT, Settings, load_settings
 from cutroom.ai_runtime import AIRuntime, ollama_environment, resolve_ollama_executable
 from cutroom.director import analyze_project, refine_project
@@ -852,6 +852,7 @@ def create_app(settings: Settings | None = None) -> Flask:
         return jsonify({
             "ok": ffmpeg_ok and ffprobe_ok,
             "version": __version__,
+            "version_label": __version_label__,
             "ffmpeg": ffmpeg_ok,
             "ffprobe": ffprobe_ok,
             "ollama": _ollama_status(settings),
@@ -875,6 +876,7 @@ def create_app(settings: Settings | None = None) -> Flask:
         return jsonify({
             "product": "CUTROOM",
             "version": __version__,
+            "version_label": __version_label__,
             "vision_analysis_version": VISION_ANALYSIS_VERSION,
             "instance_id": instance_id,
             "python": sys.version.split()[0],
@@ -2333,7 +2335,7 @@ def main() -> None:
     except ServerStartupError as error:
         owner = _probe_existing_cutroom_server(host, port, instance_id)
         if owner == "match":
-            print(f"CUTROOM AI {__version__} is already running at {url}")
+            print(f"CUTROOM AI {__version_label__} is already running at {url}")
             if settings.raw.get("open_browser", True) and os.environ.get("CUTROOM_NO_BROWSER") != "1":
                 try:
                     webbrowser.open(url)
@@ -2366,7 +2368,7 @@ def main() -> None:
         try:
             from waitress import serve
             request_body_limit = int(app.config.get("MAX_CONTENT_LENGTH") or (float(settings.raw.get("max_upload_gb", 40)) * 1024**3 + 32 * 1024**2))
-            print(f"CUTROOM AI {__version__} — {url}")
+            print(f"CUTROOM AI {__version_label__} — {url}")
             print(f"Upload transport limit: {request_body_limit / 1024**3:.1f} GiB")
             serve(
                 app,

@@ -22,7 +22,9 @@ def source(tmp_path):
         path.write_text("source", encoding="utf-8")
     for name in builder.SOURCE_TREES:
         (root / name).mkdir(exist_ok=True)
-    (root / "cutroom/__init__.py").write_text('__version__ = "5.6.1"', encoding="utf-8")
+    (root / "cutroom/__init__.py").write_text(
+        '__version__ = "1.1-beta"\n__version_label__ = "1.1 Beta"', encoding="utf-8"
+    )
     (root / "cutroom/config.py").write_text(
         'DEFAULTS: dict = {"ai": {}, "render": {}}', encoding="utf-8"
     )
@@ -54,6 +56,10 @@ def test_only_source_is_packaged_and_configuration_is_fresh(source):
 def test_archive_hashes_inventory_and_first_run_files(source, tmp_path):
     target = builder.build_package(source, tmp_path / "out", build_id="unit")
     manifest = builder.verify_package(target)
+    assert target.name == "CUTROOM-1.1-beta-unit.zip"
+    assert manifest["app_version"] == "1.1-beta"
+    assert manifest["app_version_label"] == "1.1 Beta"
+    assert manifest["kind"] == "public-source-beta"
     assert manifest["clean_machine_install_verified"] is False
     assert "START_TESTING.txt" in manifest["files"]
     assert "LICENSE" in manifest["files"]

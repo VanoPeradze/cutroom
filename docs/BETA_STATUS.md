@@ -2,6 +2,14 @@
 
 **An exploratory Windows beta for feedback from creators and editors. Not a production release, security certification or promise of professional-quality automatic edits.** Public access to a download does not change those quality boundaries.
 
+## 1.1 Beta validation — 2026-09-20
+
+- 1,238 Python regression tests, 369 frontend tests and 9 website tests passed. The final cloud-transport cleanup also passed 121 focused cloud, cache and publishing checks.
+- Real synthetic FFmpeg exports passed for horizontal and vertical output, 60 FPS, two separate sources, and a single recording with an embedded camera. Pixel checks confirmed camera above gameplay in the embedded layout.
+- Browser checks covered the updated AI choices, custom endpoint/model fields, destination consent text and a narrow viewport without horizontal overflow. Repository and Windows installer static checks passed.
+- Cloud tests use simulated responses and sockets. No real provider key, billable inference or user recording was used; this does not certify every compatible provider or AI editing quality.
+- This is still not a clean-PC installation test. The fresh downloadable source ZIP excludes personal data, API keys, installed runtimes and model weights.
+
 ## Historical validation record — 2026-09-12
 
 The results below describe that packaging pass, not a continuously updated test counter or certification of the latest source. The website identifies its specific downloadable build; source changes may be newer than that archive.

@@ -1,4 +1,4 @@
-"""Build a clean source-only test ZIP; never copy runtime or user configuration."""
+"""Build a clean source-only beta ZIP; never copy runtime or user configuration."""
 from __future__ import annotations
 
 import argparse
@@ -38,7 +38,7 @@ IMAGE_FILES = (
     "docs/images/welcome.png", "docs/images/editor.png", "docs/images/ai-options.png",
     "docs/images/readme-banner.svg",
 )
-START_TEXT = """CUTROOM
+START_TEXT = """CUTROOM {version_label}
 Your footage. Your edit.
 
 Free and open source (MIT). No subscription. No CUTROOM watermark.
@@ -52,7 +52,7 @@ First setup needs internet. Some AI features need an additional download
 before first use. Keep the launch window open while editing, and use
 the same launcher next time.
 
-Start with a short recording you know well. This is a closed beta:
+Start with a short recording you know well. This is a public beta:
 review the draft and exported video before sharing.
 
 Your guide: README.md
@@ -60,7 +60,7 @@ Setup help: docs/TEST_ON_ANOTHER_PC.md
 Feedback: docs/BETA_FEEDBACK.md
 
 What saved you time? What got in your way?
-Send feedback privately to whoever shared CUTROOM with you.
+Report reproducible problems at https://github.com/VanoPeradze/cutroom/issues.
 Please leave out private client footage and personal information.
 """
 
@@ -126,7 +126,8 @@ def collect_payload(root: Path) -> dict[str, bytes]:
     defaults.update(host="127.0.0.1", port=8765, data_dir="data", open_browser=True)
     defaults["ai"].update(ollama_url="http://127.0.0.1:11434", download_models_on_setup=False)
     payload["config.json"] = _bytes_json(defaults)
-    payload["START_TESTING.txt"] = START_TEXT.replace("\n", "\r\n").encode("ascii")
+    version_label = _literal(payload["cutroom/__init__.py"], "__version_label__")
+    payload["START_TESTING.txt"] = START_TEXT.format(version_label=version_label).replace("\n", "\r\n").encode("ascii")
     return payload
 
 
@@ -163,12 +164,14 @@ def verify_package(archive: Path) -> dict:
 def build_package(root: Path, output_dir: Path, *, build_id: str | None = None) -> Path:
     payload = collect_payload(root)
     version = _literal(payload["cutroom/__init__.py"], "__version__")
+    version_label = _literal(payload["cutroom/__init__.py"], "__version_label__")
     stamp = build_id or datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
-    folder = f"CUTROOM-{version}-test-{stamp}"
+    folder = f"CUTROOM-{version}-{stamp}"
     if not re.fullmatch(r"CUTROOM-[A-Za-z0-9.-]+", folder):
         raise ValueError("Unsafe build identifier")
     manifest = {
-        "build_id": folder, "app_version": version, "kind": "private-source-test",
+        "build_id": folder, "app_version": version, "app_version_label": version_label,
+        "kind": "public-source-beta",
         "created_utc": datetime.now(timezone.utc).isoformat(),
         "target": "Windows x64 first-run testing; no bundled runtime",
         "clean_machine_install_verified": False,

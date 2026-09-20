@@ -12,7 +12,7 @@
   const shots = {
     editor: {en: 'Independent A/B tracks, editable layouts and a live preview. The image uses synthetic test footage, not an AI-generated result.', he: 'ערוצי A/B נפרדים, פריסות ניתנות לשינוי ותצוגה מקדימה. התמונה משתמשת בחומר בדיקה סינתטי, לא בתוצאה שנוצרה ב־AI.', alt: {en: 'CUTROOM editor with separate A/B timeline tracks and synthetic test footage', he: 'עורך CUTROOM עם ערוצי טיימליין A/B נפרדים וחומר בדיקה סינתטי'}},
     welcome: {en: 'Choose a Short, a YouTube video or a manual edit. Local model setup is visible before your first AI edit.', he: 'בחרו Short, סרטון יוטיוב או עריכה ידנית. הכנת המודלים המקומיים מופיעה לפני העריכה הראשונה עם AI.', alt: {en: 'CUTROOM welcome screen with three workflows and local setup guidance', he: 'מסך הכניסה של CUTROOM עם שלושה מסלולי עריכה והכוונה להגדרת AI מקומי'}},
-    'ai-options': {en: 'Compare AI modes and inspect local models. Downloads require confirmation. This example correctly reports that the Story engine still needs installation.', he: 'השוו אפשרויות AI ובדקו מודלים מקומיים. הורדות דורשות אישור. בדוגמה הזו מוצג שמנוע Story עדיין דורש התקנה.', alt: {en: 'CUTROOM AI connection and local model setup screen', he: 'מסך חיבור ה־AI והכנת המודלים המקומיים של CUTROOM'}}
+    'ai-options': {en: 'Local model setup in an earlier beta. Downloads require confirmation. In 1.1 Beta, My own API also supports compatible provider endpoints, as explained below.', he: 'הגדרת מודלים מקומיים בבטא קודמת. הורדות דורשות אישור. בגרסת 1.1 Beta, האפשרות My own API תומכת גם בספקי API תואמים, כפי שמוסבר בהמשך.', alt: {en: 'CUTROOM local model setup example from an earlier beta', he: 'דוגמה להגדרת המודלים המקומיים של CUTROOM מבטא קודמת'}}
   };
   function renderShot() {
     tourImage.src = '/assets/' + currentShot + '.png';
@@ -34,7 +34,7 @@
     languageSwitch.lang = language === 'he' ? 'en' : 'he';
     languageSwitch.setAttribute('aria-label', language === 'he' ? 'Read this website in English' : 'קריאת האתר בעברית');
     languageSwitch.href = language === 'he' ? '?lang=en' + location.hash : '?lang=he' + location.hash;
-    document.title = language === 'he' ? 'CUTROOM — החומר שלכם. העריכה שלכם.' : 'CUTROOM — Your footage. Your edit.';
+    document.title = language === 'he' ? 'CUTROOM 1.1 Beta — החומר שלכם. העריכה שלכם.' : 'CUTROOM 1.1 Beta — Your footage. Your edit.';
     document.querySelector('meta[name="description"]').content = language === 'he'
       ? 'עריכת וידאו חינמית בקוד פתוח ליוצרי תוכן. התחילו מטיוטה בעזרת AI או ערכו ידנית. הורידו את הבטא ל־Windows ולמדו איך מתחילים.'
       : 'Free, open-source video editing for creators. Start with an AI-assisted draft or edit manually. Download the Windows beta and learn how to get started.';

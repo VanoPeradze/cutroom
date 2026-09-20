@@ -159,7 +159,11 @@ dialog.connection-dialog { width:min(1050px,calc(100vw - 32px)); }
 .connection-provider span,.connection-provider a { font-size:12px; color:var(--paper-dim); }
 .connection-provider a { margin-left:auto; color:#9edce2; }
 .connection-field { display:grid; gap:8px; font-size:14px; }
-.connection-field input { width:100%; min-width:0; padding:12px; background:#111721; color:var(--paper); border:1px solid #778397; border-radius:8px; }
+.connection-field input,.connection-field select { width:100%; min-width:0; padding:12px; background:#111721; color:var(--paper); border:1px solid #778397; border-radius:8px; }
+#compatibleConnectionFields .connection-field { margin-block:14px; }
+#cloudDestinationName { overflow-wrap:anywhere; }
+.home-footer .provider-credit { flex-basis:100%; font-size:12px; }
+.provider-credit a { color:var(--paper); text-decoration:underline; text-underline-offset:3px; }
 #cloudKeyHelp,.connection-advanced p { font-size:12px; overflow-wrap:anywhere; }
 .connection-advanced { margin-block:18px; } .connection-advanced summary { cursor:pointer; color:var(--paper-dim); font-size:14px; padding:8px 0; }
 .connection-advanced label { margin-top:12px; }

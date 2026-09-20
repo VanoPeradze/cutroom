@@ -511,7 +511,9 @@ def story_ai_status(settings: Settings, brief: dict[str, Any] | None = None) -> 
     if enabled(settings):
         selected = connection(settings)
         ready = bool(selected.get("api_key")) and settings.ai.get("enabled", True)
-        return {"ready": bool(ready), "provider": "groq", "ollama_available": False,
+        provider = str(selected.get("provider") or "groq")
+        provider_label = "Groq" if provider == "groq" else "OpenAI-compatible"
+        return {"ready": bool(ready), "provider": provider, "provider_label": provider_label, "ollama_available": False,
                 "installed_models": [], "selected_model": selected["model"] if ready else None,
                 "recommended_model": selected["model"], "reason": None if ready else "cloud_key_required"}
     if not settings.ai.get("enabled", True):
@@ -2071,7 +2073,8 @@ def hierarchical_story_edit(
     if not status["ready"]:
         recommended = status["recommended_model"]
         if status["reason"] == "cloud_key_required":
-            raise StoryAIUnavailableError("Connect your Groq account in AI connection before creating a cloud edit.")
+            provider_label = str(status.get("provider_label") or "cloud AI")
+            raise StoryAIUnavailableError(f"Connect {provider_label} in AI connection before creating a cloud edit.")
         if status["reason"] == "ollama_unavailable":
             raise StoryAIUnavailableError("Story AI requires Ollama to be running before a semantic edit can be created.")
         raise StoryAIUnavailableError(f"Story AI model {recommended} must be installed before creating a semantic edit.")
@@ -2362,7 +2365,11 @@ def plan_edit(
             "decision": decision,
             "story_beats": beats,
             "story_hierarchy": hierarchy,
-        }, "groq_hierarchical_story" if settings.ai.get("cloud_connection", {}).get("mode", "local") != "local" else "ollama_hierarchical_story"
+        }, (
+            str(settings.ai.get("cloud_connection", {}).get("provider") or "groq").replace("-", "_") + "_hierarchical_story"
+            if settings.ai.get("cloud_connection", {}).get("mode", "local") != "local"
+            else "ollama_hierarchical_story"
+        )
 
     _check_cancelled(cancel_check)
     from .cloud_ai import enabled
@@ -2370,7 +2377,11 @@ def plan_edit(
     llm = _validate_llm_result(response, enriched)
     _check_cancelled(cancel_check)
     if llm:
-        return {"segments": enriched, "decision": llm, "story_beats": [], "story_hierarchy": None}, "groq" if settings.ai.get("cloud_connection", {}).get("mode", "local") != "local" else "ollama"
+        return {"segments": enriched, "decision": llm, "story_beats": [], "story_hierarchy": None}, (
+            str(settings.ai.get("cloud_connection", {}).get("provider") or "groq").replace("-", "_")
+            if settings.ai.get("cloud_connection", {}).get("mode", "local") != "local"
+            else "ollama"
+        )
     return {"segments": enriched, "decision": deterministic_edit(enriched, brief), "story_beats": [], "story_hierarchy": None}, "deterministic"
 
 def language_from_text(text: str, fallback: str = "en") -> str:

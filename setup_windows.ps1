@@ -2,7 +2,7 @@ $ErrorActionPreference = "Stop"
 Set-StrictMode -Version 2.0
 Set-Location -LiteralPath $PSScriptRoot
 
-$script:CutroomVersion = "5.6.1"
+$script:CutroomVersion = "1.1 Beta"
 $script:UvVersion = "0.12.5"
 $script:TranscriptStarted = $false
 $script:LogDirectory = Join-Path $PSScriptRoot "data\logs"

@@ -15,6 +15,10 @@ import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+from cutroom import __version__, __version_label__
+
 REPORT_JSON = ROOT / "validation-report.json"
 REPORT_HE = ROOT / "VALIDATION_REPORT_HE.md"
 
@@ -374,7 +378,7 @@ def write_report(report: dict) -> None:
             "ללא הפעלת winget או setup_windows.ps1. בדיקות תלויות־runtime מסומנות כדילוג רק כאשר המודולים "
             "הנדרשים אינם מותקנים בסביבת הבנייה. לפני הפצה רחבה יש לבצע גם התקנה פיזית נקייה ב־Windows."
         )
-    text = f"""# CUTROOM AI 5.6.1 — דוח אימות
+    text = f"""# CUTROOM {__version_label__} — דוח אימות
 
 **מצב שחרור:** {('עבר עם דילוגים סביבתיים' if report['ok'] and any(item.get('skipped') for item in report['checks']) else 'עבר' if report['ok'] else 'נכשל')}
 
@@ -451,7 +455,8 @@ def main() -> int:
     checks.append(run("embedded_reel_contract", [sys.executable, "tests/smoke_embedded_reel.py"], timeout=600))
 
     report = {
-        "version": "5.6.1",
+        "version": __version__,
+        "version_label": __version_label__,
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "ok": all(item.get("ok") for item in checks),
         "full_runtime_verified": api_available and not missing_runtime,

@@ -1,12 +1,12 @@
-import { applyTranslations, dictionaries } from "./i18n.js?v=561-ui-refresh-50";
-import { TimelineView, formatTime, editableClips, timelineDuration, sequenceBlocks, sequenceGaps, rippleMoveStart } from "./timeline.js?v=561-ui-refresh-82";
-import { SourceReview } from "./source-review.js?v=561-ui-refresh-82";
-import { initWorkspace } from "./workspace.js?v=561-ui-refresh-80";
-import { KEYBOARD_PROFILES, resolveEditorShortcut, isEditorTransportSpace, shortcutRows } from "./keyboard.js?v=561-ui-refresh-61";
-import { AudioThresholdView } from "./audio-meter.js?v=561-ui-refresh-45";
-import { initWelcome, workflowSettings } from "./welcome.js?v=563-setup-2";
-import { initLocalModels } from "./local-models.js?v=563-setup-2";
-import { trackClips, trackAt, hasSourceTracks, SourceTimelineClock } from "./source-tracks.js?v=561-ui-refresh-59";
+import { applyTranslations, dictionaries } from "./i18n.js?v=1.1-beta-1";
+import { TimelineView, formatTime, editableClips, timelineDuration, sequenceBlocks, sequenceGaps, rippleMoveStart } from "./timeline.js?v=1.1-beta-1";
+import { SourceReview } from "./source-review.js?v=1.1-beta-1";
+import { initWorkspace } from "./workspace.js?v=1.1-beta-1";
+import { KEYBOARD_PROFILES, resolveEditorShortcut, isEditorTransportSpace, shortcutRows } from "./keyboard.js?v=1.1-beta-1";
+import { AudioThresholdView } from "./audio-meter.js?v=1.1-beta-1";
+import { initWelcome, workflowSettings, cloudProviderName } from "./welcome.js?v=1.1-beta-1";
+import { initLocalModels } from "./local-models.js?v=1.1-beta-1";
+import { trackClips, trackAt, hasSourceTracks, SourceTimelineClock } from "./source-tracks.js?v=1.1-beta-1";
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -2065,7 +2065,7 @@ async function generateDraft() {
 
 async function ensureStoryAIReady(requestedGoal = null) {
   if (state.system?.ai_connection?.mode && state.system.ai_connection.mode !== "local") {
-    if (!state.system.ai_connection.configured) throw new Error("Connect your Groq API key in AI connection before starting cloud AI.");
+    if (!state.system.ai_connection.configured) throw new Error("Connect your provider API key in AI connection before starting cloud AI.");
     assertJobStartNotCancelled();
     return true;
   }
@@ -5846,8 +5846,9 @@ function renderModelStatus() {
   if (connection?.mode && connection.mode !== "local") {
     elements.modelStatus.className = `model-status ${connection.configured ? "ready" : "partial"}`;
     elements.modelStatus.dataset.state = "cloud";
-    $("b", elements.modelStatus).textContent = connection.configured ? "Groq cloud AI selected" : "Connect your cloud AI account";
-    $("small", elements.modelStatus).textContent = connection.configured ? "Audio + transcript sent to Groq when you start AI. Provider quotas and billing apply." : "Open AI connection to enter your key. Manual editing remains available.";
+    const providerName = cloudProviderName(connection);
+    $("b", elements.modelStatus).textContent = connection.configured ? `${providerName} selected for cloud AI` : "Connect your cloud AI account";
+    $("small", elements.modelStatus).textContent = connection.configured ? `Audio + transcript sent to ${providerName} when you start AI. Provider quotas and billing apply.` : "Open AI connection to enter your key. Manual editing remains available.";
     elements.modelButton.hidden = true;
     elements.retryAIButton.hidden = true;
     return;

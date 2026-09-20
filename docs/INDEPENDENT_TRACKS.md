@@ -72,6 +72,6 @@ On larger screens, drag the video/timeline divider to resize either area; double
 - New operations require at least one frame at the selected output FPS. Unsupported tiny leftover fragments are rejected atomically, never silently discarded.
 - Sequence length can grow, but each clip must use footage that exists in its recording. Linked edits cannot repair incorrectly synchronized input files.
 - Synthetic UI and real 30/60 FPS FFmpeg regressions cover linked edits, gaps, captions and audio. These do not certify transcription accuracy, real user satisfaction, or long/reordered 4K performance.
-- Timeline editing, previews and exports remain local. CUTROOM remains free and open source. Optional cloud AI sends audio/transcript context to the user's Groq account; its quotas and possible charges are separate. See [AI connection choices](AI_CONNECTIONS.md).
+- Timeline editing, previews and exports remain local. CUTROOM remains free and open source. Optional cloud AI sends audio/transcript context to the provider selected by the user; its quotas and possible charges are separate. See [AI connection choices](AI_CONNECTIONS.md).
 
 Tests: `node --test tests/frontend_*.test.cjs` and `.venv/Scripts/python.exe -m pytest -o addopts='' -q`.

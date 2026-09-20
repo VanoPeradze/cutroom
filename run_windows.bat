@@ -1,7 +1,7 @@
 @echo off
 setlocal EnableExtensions
 cd /d "%~dp0"
-title CUTROOM AI 5.6.1
+title CUTROOM 1.1 Beta
 
 if exist ".runtime-paths.cmd" call ".runtime-paths.cmd"
 if defined LOCALAPPDATA set "PATH=%LOCALAPPDATA%\Microsoft\WindowsApps;%LOCALAPPDATA%\Microsoft\WinGet\Links;%LOCALAPPDATA%\Programs\Ollama;%PATH%"
@@ -21,7 +21,7 @@ if errorlevel 1 (
 
 set "SETUP_REQUIRED=0"
 if not exist ".setup-complete" set "SETUP_REQUIRED=1"
-if exist ".setup-complete" findstr /c:"CUTROOM AI 5.6.1 setup completed" ".setup-complete" >nul 2>&1 || set "SETUP_REQUIRED=1"
+if exist ".setup-complete" findstr /c:"CUTROOM AI 1.1 Beta setup completed" ".setup-complete" >nul 2>&1 || set "SETUP_REQUIRED=1"
 if not exist ".venv\Scripts\python.exe" set "SETUP_REQUIRED=1"
 
 if "%SETUP_REQUIRED%"=="1" goto setup

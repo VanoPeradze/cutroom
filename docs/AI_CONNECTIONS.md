@@ -1,6 +1,6 @@
 # AI, on your terms
 
-CUTROOM is free and open source. AI can run locally or through your own Groq account. You can also skip AI and edit manually.
+CUTROOM is free and open source. AI can run locally, through your Groq account, or through a compatible cloud API provider. You can also skip AI and edit manually.
 
 ## Pick your connection
 
@@ -8,9 +8,13 @@ Open **AI connection** at the top of the app, choose an option, then select **Us
 
 **On my computer:** uses CUTROOM's local transcription and Story models. Model downloads, disk space and processing resources are required. No cloud key is needed.
 
-**Online — Free tier:** uses your own Groq Free account. Create your key in the [Groq console](https://console.groq.com/keys), paste it into CUTROOM, review your account's limits, and confirm cloud processing. Long recordings can exceed free quotas. CUTROOM cannot verify whether your key belongs to a free or paid account.
+**Online — Free tier:** uses your own Groq Free account, free within its quotas. Create your key in the [Groq console](https://console.groq.com/keys), paste it into CUTROOM, review your account's limits, and confirm cloud processing. Long recordings can exceed free quotas. CUTROOM cannot verify whether your key belongs to a free or paid account; a paid account may incur charges.
 
-**My own API account:** also uses Groq in this first integration. Your account's billing and limits apply; the selection does not purchase or upgrade anything. Gemini, arbitrary API endpoints and other providers are not yet supported.
+**My own API account:** choose Groq or an OpenAI-compatible provider. For another provider, enter its public HTTPS base URL, transcription model ID and Story model ID. Your account's billing and limits apply; the selection does not purchase or upgrade anything. A chat subscription alone does not supply API access.
+
+The compatible endpoint must support both `/chat/completions` with JSON object response mode and `/audio/transcriptions` with `verbose_json` output and word timestamps. Both models must be available through the same base URL, API key and account. Compatibility with only chat completions is insufficient. HTTP, local and private-network destinations are rejected. Use the provider's API base URL, not its website or chat page.
+
+Thanks to Groq for making a free API tier available. CUTROOM is independent and is not sponsored or endorsed by Groq. [Groq rate limits](https://console.groq.com/docs/rate-limits) · [Billing FAQ](https://console.groq.com/docs/billing-faqs)
 
 You can change connections when no processing job is active. Your saved projects do not contain the connection key.
 
@@ -30,7 +34,7 @@ The in-app model action does not silently install Ollama or approve operating-sy
 
 ## What leaves your computer?
 
-For cloud transcription, CUTROOM extracts the selected audio track into small temporary chunks and sends those to Groq. For Story AI, it sends transcript text and editing context/instructions. It does not send video frames. Transcripts and instructions may contain sensitive information from your recording, so use cloud AI only for content you are allowed to share with the provider.
+For cloud transcription, CUTROOM extracts the selected audio track into small temporary chunks and sends those to your selected provider endpoint. For Story AI, it sends transcript text and editing context/instructions. It does not send video frames. Transcripts and instructions may contain sensitive information from your recording, so use cloud AI only for content you are allowed to share with the provider.
 
 Editing, preview generation and video export still run locally. This is not a browser-only hosted editor, and it does not eliminate the local video-processing installation. Existing installers and ZIPs have not been made smaller by this change.
 
@@ -38,16 +42,19 @@ Editing, preview generation and video export still run locally. This is not a br
 
 - A key pasted into CUTROOM is held in the running server's memory, not written to project files, preferences, logs or browser storage by CUTROOM.
 - Your selected mode and model are remembered, but the key must be reconnected after restarting CUTROOM.
+- A session key is bound to its provider and base URL. Changing either requires a new key and fresh consent; CUTROOM does not forward the previous destination's key to a new endpoint.
 - **Forget session key** clears the in-memory key and selects local AI.
-- Advanced users can set `CUTROOM_GROQ_API_KEY` in their own launch environment. CUTROOM does not create or persist that environment variable. Remove it yourself if you want to revoke that local configuration; the Forget button cannot remove a user-managed environment key.
+- Advanced users can set `CUTROOM_GROQ_API_KEY` in their own launch environment for Groq. It is not a credential for a custom endpoint. CUTROOM does not create or persist that environment variable. Remove it yourself if you want to revoke that local configuration; the Forget button cannot remove a user-managed environment key.
 - Provider retention and billing policies are governed by your provider account. Do not paste keys into feedback reports or screenshots.
 
 ## Models used online
 
+Groq defaults:
+
 - Transcription: **Whisper Large V3** (`whisper-large-v3`), with word timestamps.
 - Story AI default: **GPT-OSS 120B** (`openai/gpt-oss-120b`), hosted by Groq.
 
-You can enter another Groq Story model ID under **Model settings**. It must support the structured JSON responses CUTROOM needs. Availability and quotas are controlled by Groq; [check its model documentation](https://console.groq.com/docs/models). A connected key means it has been supplied, not that its permissions or model access have been verified.
+You can enter another supported Story model ID under **Model settings**. For Groq, [check its model documentation](https://console.groq.com/docs/models). For a compatible provider, supply that provider's own model IDs and verify the endpoint requirements above; Groq model names do not automatically work elsewhere. Availability, retention and quotas are controlled by the selected provider. A connected key means it has been supplied, not that its permissions or model access have been verified.
 
 ## If a request fails
 
@@ -59,4 +66,4 @@ Cancel stops CUTROOM from continuing the job and closes the local request. It ca
 
 ## Beta verification
 
-Automated tests cover opt-in consent, credential redaction, restart behavior, provider failures, cancellation, chunk timing and routing without local-model fallback. Responses are mocked: real Groq inference has not been verified with a user API key in this change. No new claim is made about Hebrew accuracy or Story quality. Review transcripts, edits and exports before using them.
+Automated tests cover opt-in consent, credential redaction, restart behavior, provider failures, cancellation, chunk timing and routing without local-model fallback. Responses are mocked: real provider inference has not been verified with a user API key in this change. No new claim is made about Hebrew accuracy or Story quality. Review transcripts, edits and exports before using them.

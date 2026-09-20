@@ -99,7 +99,7 @@ def test_windows_launcher_checks_setup_marker_environment_and_real_parser():
     verifier = (ROOT / "verify_windows_installer.ps1").read_text(encoding="ascii")
     preflight = (ROOT / "scripts" / "preflight.py").read_text(encoding="utf-8")
     assert 'if not exist ".setup-complete"' in launcher
-    assert 'CUTROOM AI 5.6.1 setup completed' in launcher
+    assert 'CUTROOM AI 1.1 Beta setup completed' in launcher
     assert 'if not exist ".venv\\Scripts\\python.exe"' in launcher
     assert "verify_windows_installer.ps1" in launcher
     assert '"scripts\\preflight.py"' in launcher

@@ -46,3 +46,13 @@ test('language switching cannot replace links with plain text', () => {
 test('public website copy does not describe the repository as private', () => {
   assert.doesNotMatch(html, /private (?:GitHub )?(?:repository|repo)\b|\b(?:repository|repo) (?:is|remains) private|מאגר פרטי|המאגר (?:פרטי|נשאר פרטי)/i);
 });
+
+test('AI choices explain compatibility, Groq Free limits and independent credit', () => {
+  assert.match(html, /OpenAI-compatible API/);
+  assert.match(html, /word timestamps/);
+  assert.match(html, /JSON-object/);
+  assert.match(html, /free API tier with usage limits/);
+  assert.match(html, /not sponsored or endorsed by Groq/);
+  assert.ok(linksTo(html, 'https://console.groq.com/docs/rate-limits').length);
+  assert.doesNotMatch(html, /Currently supports Groq only|This integration currently supports Groq only/);
+});

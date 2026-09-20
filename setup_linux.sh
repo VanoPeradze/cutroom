@@ -25,5 +25,5 @@ if command -v ollama >/dev/null; then
 fi
 .venv/bin/python -m compileall -q server.py cutroom
 .venv/bin/python scripts/preflight.py
-printf 'CUTROOM AI 5.6.1 setup completed\n' > .setup-complete
+printf 'CUTROOM AI 1.1 Beta setup completed\n' > .setup-complete
 echo "CUTROOM is ready. Run ./run_linux.sh"

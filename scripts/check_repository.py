@@ -5,7 +5,7 @@ import ast
 from html.parser import HTMLParser
 from pathlib import Path
 import re
-from urllib.parse import unquote, urlsplit
+from urllib.parse import quote, unquote, urlsplit
 import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -40,7 +40,11 @@ def check_document(name: str) -> None:
         tree = ast.parse((ROOT / "cutroom/__init__.py").read_text(encoding="utf-8"))
         version = next(ast.literal_eval(node.value) for node in tree.body if isinstance(node, ast.Assign)
                        and any(isinstance(target, ast.Name) and target.id == "__version__" for target in node.targets))
-        if f"badge/version-{version}-" not in text:
+        version_label = next(ast.literal_eval(node.value) for node in tree.body if isinstance(node, ast.Assign)
+                             and any(isinstance(target, ast.Name) and target.id == "__version_label__" for target in node.targets))
+        if version_label != version.removesuffix("-beta") + " Beta":
+            raise ValueError("Application beta identifier and display label must agree")
+        if f"badge/version-{quote(version_label, safe='')}-" not in text:
             raise ValueError("README version badge must match the application version")
         if "MIT" not in text or "beta" not in text.lower():
             raise ValueError("README must identify the license and beta status")

@@ -34,7 +34,7 @@ if ($sourceBytes.Length -eq 0 -or ($sourceBytes | Where-Object { $_ -gt 127 } | 
 }
 $sourceText = [System.Text.Encoding]::ASCII.GetString($sourceBytes)
 $requiredMarkers = @(
-    '$script:CutroomVersion = "5.6.1"',
+    '$script:CutroomVersion = "1.1 Beta"',
     'Resolve-SystemPython',
     '$script:UvVersion = "0.12.5"',
     'UV_PYTHON_INSTALL_DIR',

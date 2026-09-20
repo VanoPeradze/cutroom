@@ -47,7 +47,7 @@ The ZIP is downloaded from the existing public Expo website. If that site is una
 provide the already-approved local archive instead:
 
 ```sh
-node prepare-download.mjs ../dist/CUTROOM-5.6.1-test-20260919-223724.zip
+node prepare-download.mjs ../dist/CUTROOM-1.1-beta-20260920-131622.zip
 ```
 
 An existing ZIP with the wrong checksum is rejected, not overwritten. Review and move it

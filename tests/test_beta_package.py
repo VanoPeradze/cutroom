@@ -5,9 +5,27 @@ from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
 from cutroom.config import DEFAULTS
+from cutroom import __version__, __version_label__
 from scripts.build_test_package import collect_payload
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_public_beta_version_is_consistent_across_package_and_setup():
+    payload = collect_payload(ROOT)
+    assert __version__ == "1.1-beta"
+    assert __version_label__ == "1.1 Beta"
+    assert f"CUTROOM {__version_label__}" in payload["START_TESTING.txt"].decode("ascii")
+    assert "public beta" in payload["START_TESTING.txt"].decode("ascii")
+    for name in ("run_windows.bat", "repair_windows.bat", "setup_windows.ps1",
+                 "verify_windows_installer.ps1", "setup_linux.sh", "README.md", "README_HE.md",
+                 "START_HERE_HE.txt", "UPGRADE_HE.md", "docs/TEST_ON_ANOTHER_PC.md"):
+        text = payload[name].decode("utf-8")
+        assert __version_label__ in text, name
+        assert "5.6.1" not in text, name
+    marker = f"CUTROOM AI {__version_label__} setup completed"
+    assert marker in payload["run_windows.bat"].decode("ascii")
+    assert marker in payload["setup_linux.sh"].decode("ascii")
 
 
 def test_beta_entry_documents_and_their_local_links_ship_together():

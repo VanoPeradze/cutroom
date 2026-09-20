@@ -33,8 +33,8 @@ Open **AI connection**. Selecting an option is not enough: choose **Use local AI
 | Option | What you get | What you need |
 | --- | --- | --- |
 | **On my computer** | Local transcription and Story planning; no AI-provider fees or content upload to one | Initial model downloads, disk space and enough memory; speed depends on your machine |
-| **Online — Free tier** | Groq processes extracted audio and transcript/editing context, reducing local AI work | Your Groq key, internet and remaining account quota; not unlimited or guaranteed free |
-| **My own API account** | The same Groq integration under your chosen plan/model | Your key; provider charges may apply. CUTROOM does not buy, upgrade or cap the account |
+| **Online — Free tier** | Groq processes extracted audio and transcript/editing context, reducing local AI work | Your Groq Free key, internet and remaining quota; free within Free tier quotas |
+| **My own API account** | Groq or a compatible public HTTPS provider processes transcription and Story planning | Your endpoint, supported models and API key; provider charges may apply. CUTROOM does not buy, upgrade or cap the account |
 | **Manual edit** | Timeline, layout, preview and export without AI processing | Your footage; no AI models or account. No automatic transcript or Story draft |
 
 ### Local models: what to download
@@ -67,11 +67,11 @@ Default chronological YouTube cleanup can work without a Story model; semantic S
 
 ### Cloud AI: consent, keys and costs
 
-Only **Groq** is supported by this first cloud integration. This is not a general API-key field for other providers. Open the provider's key link in the dialog, enter your own key and confirm the data-sharing notice before saving.
+Choose **Groq** or an **OpenAI-compatible provider** under **My own API account**. For another provider, supply its public HTTPS API base URL and model IDs. Both models must use the same endpoint and account: `/chat/completions` must support JSON object mode, and `/audio/transcriptions` must return `verbose_json` with word timestamps. Chat-only APIs and chat subscriptions are insufficient; local/private-network endpoints are rejected. Enter your own key and confirm the destination and data-sharing notice before saving.
 
 CUTROOM sends selected audio for transcription and transcript/editing context for Story AI. It does not send video frames. This content can include private speech, so use cloud processing only when you may share that material. Video previews and MP4 rendering still run on your computer: cloud AI is not an online render farm or a browser-only installation.
 
-Keys entered in the app last for the current CUTROOM session. Reconnect after restarting. **Forget session key** clears that key and selects local AI. A supplied key is not a successful connection test. Never include keys in screenshots or bug reports.
+Keys entered in the app stay in memory for the current CUTROOM session and are bound to the selected provider and base URL. Changing either requires a new key and fresh consent. Reconnect after restarting. **Forget session key** clears that key and selects local AI. A supplied key is not a successful connection test. Never include keys in screenshots or bug reports.
 
 The Free tier label does not verify your plan or prevent a paid key from incurring charges. A Story edit can make multiple requests. Quota/key/provider errors stop the task rather than silently switching providers or plans. Cancellation cannot undo usage already accepted by the provider. Mocked regression tests do not certify real provider inference. [Privacy and connection details](AI_CONNECTIONS.md)
 

@@ -22,4 +22,10 @@ CUTROOM does not bundle Python, uv, FFmpeg, Ollama or model weights inside this 
 - License: Apache License 2.0 according to the upstream model card.
 - Model weights are not bundled in the CUTROOM ZIP; faster-whisper downloads them on first use when selected.
 
-See [the model inventory](docs/MODELS.md) for configured tags and upstream sources. The MIT-licensed CUTROOM source is included in this private beta; this does not relicense third-party tools or weights.
+See [the model inventory](docs/MODELS.md) for configured tags and upstream sources. The MIT-licensed CUTROOM source is included in CUTROOM 1.1 Beta; this does not relicense third-party tools or weights.
+
+## Optional cloud providers
+
+CUTROOM can use your Groq account or a compatible public HTTPS provider for chat planning and timed audio transcription. Provider models, retention, quotas and billing remain governed by that provider's terms; the application's MIT license does not apply to those services. See [connection requirements and privacy](docs/AI_CONNECTIONS.md).
+
+Thanks to Groq for making a free API tier available. CUTROOM is independent and is not sponsored or endorsed by Groq. Groq Free tier is free within its quotas; a paid account may incur charges. See [Groq rate limits](https://console.groq.com/docs/rate-limits) and [billing FAQ](https://console.groq.com/docs/billing-faqs).
