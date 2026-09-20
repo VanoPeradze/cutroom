@@ -9,10 +9,18 @@ The previous separate website checkout is not needed for future updates.
 
 ## What belongs here
 
-- `public/`: the English/Hebrew page, styling, scripts, real product screenshots and user guides.
+- `public/`: the English/Hebrew page, styling, scripts and generated copies of the real product screenshots and user guides.
 - `app.json`: the existing Expo website project identity, not a credential.
 - `release.json`: the approved Windows beta download's exact filename, size and checksum.
 - `prepare-download.mjs`: restores that approved ZIP locally without committing it to Git.
+- `prepare-assets.mjs`: copies exactly six canonical repository files into `public/`, entirely offline.
+
+Edit screenshots in `docs/images/{welcome,editor,ai-options}.png`, user guides in
+`docs/USER_GUIDE_EN.md` and `docs/USER_GUIDE_HE.md`, and the license in the root `LICENSE`.
+Their copies under `public/assets/` and `public/downloads/` are generated and ignored by
+Git. The helper checks all source and destination paths before writing, rejects symbolic
+links, preserves the exact bytes, and leaves already-matching copies untouched.
+The favicon and approved ZIP checksum sidecar remain maintained website files.
 
 The Windows ZIP has three top-level entries: `START CUTROOM.bat`, `START HERE.html`, and `App/`. Windows **Extract All** supplies the enclosing destination folder. Full source and the package manifest are inside `App`; never remove or rename that folder independently of the launcher.
 
@@ -35,7 +43,7 @@ npx --yes eas-cli@24.7.0 login
 npm run deploy
 ```
 
-`npm run deploy` restores the approved download, checks its size and SHA-256,
+`npm run deploy` restores the approved download, prepares the canonical assets, checks the ZIP's size and SHA-256,
 runs the small website tests and link checks, then publishes to the existing Expo project.
 It does not deploy to the previous host, push source changes to GitHub, purchase a plan,
 upload private app data, or change CUTROOM's local editing engine.
@@ -45,11 +53,25 @@ Authentication stays in Expo's normal local credential storage, never in this re
 
 ### Prepare without publishing
 
+From a fresh clone, prepare and verify the screenshots, guides and license offline:
+
+```sh
+cd website
+npm run prepare:assets
+npm run check:assets
+npm test
+```
+
+`npm run check:assets` is read-only and fails if a generated file is missing or stale.
+CI runs this offline preparation and verification without downloading the ZIP or deploying.
+For the complete website check, also restore the approved download:
+
 ```sh
 npm run prepare:download
-npm test
 npm run check
 ```
+
+`npm run check` refreshes canonical assets automatically before checking every public link.
 
 The ZIP is downloaded from the existing public Expo website. If that site is unavailable,
 provide the already-approved local archive instead:
@@ -60,7 +82,7 @@ node prepare-download.mjs ../dist/CUTROOM-1.1-beta-20260920-135632.zip
 
 An existing ZIP with the wrong checksum is rejected, not overwritten. Review and move it
 out of the download folder yourself before retrying. All ZIP files in that folder remain
-ignored by Git. The source, checksums and approved screenshots are tracked.
+ignored by Git. Canonical source assets and release checksums are tracked; generated copies are not.
 
 ## Change the beta download deliberately
 

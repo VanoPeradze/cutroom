@@ -16,7 +16,7 @@ SPEC.loader.exec_module(builder)
 @pytest.fixture
 def source(tmp_path):
     root = tmp_path / "source"
-    for name in (*builder.ROOT_FILES, *builder.DOC_FILES, *builder.IMAGE_FILES, *builder.PACKAGING_FILES):
+    for name in (*builder.ROOT_FILES, *builder.SUPPORT_FILES, *builder.DOC_FILES, *builder.IMAGE_FILES, *builder.PACKAGING_FILES):
         path = root / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("source", encoding="utf-8")
@@ -230,5 +230,5 @@ def test_real_payload_has_no_setup_markers_or_user_paths():
     assert not any(name.startswith(("data/", ".venv/", ".tools/")) for name in payload)
     assert ".setup-complete" not in payload
     assert ".runtime-paths.cmd" not in payload
-    for name in ("README.md", "README_HE.md", "config.json"):
+    for name in ("README.md", "docs/README_HE.md", "config.json"):
         assert b"C:\\Users\\" not in payload[name]

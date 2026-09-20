@@ -19,7 +19,8 @@
   <a href="https://cutroom-studio.expo.app/">Website &amp; download</a> ·
   <a href="docs/USER_GUIDE_EN.md">User guide</a> ·
   <a href="https://github.com/VanoPeradze/cutroom/issues/new/choose">Report an issue</a> ·
-  <a href="CONTRIBUTING.md">Contribute</a>
+  <a href="docs/README.md">All guides</a> ·
+  <a href=".github/CONTRIBUTING.md">Contribute</a>
 </p>
 
 ---
@@ -118,14 +119,14 @@ Use copies of your footage, not your only originals or an urgent client delivery
 
 **Creators:** try one short project and tell us where the workflow helped or got in your way. [Report a reproducible bug](https://github.com/VanoPeradze/cutroom/issues/new/choose) or use the [tester feedback guide](docs/BETA_FEEDBACK.md). If the repository is not accessible yet, send feedback to the person who shared your beta download.
 
-**Contributors:** help improve timeline interactions, setup, accessibility, transcript evaluation, documentation or tests. Start with the [contribution guide](CONTRIBUTING.md). Discuss larger changes before building them.
+**Contributors:** help improve timeline interactions, setup, accessibility, transcript evaluation, documentation or tests. Start with the [contribution guide](.github/CONTRIBUTING.md). Discuss larger changes before building them.
 
-**Security reports:** follow the [security policy](SECURITY.md). Keep credentials, client footage, transcripts and personal file paths out of public issues.
+**Security reports:** follow the [security policy](.github/SECURITY.md). Keep credentials, client footage, transcripts and personal file paths out of public issues.
 
 <details>
 <summary><strong>For developers</strong></summary>
 
-The editor uses a Python backend, a plain JavaScript frontend and FFmpeg rendering. AI integrations are optional. See the [developer setup and checks](docs/CONTRIBUTING.md) before making changes.
+The editor uses a Python backend, a plain JavaScript frontend and FFmpeg rendering. AI integrations are optional. See the [developer setup and checks](docs/CONTRIBUTING.md) before making changes. Just want to edit a video? Use the Windows beta download above; the folders below are for contributors.
 
 ```text
 cutroom/       Editing, transcription, jobs and rendering
@@ -133,7 +134,9 @@ web/           Local editor interface and timeline
 tests/         Backend, frontend and synthetic-render regression tests
 scripts/       Validation and privacy-conscious packaging tools
 docs/          User guides, limitations and contributor documentation
+packaging/     Windows download launcher and offline help
 website/       Separate Expo-hosted presentation and download site
+.github/       Community guidelines and automated repository checks
 ```
 
 Repository checks cover documentation, frontend regressions and the website download helper. Full backend tests, synthetic renders and clean-machine testing are separate checks; none proves real-world AI quality.
@@ -142,6 +145,6 @@ Repository checks cover documentation, frontend regressions and the website down
 
 ## License
 
-CUTROOM is released under the **[MIT License](LICENSE)**. You can use it, study it, modify it and redistribute it under that license. Third-party tools and AI models retain their own licenses; see [Third-party notices](THIRD_PARTY_NOTICES.md).
+CUTROOM is released under the **[MIT License](LICENSE)**. You can use it, study it, modify it and redistribute it under that license. Third-party tools and AI models retain their own licenses; see [Third-party notices](docs/THIRD_PARTY_NOTICES.md).
 
 <p align="center"><strong>Built for creators. Shaped by the people who use it.</strong></p>

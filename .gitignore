@@ -3,19 +3,13 @@ dist/
 __pycache__/
 *.py[cod]
 .pytest_cache/
+.hypothesis/
+.ruff_cache/
 .setup-complete
-data/projects/*
-!data/projects/.gitkeep
-data/exports/*
-!data/exports/.gitkeep
-data/cache/*
-!data/cache/.gitkeep
 *.partial.*
 validation-work/
 .tools/
 .runtime-paths.cmd
-data/logs/*
-!data/logs/.gitkeep
 
 # Private content and generated reports never belong in Git.
 data/

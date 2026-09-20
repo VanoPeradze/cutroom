@@ -19,7 +19,7 @@ CUTROOM 1.1 Beta
 מומלץ להתחיל בסרטון קצר שאתם מכירים.
 זו בטא: בדקו את הטיוטה ואת הקובץ המיוצא לפני שיתוף.
 
-המדריך בעברית: README_HE.md
+המדריך בעברית: docs/README_HE.md
 המדריך באנגלית: README.md
 עזרה בהפעלה: docs/TEST_ON_ANOTHER_PC.md
 משוב: docs/BETA_FEEDBACK.md

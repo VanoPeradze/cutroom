@@ -41,12 +41,12 @@ def run(name: str, command: list[str], timeout: int = 600, env: dict[str, str] |
 def static_checks() -> list[dict]:
     checks: list[dict] = []
     required = [
-        "server.py", "config.json", "requirements.txt", "requirements-dev.txt", "run_windows.bat", "repair_windows.bat", "setup_windows.ps1", "verify_windows_installer.ps1", "scripts/preflight.py",
+        "server.py", "config.json", "requirements.txt", "tests/requirements.txt", "run_windows.bat", "repair_windows.bat", "setup_windows.ps1", "scripts/verify_windows_installer.ps1", "scripts/preflight.py",
         "run_linux.sh", "setup_linux.sh", "web/index.html", "web/styles.css", "web/app.js", "web/i18n.js", "web/timeline.js", "web/audio-meter.js",
         "cutroom/config.py", "cutroom/projects.py", "cutroom/media.py", "cutroom/jobs.py", "cutroom/transcription.py",
         "cutroom/intelligence.py", "cutroom/sync.py", "cutroom/vision.py", "cutroom/composition.py", "cutroom/editing.py", "cutroom/director.py", "cutroom/render.py", "cutroom/audio.py", "cutroom/captions.py", "cutroom/effects.py",
         "tests/test_utils.py", "tests/test_intelligence.py", "tests/test_director.py", "tests/test_vision.py", "tests/test_composition.py", "tests/test_transcription_profiles.py", "tests/test_api.py", "tests/test_effects.py", "tests/smoke_render.py", "tests/smoke_director_two_source.py", "tests/smoke_short_target.py", "tests/smoke_youtube_cleanup.py", "tests/smoke_burn_captions.py", "tests/smoke_embedded_reel.py", "tests/smoke_editorial_stack.py",
-        "README_HE.md", "README.md", "START_HERE_HE.txt", "CHANGELOG.md", "LICENSE", "THIRD_PARTY_NOTICES.md",
+        "docs/README_HE.md", "README.md", "docs/START_HERE_HE.txt", "CHANGELOG.md", "LICENSE", "docs/THIRD_PARTY_NOTICES.md",
     ]
     missing = [item for item in required if not (ROOT / item).is_file()]
     checks.append({"name": "required_files", "ok": not missing, "details": missing})
@@ -98,7 +98,7 @@ def static_checks() -> list[dict]:
 
     windows_files = [
         ROOT / "setup_windows.ps1",
-        ROOT / "verify_windows_installer.ps1",
+        ROOT / "scripts/verify_windows_installer.ps1",
         ROOT / "run_windows.bat",
         ROOT / "repair_windows.bat",
     ]
@@ -121,8 +121,8 @@ def static_checks() -> list[dict]:
     repair_source = windows_payloads.get("repair_windows.bat", b"").decode("ascii", errors="ignore")
     windows_guard_ok = all((
         "System.Management.Automation.Language.Parser" in validator_source,
-        "verify_windows_installer.ps1" in launcher_source,
-        "verify_windows_installer.ps1" in repair_source,
+        "scripts\\verify_windows_installer.ps1" in launcher_source,
+        "scripts\\verify_windows_installer.ps1" in repair_source,
         'if not exist ".setup-complete"' in launcher_source,
         'if not exist ".venv\\Scripts\\python.exe"' in launcher_source,
         "--managed-python" not in setup_source,
@@ -143,7 +143,7 @@ def static_checks() -> list[dict]:
     setup_bytes = (ROOT / "setup_windows.ps1").read_bytes()
     windows_launchers = {
         name: (ROOT / name).read_bytes()
-        for name in ("setup_windows.ps1", "verify_windows_installer.ps1", "run_windows.bat", "repair_windows.bat")
+        for name in ("setup_windows.ps1", "scripts/verify_windows_installer.ps1", "run_windows.bat", "repair_windows.bat")
     }
     non_ascii = {
         name: sorted({value for value in payload if value > 127})
@@ -230,7 +230,7 @@ def static_checks() -> list[dict]:
     })
 
     run_windows = windows_launchers["run_windows.bat"].decode("ascii", errors="replace")
-    verifier = windows_launchers["verify_windows_installer.ps1"].decode("ascii", errors="replace")
+    verifier = windows_launchers["scripts/verify_windows_installer.ps1"].decode("ascii", errors="replace")
     checks.append({
         "name": "windows_setup_guards",
         "ok": all(
@@ -238,7 +238,7 @@ def static_checks() -> list[dict]:
             for marker in (
                 'if not exist ".setup-complete"',
                 'if not exist ".venv\\Scripts\\python.exe"',
-                "verify_windows_installer.ps1",
+                "scripts\\verify_windows_installer.ps1",
                 "scripts\\preflight.py",
             )
         ) and all(

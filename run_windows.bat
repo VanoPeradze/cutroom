@@ -10,7 +10,7 @@ if defined ProgramFiles if exist "%ProgramFiles%\Ollama\lib\ollama\cuda_v12\cubl
 set "PYTHONUTF8=1"
 set "PYTHONIOENCODING=utf-8"
 
-powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "%~dp0verify_windows_installer.ps1"
+powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "%~dp0scripts\verify_windows_installer.ps1"
 if errorlevel 1 (
   echo.
   echo The CUTROOM Windows installer is damaged or incomplete.

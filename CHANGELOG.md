@@ -2,6 +2,8 @@
 
 ## 1.1 Beta — 2026-09-20
 
+- Tidied the repository root: guides live in docs, community policies in .github, and development helpers beside their tools. Application launch commands and saved-project locations are unchanged.
+- Reused the documentation screenshots and guides when preparing the website, instead of keeping duplicate copies in Git.
 - Fixed keyboard focus after choosing an editing preset or closing its help panel.
 - Added familiar snapping keys, Premiere Extract and timeline-only Pro Tools F7/F8 tool selection.
 - Reorganized shortcut help by task, with an in-panel profile selector, per-key adaptation notes and a separate unassigned list.

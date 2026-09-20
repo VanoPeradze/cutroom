@@ -36,5 +36,9 @@ jobs:
         run: node --test tests/frontend*.test.cjs
       - name: Check website JavaScript
         run: node --check website/public/site.js
-      - name: Test approved-download validation
+      - name: Prepare and verify canonical website assets offline
+        run: |
+          npm --prefix website run prepare:assets
+          npm --prefix website run check:assets
+      - name: Test website and approved-download validation
         run: npm --prefix website test

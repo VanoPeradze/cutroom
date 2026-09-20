@@ -13,4 +13,4 @@ List the checks you ran and their results. Explain anything you could not test. 
 - [ ] I reviewed the diff and attachments for credentials, private footage, transcripts, local configuration, generated data, and identifying information.
 - [ ] Any added dependencies or assets have appropriate license notices.
 
-See the [contributor guide](https://github.com/VanoPeradze/cutroom/blob/HEAD/CONTRIBUTING.md). Suspected vulnerabilities belong in the private reporting process described in [SECURITY.md](https://github.com/VanoPeradze/cutroom/blob/HEAD/SECURITY.md).
+See the [contributor guide](https://github.com/VanoPeradze/cutroom/blob/HEAD/.github/CONTRIBUTING.md). Suspected vulnerabilities belong in the private reporting process described in [SECURITY.md](https://github.com/VanoPeradze/cutroom/blob/HEAD/.github/SECURITY.md).

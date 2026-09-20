@@ -6,7 +6,7 @@ Contributions can improve the editor, installation, documentation, accessibility
 
 Search existing issues for the same problem. Use the [bug report or feature request form](https://github.com/VanoPeradze/cutroom/issues/new/choose) to provide context. Discuss substantial features, new dependencies, and changes to project storage or editing behavior before starting a large implementation.
 
-For a suspected vulnerability, follow the [security policy](../SECURITY.md) instead of opening an ordinary issue.
+For a suspected vulnerability, follow the [security policy](../.github/SECURITY.md) instead of opening an ordinary issue.
 
 Use synthetic or non-sensitive test media. Keep credentials, personal configuration, recordings, transcripts, client information, projects, logs, and model caches out of Git and issue attachments. The tracked `config.json` should contain shareable application defaults only. Review your staged diff even when files are covered by `.gitignore`.
 
@@ -51,7 +51,7 @@ The editor normally opens at `http://127.0.0.1:8765`. Keep it on the local compu
 After initial setup, install test dependencies in the same virtual environment. From the repository root on Windows:
 
 ```powershell
-.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+.\.venv\Scripts\python.exe -m pip install -r tests/requirements.txt
 .\.venv\Scripts\python.exe -m pytest -q
 node --test tests/frontend*.test.cjs
 ```
@@ -109,4 +109,4 @@ Never ZIP the whole working directory: it may contain private footage, projects 
 - [Installation, hardware notes and troubleshooting](TEST_ON_ANOTHER_PC.md)
 - [Models and evaluation recommendations](MODELS.md)
 - [Independent editing behavior](INDEPENDENT_TRACKS.md)
-- [License](../LICENSE) and [third-party notices](../THIRD_PARTY_NOTICES.md)
+- [License](../LICENSE) and [third-party notices](THIRD_PARTY_NOTICES.md)

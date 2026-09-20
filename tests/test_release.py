@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import os
 import re
+import subprocess
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -9,10 +13,10 @@ ROOT = Path(__file__).resolve().parent.parent
 def test_required_release_files_exist():
     required = [
         "server.py", "config.json", "requirements.txt", "run_windows.bat", "repair_windows.bat",
-        "setup_windows.ps1", "verify_windows_installer.ps1",
+        "setup_windows.ps1", "scripts/verify_windows_installer.ps1", "tests/requirements.txt",
         "run_linux.sh", "setup_linux.sh", "web/index.html", "web/styles.css", "web/app.js", "web/i18n.js", "web/timeline.js", "web/audio-meter.js",
         "cutroom/director.py", "cutroom/intelligence.py", "cutroom/transcription.py", "cutroom/render.py", "cutroom/audio.py",
-        "README_HE.md", "LICENSE", "THIRD_PARTY_NOTICES.md",
+        "docs/README_HE.md", "LICENSE", "docs/THIRD_PARTY_NOTICES.md",
     ]
     assert not [item for item in required if not (ROOT / item).is_file()]
 
@@ -80,7 +84,7 @@ def test_studio_keeps_live_preview_and_tools_in_one_viewport():
 
 
 def test_windows_installers_are_ascii_crlf_and_parser_safe():
-    for name in ("setup_windows.ps1", "verify_windows_installer.ps1", "run_windows.bat", "repair_windows.bat"):
+    for name in ("setup_windows.ps1", "scripts/verify_windows_installer.ps1", "run_windows.bat", "repair_windows.bat"):
         payload = (ROOT / name).read_bytes()
         assert payload
         assert all(value < 128 for value in payload), f"{name} contains non-ASCII bytes"
@@ -96,12 +100,12 @@ def test_windows_installers_are_ascii_crlf_and_parser_safe():
 
 def test_windows_launcher_checks_setup_marker_environment_and_real_parser():
     launcher = (ROOT / "run_windows.bat").read_text(encoding="ascii")
-    verifier = (ROOT / "verify_windows_installer.ps1").read_text(encoding="ascii")
+    verifier = (ROOT / "scripts/verify_windows_installer.ps1").read_text(encoding="ascii")
     preflight = (ROOT / "scripts" / "preflight.py").read_text(encoding="utf-8")
     assert 'if not exist ".setup-complete"' in launcher
     assert 'CUTROOM AI 1.1 Beta setup completed' in launcher
     assert 'if not exist ".venv\\Scripts\\python.exe"' in launcher
-    assert "verify_windows_installer.ps1" in launcher
+    assert r'scripts\verify_windows_installer.ps1' in launcher
     assert '"scripts\\preflight.py"' in launcher
     for dependency in ("flask", "waitress", "faster_whisper", "cutroom", "FFmpeg", "FFprobe"):
         assert dependency in preflight
@@ -109,6 +113,16 @@ def test_windows_launcher_checks_setup_marker_environment_and_real_parser():
     assert "setup_windows.ps1" in verifier
     assert "$errors.Count" in verifier
     assert (ROOT / "repair_windows.bat").is_file()
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Runs the read-only Windows PowerShell verifier")
+def test_windows_installer_verifier_resolves_repository_from_another_directory(tmp_path):
+    completed = subprocess.run(
+        ["powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+         "-File", str(ROOT / "scripts/verify_windows_installer.ps1")],
+        cwd=tmp_path, capture_output=True, text=True, timeout=30,
+    )
+    assert completed.returncode == 0, completed.stdout + completed.stderr
 
 
 def test_linux_setup_resolves_supported_python_and_verifies_the_runtime_before_success():
@@ -168,7 +182,7 @@ def _balanced_powershell_delimiters(source: str) -> bool:
 
 def test_windows_installer_is_ascii_safe_and_self_validating():
     setup = _assert_ascii_crlf(ROOT / "setup_windows.ps1")
-    validator = _assert_ascii_crlf(ROOT / "verify_windows_installer.ps1")
+    validator = _assert_ascii_crlf(ROOT / "scripts/verify_windows_installer.ps1")
     launcher = _assert_ascii_crlf(ROOT / "run_windows.bat")
     repair = _assert_ascii_crlf(ROOT / "repair_windows.bat")
 
@@ -176,8 +190,8 @@ def test_windows_installer_is_ascii_safe_and_self_validating():
     assert _balanced_powershell_delimiters(setup_text)
     assert _balanced_powershell_delimiters(validator.decode("ascii"))
     assert "System.Management.Automation.Language.Parser" in validator.decode("ascii")
-    assert "verify_windows_installer.ps1" in launcher.decode("ascii")
-    assert "verify_windows_installer.ps1" in repair.decode("ascii")
+    assert r'scripts\verify_windows_installer.ps1' in launcher.decode("ascii")
+    assert r'scripts\verify_windows_installer.ps1' in repair.decode("ascii")
     assert b"cuda_v12\\cublas64_12.dll" in launcher
     assert b"%ProgramFiles%\\Ollama" in launcher
     assert b"cuda_v12" in setup

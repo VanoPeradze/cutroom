@@ -14,17 +14,22 @@ from pathlib import Path, PurePosixPath
 
 ROOT = Path(__file__).resolve().parents[1]
 ROOT_FILES = (
-    ".gitignore", ".gitattributes", "server.py", "requirements.txt", "requirements-dev.txt", "pytest.ini",
+    ".gitignore", ".gitattributes", "server.py", "requirements.txt", "pytest.ini",
     "run_windows.bat", "repair_windows.bat", "setup_windows.ps1", "PUBLISH.bat",
-    "verify_windows_installer.ps1", "run_linux.sh", "setup_linux.sh",
-    "README.md", "README_HE.md", "START_HERE_HE.txt", "CHANGELOG.md",
-    "LICENSE", "THIRD_PARTY_NOTICES.md", "UPGRADE_HE.md", "CONTRIBUTING.md", "SECURITY.md",
+    "run_linux.sh", "setup_linux.sh", "README.md", "CHANGELOG.md", "LICENSE",
+)
+# Explicit support files stay in their source locations inside App as well.
+SUPPORT_FILES = (
+    "scripts/verify_windows_installer.ps1", "tests/requirements.txt",
+    ".github/CONTRIBUTING.md", ".github/SECURITY.md",
 )
 SOURCE_TREES = {
     "cutroom": {".py"}, "web": {".html", ".css", ".js", ".svg"},
     "scripts": {".py"}, "tests": {".py", ".cjs"},
 }
 DOC_FILES = (
+    "docs/README.md", "docs/README_HE.md", "docs/START_HERE_HE.txt",
+    "docs/THIRD_PARTY_NOTICES.md", "docs/UPGRADE_HE.md",
     "docs/KEYBOARD_SHORTCUTS.md", "docs/KEYBOARD_PROFILES.md", "docs/UI_LAYOUT_QA.md",
     "docs/CREATOR_EDITING_RESEARCH.md", "docs/TEST_ON_ANOTHER_PC.md",
     "docs/TRANSCRIPT_EVALUATION.md", "docs/QUALITY_AND_LIMITS.md", "docs/UIUX_SKILL_CSS.md",
@@ -110,7 +115,7 @@ def _literal(source: bytes, name: str) -> object:
 def collect_payload(root: Path) -> dict[str, bytes]:
     root = root.resolve()
     payload = {name: _read_source(root, name)
-               for name in (*ROOT_FILES, *DOC_FILES, *IMAGE_FILES, *PACKAGING_FILES)}
+               for name in (*ROOT_FILES, *SUPPORT_FILES, *DOC_FILES, *IMAGE_FILES, *PACKAGING_FILES)}
 
     def walk(directory: Path, suffixes: set[str]) -> None:
         if _is_link(directory):

@@ -1,12 +1,17 @@
 """Check the real beta payload, not just a synthetic packaging fixture."""
 import posixpath
 import re
+import os
+import subprocess
+import zipfile
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
 from cutroom.config import DEFAULTS
 from cutroom import __version__, __version_label__
-from scripts.build_test_package import collect_payload
+from scripts.build_test_package import build_package, collect_payload, verify_package
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -18,8 +23,8 @@ def test_public_beta_version_is_consistent_across_package_and_setup():
     assert f"CUTROOM {__version_label__}" in payload["START_TESTING.txt"].decode("ascii")
     assert "public beta" in payload["START_TESTING.txt"].decode("ascii")
     for name in ("run_windows.bat", "repair_windows.bat", "setup_windows.ps1",
-                 "verify_windows_installer.ps1", "setup_linux.sh", "README.md", "README_HE.md",
-                 "START_HERE_HE.txt", "UPGRADE_HE.md", "docs/TEST_ON_ANOTHER_PC.md"):
+                 "scripts/verify_windows_installer.ps1", "setup_linux.sh", "README.md", "docs/README_HE.md",
+                 "docs/START_HERE_HE.txt", "docs/UPGRADE_HE.md", "docs/TEST_ON_ANOTHER_PC.md"):
         text = payload[name].decode("utf-8")
         assert __version_label__ in text, name
         assert "5.6.1" not in text, name
@@ -30,7 +35,7 @@ def test_public_beta_version_is_consistent_across_package_and_setup():
 
 def test_beta_entry_documents_and_their_local_links_ship_together():
     payload = collect_payload(ROOT)
-    entry_points = ["README.md", "README_HE.md", "CONTRIBUTING.md", "SECURITY.md", "docs/BETA_STATUS.md",
+    entry_points = ["README.md", "docs/README.md", "docs/README_HE.md", ".github/CONTRIBUTING.md", ".github/SECURITY.md", "docs/BETA_STATUS.md",
                     "docs/BETA_FEEDBACK.md", "docs/MODELS.md", "docs/INDEPENDENT_TRACKS.md",
                     "docs/CONTRIBUTING.md", "docs/PUBLISHING.md", "docs/AI_CONNECTIONS.md",
                     "docs/USER_GUIDE_EN.md", "docs/USER_GUIDE_HE.md", "docs/SHOWCASE_EN.md", "docs/SHOWCASE_HE.md"]
@@ -48,7 +53,7 @@ def test_beta_entry_documents_and_their_local_links_ship_together():
     assert "MIT" in payload["README.md"].decode()
     assert "run_windows.bat" in payload["START_TESTING.txt"].decode()
     assert "README.md" in payload["START_TESTING.txt"].decode()
-    for name in ("README.md", "README_HE.md", "START_HERE_HE.txt", "START_TESTING.txt"):
+    for name in ("README.md", "docs/README_HE.md", "docs/START_HERE_HE.txt", "START_TESTING.txt"):
         text = payload[name].decode("utf-8").lower()
         for infrastructure_detail in ("127.0.0.1", "localhost", "nvidia", "cuda", "ollama", "ctranslate2"):
             assert infrastructure_detail not in text, (name, infrastructure_detail)
@@ -82,3 +87,22 @@ def test_beta_gitignore_excludes_private_data_and_runtime_files():
     rules = (ROOT / ".gitignore").read_text().splitlines()
     for pattern in ("data/", ".venv/", ".tools/", "dist/", ".runtime-paths.cmd", ".env"):
         assert pattern in rules
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Runs the read-only Windows installer verifier")
+def test_reorganized_real_package_keeps_setup_and_development_requirements(tmp_path):
+    archive = build_package(ROOT, tmp_path / "build", build_id="structure-check")
+    verify_package(archive)
+    with zipfile.ZipFile(archive) as bundle:
+        bundle.extractall(tmp_path / "extracted")
+    app = tmp_path / "extracted/App"
+    assert (app / "tests/requirements.txt").read_text().splitlines()[0] == "-r ../requirements.txt"
+    assert (app / "requirements.txt").is_file()
+    assert (app / ".github/SECURITY.md").is_file()
+    assert (app / "docs/README.md").is_file()
+    completed = subprocess.run(
+        ["powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+         "-File", str(app / "scripts/verify_windows_installer.ps1")],
+        cwd=tmp_path, capture_output=True, text=True, timeout=30,
+    )
+    assert completed.returncode == 0, completed.stdout + completed.stderr

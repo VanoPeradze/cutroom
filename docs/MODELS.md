@@ -58,4 +58,4 @@ These are **evaluation recommendations, not measured CUTROOM improvements**. No 
 5. **Do not replace multilingual speech recognition with an English-only model for everybody.** Distil-Whisper large-v3.5 is English-focused, not a Hebrew upgrade. [Model card](https://huggingface.co/distil-whisper/distil-large-v3.5)
 6. **Evaluate camera detection separately.** Haar detection is a replacement candidate if beta footage shows systematic misses. Check licensing, CPU cost and false positives, and preserve manual correction.
 
-Speech quality, Story quality, timing and usability are different measurements. Regression tests do not certify them. See [third-party notices](../THIRD_PARTY_NOTICES.md).
+Speech quality, Story quality, timing and usability are different measurements. Regression tests do not certify them. See [third-party notices](THIRD_PARTY_NOTICES.md).

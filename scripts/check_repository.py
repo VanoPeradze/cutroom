@@ -9,7 +9,7 @@ from urllib.parse import quote, unquote, urlsplit
 import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
-DOCUMENTS = ("README.md", "CONTRIBUTING.md", "SECURITY.md", "docs/CONTRIBUTING.md")
+DOCUMENTS = ("README.md", ".github/CONTRIBUTING.md", ".github/SECURITY.md")
 
 
 class Resources(HTMLParser):
@@ -51,8 +51,10 @@ def check_document(name: str) -> None:
 
 
 def main() -> None:
-    for name in DOCUMENTS:
+    for name in (*DOCUMENTS, *(path.relative_to(ROOT).as_posix() for path in sorted((ROOT / "docs").rglob("*.md")))):
         check_document(name)
+    if (ROOT / "website/README.md").is_file():
+        check_document("website/README.md")
     if not (ROOT / "LICENSE").read_text(encoding="utf-8").startswith("MIT License"):
         raise ValueError("Expected the project's MIT license")
     ET.parse(ROOT / "docs/images/readme-banner.svg")

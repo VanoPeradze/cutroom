@@ -1,6 +1,7 @@
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version 2.0
-Set-Location -LiteralPath $PSScriptRoot
+$repositoryRoot = Split-Path -Parent $PSScriptRoot
+Set-Location -LiteralPath $repositoryRoot
 
 $required = @(
     "setup_windows.ps1", "requirements.txt", "config.json", "server.py", "scripts\preflight.py",
@@ -8,14 +9,14 @@ $required = @(
     "web\index.html", "web\styles.css", "web\app.js"
 )
 foreach ($relativePath in $required) {
-    $requiredPath = Join-Path $PSScriptRoot $relativePath
+    $requiredPath = Join-Path $repositoryRoot $relativePath
     if (-not (Test-Path -LiteralPath $requiredPath -PathType Leaf)) {
         Write-Host "CUTROOM installer validation failed: missing $relativePath" -ForegroundColor Red
         exit 1
     }
 }
 
-$target = Join-Path $PSScriptRoot "setup_windows.ps1"
+$target = Join-Path $repositoryRoot "setup_windows.ps1"
 $tokens = $null
 $errors = $null
 [System.Management.Automation.Language.Parser]::ParseFile($target, [ref]$tokens, [ref]$errors) | Out-Null

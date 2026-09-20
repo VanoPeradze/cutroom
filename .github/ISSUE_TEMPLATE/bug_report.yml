@@ -5,7 +5,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Search existing issues before reporting. For suspected vulnerabilities, follow [SECURITY.md](https://github.com/VanoPeradze/cutroom/blob/HEAD/SECURITY.md) and report privately.
+        Search existing issues before reporting. For suspected vulnerabilities, follow [SECURITY.md](https://github.com/VanoPeradze/cutroom/blob/HEAD/.github/SECURITY.md) and report privately.
         Use synthetic or non-sensitive examples. Never attach private footage, transcripts, client data, API keys, or an entire project/data folder.
   - type: input
     id: version
