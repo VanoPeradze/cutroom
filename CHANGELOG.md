@@ -2,6 +2,11 @@
 
 ## 1.1 Beta — 2026-09-20
 
+- Fixed keyboard focus after choosing an editing preset or closing its help panel.
+- Added familiar snapping keys, Premiere Extract and timeline-only Pro Tools F7/F8 tool selection.
+- Reorganized shortcut help by task, with an in-panel profile selector, per-key adaptation notes and a separate unassigned list.
+- Allowed CUTROOM's Shift+R to open Original footage without selecting an unrelated range first.
+
 - Simplified the Windows download to one launcher, an offline quick-start guide and an App folder. Existing source checkouts and installations retain their original layout.
 - Established **1.1 Beta** as the current public release label and `1.1-beta` as its technical version identifier.
 - Updated launchers, setup markers, package filenames, source manifests and documentation to use the current version consistently.

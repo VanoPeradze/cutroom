@@ -737,6 +737,94 @@ test('keyboard routing accepts only the chosen split binding and does not close 
   assert.equal(run('state.studio.open'), true);
 });
 
+test('keyboard profile controls stay in sync and return focus to the timeline without escaping a dialog', () => {
+  const {run, selectors} = app();
+  run(`globalThis.savedKeys={};globalThis.focusCount=0;
+    globalThis.localStorage={getItem:()=> 'premiere',setItem:(key,value)=>savedKeys[key]=value};
+    state.studio.open=true;
+    elements.timelineCanvas.focus=()=>focusCount++;
+    initializeKeyboardProfile();bindKeyboardControls();`);
+  assert.equal(run('elements.keyboardProfile.value'), 'premiere');
+  assert.equal(run('elements.keyboardHelpProfile.value'), 'premiere');
+  run(`elements.keyboardProfile.value='resolve';elements.keyboardProfile.listeners.change();`);
+  assert.equal(run('focusCount'), 1);
+  assert.equal(run('elements.keyboardHelpProfile.value'), 'resolve');
+  assert.equal(run('savedKeys["cutroom-keyboard-profile"]'), 'resolve');
+  selectors.set('dialog[open]', [{}]);
+  run(`elements.keyboardHelpProfile.value='protools';elements.keyboardHelpProfile.listeners.change();`);
+  assert.equal(run('focusCount'), 1, 'changing the dialog select must keep keyboard access inside the dialog');
+  assert.equal(run('elements.keyboardProfile.value'), 'protools');
+  run('elements.keyboardDialog.listeners.close();');
+  assert.equal(run('focusCount'), 1, 'another dialog may still be open');
+  selectors.delete('dialog[open]');
+  run('elements.keyboardDialog.listeners.close();');
+  assert.equal(run('focusCount'), 2);
+  run('state.studio.open=false;elements.keyboardDialog.listeners.close();');
+  assert.equal(run('focusCount'), 2);
+});
+
+test('help lists each working action once and distinguishes individual adaptations from unassigned actions', () => {
+  const {run} = app();
+  for (const id of ['cutroom', 'resolve', 'premiere', 'protools', 'finalcut']) {
+    run(`selectKeyboardProfile('${id}');`);
+    assert.equal(run('(elements.keyboardShortcutList.innerHTML.match(/class="shortcut-row"/g)||[]).length'),
+      run(`shortcutRows('${id}').filter(row=>row.bound).length`));
+    assert.doesNotMatch(run('elements.keyboardShortcutList.innerHTML'), /<kbd>Toolbar<\/kbd>|<kbd>Not assigned<\/kbd>/);
+  }
+  run(`selectKeyboardProfile('resolve');`);
+  const help = run('elements.keyboardShortcutList.innerHTML');
+  assert.match(help, /<kbd>Delete<\/kbd><small class="shortcut-adaptation">/);
+  assert.doesNotMatch(help, /<kbd>Shift\+Delete<\/kbd><small class="shortcut-adaptation">/);
+  assert.match(help, /Not assigned in this profile/);
+  assert.match(run('elements.keyboardLimitations.textContent'), /./);
+  run(`selectKeyboardProfile('unknown');`);
+  assert.equal(run('state.keyboardProfile'), 'cutroom');
+});
+
+test('native snapping keys reach the timeline once, and busy editing prevents changes', () => {
+  const {run} = app();
+  run(`state.studio.open=true;globalThis.snapChanges=[];
+    state.timeline={snapping:false,setSnapping(value){this.snapping=value;snapChanges.push(value);}};
+    globalThis.snapKey=key=>({key,preventDefault(){this.defaultPrevented=true;}});`);
+  for (const [profile, key] of [['cutroom','n'], ['resolve','n'], ['premiere','s'], ['finalcut','n']]) {
+    run(`state.keyboardProfile='${profile}';handleEditorShortcut(snapKey('${key}'));`);
+  }
+  assert.equal(run('JSON.stringify(snapChanges)'), '[true,false,true,false]');
+  run(`state.keyboardProfile='protools';handleEditorShortcut(snapKey('n'));
+    state.keyboardProfile='premiere';handleEditorShortcut({...snapKey('s'),repeat:true});
+    state.manualEditBusy=true;handleEditorShortcut(snapKey('s'));`);
+  assert.equal(run('snapChanges.length'), 4);
+});
+
+test('Premiere Extract uses the active edit scope and never removes footage without a range', () => {
+  const {run} = app();
+  run(`state.studio.open=true;state.keyboardProfile='premiere';
+    state.project.editor_sequence={version:1,tracks:{A:[{id:'a',start:0,end:10,source_start:0}]}};
+    globalThis.extractEdits=[];
+    targetEditableClips=()=>[{start:0,end:10}];editorDuration=()=>10;previewTimelineTime=()=>3;
+    applyManualEdit=(action,detail)=>extractEdits.push({action,...detail});
+    globalThis.extract=()=>handleEditorShortcut({key:"'",preventDefault(){}});
+    activeEditTarget=()=> 'edit';state.manualSelection=null;extract();
+    state.manualSelection={start:2,end:4};extract();
+    activeEditTarget=()=> 'A';extract();`);
+  assert.equal(run('JSON.stringify(extractEdits)'), JSON.stringify([
+    {action:'sequence_ripple_delete',start:2,end:4},
+    {action:'track_remove_range',start:2,end:4,slot:'A'},
+  ]));
+});
+
+test('Shift+R opens original footage without requiring an unrelated edited-timeline selection', () => {
+  const {run} = app();
+  run(`state.studio.open=true;state.keyboardProfile='cutroom';state.manualSelection=null;
+    state.project.editor_sequence={version:1};globalThis.reviewCount=0;
+    previewTimelineTime=()=>3;targetEditableClips=()=>[];
+    openSourceReview=()=>reviewCount++;
+    handleEditorShortcut({key:'R',shiftKey:true,preventDefault(){}});`);
+  assert.equal(run('reviewCount'), 1);
+  run(`state.manualEditBusy=true;handleEditorShortcut({key:'R',shiftKey:true,preventDefault(){}});`);
+  assert.equal(run('reviewCount'), 1);
+});
+
 function transportFixture() {
   const fixture = app();
   fixture.run(`state.studio.open=true; state.preview.mode='edit';

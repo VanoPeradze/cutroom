@@ -7,7 +7,7 @@
   <meta name="color-scheme" content="dark">
   <title>CUTROOM 1.1 Beta — Your editing workspace</title>
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/assets/styles.css?v=1.1-beta-1">
+  <link rel="stylesheet" href="/assets/styles.css?v=1.1-beta-3">
   <link rel="stylesheet" href="/assets/workspace.css?v=1.1-beta-1">
   <link rel="stylesheet" href="/assets/welcome.css?v=1.1-beta-1">
 </head>
@@ -642,7 +642,16 @@
     </section>
   </main>
 
-  <dialog id="keyboardDialog" class="sheet-dialog keyboard-dialog"><form method="dialog" class="dialog-shell"><header><div><p class="eyebrow">YOUR WORKSPACE</p><h2>Keyboard shortcuts</h2></div><button class="icon-button" value="cancel" aria-label="Close shortcuts">×</button></header><p id="keyboardDescription"></p><div id="keyboardShortcutList"></div><p>These profiles cover CUTROOM's supported editing actions, not every command in another editor. Shortcuts stay inactive while typing.</p></form></dialog>
+  <dialog id="keyboardDialog" class="sheet-dialog keyboard-dialog" aria-labelledby="keyboardTitle">
+    <form method="dialog" class="dialog-shell">
+      <header><div><p class="eyebrow">YOUR WORKSPACE</p><h2 id="keyboardTitle">Keyboard shortcuts</h2></div><button class="icon-button" value="cancel" aria-label="Close shortcuts">×</button></header>
+      <div class="shortcut-profile-picker"><label for="keyboardHelpProfile">Familiar keys from<select id="keyboardHelpProfile"><option value="cutroom">CUTROOM</option></select></label><button class="button primary" value="done">Use these keys</button></div>
+      <p id="keyboardDescription" aria-live="polite"></p>
+      <p class="shortcut-context">Close this panel to use shortcuts on the timeline. Edits follow your <strong>Together / A only / B only</strong> selection. Typing fields and other dialogs keep their own keys.</p>
+      <div id="keyboardShortcutList"></div>
+      <aside class="shortcut-limitations"><h3>What is different?</h3><p id="keyboardLimitations"></p><p>These are supported editing presets, not full copies of other applications. Browser zoom, reload, address bar, clipboard and Tab navigation stay available. Some browsers or system settings reserve other keys; the timeline buttons remain available.</p></aside>
+    </form>
+  </dialog>
   <dialog id="sourceReviewDialog" class="source-review-dialog" aria-labelledby="sourceReviewTitle">
     <div class="source-review-shell">
       <header><div><h2 id="sourceReviewTitle">Original footage</h2><p data-review="summary"></p></div><button type="button" data-review="close" aria-label="Close original footage">Done</button></header>
@@ -727,6 +736,6 @@
       <footer class="connection-actions"><button class="button ghost" id="forgetCloudKey" type="button">Forget session key</button><button class="button primary" id="saveAIConnection" type="submit">Use this connection</button></footer>
     </form>
   </dialog>
-  <script type="module" src="/assets/app.js?v=1.1-beta-1"></script>
+  <script type="module" src="/assets/app.js?v=1.1-beta-2"></script>
 </body>
 </html>

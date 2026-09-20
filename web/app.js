@@ -2,7 +2,7 @@ import { applyTranslations, dictionaries } from "./i18n.js?v=1.1-beta-1";
 import { TimelineView, formatTime, editableClips, timelineDuration, sequenceBlocks, sequenceGaps, rippleMoveStart } from "./timeline.js?v=1.1-beta-1";
 import { SourceReview } from "./source-review.js?v=1.1-beta-1";
 import { initWorkspace } from "./workspace.js?v=1.1-beta-1";
-import { KEYBOARD_PROFILES, resolveEditorShortcut, isEditorTransportSpace, shortcutRows } from "./keyboard.js?v=1.1-beta-1";
+import { KEYBOARD_PROFILES, resolveEditorShortcut, isEditorTransportSpace, shortcutRows } from "./keyboard.js?v=1.1-beta-2";
 import { AudioThresholdView } from "./audio-meter.js?v=1.1-beta-1";
 import { initWelcome, workflowSettings, cloudProviderName } from "./welcome.js?v=1.1-beta-1";
 import { initLocalModels } from "./local-models.js?v=1.1-beta-1";
@@ -127,7 +127,7 @@ function cacheElements() {
     "timelineRangeForm", "timelineRangeStart", "timelineRangeEnd", "timelineRangeSubmit", "timelineRangeStatus",
     "cameraDetection", "useEmbeddedCamera", "transcriptSearch", "transcriptList", "transcriptLanguage", "aspectSelect", "resolutionSelect",
     "transcriptFilter", "transcriptResults", "transcriptRemove", "transcriptRestore", "transcriptEditForm", "transcriptEditText", "transcriptEditTime", "transcriptEditStatus", "transcriptSave", "transcriptDiscard", "transcriptPrevious", "transcriptNext", "transcriptSaveAll",
-    "keyboardProfile", "keyboardHelp", "keyboardDialog", "keyboardDescription", "keyboardShortcutList", "clipTrimForm", "clipTrimIn", "clipTrimOut", "clipTrimTitle", "clipTrimApply", "clipTrimStatus", "timelineTarget", "timelineTargetField", "trackReset", "trackHelp", "clipSourceIn", "clipSourceField", "clipMove",
+    "keyboardProfile", "keyboardHelpProfile", "keyboardHelp", "keyboardDialog", "keyboardDescription", "keyboardLimitations", "keyboardShortcutList", "clipTrimForm", "clipTrimIn", "clipTrimOut", "clipTrimTitle", "clipTrimApply", "clipTrimStatus", "timelineTarget", "timelineTargetField", "trackReset", "trackHelp", "clipSourceIn", "clipSourceField", "clipMove",
     "qualitySelect", "fpsSelect", "fpsHelp", "exportFpsSelect", "exportFpsHelp", "exportFrameRateField", "autoReframe", "effectsToggle", "captionsToggle", "burnCaptionsToggle", "studioBurnCaptionsToggle", "captionControlStatus", "captionLanguageStatus",
     "captionStyleSelect", "captionPositionSelect", "captionScale", "captionScaleOut", "captionWordsPerLine", "captionWordsPerLineOut", "spokenLanguageSelect", "performanceModeSelect", "audioPresetChoices", "audioPresetNote",
     "silenceAction", "silenceMin", "silenceMinOut", "silenceKeep", "silenceKeepOut", "maxRemoveRatio", "maxRemoveOut",
@@ -607,12 +607,7 @@ function bindEvents() {
     elements.layoutRangeForm.dataset.selectionKey = "";
     state.markIn = null; state.timeline?.clearSelection();
   });
-  elements.keyboardProfile.addEventListener("change", () => {
-    state.keyboardProfile = elements.keyboardProfile.value;
-    try { localStorage.setItem("cutroom-keyboard-profile", state.keyboardProfile); } catch {}
-    renderKeyboardHelp();
-  });
-  elements.keyboardHelp.addEventListener("click", () => { renderKeyboardHelp(); elements.keyboardDialog.showModal(); });
+  bindKeyboardControls();
   window.addEventListener("beforeunload", (event) => {
     if (state.transcriptBuffers.size) { event.preventDefault(); event.returnValue = ""; }
   });
@@ -4856,15 +4851,54 @@ function initializeKeyboardProfile() {
   let stored;
   try { stored = localStorage.getItem("cutroom-keyboard-profile"); } catch {}
   state.keyboardProfile = KEYBOARD_PROFILES.some((item) => item.id === stored) ? stored : "cutroom";
-  elements.keyboardProfile.innerHTML = KEYBOARD_PROFILES.map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.label)}</option>`).join("");
-  elements.keyboardProfile.value = state.keyboardProfile;
+  for (const control of [elements.keyboardProfile, elements.keyboardHelpProfile]) {
+    control.innerHTML = KEYBOARD_PROFILES.map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.label)}</option>`).join("");
+  }
   renderKeyboardHelp();
+}
+
+function focusTimelineForShortcuts() {
+  if (!state.studio.open || !state.project?.draft || document.querySelector("dialog[open]")) return;
+  if (elements.timelineCanvas?.checkVisibility?.() === false) return;
+  elements.timelineCanvas?.focus({ preventScroll: true });
+}
+
+function selectKeyboardProfile(value) {
+  state.keyboardProfile = KEYBOARD_PROFILES.some((item) => item.id === value) ? value : "cutroom";
+  try { localStorage.setItem("cutroom-keyboard-profile", state.keyboardProfile); } catch {}
+  renderKeyboardHelp();
+}
+
+function bindKeyboardControls() {
+  elements.keyboardProfile.addEventListener("change", () => {
+    selectKeyboardProfile(elements.keyboardProfile.value);
+    focusTimelineForShortcuts();
+  });
+  elements.keyboardHelpProfile.addEventListener("change", () => selectKeyboardProfile(elements.keyboardHelpProfile.value));
+  elements.keyboardHelp.addEventListener("click", () => { renderKeyboardHelp(); elements.keyboardDialog.showModal(); });
+  elements.keyboardDialog.addEventListener("close", focusTimelineForShortcuts);
 }
 
 function renderKeyboardHelp() {
   const profile = KEYBOARD_PROFILES.find((item) => item.id === state.keyboardProfile) || KEYBOARD_PROFILES[0];
-  elements.keyboardDescription.textContent = `${profile.label} · ${profile.description}`;
-  elements.keyboardShortcutList.innerHTML = shortcutRows(profile.id).map((row) => `<div class="shortcut-row"><span>${escapeHtml(row.label)}${row.custom ? ' <small>CUTROOM addition</small>' : ''}</span><kbd>${escapeHtml(row.keys)}</kbd></div>`).join("");
+  elements.keyboardProfile.value = elements.keyboardHelpProfile.value = profile.id;
+  elements.keyboardDescription.textContent = profile.description;
+  elements.keyboardLimitations.textContent = profile.limitations || "CUTROOM's own editing keys. Commands apply to your current Together, A only or B only scope.";
+  const rows = shortcutRows(profile.id);
+  const groups = [
+    ["Playback & navigation", ["toggle_play", "stop", "play_forward", "frame_back", "frame_forward", "previous_edit", "next_edit", "jump_start", "jump_end"]],
+    ["Tools & cuts", ["tool_select", "tool_range", "tool_blade", "tool_remove_between", "split", "delete_selection", "restore_selection"]],
+    ["Selection & trimming", ["mark_in", "mark_out", "select_clip", "clear_selection", "trim_start", "trim_end"]],
+    ["Timeline view", ["toggle_snapping", "zoom_in", "zoom_out", "fit"]],
+    ["Undo & redo", ["undo", "redo"]],
+  ];
+  const renderRow = (row) => `<div class="shortcut-row"><span>${escapeHtml(row.label)}</span><div class="shortcut-bindings">${row.bindings.map((binding) => `<div><kbd>${escapeHtml(binding.keys)}</kbd>${binding.custom ? '<small class="shortcut-adaptation">CUTROOM adaptation</small>' : ''}${binding.note ? `<small>${escapeHtml(binding.note)}</small>` : ''}</div>`).join("")}</div></div>`;
+  const mapped = groups.map(([label, actions]) => {
+    const entries = actions.map((action) => rows.find((row) => row.action === action)).filter((row) => row?.bound);
+    return entries.length ? `<section class="shortcut-group"><h3>${escapeHtml(label)}</h3>${entries.map(renderRow).join("")}</section>` : "";
+  }).join("");
+  const unassigned = rows.filter((row) => !row.bound);
+  elements.keyboardShortcutList.innerHTML = mapped + (unassigned.length ? `<details class="shortcut-unassigned"><summary>Not assigned in this profile (${unassigned.length})</summary><p>These CUTROOM actions have no key in this preset. Unsupported native commands are not substituted with unrelated edits.</p><ul>${unassigned.map((row) => `<li>${escapeHtml(row.label)}</li>`).join("")}</ul></details>` : "");
 }
 
 function setTimelineTool(tool) {
@@ -4986,7 +5020,8 @@ function handleEditorShortcut(event) {
   const time = previewTimelineTime();
   const clips = targetEditableClips();
   const clip = clips.find((item) => time >= item.start && time < item.end);
-  if (["delete_selection", "restore_selection"].includes(action) && !selection) return;
+  if (action === "delete_selection" && !selection) return;
+  if (action === "restore_selection" && !selection && !state.project?.editor_sequence) return;
   if (action === "split" && (!clip || (state.project?.editor_sequence && state.timeline?.canSplitAt && !state.timeline.canSplitAt(time)))) return;
   if (["trim_start", "trim_end"].includes(action) && (!clip || time - clip.start < minimumEditLength() - 1e-6 || clip.end - time < minimumEditLength() - 1e-6)) return;
   if (action === "undo" && !manualHistoryCounts().undo) return;
@@ -5000,6 +5035,7 @@ function handleEditorShortcut(event) {
     return;
   }
   if (action === "stop") { pauseAllMedia(); return; }
+  if (action === "toggle_snapping") { state.timeline?.setSnapping(!state.timeline.snapping); return; }
   if (action.startsWith("tool_")) { setTimelineTool(action.slice(5)); return; }
   if (action === "clear_selection") {
     const gestureCancelled = state.timeline?.cancelGesture();

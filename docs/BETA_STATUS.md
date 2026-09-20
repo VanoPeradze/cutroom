@@ -2,6 +2,12 @@
 
 **An exploratory Windows beta for feedback from creators and editors. Not a production release, security certification or promise of professional-quality automatic edits.** Public access to a download does not change those quality boundaries.
 
+## Keyboard preset update — 2026-09-20
+
+- All 1,260 Python regressions and 378 frontend checks passed, including new tests for profile focus, per-binding help, snapping, Premiere Extract and reviewing original footage without a selection.
+- Browser checks used disposable synthetic footage: selecting Premiere immediately enabled C/S, Pro Tools F7/F8 selected the range/move tools, and closing shortcut help returned focus to the timeline. Shift+R opened Original footage without an edited-timeline selection. No browser console errors were observed.
+- These are supported keyboard subsets, not complete emulations of other editors. The help distinguishes adaptations and unassigned actions. No real media, AI inference or clean-PC installation was tested in this pass.
+
 ## Simplified Windows download — 2026-09-20
 
 - The ZIP now opens to only `START CUTROOM.bat`, `START HERE.html`, and `App/`. Complete source, guides, tests and license files remain in App; the existing editor and installer are unchanged.

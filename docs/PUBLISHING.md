@@ -1,19 +1,21 @@
-# Prepare CUTROOM for testers
+# Package and publish CUTROOM
 
-`PUBLISH.bat` is a maintainer tool. It can prepare a clean tester ZIP and, after checks and confirmation, push an already reviewed commit to an **existing private GitHub repository**. It does not turn CUTROOM into a hosted editing service.
+The [CUTROOM GitHub repository](https://github.com/VanoPeradze/cutroom) is public. Publish reviewed source changes through the normal Git workflow; publish the introduction/download website through the separate Expo workflow below.
 
-Double-clicking it is safe: the default only inspects the package candidate and displays its exact file list. It does not upload, install, commit, change accounts or change repository visibility.
+`PUBLISH.bat` remains useful for inspecting and building the clean beta ZIP. Its legacy Git commands require an **existing private GitHub repository** and intentionally reject the current public repository. That guard has not been removed; it does not change repository visibility.
+
+Double-clicking `PUBLISH.bat` only inspects the package candidate and displays its exact file list. It does not upload, install, commit, or change accounts.
 
 ## Choose the action you actually need
 
-Open a terminal in the CUTROOM folder:
+Run maintainer commands from the repository root in a Git checkout. In the downloaded Windows beta, these technical files live inside `App`; that package contains source but no Git metadata.
 
 | Command | What happens | Internet / external changes |
 | --- | --- | --- |
 | `PUBLISH.bat` or `PUBLISH.bat plan` | Show the exact source-package inventory and basic privacy checks. | None. |
 | `PUBLISH.bat package` | Build a clean ZIP and SHA-256 checksum in `dist`. | None. You decide who receives it. |
-| `PUBLISH.bat git` | Check the existing private GitHub target, clean committed branch, history and fast-forward safety. | Read-only GitHub/Git requests; no push. |
-| `PUBLISH.bat git --publish` | Perform those checks, run regression tests, ask for an exact typed confirmation, then push that one commit/branch. | Writes to the confirmed private GitHub repository only. |
+| `PUBLISH.bat git` | Legacy private-target checks. Rejects the current public repository. | Read-only GitHub/Git requests; no push. |
+| `PUBLISH.bat git --publish` | Legacy private-target checks, tests, and exact typed confirmation before a push. Rejects the current public repository. | Writes only to a confirmed private GitHub repository. |
 | `PUBLISH.bat expo` | Explain why the local editing backend cannot be deployed this way, then stop. | None. |
 
 ### 1. Make a tester ZIP
@@ -26,19 +28,29 @@ The existing allowlist builder includes application source, user guides, tests a
 
 The ZIP contains your **current source files**, including intentional uncommitted changes. A ZIP and a Git push are different operations: the Git workflow only accepts a clean, committed checkout. Review the displayed inventory before sharing either one.
 
-Send the ZIP together with its `.sha256` file. Ask the tester to extract the entire ZIP and start `run_windows.bat`. The first setup still downloads dependencies; optional local AI models require their own downloads. This is a source-based test package, not a fully offline or single-file installer.
+Send the ZIP together with its `.sha256` file. Ask the tester to use **Extract All** and double-click **START CUTROOM.bat**. The extracted folder has three top-level entries: **START CUTROOM.bat**, **START HERE.html** (offline help), and **App** (source, technical files and saved work). Keep them together. The launcher runs the existing `App/run_windows.bat` setup/startup flow; Git source checkouts and older flat packages still use `run_windows.bat` directly.
+
+The first setup still downloads dependencies; optional local AI models require their own downloads. This is a source-based test package, not a fully offline or single-file installer.
 
 Do not send personal source footage along with the app unless you have permission. Screenshots and other committed images still need a human privacy and rights check: an automated scanner cannot understand everything inside an image.
 
-### 2. Review and commit intended changes
+### 2. Publish reviewed source to the public repository
 
-The publisher deliberately does not run `git add .`, create a commit, discard files or hide changes in a stash. Use your normal Git workflow to review differences and commit only the files you intend to share. Untracked files also block pushing until you make a deliberate decision about them; ignored user data is left alone.
+Use a Git checkout and the normal Git workflow to review differences, stage the intended files, and commit the reviewed changes. Check the staged diff and attachments for private content, and run the relevant [contributor checks](CONTRIBUTING.md) before publishing. Leave recordings, local configuration, generated ZIPs and unrelated drafts out of the commit.
 
-The default expected repository is `VanoPeradze/cutroom`. Both the fetch and push URLs of `origin` must resolve to that same GitHub repository. Another private repository can be chosen explicitly with `--repo owner/name`; this does not create it or change `origin`.
+Confirm that `origin`, the destination branch and the commit are the ones you intend to publish, then use a normal non-force Git push of that reviewed branch. If the remote has changed, fetch and review it before proceeding. This publishes committed source; it does not upload the beta ZIP, create a GitHub Release or deploy the website. Review and publish the download through the Expo workflow separately.
+
+Do not use `PUBLISH.bat git --publish` for this public repository or change visibility to satisfy it. Its private-target restriction is a legacy safeguard, not the public repository's publishing workflow.
+
+### Legacy Git helper: private targets only
+
+The helper deliberately does not run `git add .`, create a commit, discard files or hide changes in a stash. Unlike a normal Git push, it requires a clean committed checkout and also blocks on untracked files. Ignored user data is left alone.
+
+The helper's default expected repository is still `VanoPeradze/cutroom`, so its visibility check now rejects that public target. Both fetch and push URLs of `origin` must resolve to the selected GitHub repository. An existing private repository can be selected explicitly with `--repo owner/name`; this does not create it or change `origin`.
 
 For the Git actions, install Git and the GitHub CLI yourself and sign in using your normal workflow. The publisher uses the current account and verifies that the repository is private, writable and not archived. It does not log in for you, request broader scopes, print tokens or change visibility. If authentication or network access is unavailable, it stops.
 
-### 3. Check, then publish deliberately
+For an intentionally selected private target only:
 
 ```bat
 PUBLISH.bat git
@@ -57,9 +69,9 @@ If the terminal closes or the network fails during a push, inspect GitHub before
 
 ## Website hosting is separate from the editing engine
 
-The public introduction and download website is already hosted on **Expo / EAS Hosting** at [cutroom-studio.expo.app](https://cutroom-studio.expo.app/). Its maintained source is in the private repository's `website/` directory. That directory is intentionally excluded from the application tester ZIP.
+The public introduction and download website is hosted on **Expo / EAS Hosting** at [cutroom-studio.expo.app](https://cutroom-studio.expo.app/). Its maintained source is in the public repository's `website/` directory. That directory is intentionally excluded from the application tester ZIP.
 
-To update the website from a Git checkout, open `website/`, read its README and run `npm run deploy`. The website workflow verifies the approved download and publishes only its `public/` directory to the existing Expo project. Generated ZIP files are ignored by Git and restored using a pinned size and checksum. The repository remains private; the website and beta download are public.
+To update the website from a Git checkout, open `website/`, follow its README and run `npm run deploy`. The website workflow verifies the approved download and publishes only its `public/` directory to the existing Expo project. Generated ZIP files are ignored by Git and restored using a pinned size and checksum. When publishing a newly approved ZIP, supply it locally before its first deployment; it is not available from the live site yet. GitHub source, the website and the beta download are public; each still has its own publishing step.
 
 CUTROOM's **editor** still uses a Python server, native FFmpeg and optional local AI processes. Uploading its frontend alone would not make video editing work in the cloud. `PUBLISH.bat expo` remains a safety stop for that application backend, not the website deployment command. An actual hosted editor would require a separate design for private media, job isolation, retention, authentication and processing costs. No such infrastructure or paid plan is created by either workflow.
 
@@ -74,8 +86,8 @@ CUTROOM's **editor** still uses a Python server, native FFmpeg and optional loca
 
 ## בקצרה בעברית
 
-לחיצה כפולה על `PUBLISH.bat` מבצעת בדיקה בלבד ולא מעלה דבר. כדי ליצור חבילה נקייה לשליחה לבודקים מריצים `PUBLISH.bat package`; התוצאה נשמרת בתיקיית `dist`, ללא הסרטונים, הפרויקטים, המפתחות והמודלים שלכם.
+לחיצה כפולה על `PUBLISH.bat` מבצעת בדיקה בלבד ולא מעלה דבר. כדי ליצור חבילה נקייה לשליחה לבודקים מריצים `PUBLISH.bat package`; התוצאה נשמרת בתיקיית `dist`, ללא הסרטונים, הפרויקטים, המפתחות והמודלים שלכם. אחרי חילוץ מלא מפעילים את **START CUTROOM.bat** ומשאירים לצדו את **START HERE.html** ואת תיקיית **App**.
 
-`PUBLISH.bat git` בודק את יעד ה־GitHub הפרטי ללא העלאה. `PUBLISH.bat git --publish` מריץ בדיקות ודורש אישור מפורש לפני העלאת השינוי שכבר בדקתם ושמרתם ב־commit. הוא לא הופך את המאגר לציבורי ולא מפרסם אתר. יש לבדוק את ה־ZIP במחשב נוסף לפני שמפיצים אותו.
+מאגר GitHub של CUTROOM כבר ציבורי. מפרסמים אליו שינויים בדוקים באמצעות commit ו־push רגילים לענף שנבדק. הפקודות הישנות `PUBLISH.bat git` ו־`PUBLISH.bat git --publish` עדיין מיועדות למאגרים פרטיים בלבד ולכן דוחות את המאגר הציבורי; אין לשנות את ההגנה או את נראות המאגר כדי לעקוף זאת. יש לבדוק את ה־ZIP במחשב נוסף לפני שמפיצים אותו.
 
 אתר ההצגה וההורדה כבר פועל ב־https://cutroom-studio.expo.app/. כדי לעדכן אותו מתוך עותק Git, נכנסים לתיקיית `website`, קוראים את ה־README שלה ומריצים `npm run deploy`. רק האתר והחבילה המאושרת מתפרסמים; עורך הווידאו, הסרטונים והמודלים נשארים במחשב המשתמש. תיקיית האתר אינה חלק מחבילת הבטא להורדה.

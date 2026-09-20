@@ -14,10 +14,11 @@ test("every profile exposes every supported action with readable nonempty help",
   assert.deepEqual(Array.from(KEYBOARD_PROFILES, (profile) => profile.id), ["cutroom", "resolve", "premiere", "protools", "finalcut"]);
   for (const { id } of KEYBOARD_PROFILES) {
     const rows = shortcutRows(id);
-    assert.equal(rows.length, 27);
-    assert.equal(new Set(rows.map((row) => row.action)).size, 27);
+    assert.equal(rows.length, 28);
+    assert.equal(new Set(rows.map((row) => row.action)).size, 28);
     assert.ok(rows.every((row) => row.keys && row.label && typeof row.custom === "boolean" && typeof row.bound === "boolean"));
-    assert.ok(rows.filter((row) => !row.bound).every((row) => row.keys === "Toolbar" && !row.custom));
+    assert.ok(rows.every((row) => Array.isArray(row.bindings) && row.bindings.every((binding) => typeof binding.keys === "string" && typeof binding.custom === "boolean" && typeof binding.note === "string")));
+    assert.ok(rows.filter((row) => !row.bound).every((row) => row.keys === "Not assigned" && !row.custom && row.bindings.length === 0));
   }
 });
 
@@ -26,7 +27,7 @@ test("each profile routes split to its actual CUTROOM action, without leaking ot
   assert.equal(resolve(event("b", { ctrlKey: true }), "resolve"), "split");
   assert.equal(resolve(event("k", { ctrlKey: true }), "premiere"), "split");
   assert.equal(resolve(event("b", { ctrlKey: true }), "premiere"), null);
-  assert.equal(resolve(event("s"), "premiere"), null);
+  assert.equal(resolve(event("s"), "premiere"), "toggle_snapping");
   assert.equal(resolve(event("k", { ctrlKey: true }), "resolve"), null);
   assert.equal(resolve(event("b"), "protools"), "split");
   assert.equal(resolve(event("b", { metaKey: true }), "finalcut"), "split");
@@ -67,7 +68,7 @@ test("tool shortcuts remain profile-specific and CUTROOM's two-click cut is neve
   for (const id of ["resolve", "premiere", "protools", "finalcut"]) {
     assert.equal(resolve(event("d"), id), null);
     assert.equal(resolve(event("B", { shiftKey: true }), id), null);
-    assert.equal(shortcutRows(id).find((row) => row.action === "tool_remove_between").keys, "Toolbar");
+    assert.equal(shortcutRows(id).find((row) => row.action === "tool_remove_between").keys, "Not assigned");
   }
 });
 
@@ -77,7 +78,7 @@ test("Pro Tools Commands Focus uses separate meanings instead of leaking NLE I O
   assert.equal(resolve(event("Z", { shiftKey: true }), "protools"), "redo");
   assert.equal(resolve(event("Enter", { ctrlKey: true }), "protools"), "jump_end");
   assert.equal(resolve(event("Enter", { metaKey: true }), "protools"), null);
-  for (const key of ["i", "o", "j", "k", "x", "v", "f", "q", "w", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "=", "-", "Home", "End"])
+  for (const key of ["i", "o", "j", "k", "x", "v", "f", "q", "w", "n", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "=", "-", "Home", "End"])
     assert.equal(resolve(event(key), "protools"), null, key);
   assert.equal(resolve(event(","), "protools"), "frame_back");
   assert.equal(resolve(event("."), "protools"), "frame_forward");
@@ -92,6 +93,58 @@ test("Premiere ripple trims do not leak onto other applications' unrelated nativ
   }
   for (const id of ["resolve", "finalcut"])
     for (const key of ["q", "w"]) assert.equal(resolve(event(key), id), null);
+});
+
+test("snapping follows the selected profile without borrowing Pro Tools N", () => {
+  for (const [profile, key] of [["cutroom", "n"], ["resolve", "n"], ["premiere", "s"], ["finalcut", "n"]]) {
+    assert.equal(resolve(event(key), profile), "toggle_snapping");
+    assert.equal(resolve(event(key, {repeat: true}), profile), null);
+    for (const modifier of ["ctrlKey", "metaKey", "altKey", "shiftKey"])
+      assert.equal(resolve(event(key, {[modifier]: true}), profile), null);
+  }
+  assert.equal(resolve(event("n"), "protools"), null);
+  assert.equal(resolve(event("n"), "premiere"), null);
+  assert.equal(resolve(event("ד", {code: "KeyS"}), "premiere"), "toggle_snapping");
+});
+
+test("Premiere Extract removes a marked range and does not replace another profile's navigation", () => {
+  assert.equal(resolve(event("'"), "premiere"), "delete_selection");
+  assert.equal(resolve(event("'", {repeat: true}), "premiere"), null);
+  for (const modifier of ["ctrlKey", "metaKey", "altKey", "shiftKey"])
+    assert.equal(resolve(event("'", {[modifier]: true}), "premiere"), null);
+  assert.equal(resolve(event("'"), "protools"), "next_edit");
+  assert.equal(resolve(event("'"), "finalcut"), "next_edit");
+  assert.equal(resolve(event("'"), "resolve"), null);
+  const extract = shortcutRows("premiere").find(row => row.action === "delete_selection").bindings.find(binding => binding.keys === "'");
+  assert.equal(extract.custom, false);
+  assert.match(extract.note, /Together.*source-only.*gap/);
+});
+
+function editorCanvas(ancestor = null) {
+  return {tagName: "CANVAS", dataset: {editorShortcuts: "on"},
+    closest: selector => ancestor && selector.split(",").includes(ancestor) ? {} : null};
+}
+
+test("Pro Tools F7 and F8 select adapted tools only on the opted-in timeline canvas", () => {
+  const target = editorCanvas();
+  for (const [key, action] of [["F7", "tool_range"], ["F8", "tool_select"]]) {
+    assert.equal(resolve(event(key, {target}), "protools"), action, "event.key works without event.code");
+    assert.equal(resolve(event("", {code: key, target}), "protools"), action);
+    assert.equal(resolve(event(key), "protools"), null);
+    for (const otherTarget of [chromeButton(), {tagName: "DIV", dataset: {editorShortcuts: "on"}}, {tagName: "CANVAS", dataset: {editorShortcuts: "off"}}])
+      assert.equal(resolve(event(key, {target: otherTarget}), "protools"), null);
+    for (const profile of ["cutroom", "resolve", "premiere", "finalcut"])
+      assert.equal(resolve(event(key, {target}), profile), null);
+    for (const field of ["ctrlKey", "metaKey", "altKey", "shiftKey", "repeat", "isComposing", "defaultPrevented"])
+      assert.equal(resolve(event(key, {target, [field]: true}), "protools"), null);
+    assert.equal(resolve(event(key, {target, getModifierState: name => name === "AltGraph"}), "protools"), null);
+    assert.equal(resolve(event(key, {target, keyCode: 229}), "protools"), null);
+    for (const ancestor of ["dialog", "input", "textarea", "select", "[data-editor-shortcuts='off']"])
+      assert.equal(resolve(event(key, {target: editorCanvas(ancestor)}), "protools"), null);
+    assert.equal(resolve(event(key, {target, composedPath: () => [{isContentEditable: true}]}), "protools"), null);
+    const protectedFocus = editorCanvas(); protectedFocus.ownerDocument = {activeElement: {isContentEditable: true}};
+    assert.equal(resolve(event(key, {target: protectedFocus}), "protools"), null);
+  }
 });
 
 test("profile-specific remove, clear and fit keys preserve their documented scope", () => {
@@ -144,7 +197,7 @@ test("browser shortcuts, Alt and IME keystrokes are never intercepted", () => {
   for (const { id } of KEYBOARD_PROFILES) {
     for (const key of ["r", "R", "e", "f", "w", "t", "n", "l", "s", "c", "x", "v", "+", "=", "-", "0", "ArrowLeft"])
       assert.equal(resolve(event(key, { ctrlKey: true }), id), null, `${id}: Ctrl+${key}`);
-    for (const key of ["Tab", "F1", "F5", "F6", "F7", "F11", "F12"])
+    for (const key of ["Tab", "F1", "F5", "F6", "F7", "F8", "F11", "F12"])
       assert.equal(resolve(event(key, { code: key }), id), null);
     assert.equal(resolve(event("i", { altKey: true }), id), null);
     assert.equal(resolve(event("s", { isComposing: true }), id), null);
@@ -258,18 +311,39 @@ test("invalid stored profiles safely fall back and UI cannot mutate future short
   }
   const rows = shortcutRows("premiere");
   rows[0].keys = "changed";
+  rows[0].bindings[0].keys = "changed";
   assert.equal(shortcutRows("premiere")[0].keys, "Space");
+  assert.equal(shortcutRows("premiere")[0].bindings[0].keys, "Space");
   assert.equal(shortcutRows("resolve").find((row) => row.action === "zoom_in").custom, true);
   assert.equal(shortcutRows("premiere").find((row) => row.action === "restore_selection").bound, false);
   assert.ok(shortcutRows("cutroom").every((row) => !row.custom));
 });
 
-test("every advertised bound action is reachable with exactly one key and modifier combination", () => {
-  const possible = [..."abcdefghijklmnopqrstuvwxyz", " ", "Escape", "Delete", "Backspace", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "Enter", "=", "+", "-", "\\", "'", ";", ",", "."];
+test("help distinguishes individual adaptations and deduplicates displayed aliases", () => {
+  const removal = shortcutRows("resolve").find(row => row.action === "delete_selection");
+  assert.equal(removal.custom, true, "The compatibility flag still summarizes the row");
+  assert.equal(removal.bindings.find(binding => binding.keys === "Delete").custom, true);
+  assert.equal(removal.bindings.find(binding => binding.keys === "Shift+Delete").custom, false);
+  assert.equal(removal.bindings.find(binding => binding.keys === "Shift+Backspace").custom, false);
+  assert.equal(shortcutRows("resolve").find(row => row.action === "zoom_in").bindings.length, 1);
+  assert.equal(shortcutRows("protools").find(row => row.action === "delete_selection").bindings.length, 1);
+  for (const action of ["trim_start", "trim_end", "frame_back", "frame_forward", "tool_select", "tool_range"]) {
+    const binding = shortcutRows("protools").find(row => row.action === action).bindings[0];
+    assert.equal(binding.custom, true);
+    assert.ok(binding.note.length > 0);
+  }
+  assert.equal(shortcutRows("finalcut").find(row => row.action === "delete_selection").bindings.find(binding => binding.keys === "Forward Delete").custom, true);
+  assert.equal(shortcutRows().find(row => row.action === "restore_selection").label, "Review / restore original footage");
+  for (const profile of KEYBOARD_PROFILES.filter(profile => profile.id !== "cutroom")) assert.ok(profile.limitations);
+  assert.match(KEYBOARD_PROFILES.find(profile => profile.id === "protools").limitations, /F7\/F8.*timeline.*Tab/);
+});
+
+test("every advertised bound action is reachable in its supported focus scope", () => {
+  const possible = [..."abcdefghijklmnopqrstuvwxyz", " ", "Escape", "Delete", "Backspace", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "Enter", "F7", "F8", "=", "+", "-", "\\", "'", ";", ",", "."];
   for (const { id } of KEYBOARD_PROFILES) {
     const observed = new Set();
     for (const key of possible) for (const shiftKey of [false, true]) for (const mod of [null, "ctrlKey", "metaKey"]) {
-      const action = resolve(event(key, { shiftKey, ...(mod ? { [mod]: true } : {}) }), id);
+      const action = resolve(event(key, { target: editorCanvas(), shiftKey, ...(mod ? { [mod]: true } : {}) }), id);
       if (action) observed.add(action);
     }
     const advertised = shortcutRows(id).filter((row) => row.bound).map((row) => row.action);

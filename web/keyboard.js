@@ -3,17 +3,17 @@
 // after it accepts an action. Nothing here changes media or document state.
 export const KEYBOARD_PROFILES = Object.freeze([
   Object.freeze({ id: "cutroom", label: "CUTROOM", description: "Fast editing keys. D selects Cut out; click twice to remove the section." }),
-  Object.freeze({ id: "resolve", label: "DaVinci Resolve", description: "Core Edit-page keys: A selects, B blades, Ctrl/Cmd+B splits. Not a full Resolve emulation." }),
-  Object.freeze({ id: "premiere", label: "Adobe Premiere Pro", description: "Core editing keys: V selects, C razors, Q/W ripple-trim. Not a full Premiere emulation." }),
-  Object.freeze({ id: "protools", label: "Pro Tools", description: "Commands Keyboard Focus: B separates, A/S trim, R/T zoom, L / ' navigate edits. Trims close gaps in CUTROOM." }),
-  Object.freeze({ id: "finalcut", label: "Final Cut Pro", description: "Core timeline keys: A selects, B blades, R selects a range. Command shortcuts also accept Ctrl on Windows." }),
+  Object.freeze({ id: "resolve", label: "DaVinci Resolve", description: "Core editing keys: A selects, B blades, Ctrl/Cmd+B splits, N toggles snapping.", limitations: "An editing subset, not full Resolve emulation. No reverse or multi-speed J/K/L shuttle. Alt/Option, browser shortcuts and function keys stay native." }),
+  Object.freeze({ id: "premiere", label: "Adobe Premiere Pro", description: "Core editing keys: V selects, C razors, Q/W ripple-trim, S toggles snapping, apostrophe extracts a range.", limitations: "An editing subset, not full Premiere emulation. No reverse or multi-speed J/K/L shuttle or clipboard editing. Alt/Option, browser shortcuts and function keys stay native." }),
+  Object.freeze({ id: "protools", label: "Pro Tools", description: "Commands Keyboard Focus: B separates, A/S trim, R/T zoom, L / ' navigate edits. F7/F8 select timeline tools.", limitations: "F7/F8 work only on the focused timeline canvas. Tab changes focus; no Tab to Transients, Slip/Shuffle modes, sample-accurate nudge or clipboard editing. Trims use CUTROOM's edit scope." }),
+  Object.freeze({ id: "finalcut", label: "Final Cut Pro", description: "Core timeline keys: A selects, B blades, R selects a range, N toggles snapping. Command shortcuts also accept Ctrl on Windows.", limitations: "An editing subset, not full Final Cut emulation. No skimming or reverse/multi-speed shuttle. Alt/Option, browser shortcuts and function keys stay native." }),
 ]);
 
 const ACTION_LABELS = {
   toggle_play: "Play / pause", stop: "Stop playback", mark_in: "Mark selection in",
   mark_out: "Mark selection out", select_clip: "Mark clip at playhead",
   clear_selection: "Clear selection", split: "Split at playhead",
-  delete_selection: "Remove selection from edit", restore_selection: "Restore selection to edit",
+  delete_selection: "Remove selection from edit", restore_selection: "Review / restore original footage",
   undo: "Undo edit", redo: "Redo edit", frame_back: "Previous frame",
   frame_forward: "Next frame", previous_edit: "Previous edit point",
   next_edit: "Next edit point", zoom_in: "Zoom timeline in",
@@ -21,10 +21,12 @@ const ACTION_LABELS = {
   tool_select: "Select tool", tool_range: "Range tool", tool_blade: "Blade tool",
   tool_remove_between: "Cut out tool (two clicks)", play_forward: "Play forward at 1×",
   trim_start: "Remove clip start up to playhead", trim_end: "Remove playhead to clip end",
-  jump_start: "Go to timeline start", jump_end: "Go to timeline end",
+  jump_start: "Go to timeline start", jump_end: "Go to timeline end", toggle_snapping: "Toggle timeline snapping",
 };
 
 const key = (action, code, keys, options = {}) => ({ action, code, keys, mod: false, shift: false, custom: false, ...options });
+const REMOVE_SCOPE_NOTE = "Closes time in Together (A+B); source-only removal can leave a gap on that track.";
+const TRIM_SCOPE_NOTE = "CUTROOM trim: Together closes time; source-only trim leaves the other track still. No Slip/Shuffle modes.";
 // Share only semantics that really agree. In Pro Tools Commands Keyboard Focus,
 // K snaps a clip, I/O manage timeline selection and X cuts to the clipboard.
 // Importing an NLE's common keys there would silently perform the wrong edits.
@@ -35,7 +37,7 @@ const COMMON = [
   key("redo", "KeyZ", "Ctrl/Cmd+Shift+Z", { mod: true, shift: true }),
 ];
 const NLE_NAVIGATION = [
-  key("stop", "KeyK", "K"), key("play_forward", "KeyL", "L", { custom: true }),
+  key("stop", "KeyK", "K"), key("play_forward", "KeyL", "L", { custom: true, note: "Starts forward playback at 1×; repeated presses do not increase speed." }),
   key("mark_in", "KeyI", "I"), key("mark_out", "KeyO", "O"),
   key("select_clip", "KeyX", "X"),
   key("frame_back", "ArrowLeft", "Left"), key("frame_forward", "ArrowRight", "Right"),
@@ -56,45 +58,52 @@ const PROFILE_KEYS = {
     key("tool_select", "KeyV", "V"), key("tool_range", "KeyR", "R"),
     key("tool_blade", "KeyB", "B"), key("tool_remove_between", "KeyD", "D"),
     key("trim_start", "KeyQ", "Q"), key("trim_end", "KeyW", "W"),
+    key("toggle_snapping", "KeyN", "N"),
   ],
   resolve: [
-    ...NLE_NAVIGATION, ...PLAIN_ZOOM.map((binding) => ({ ...binding, custom: true })),
+    ...NLE_NAVIGATION, ...PLAIN_ZOOM.map((binding) => ({ ...binding, custom: true, note: "Unmodified CUTROOM zoom keys; browser Ctrl/Cmd zoom stays native." })),
     key("tool_select", "KeyA", "A"), key("tool_blade", "KeyB", "B"),
     key("split", "KeyB", "Ctrl/Cmd+B", { mod: true }),
-    key("delete_selection", "Delete", "Delete", { custom: true }),
+    key("delete_selection", "Delete", "Delete", { custom: true, note: REMOVE_SCOPE_NOTE }),
     key("delete_selection", "Delete", "Shift+Delete", { shift: true }),
     key("delete_selection", "Backspace", "Shift+Backspace", { shift: true }),
     key("fit", "KeyZ", "Shift+Z", { shift: true }),
+    key("toggle_snapping", "KeyN", "N"),
   ],
   premiere: [
     ...NLE_NAVIGATION, ...PLAIN_ZOOM,
     key("tool_select", "KeyV", "V"), key("tool_blade", "KeyC", "C"),
     key("split", "KeyK", "Ctrl/Cmd+K", { mod: true }),
-    key("delete_selection", "Delete", "Shift+Delete", { shift: true }),
+    key("delete_selection", "Delete", "Shift+Delete", { shift: true, note: REMOVE_SCOPE_NOTE }),
+    key("delete_selection", "Quote", "'", { note: `Extract the selected range. ${REMOVE_SCOPE_NOTE}` }),
     key("clear_selection", "KeyX", "Ctrl+Shift+X", { mod: true, modifier: "ctrl", shift: true }),
     key("fit", "Backslash", "\\"),
     key("trim_start", "KeyQ", "Q"), key("trim_end", "KeyW", "W"),
+    key("toggle_snapping", "KeyS", "S"),
   ],
   protools: [
     key("split", "KeyB", "B"),
-    key("trim_start", "KeyA", "A", { custom: true }), key("trim_end", "KeyS", "S", { custom: true }),
+    key("trim_start", "KeyA", "A", { custom: true, note: TRIM_SCOPE_NOTE }), key("trim_end", "KeyS", "S", { custom: true, note: TRIM_SCOPE_NOTE }),
+    key("tool_range", "F7", "F7", { custom: true, canvasOnly: true, note: "Focused timeline only: Selector maps to CUTROOM's Range tool." }),
+    key("tool_select", "F8", "F8", { custom: true, canvasOnly: true, note: "Focused timeline only: Grabber maps to CUTROOM's Select / Move tool." }),
     key("zoom_out", "KeyR", "R"), key("zoom_in", "KeyT", "T"),
     key("previous_edit", "KeyL", "L"), key("next_edit", "Quote", "'"),
     key("undo", "KeyZ", "Z"), key("redo", "KeyZ", "Shift+Z", { shift: true }),
-    key("frame_back", "Comma", ",", { custom: true }), key("frame_forward", "Period", ".", { custom: true }),
+    key("frame_back", "Comma", ",", { custom: true, note: "Moves one video frame, not an audio sample or Pro Tools nudge interval." }), key("frame_forward", "Period", ".", { custom: true, note: "Moves one video frame, not an audio sample or Pro Tools nudge interval." }),
     key("jump_start", "Enter", "Enter / Return"),
     key("jump_end", "Enter", "Ctrl+Enter", { mod: true, modifier: "ctrl" }),
-    key("delete_selection", "Delete", "Delete / Backspace", { custom: true }),
-    key("delete_selection", "Backspace", "Delete / Backspace", { custom: true }),
+    key("delete_selection", "Delete", "Delete / Backspace", { custom: true, note: REMOVE_SCOPE_NOTE }),
+    key("delete_selection", "Backspace", "Delete / Backspace", { custom: true, note: REMOVE_SCOPE_NOTE }),
   ],
   finalcut: [
     ...NLE_NAVIGATION,
     key("tool_select", "KeyA", "A"), key("tool_blade", "KeyB", "B"), key("tool_range", "KeyR", "R"),
     key("split", "KeyB", "Ctrl/Cmd+B", { mod: true }),
     key("delete_selection", "Backspace", "Delete (Mac) / Backspace"),
-    key("delete_selection", "Delete", "Forward Delete", { custom: true }),
+    key("delete_selection", "Delete", "Forward Delete", { custom: true, note: `Additional CUTROOM removal key. ${REMOVE_SCOPE_NOTE}` }),
     key("previous_edit", "Semicolon", ";"), key("next_edit", "Quote", "'"),
     key("fit", "KeyZ", "Shift+Z", { shift: true }),
+    key("toggle_snapping", "KeyN", "N"),
   ],
 };
 const REPEATABLE = new Set(["frame_back", "frame_forward", "previous_edit", "next_edit", "zoom_in", "zoom_out"]);
@@ -102,7 +111,7 @@ const KEY_CODES = {
   " ": "Space", Spacebar: "Space", Escape: "Escape", Esc: "Escape", Delete: "Delete", Del: "Delete",
   Backspace: "Backspace", ArrowLeft: "ArrowLeft", Left: "ArrowLeft", ArrowRight: "ArrowRight", Right: "ArrowRight",
   ArrowUp: "ArrowUp", Up: "ArrowUp", ArrowDown: "ArrowDown", Down: "ArrowDown",
-  Home: "Home", End: "End", Enter: "Enter", Return: "Enter",
+  Home: "Home", End: "End", Enter: "Enter", Return: "Enter", F7: "F7", F8: "F8",
   "'": "Quote", "\"": "Quote", ";": "Semicolon", ":": "Semicolon", ",": "Comma", "<": "Comma", ".": "Period", ">": "Period",
   "=": "Equal", "+": "Equal", "-": "Minus", "_": "Minus", "\\": "Backslash", "|": "Backslash",
 };
@@ -180,16 +189,19 @@ export function resolveEditorShortcut(event, profile = "cutroom") {
   const binding = bindings(profile).find((item) => item.code === code && item.mod === mod && item.shift === shift
     && (!item.modifier || (item.modifier === "ctrl" ? !!event.ctrlKey : !!event.metaKey)));
   if (!binding || (event.repeat && !REPEATABLE.has(binding.action))) return null;
+  if (binding.canvasOnly && !(event.target?.tagName === "CANVAS" && event.target?.dataset?.editorShortcuts === "on")) return null;
   return binding.action;
 }
 
-/** Readable rows; custom=true denotes a CUTROOM adaptation in an imported set. */
+/** Readable rows; each binding identifies its own CUTROOM adaptation and scope. */
 export function shortcutRows(profile = "cutroom") {
   const id = profileId(profile);
   return Object.keys(ACTION_LABELS).map((action) => {
     const matches = bindings(id).filter((item) => item.action === action);
-    const custom = id !== "cutroom" && matches.some((item) => item.custom);
-    return { action, label: ACTION_LABELS[action], keys: [...new Set(matches.map((item) => item.keys))].join(" or ") || "Toolbar", custom,
-      bound: matches.length > 0 };
+    const entries = [...new Map(matches.map((item) => [item.keys, {
+      keys: item.keys, custom: id !== "cutroom" && item.custom, note: item.note || "",
+    }])).values()];
+    return { action, label: ACTION_LABELS[action], keys: entries.map((item) => item.keys).join(" or ") || "Not assigned",
+      custom: entries.some((item) => item.custom), bound: matches.length > 0, bindings: entries };
   });
 }

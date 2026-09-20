@@ -1705,6 +1705,19 @@ body.studio-open #advancedButton { display: none; }
 .shortcut-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; gap: 16px; border-bottom: 1px solid var(--line); color: var(--paper-dim); font-size: 13px; }
 .shortcut-row small { display: block; color: var(--muted); font-size: 10px; }
 .shortcut-row kbd { white-space: nowrap; font: 12px var(--mono); color: var(--cyan-text); }
+.shortcut-profile-picker { display: flex; align-items: end; gap: 16px; flex-wrap: wrap; }
+.shortcut-profile-picker label { display: grid; gap: 8px; flex: 1 1 220px; color: var(--paper-dim); font-size: 13px; }
+.shortcut-profile-picker select { width: 100%; min-width: 0; padding: 10px 12px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--ink-2); color: var(--paper); font: inherit; line-height: 1.4; }
+.shortcut-profile-picker .button { flex-shrink: 0; }
+.shortcut-group { margin-top: 24px; }
+.keyboard-dialog h3 { margin: 0 0 8px; color: var(--paper); font-size: 13px; }
+.shortcut-bindings { display: grid; gap: 10px; text-align: end; flex: 0 1 55%; min-width: 0; }
+.shortcut-bindings small { margin-top: 4px; line-height: 1.5; }
+.shortcut-bindings .shortcut-adaptation { color: var(--cyan-text); }
+.shortcut-unassigned, .shortcut-limitations { margin-top: 24px; padding: 14px; border: 1px solid var(--line); border-radius: 8px; }
+.shortcut-unassigned summary { cursor: pointer; font-size: 13px; color: var(--paper-dim); }
+.shortcut-unassigned ul { color: var(--muted); font-size: 12px; line-height: 1.8; padding-inline-start: 20px; }
+.shortcut-limitations p:last-child { margin-bottom: 0; }
 @media (min-width: 761px) {
   .advanced-panel.studio-workspace:not([hidden]) { --editor-timeline-height: 320px; }
   .advanced-panel.studio-workspace.has-clip-selection { --editor-timeline-height: 370px; }

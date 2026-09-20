@@ -21,6 +21,12 @@ Only `public/` is deployed. Never put recordings, project files, keys or model w
 
 ## Publish a website update
 
+GitHub source changes and Expo deployment are separate steps. Review and commit the
+intended files, then use a normal non-force Git push to the reviewed branch of the
+public CUTROOM repository. The legacy `PUBLISH.bat git` commands still require a
+private target and reject this public repository; keep that guard intact. See the
+[publishing guide](../docs/PUBLISHING.md) for the source and packaging workflow.
+
 Install Node.js 22 or newer and sign in to the owning Expo account using its official CLI:
 
 ```sh
@@ -31,7 +37,7 @@ npm run deploy
 
 `npm run deploy` restores the approved download, checks its size and SHA-256,
 runs the small website tests and link checks, then publishes to the existing Expo project.
-It does not deploy to the previous host, publish the app repository, purchase a plan,
+It does not deploy to the previous host, push source changes to GitHub, purchase a plan,
 upload private app data, or change CUTROOM's local editing engine.
 
 No framework build, global CLI installation, or npm dependency installation is required.
@@ -49,7 +55,7 @@ The ZIP is downloaded from the existing public Expo website. If that site is una
 provide the already-approved local archive instead:
 
 ```sh
-node prepare-download.mjs ../dist/CUTROOM-1.1-beta-20260920-132911.zip
+node prepare-download.mjs ../dist/CUTROOM-1.1-beta-20260920-135632.zip
 ```
 
 An existing ZIP with the wrong checksum is rejected, not overwritten. Review and move it
@@ -60,7 +66,10 @@ ignored by Git. The source, checksums and approved screenshots are tracked.
 
 Build and test a clean source-only package with CUTROOM's allowlist packager. Update
 `release.json`, the checksum sidecar, visible version/size/download links and `verify.mjs`
-together. Supply the newly approved ZIP locally for its first website deployment.
+together as appropriate for the release. Extract the ZIP and check that
+`START CUTROOM.bat`, `START HERE.html`, and `App/` remain together and that the launcher
+starts the expected build. Supply the newly approved ZIP locally for its first
+website deployment; the live site cannot supply a file that has not been published yet.
 Do not silently replace a beta under an existing filename.
 
 Website checks do not prove AI editing quality or a successful installation on another PC.
