@@ -6,6 +6,8 @@ CUTROOM helps creators turn recordings into an editable first cut. Bring in your
 
 **Free and open source. No CUTROOM subscription or watermark.** Optional online AI uses your own provider account; its limits and charges are separate.
 
+[Visit the website and download the Windows beta](https://cutroom-studio.expo.app/) · [עברית](https://cutroom-studio.expo.app/?lang=he)
+
 ## Made for the videos you create
 
 - **YouTube videos** — clean up a recording while keeping its original sequence.

@@ -1,0 +1,15 @@
+{
+  "expo": {
+    "name": "CUTROOM Website",
+    "slug": "cutroom-website",
+    "owner": "vano17p",
+    "web": {
+      "output": "static"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "834360ab-2d84-4c2a-b240-d80247ac6286"
+      }
+    }
+  }
+}

@@ -14,7 +14,7 @@ Open a terminal in the CUTROOM folder:
 | `PUBLISH.bat package` | Build a clean ZIP and SHA-256 checksum in `dist`. | None. You decide who receives it. |
 | `PUBLISH.bat git` | Check the existing private GitHub target, clean committed branch, history and fast-forward safety. | Read-only GitHub/Git requests; no push. |
 | `PUBLISH.bat git --publish` | Perform those checks, run regression tests, ask for an exact typed confirmation, then push that one commit/branch. | Writes to the confirmed private GitHub repository only. |
-| `PUBLISH.bat expo` | Explain the unsupported hosting target and stop. | None. |
+| `PUBLISH.bat expo` | Explain why the local editing backend cannot be deployed this way, then stop. | None. |
 
 ### 1. Make a tester ZIP
 
@@ -55,13 +55,13 @@ The checks inspect all reachable file history, not just the newest files. Histor
 
 If the terminal closes or the network fails during a push, inspect GitHub before retrying. Do not assume the push failed just because the final message was not shown. Cancelling cannot undo a push already accepted by GitHub.
 
-## Why there is no Expo upload button yet
+## Website hosting is separate from the editing engine
 
-If “EXPO” means **Expo / EAS Hosting**, its documented deployment path is an Expo Router/React web build with a JavaScript/Workers server runtime. CUTROOM currently uses a plain JavaScript frontend with a Python server, native FFmpeg rendering and optional local AI processes. It is not an Expo project, and uploading the frontend alone would not provide working video editing. See [Expo's hosting overview](https://docs.expo.dev/eas/hosting/introduction/) and [web deployment instructions](https://docs.expo.dev/deploy/web/).
+The public introduction and download website is already hosted on **Expo / EAS Hosting** at [cutroom-studio.expo.app](https://cutroom-studio.expo.app/). Its maintained source is in the private repository's `website/` directory. That directory is intentionally excluded from the application tester ZIP.
 
-The appropriate near-term distribution is a private tester ZIP plus the private source repository. A public introduction/download page could be hosted separately later. An actual hosted editor needs a deliberate backend design: authentication, private media storage, job isolation, deletion/retention controls, resource limits and a budget for processing. A free API tier does not supply free hosting or unlimited rendering. None of those services is provisioned by this tool.
+To update the website from a Git checkout, open `website/`, read its README and run `npm run deploy`. The website workflow verifies the approved download and publishes only its `public/` directory to the existing Expo project. Generated ZIP files are ignored by Git and restored using a pinned size and checksum. The repository remains private; the website and beta download are public.
 
-If “EXPO” refers to a different product or destination, confirm its exact URL/account before connecting a deployment command. No guessed deployment or paid resource is created.
+CUTROOM's **editor** still uses a Python server, native FFmpeg and optional local AI processes. Uploading its frontend alone would not make video editing work in the cloud. `PUBLISH.bat expo` remains a safety stop for that application backend, not the website deployment command. An actual hosted editor would require a separate design for private media, job isolation, retention, authentication and processing costs. No such infrastructure or paid plan is created by either workflow.
 
 ## Before inviting testers
 
@@ -76,4 +76,6 @@ If “EXPO” refers to a different product or destination, confirm its exact UR
 
 לחיצה כפולה על `PUBLISH.bat` מבצעת בדיקה בלבד ולא מעלה דבר. כדי ליצור חבילה נקייה לשליחה לבודקים מריצים `PUBLISH.bat package`; התוצאה נשמרת בתיקיית `dist`, ללא הסרטונים, הפרויקטים, המפתחות והמודלים שלכם.
 
-`PUBLISH.bat git` בודק את יעד ה־GitHub הפרטי ללא העלאה. `PUBLISH.bat git --publish` מריץ בדיקות ודורש אישור מפורש לפני העלאת השינוי שכבר בדקתם ושמרתם ב־commit. הוא לא הופך את המאגר לציבורי ולא מעלה אתר עובד. יש לבדוק את ה־ZIP במחשב נוסף לפני שמפיצים אותו. פרסום ב־Expo אינו מחובר כרגע: קודם צריך להבהיר את היעד ולהתאים לו את צד השרת, ולא רק להעלות את המסך החיצוני.
+`PUBLISH.bat git` בודק את יעד ה־GitHub הפרטי ללא העלאה. `PUBLISH.bat git --publish` מריץ בדיקות ודורש אישור מפורש לפני העלאת השינוי שכבר בדקתם ושמרתם ב־commit. הוא לא הופך את המאגר לציבורי ולא מפרסם אתר. יש לבדוק את ה־ZIP במחשב נוסף לפני שמפיצים אותו.
+
+אתר ההצגה וההורדה כבר פועל ב־https://cutroom-studio.expo.app/. כדי לעדכן אותו מתוך עותק Git, נכנסים לתיקיית `website`, קוראים את ה־README שלה ומריצים `npm run deploy`. רק האתר והחבילה המאושרת מתפרסמים; עורך הווידאו, הסרטונים והמודלים נשארים במחשב המשתמש. תיקיית האתר אינה חלק מחבילת הבטא להורדה.

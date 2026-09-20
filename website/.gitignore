@@ -1,0 +1,8 @@
+/node_modules/
+/.expo/
+/.openai/
+/.sites-runtime/
+/public/downloads/*.zip
+*.partial
+.env
+.env.*

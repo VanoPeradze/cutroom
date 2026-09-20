@@ -1,0 +1,11 @@
+{
+  "name": "cutroom-website",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "prepare:download": "node prepare-download.mjs",
+    "test": "node --test prepare-download.test.mjs",
+    "check": "node verify.mjs && node --check public/site.js",
+    "deploy": "npm run prepare:download && npm test && npm run check && npx --yes eas-cli@24.7.0 deploy --export-dir public --prod --non-interactive"
+  }
+}
