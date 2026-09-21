@@ -49,6 +49,7 @@ assert.ok(!html.includes('127.0.0.1')&&!html.includes('C:/Users/'),'Local-only r
 const {expo}=JSON.parse(readFileSync(resolve(root,'app.json'),'utf8'));
 assert.equal(expo.web.output,'static','Only the static website may be deployed');
 assert.ok(expo.extra?.eas?.projectId,'Expo project must be linked before publishing');
-assert.ok(html.includes('https://cutroom-studio.expo.app/'),'Canonical must point to the Expo website');
+const canonicalTag = html.match(/<link\b[^>]*\brel=["']canonical["'][^>]*>/i)?.[0];
+assert.equal(canonicalTag?.match(/\bhref=["']([^"']+)["']/i)?.[1], 'https://cutroom-studio.expo.app/', 'Canonical must point to the Expo website');
 assert.ok(!html.includes('chatgpt.site'),'The public page must not refer visitors to the previous host');
 console.log('Verified: all public pages, privacy notice, local assets, anchors, unique IDs, Expo config and exact approved download.');

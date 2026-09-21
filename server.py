@@ -840,7 +840,7 @@ def create_app(settings: Settings | None = None) -> Flask:
                 "message": "Captions no longer match the selected audio source or sync offset. Rebuild the Draft before exporting captions.",
             }), 409
         app.logger.exception("Unhandled error")
-        return jsonify({"error": type(error).__name__, "message": str(error)}), 500
+        return jsonify({"error": "internal_error", "message": "CUTROOM could not complete this action. Try again or check the local log for details."}), 500
 
     @app.get("/")
     def index():
@@ -2305,10 +2305,10 @@ def _public_project(project: dict[str, Any]) -> dict[str, Any]:
     strip_private_edit_history(public)
     try:
         public["editor_sequence"] = editor_sequence_snapshot(public)
-    except SourceTrackError as error:
+    except SourceTrackError:
         # A malformed old draft must remain openable; report the editor issue
         # without silently replacing its footage with a different sequence.
-        public["editor_sequence"] = {"error": str(error)}
+        public["editor_sequence"] = {"error": "The saved timeline is invalid. Review your clips or restore an earlier edit."}
     project_id = public["id"]
     for slot, source in public.get("sources", {}).items():
         if source:

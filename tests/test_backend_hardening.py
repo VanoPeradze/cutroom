@@ -184,6 +184,28 @@ def test_browser_security_headers_cover_pages_api_and_errors(app, path):
     response.close()
 
 
+def test_unexpected_api_errors_do_not_expose_internal_details(app, monkeypatch):
+    def fail():
+        raise RuntimeError("private/path/customer-video.mp4 secret-value")
+
+    monkeypatch.setattr(app.extensions["cutroom_store"], "list", fail)
+    response = app.test_client().get("/api/projects")
+    assert response.status_code == 500
+    assert response.get_json()["error"] == "internal_error"
+    assert "private/path" not in response.get_data(as_text=True)
+    assert "secret-value" not in response.get_data(as_text=True)
+
+
+def test_invalid_sequence_does_not_expose_internal_exception(monkeypatch):
+    def fail(_project):
+        raise server.SourceTrackError("private/path/customer-video.mp4 secret-value")
+
+    monkeypatch.setattr(server, "editor_sequence_snapshot", fail)
+    public = server._public_project({"id": "safe-test-project", "sources": {}})
+    assert "saved timeline is invalid" in public["editor_sequence"]["error"]
+    assert "secret-value" not in json.dumps(public)
+
+
 def test_system_endpoint_publishes_the_embedded_camera_detector_contract(
     app, monkeypatch: pytest.MonkeyPatch,
 ):
