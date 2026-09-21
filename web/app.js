@@ -609,7 +609,7 @@ function bindEvents() {
   });
   bindKeyboardControls();
   window.addEventListener("beforeunload", (event) => {
-    if (state.transcriptBuffers.size) { event.preventDefault(); event.returnValue = ""; }
+    if (state.transcriptBuffers.size || liveEmbeddedCameraRequest()) { event.preventDefault(); event.returnValue = ""; }
   });
   elements.burnCaptionsToggle.addEventListener("change", () => {
     setCaptionBurnEnabled(elements.burnCaptionsToggle.checked, true);
@@ -1884,6 +1884,7 @@ async function flushCurrentProjectSaves() {
     if (state.manualEditPromise) await state.manualEditPromise;
     if (state.sourceMixerSavePending) await state.sourceMixerSaveTail;
     await flushPendingSourceSync(projectId);
+    if (!(await flushEmbeddedCameraSave(projectId))) return false;
     await flushProjectSaves(projectId);
     return true;
   } catch (error) {
@@ -2031,6 +2032,8 @@ async function generateDraft() {
   }
   const projectId = state.project.id;
   const viewToken = state.projectViewToken;
+  if (liveEmbeddedCameraRequest()
+    && (!(await flushEmbeddedCameraSave(projectId)) || state.project?.id !== projectId || state.projectViewToken !== viewToken)) return;
   const lock = acquireJobStartLock("director", projectId);
   if (!lock) {
     toast(t("directorBusy"));
@@ -2096,6 +2099,7 @@ async function refineDraft(command) {
   if (state.draftDirtyReasons.size) { toast(t("rebuildBeforeRefine")); return; }
   if (command === "new_variation" && !canVaryDraft()) return;
   const projectId = state.project.id;
+  if (liveEmbeddedCameraRequest() && (!(await flushEmbeddedCameraSave(projectId)) || state.project?.id !== projectId)) return;
   const lock = acquireJobStartLock("director", projectId);
   if (!lock) { toast(t("directorBusy")); return; }
   pauseAllMedia();
@@ -3384,6 +3388,7 @@ async function applySourceLayout(scope, { immediate = false } = {}) {
   let committed = false;
   state.sourceMixerLayoutRequest = request;
   renderSourceMixer();
+  syncSecondaryPreview(previewPlaybackTime());
   try {
     // Fit/Fill and role saves are serialized separately. Await them rather
     // than silently dropping this click because applyManualEdit sees Busy.
@@ -3411,6 +3416,7 @@ async function applySourceLayout(scope, { immediate = false } = {}) {
       state.sourceMixerLayoutRequest = null;
       if (!committed && state.project?.id === request.projectId) hydrateSourceMixerLayout();
       renderSourceMixer();
+      if (state.project?.id === request.projectId) syncSecondaryPreview(previewPlaybackTime());
     }
   }
 }
@@ -3429,6 +3435,7 @@ async function applyCreatorFrame() {
 }
 
 function embeddedLayoutConfirmed() {
+  if (liveEmbeddedCameraRequest()) return true;
   const draft = state.project?.draft;
   return !state.project?.sources?.B && Boolean(embeddedCameraCandidate())
     && draft?.embedded_layout_confirmed === true && draft?.layout === "embedded_stack";
@@ -3504,6 +3511,7 @@ function embeddedCameraCandidate() {
 }
 
 function embeddedCameraIsActive() {
+  if (liveEmbeddedCameraRequest()) return true;
   if (!embeddedCameraCandidate()) return false;
   if (state.project?.draft) return embeddedLayoutConfirmed();
   return state.project?.settings?.layout === "embedded_stack";
@@ -3513,6 +3521,137 @@ function embeddedEditorCandidateKey(candidate) {
   if (!candidate) return "default";
   return [candidate.candidate_source || candidate.detector || "candidate", candidate.x, candidate.y, candidate.w, candidate.h,
     candidate.content_focus?.x, candidate.content_focus?.y].join(":");
+}
+
+function embeddedEditorSourceKey() {
+  const source = state.project?.sources?.A;
+  return source ? `${source.generation || ""}:${source.url || ""}` : null;
+}
+
+function embeddedCameraRequestIsCurrent(request) {
+  return Boolean(request && state.project?.sources?.A && !state.project.sources.B
+    && request.projectId === state.project.id && request.generation === embeddedEditorSourceKey()
+    && request.viewToken === state.projectViewToken);
+}
+
+function liveEmbeddedCameraRequest() {
+  const request = state.embeddedEditor.pending;
+  return embeddedCameraRequestIsCurrent(request) ? request : null;
+}
+
+function embeddedCameraPreviewCandidate() {
+  return liveEmbeddedCameraRequest()?.geometry || embeddedCameraCandidate();
+}
+
+function embeddedEditorBusy() {
+  // Keep dragging responsive while this editor's own save is in flight.
+  return Boolean(state.activeJob || state.activeUploads.size || state.jobStartLocks.size
+    || state.sourceSyncPending || state.sourceMixerSavePending
+    || (state.manualEditBusy && !state.embeddedEditor.applying));
+}
+
+function resetEmbeddedEditor() {
+  clearTimeout(state.embeddedEditor.saveTimer);
+  state.embeddedEditor = { projectId: state.project?.id, generation: embeddedEditorSourceKey(),
+    viewToken: state.projectViewToken, candidateKey: null, dirty: false, dragging: false };
+}
+
+function renderEmbeddedSaveState() {
+  const editor = state.embeddedEditor;
+  const active = embeddedCameraIsActive();
+  if (elements.embeddedCameraState) {
+    elements.embeddedCameraState.classList.toggle("active", active && !editor.dirty);
+    elements.embeddedCameraState.textContent = editor.error ? "Save failed — retry"
+      : editor.dirty ? "Saving…"
+      : active ? "Saved"
+      : embeddedCameraCandidate()?.candidate_source === "vision" ? "Review camera area" : "Mark your camera";
+  }
+  if (elements.saveEmbeddedCamera) {
+    elements.saveEmbeddedCamera.hidden = !editor.error && (active || editor.dirty);
+    elements.saveEmbeddedCamera.textContent = editor.error ? "Retry save" : "Use camera layout";
+    elements.saveEmbeddedCamera.disabled = embeddedEditorBusy() || Boolean(editor.saving);
+  }
+}
+
+function previewEmbeddedCameraSelection() {
+  if (!state.project?.sources?.A || !elements.previewA || !elements.previewB) return;
+  const sourceUrl = sourceMediaUrl(state.project.sources.A);
+  if (liveEmbeddedCameraRequest() && elements.previewB.dataset.url !== sourceUrl) {
+    elements.previewB.src = sourceUrl;
+    elements.previewB.dataset.url = sourceUrl;
+    elements.previewB.load();
+  }
+  syncSecondaryPreview(previewPlaybackTime());
+}
+
+function queueEmbeddedCameraSave({ immediate = false } = {}) {
+  if (!state.project?.sources?.A || state.project.sources.B || embeddedEditorBusy()) return null;
+  const editor = state.embeddedEditor;
+  const geometry = normalizedEmbeddedGeometry(embeddedEditorGeometryFromControls());
+  if (!geometry) return null;
+  clearTimeout(editor.saveTimer);
+  editor.pending = { projectId: state.project.id, generation: embeddedEditorSourceKey(),
+    viewToken: state.projectViewToken, geometry };
+  editor.dirty = true;
+  editor.error = false;
+  updateEmbeddedEditorPreview();
+  previewEmbeddedCameraSelection();
+  if (immediate) return flushEmbeddedCameraSave();
+  editor.saveTimer = setTimeout(() => { flushEmbeddedCameraSave(); }, 450);
+  return editor.pending;
+}
+
+async function flushEmbeddedCameraSave(projectId = state.project?.id) {
+  const editor = state.embeddedEditor;
+  if (editor.pending?.projectId !== projectId || !liveEmbeddedCameraRequest()) return true;
+  clearTimeout(editor.saveTimer);
+  editor.saveTimer = null;
+  if (editor.saveTask) return editor.saveTask;
+  editor.saving = true;
+  // Start in a microtask so saveTask exists before applyManualEdit renders.
+  editor.saveTask = Promise.resolve().then(async () => {
+    while (editor === state.embeddedEditor && liveEmbeddedCameraRequest()) {
+      if (state.manualEditPromise) await state.manualEditPromise;
+      if (state.sourceMixerSavePending) await state.sourceMixerSaveTail;
+      if (state.sourceSyncPending) await flushPendingSourceSync(projectId);
+      const request = editor.pending;
+      if (editor !== state.embeddedEditor || !embeddedCameraRequestIsCurrent(request)) return true;
+      if (foregroundBusy()) throw new Error("Camera layout could not be saved while another operation is running.");
+      const geometry = request.geometry;
+      editor.applying = true;
+      const updated = await applyManualEdit("set_embedded_camera", {
+        enabled: true, x: geometry.x, y: geometry.y, w: geometry.w, h: geometry.h,
+        content_x: geometry.content_focus.x, content_y: geometry.content_focus.y,
+      }, { isCurrent: () => embeddedCameraRequestIsCurrent(request) });
+      editor.applying = false;
+      if (editor !== state.embeddedEditor || !embeddedCameraRequestIsCurrent(request)) return true;
+      if (!updated) throw new Error("Camera layout was not saved.");
+      // The reply may represent an older drag position. Keep the newer overlay
+      // and controls intact until that exact position has also been saved.
+      if (editor.pending === request) {
+        editor.pending = null;
+        editor.dirty = false;
+        editor.candidateKey = embeddedEditorCandidateKey(embeddedCameraCandidate());
+      }
+    }
+    return true;
+  }).catch((error) => {
+    if (editor === state.embeddedEditor && liveEmbeddedCameraRequest()) {
+      editor.error = true;
+      toast(`${error.message} Retry save to keep this camera layout.`);
+    }
+    return false;
+  }).finally(() => {
+    editor.saving = false;
+    editor.applying = false;
+    editor.saveTask = null;
+    if (editor === state.embeddedEditor) {
+      renderEmbeddedCameraEditor();
+      previewEmbeddedCameraSelection();
+    }
+  });
+  renderEmbeddedSaveState();
+  return editor.saveTask;
 }
 
 function embeddedEditorGeometryFromControls() {
@@ -3564,10 +3703,7 @@ function updateEmbeddedEditorPreview() {
     ["embeddedCameraWOut", geometry.w], ["embeddedCameraHOut", geometry.h],
     ["embeddedContentXOut", geometry.content_focus.x], ["embeddedContentYOut", geometry.content_focus.y],
   ]) elements[key].textContent = `${Math.round(value * 100)}%`;
-  if (state.embeddedEditor.dirty && elements.embeddedCameraState) {
-    elements.embeddedCameraState.textContent = "UNSAVED — APPLY LAYOUT";
-    elements.embeddedCameraState.classList.toggle("active", false);
-  }
+  renderEmbeddedSaveState();
 }
 
 function renderEmbeddedCameraEditor() {
@@ -3575,12 +3711,14 @@ function renderEmbeddedCameraEditor() {
   const source = state.project?.sources?.A;
   const hasB = Boolean(state.project?.sources?.B);
   elements.embeddedCameraEditor.hidden = !source || hasB;
-  if (!source || hasB) return;
+  if (!source || hasB) { resetEmbeddedEditor(); return; }
 
   const candidate = embeddedCameraCandidate();
-  const generation = String(source.generation || source.url || "A");
+  const generation = embeddedEditorSourceKey();
   const candidateKey = embeddedEditorCandidateKey(candidate);
-  const changedSource = state.embeddedEditor.projectId !== state.project.id || state.embeddedEditor.generation !== generation;
+  const changedSource = state.embeddedEditor.projectId !== state.project.id || state.embeddedEditor.generation !== generation
+    || state.embeddedEditor.viewToken !== state.projectViewToken;
+  if (changedSource) resetEmbeddedEditor();
   const changedSuggestion = !state.embeddedEditor.dirty && state.embeddedEditor.candidateKey !== candidateKey;
   if (changedSource || changedSuggestion) {
     state.embeddedEditor.projectId = state.project.id;
@@ -3602,24 +3740,16 @@ function renderEmbeddedCameraEditor() {
   if (sourceWidth > 0 && sourceHeight > 0) elements.embeddedCameraCanvas.style.aspectRatio = `${sourceWidth} / ${sourceHeight}`;
 
   const active = embeddedCameraIsActive();
-  elements.embeddedCameraState.classList.toggle("active", active && !state.embeddedEditor.dirty);
-  elements.embeddedCameraState.textContent = state.embeddedEditor.dirty
-    ? "UNSAVED — APPLY LAYOUT"
-    : active
-    ? uiCopy("פעיל בעריכה", "ACTIVE IN EDIT")
-    : candidate?.candidate_source === "vision"
-      ? uiCopy("נמצאה הצעה — נדרש אישור", "SUGGESTION — CONFIRM")
-      : uiCopy("שליטה ידנית", "MANUAL CONTROL");
+  renderEmbeddedSaveState();
   elements.embeddedCameraHelp.textContent = candidate?.candidate_source === "vision"
-    ? uiCopy("ה־AI סימן אזור אפשרי. בדקו את המסגרת ושמרו רק אם היא באמת מקיפה את המצלמה.", "AI found a possible area. Check the frame and save only if it really contains the camera.")
-    : uiCopy("אם המצלמה כבר מופיעה בתוך ההקלטה, סמנו כאן את האזור שלה. אין צורך להעלות את אותו הסרטון שוב כמקור B.", "If the camera is baked into the recording, mark its area here. Do not upload the same file again as source B.");
-  const busy = state.manualEditBusy || foregroundBusy();
+    ? "Check that the suggested area contains your camera. Moving the frame previews and saves your camera layout automatically."
+    : "If your recording includes a camera, drag its frame here. The edited preview updates immediately and changes save automatically.";
+  const busy = embeddedEditorBusy();
   if (elements.embeddedCameraSeek) {
     elements.embeddedCameraSeek.disabled = busy || !(Number(source.duration) > 0);
     elements.embeddedCameraSeekOut.textContent = formatTime(Number(elements.embeddedCameraVideo.currentTime || 0), true);
   }
-  elements.saveEmbeddedCamera.disabled = busy;
-  elements.disableEmbeddedCamera.disabled = busy || !active;
+  elements.disableEmbeddedCamera.disabled = busy || Boolean(state.embeddedEditor.saving) || !active;
   elements.disableEmbeddedCamera.hidden = !active;
   for (const control of [elements.embeddedCameraX, elements.embeddedCameraY, elements.embeddedCameraW, elements.embeddedCameraH, elements.embeddedContentX, elements.embeddedContentY]) {
     control.disabled = busy;
@@ -3630,8 +3760,7 @@ function renderEmbeddedCameraEditor() {
 function bindEmbeddedCameraEditorEvents() {
   const geometryControls = [elements.embeddedCameraX, elements.embeddedCameraY, elements.embeddedCameraW, elements.embeddedCameraH, elements.embeddedContentX, elements.embeddedContentY];
   for (const control of geometryControls) control.addEventListener("input", () => {
-    state.embeddedEditor.dirty = true;
-    updateEmbeddedEditorPreview();
+    queueEmbeddedCameraSave();
   });
   elements.embeddedCameraPresets.addEventListener("click", (event) => {
     const button = event.target.closest("button[data-embedded-preset]");
@@ -3642,6 +3771,7 @@ function bindEmbeddedCameraEditorEvents() {
     current.x = Math.max(0, Math.min(1 - current.w, horizontal === "left" ? gap : 1 - current.w - gap));
     current.y = Math.max(0, Math.min(1 - current.h, vertical === "top" ? gap : 1 - current.h - gap));
     writeEmbeddedEditorGeometry(current, { dirty: true });
+    queueEmbeddedCameraSave();
   });
   elements.saveEmbeddedCamera.addEventListener("click", () => runUiAction(saveEmbeddedCameraSelection, uiCopy("שמירת אזור המצלמה", "Saving camera area")));
   elements.disableEmbeddedCamera.addEventListener("click", () => runUiAction(disableEmbeddedCameraSelection, uiCopy("ביטול המצלמה הפנימית", "Disabling embedded camera")));
@@ -3650,7 +3780,7 @@ function bindEmbeddedCameraEditorEvents() {
 
   const canvas = elements.embeddedCameraCanvas;
   canvas.addEventListener("pointerdown", (event) => {
-    if (state.manualEditBusy || foregroundBusy()) return;
+    if (embeddedEditorBusy()) return;
     const bounds = canvas.getBoundingClientRect();
     if (!bounds.width || !bounds.height) return;
     const geometry = embeddedEditorGeometryFromControls();
@@ -3707,26 +3837,18 @@ function moveEmbeddedCameraFromPointer(event) {
     geometry.y = Math.max(0, Math.min(1 - geometry.h, py - offset.y));
   }
   writeEmbeddedEditorGeometry(geometry, { dirty: true });
+  queueEmbeddedCameraSave();
 }
 
 async function saveEmbeddedCameraSelection() {
-  if (!state.project?.sources?.A || state.project?.sources?.B) return null;
-  const geometry = embeddedEditorGeometryFromControls();
-  const updated = await applyManualEdit("set_embedded_camera", {
-    enabled: true,
-    x: geometry.x, y: geometry.y, w: geometry.w, h: geometry.h,
-    content_x: geometry.content_focus.x, content_y: geometry.content_focus.y,
-  });
-  if (!updated) return null;
-  state.embeddedEditor.dirty = false;
-  state.embeddedEditor.candidateKey = embeddedEditorCandidateKey(embeddedCameraCandidate());
-  renderEmbeddedCameraEditor();
-  toast(uiCopy("אזור המצלמה נשמר והפריסה הוחלה", "Camera area saved and layout applied"), "success", 2800);
-  return updated;
+  return queueEmbeddedCameraSave({ immediate: true });
 }
 
 async function disableEmbeddedCameraSelection() {
   if (!state.project?.sources?.A || state.project?.sources?.B) return null;
+  if (embeddedEditorBusy() || state.embeddedEditor.saving) return null;
+  // An explicit disable supersedes any still-debounced camera position.
+  resetEmbeddedEditor();
   const updated = await applyManualEdit("set_embedded_camera", { enabled: false });
   if (!updated) return null;
   state.embeddedEditor.dirty = false;
@@ -3745,7 +3867,7 @@ function setupPreviewSources() {
   if (elements.previewA.dataset.url !== sourceAUrl) {
     elements.previewA.src = sourceAUrl; elements.previewA.dataset.url = sourceAUrl; elements.previewA.load();
   }
-  const embedded = embeddedCameraCandidate();
+  const embedded = embeddedCameraPreviewCandidate();
   if (embedded && embeddedLayoutConfirmed()) {
     if (elements.previewB.dataset.url !== sourceAUrl) {
       elements.previewB.src = sourceAUrl; elements.previewB.dataset.url = sourceAUrl; elements.previewB.load();
@@ -4071,7 +4193,7 @@ function syncSecondaryPreview(globalTime) {
   elements.cameraBadge.textContent = camera === "gap" ? "GAP" : cameraLabels[camera] || singleSlot;
 
   if (camera === "embedded_stack") {
-    const candidate = embeddedCameraCandidate();
+    const candidate = embeddedCameraPreviewCandidate();
     if (candidate) {
       const liveCrop = state.framingDraft?.projectId === state.project.id && state.framingDraft.slot === "A"
         && globalTime >= state.framingDraft.scope.start && globalTime < state.framingDraft.scope.end ? state.framingDraft.crop : null;
@@ -4124,7 +4246,11 @@ function syncSecondaryPreview(globalTime) {
 
 function cameraAt(time) {
   const project = playbackProject();
-  const previewLayout = state.sourceMixerPreviewLayout;
+  if (liveEmbeddedCameraRequest()) return "embedded_stack";
+  const request = state.sourceMixerLayoutRequest;
+  const pendingLayout = request?.projectId === state.project?.id && time >= request.start && time < request.end
+    ? request.layout : null;
+  const previewLayout = pendingLayout || state.sourceMixerPreviewLayout;
   const plan = previewLayout === "auto" ? project?.draft?.ai_camera_plan : project?.draft?.camera_plan;
   const camera = previewLayout && previewLayout !== "auto"
     ? previewLayout
@@ -4626,7 +4752,7 @@ function renderCameraDetection() {
   const candidate = embeddedCameraCandidate();
   const sourceA = state.project?.sources?.A;
   const hasB = Boolean(state.project?.sources?.B);
-  elements.cameraDetection.hidden = !sourceA || hasB;
+  elements.cameraDetection.hidden = !sourceA || hasB || embeddedCameraIsActive();
   if (!sourceA || hasB) return;
   const title = $("b", elements.cameraDetection);
   const help = $("p", elements.cameraDetection);
@@ -5242,7 +5368,7 @@ function runManualRangeEdit(action, target = activeEditTarget()) {
   return applyManualEdit(target === "edit" ? (state.project?.editor_sequence && action === "delete_range" ? "sequence_ripple_delete" : action) : action === "delete_range" ? "track_remove_range" : "track_restore_range", { ...state.manualSelection, ...(target !== "edit" ? { slot: target } : {}) });
 }
 
-async function applyManualEdit(action, detail = {}) {
+async function applyManualEdit(action, detail = {}, { isCurrent = () => true } = {}) {
   if (state.project?.editor_sequence) {
     action = ({ track_move: "sequence_move", track_split: "sequence_split", track_remove_range: "sequence_remove_range", track_trim: "sequence_trim", set_camera_layout: "sequence_layout", track_reset: "sequence_reset" })[action] || action;
     if (action === "sequence_reset") detail = {};
@@ -5252,7 +5378,7 @@ async function applyManualEdit(action, detail = {}) {
     return null;
   }
   const projectLevelAction = action === "set_source_mixer" || action === "set_embedded_camera";
-  if ((!state.project?.draft && !projectLevelAction) || state.manualEditBusy || foregroundBusy()) return null;
+  if ((!state.project?.draft && !projectLevelAction) || state.manualEditBusy || foregroundBusy() || !isCurrent()) return null;
   state.timeline?.cancelPendingCut?.();
   const projectId = state.project.id;
   const preservedSelection = state.manualSelection ? { ...state.manualSelection } : null;
@@ -5267,6 +5393,7 @@ async function applyManualEdit(action, detail = {}) {
   renderSourceMixer();
   try {
     await flushProjectSaves(projectId);
+    if (state.project?.id !== projectId || !isCurrent()) return null;
     const expectedRevision = saveQueueFor(projectId, state.project?.revision).revision;
     const submit = (revision) => api(`/api/projects/${encodeURIComponent(projectId)}/manual/edit`, {
       method: "POST",
@@ -5281,6 +5408,7 @@ async function applyManualEdit(action, detail = {}) {
       if (!latest?.project || (!latest.project.draft && !projectLevelAction)) throw error;
       state.project = latest.project;
       rememberProjectRevision(state.project);
+      if (!isCurrent()) return null;
       if (action.startsWith("sequence_")) {
         renderDraft();
         state.timeline?.clearSelection();
@@ -5290,7 +5418,7 @@ async function applyManualEdit(action, detail = {}) {
     }
     if (!payload?.project) throw new Error("Manual edit did not return an updated project");
     rememberProjectRevision(payload.project);
-    if (state.project?.id !== projectId) return payload.project;
+    if (state.project?.id !== projectId || !isCurrent()) return payload.project;
     state.project = payload.project;
     elements.projectName.value = state.project.name || "";
     hydrateSettings();
@@ -5706,6 +5834,7 @@ async function startExport() {
   if (state.draftDirtyReasons.size) { toast(t("rebuildBeforeRefine")); return; }
   pauseAllMedia();
   const projectId = state.project.id;
+  if (liveEmbeddedCameraRequest() && (!(await flushEmbeddedCameraSave(projectId)) || state.project?.id !== projectId)) return;
   const lock = acquireJobStartLock("render", projectId);
   if (!lock) { toast(uiCopy("כבר מתבצעת עבודה", "Another job is already running")); return; }
   elements.exportActions.hidden = true;

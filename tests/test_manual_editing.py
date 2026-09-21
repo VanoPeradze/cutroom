@@ -425,6 +425,7 @@ def test_embedded_camera_can_be_marked_before_first_draft():
 def test_embedded_camera_updates_existing_draft_and_is_undoable():
     value = project()
     value["settings"] = {"layout": "auto"}
+    value["manual"]["source_mixer"] = {"default_layout": "auto", "audio_slot": "A"}
     value["draft"]["layout"] = "auto"
     value["draft"]["embedded_layout_confirmed"] = False
     value["draft"]["reel_candidates"] = [{
@@ -445,16 +446,19 @@ def test_embedded_camera_updates_existing_draft_and_is_undoable():
     assert {item["camera"] for item in value["draft"]["camera_plan"]} == {"embedded_stack"}
     assert value["draft"]["reel_candidates"][0]["camera_plan"][0]["camera"] == "embedded_stack"
     assert value["settings"]["layout"] == "embedded_stack"
+    assert value["manual"]["source_mixer"] == {"audio_slot": "A"}
 
     apply_manual_edit(value, {"action": "undo"})
     assert value["draft"]["layout"] == "auto"
     assert value["draft"]["embedded_layout_confirmed"] is False
     assert "embedded_camera" not in value["manual"]
     assert value["settings"]["layout"] == "auto"
+    assert value["manual"]["source_mixer"] == {"default_layout": "auto", "audio_slot": "A"}
 
     apply_manual_edit(value, {"action": "redo"})
     assert value["draft"]["embedded_layout_confirmed"] is True
     assert value["manual"]["embedded_camera"]["x"] == .70
+    assert value["manual"]["source_mixer"] == {"audio_slot": "A"}
 
     apply_manual_edit(value, {"action": "set_embedded_camera", "enabled": False})
     assert value["settings"]["layout"] == "auto"

@@ -411,6 +411,8 @@ def test_single_combined_source_has_manual_embedded_camera_fallback():
     assert "sourceMediaUrl(source)" in editor
     assert "embeddedCameraIsActive()" in editor
     save = function_block(APP, "saveEmbeddedCameraSelection", "disableEmbeddedCameraSelection")
+    assert 'queueEmbeddedCameraSave({ immediate: true })' in save
+    save = function_block(APP, "flushEmbeddedCameraSave", "embeddedEditorGeometryFromControls")
     assert 'applyManualEdit("set_embedded_camera"' in save
     assert "enabled: true" in save
     assert "content_x" in save and "content_y" in save

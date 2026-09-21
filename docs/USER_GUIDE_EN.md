@@ -83,7 +83,7 @@ The Free tier label does not verify your plan or prevent a paid key from incurri
 
 **Separate camera and screen:** add both files. Check **Screen recording**, **Camera** and **Audio source**. Choose the audio containing the speech you want transcribed and heard in the export. Automatic synchronization is a starting point; listen near both the beginning and end.
 
-**Camera already inside one recording:** add that combined file only as A. In **Layout**, choose a reference frame, move/resize the camera rectangle, then **Save and use layout**. Do not upload the same file again as B. The confirmed camera fills the top 30%; the remaining screen fills the bottom 70%. This crops one recording into two views—it cannot recover hidden pixels or a separate camera file. A camera that moves during recording needs review.
+**Camera already inside one recording:** add that combined file only as A. In **Layout**, choose a reference frame and move/resize the camera rectangle. The video updates immediately and changes save automatically; wait for **Saved**. To accept the suggested rectangle unchanged, choose **Use camera layout** once. Do not upload the same file again as B. The camera fills the top 30%; the remaining screen fills the bottom 70%. This choice carries into the AI draft and rebuilds. It crops one recording into two views—it cannot recover hidden pixels or a separate camera file. A camera that moves during recording needs review.
 
 In **Source setup**, **Source B offset** adjusts sync for the whole edit. Positive values place B later; negative values earlier. The one-frame buttons nudge precisely. Source roles, audio, order and sync are whole-edit settings, even with a short range selected.
 
@@ -156,7 +156,7 @@ Select **where** a layout applies: a timeline range, exact From/To times or **En
 
 **Fill frame** crops edges to fill the panel. **Fit entire source** keeps the full picture with bars when needed; it does not squeeze the image. In **Clip framing**, choose A/B and adjust horizontal focus, vertical focus and zoom. Check the scope label: changes affect the selected clip/range, or the clip at the playhead—not automatically every cut. Crops follow clips when moved/copied. Full source browsing does not enable per-cut framing edits.
 
-For an embedded camera, use its rectangle and **Main screen focus**. A fixed rectangle does not track a moving camera. **Source order preview** checks routing; **Layout by section** lists existing composition blocks.
+For an embedded camera, drag its rectangle; open **Precise camera position** only when you need numeric controls. **Main screen focus** sets the default screen position; a clip's own framing takes priority. **More layouts** contains side-by-side, picture-in-picture and the style default. A fixed rectangle does not track a moving camera. **Source order preview** checks routing; **Layout by section** lists existing composition blocks. If saving fails, the panel says so and offers **Retry save**; do not close the editor until it shows **Saved**.
 
 ## 8. Correct words and control captions
 

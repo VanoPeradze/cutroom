@@ -30,6 +30,17 @@ def test_optional_audio_is_a_closed_native_disclosure():
     assert "open" not in attrs
 
 
+def test_advanced_layout_and_precision_controls_are_collapsed_by_default():
+    elements = page()
+    for control_id in ("moreSourceLayouts", "preciseEmbeddedPosition"):
+        tag, attrs = next((tag, attrs) for tag, attrs in elements if attrs.get("id") == control_id)
+        assert tag == "details"
+        assert "open" not in attrs
+    html = (Path(__file__).parents[1] / "web/index.html").read_text(encoding="utf-8")
+    assert "Save and use layout" not in html
+    assert "changes save automatically" in html.lower()
+
+
 def test_fps_controls_have_separate_label_and_description():
     elements = page()
     ids = {attrs.get("id") for _, attrs in elements}

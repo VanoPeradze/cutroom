@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1 Beta — 2026-09-21
+
+- Kept explicitly selected embedded-camera layouts through AI drafting, refinement and rebuilds, including higher-quality analysis passes.
+- Added immediate camera-frame previews and automatic saving, with visible save status and retry on failure.
+- Simplified Layout: common compositions first, with extra layouts and precise camera coordinates in expandable sections.
+- Preserved independent clip framing and removed redundant camera-layout confirmation controls once active.
+- Replaced the README opening artwork with the maintainer's CUTROOM launch image.
+
 ## 1.1 Beta — 2026-09-20
 
 - Tidied the repository root: guides live in docs, community policies in .github, and development helpers beside their tools. Application launch commands and saved-project locations are unchanged.
