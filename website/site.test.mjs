@@ -86,8 +86,13 @@ test('the notice distinguishes hosting, local editing and optional cloud process
   assert.match(privacy, /If you choose and confirm cloud AI/);
   assert.equal(linksTo(privacy, 'https://expo.dev/privacy').length, 2);
   assert.doesNotMatch(privacy, /href="[^"]*\/issues\b/i, 'Privacy requests must not be sent to public issues');
-  assert.match(privacy, /trusted private channel/);
-  assert.match(privacy, /No dedicated privacy email or private contact form is currently published/);
+  assert.equal(linksTo(privacy, 'mailto:Vano17p@gmail.com').length, 2);
+  for (const id of ['english', 'hebrew']) {
+    const section = privacy.match(new RegExp(`<section id="${id}"[^>]*>([\\s\\S]*?)</section>`))?.[1];
+    assert.ok(section, `Missing ${id} privacy section`);
+    assert.equal(linksTo(section, 'mailto:Vano17p@gmail.com').length, 1);
+  }
+  assert.doesNotMatch(privacy, /No dedicated privacy email|trusted private channel/);
 });
 
 test('website resources remain local with no tracking or browser-storage APIs', () => {
