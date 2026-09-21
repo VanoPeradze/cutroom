@@ -42,6 +42,7 @@ DOC_FILES = (
 IMAGE_FILES = (
     "docs/images/welcome.png", "docs/images/editor.png", "docs/images/ai-options.png",
     "docs/images/readme-banner.svg",
+    "docs/images/readme-hero.png",
 )
 PACKAGING_FILES = (
     "packaging/windows/START CUTROOM.bat",

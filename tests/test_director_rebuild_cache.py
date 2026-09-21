@@ -204,3 +204,89 @@ def test_rebuild_preserves_reordered_edit_sequence_beyond_original_source_durati
     assert after["manual"]["sequence"] == before["manual"]["sequence"]
     assert after["manual"]["source_tracks"] == before["manual"]["source_tracks"]
     assert editor_sequence_snapshot(after)["active"] is True
+
+
+@pytest.mark.parametrize("candidate_source", ["manual", "prepared"])
+def test_prepared_embedded_layout_survives_generation_refinement_and_rebuild(semantic_project, candidate_source):
+    from cutroom.editing import apply_manual_edit
+
+    store, settings, project_id, _calls, context = semantic_project
+    geometry = {"x": .72, "y": .06, "w": .24, "h": .25}
+
+    def prepare(current):
+        current["analysis"] = None
+        current["draft"] = None
+        current["sources"]["A"]["generation"] = "combined-recording"
+        current["settings"].update({"layout": "embedded_stack", "performance_mode": "quality"})
+        current["pre_analysis"]["vision"]["A"] = {
+            "version": VISION_ANALYSIS_VERSION,
+            "source_generation": "combined-recording", "sample_count": 6,
+            "embedded_camera": {**geometry, "detector": VISION_ANALYSIS_VERSION},
+        }
+        if candidate_source == "manual":
+            # A stale two-source preference cannot defeat the newer selection.
+            current["manual"]["source_mixer"]["default_layout"] = "auto"
+            apply_manual_edit(current, {
+                "action": "set_embedded_camera", "enabled": True,
+                **geometry, "content_x": .31, "content_y": .58,
+            })
+
+    store.update(project_id, prepare)
+    director.analyze_project(context(), project_id, store, settings)
+    first = store.load(project_id)
+    assert first["draft"]["layout"] == "embedded_stack"
+    assert first["draft"]["embedded_layout_confirmed"] is True
+    assert {row["camera"] for row in first["draft"]["camera_plan"]} == {"embedded_stack"}
+    assert director._effective_embedded_candidate(first, first["analysis"]["vision"])["x"] == geometry["x"]
+
+    def frame_one_clip(current):
+        first_range = current["draft"]["keep_ranges"][0]
+        apply_manual_edit(current, {
+            "action": "sequence_crop", "slot": "A",
+            "start": first_range["start"], "end": first_range["end"],
+            "x": .2, "y": .7, "zoom": 1.3,
+        })
+
+    store.update(project_id, frame_one_clip)
+    framed = copy.deepcopy(store.load(project_id)["manual"]["source_tracks"])
+    for command in ("shorter", "new_variation", None):
+        if command:
+            director.refine_project(context(), project_id, store, settings, command)
+        else:
+            director.analyze_project(context(), project_id, store, settings)
+        saved = store.load(project_id)
+        assert saved["settings"]["layout"] == "embedded_stack"
+        assert saved["draft"]["layout"] == "embedded_stack"
+        assert saved["draft"]["embedded_layout_confirmed"] is True
+        assert {row["camera"] for row in saved["draft"]["camera_plan"]} == {"embedded_stack"}
+        assert saved["manual"]["source_tracks"] == framed
+
+
+@pytest.mark.parametrize("case", ["not_selected", "old_generation", "missing_generation", "old_detector", "invalid_geometry"])
+def test_preparation_cannot_enable_unselected_or_stale_embedded_layout(semantic_project, case):
+    store, settings, project_id, _calls, context = semantic_project
+
+    def prepare(current):
+        current["analysis"] = None
+        current["draft"] = None
+        current["sources"]["A"]["generation"] = "combined-recording"
+        current["settings"]["layout"] = "auto" if case == "not_selected" else "embedded_stack"
+        current["settings"]["performance_mode"] = "quality"
+        profile = {
+            "version": VISION_ANALYSIS_VERSION,
+            "source_generation": "combined-recording", "sample_count": 6,
+            "embedded_camera": {"x": .72, "y": .06, "w": .24, "h": .25},
+        }
+        if case in {"old_generation", "missing_generation"}:
+            profile["source_generation"] = "old-recording" if case == "old_generation" else ""
+        elif case == "old_detector":
+            profile["version"] = "legacy-detector"
+        elif case == "invalid_geometry":
+            profile["embedded_camera"]["x"] = .99
+        current["pre_analysis"]["vision"]["A"] = profile
+
+    store.update(project_id, prepare)
+    director.analyze_project(context(), project_id, store, settings)
+    saved = store.load(project_id)
+    assert saved["draft"]["embedded_layout_confirmed"] is False
+    assert {row["camera"] for row in saved["draft"]["camera_plan"]} == {"A"}

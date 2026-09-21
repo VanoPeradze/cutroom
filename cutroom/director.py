@@ -1787,6 +1787,16 @@ def analyze_project(
         source_generation,
         vision_samples,
     )
+    # Selecting the embedded layout accepts the displayed preparation crop. A
+    # higher-sample Director pass may refine detection, but must not erase that
+    # choice. Only current-source geometry from the trusted detector qualifies.
+    accepted_prepared_embedded = (
+        select_embedded_candidate(None, prepared_vision)
+        if not source_b
+        and str(brief.get("layout")) == "embedded_stack"
+        and _prepared_vision_is_reusable(prepared_vision, source_generation, 0)
+        else None
+    )
 
     def resolve_source_vision() -> dict[str, Any]:
         if prepared_vision_is_current:
@@ -2004,6 +2014,8 @@ def analyze_project(
     if reusable_context and need_vision and not reusable_vision:
         context.update(max(0.45, float(context.job.progress)), "Refreshing speaker and framing detection")
         vision = resolve_source_vision()
+    if accepted_prepared_embedded is not None:
+        vision = {**vision, "embedded_camera": accepted_prepared_embedded}
 
     transcript_quality = transcript_quality_report(transcript)
     edit_style = str(brief.get("edit_style") or "smart")

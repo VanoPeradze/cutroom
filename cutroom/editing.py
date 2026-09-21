@@ -797,6 +797,10 @@ def _set_embedded_camera(project: dict[str, Any], payload: dict[str, Any]) -> No
         # per-range source overrides would make a later cut rebuild silently
         # undo that explicit choice.
         manual["camera_overrides"] = []
+        # A prior Source Mixer default must not override this newer single-source
+        # choice when Director constructs the next draft. Keep routing and crops.
+        if isinstance(manual.get("source_mixer"), dict):
+            manual["source_mixer"].pop("default_layout", None)
         project.setdefault("settings", {})["layout"] = "embedded_stack"
     else:
         manual.pop("embedded_camera", None)

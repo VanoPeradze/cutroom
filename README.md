@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/images/readme-banner.svg" alt="CUTROOM — Your footage. Your edit." width="100%">
+  <img src="docs/images/readme-hero.png" alt="CUTROOM Windows Beta — Free and open source" width="720">
 </p>
 
 <p align="center">

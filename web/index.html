@@ -8,7 +8,7 @@
   <title>CUTROOM 1.1 Beta — Your editing workspace</title>
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/assets/styles.css?v=1.1-beta-3">
-  <link rel="stylesheet" href="/assets/workspace.css?v=1.1-beta-1">
+  <link rel="stylesheet" href="/assets/workspace.css?v=1.1-beta-2">
   <link rel="stylesheet" href="/assets/welcome.css?v=1.1-beta-1">
 </head>
 <body class="welcome-mode">
@@ -377,7 +377,7 @@
             <details class="editor-ai-suggestions"><summary>AI suggestions</summary><div id="studioDirectorDock"></div></details>
           </div>
           <div class="tab-panel" id="studioPanelFraming" role="tabpanel" aria-labelledby="studioTabFraming" tabindex="0" data-panel="framing">
-            <header class="studio-tool-intro"><div><p>02 · LAYOUT</p><h3>Control every source</h3></div><span>Choose screen, camera, audio and composition. AI can suggest; your routing always wins.</span></header>
+            <header class="studio-tool-intro"><div><p>02 · LAYOUT</p><h3>Frame your video</h3></div><span>See changes in the video as you make them. Layout changes save automatically.</span></header>
             <section class="source-mixer" id="sourceMixer" aria-labelledby="sourceMixerTitle">
               <div class="source-mixer-head">
                 <div><p class="eyebrow">SOURCE MIXER</p><h3 id="sourceMixerTitle">Source control</h3><p id="sourceMixerHelp">AI suggests a layout; your choice always wins.</p></div>
@@ -404,12 +404,15 @@
                       <button type="button" data-embedded-preset="bottom-left">↙ <span>Bottom left</span></button>
                       <button type="button" data-embedded-preset="bottom-right">↘ <span>Bottom right</span></button>
                     </div>
-                    <div class="embedded-camera-sliders">
+                    <details class="embedded-precise-position" id="preciseEmbeddedPosition">
+                      <summary>Precise camera position</summary>
+                      <div class="embedded-camera-sliders">
                       <label><span>Horizontal position</span><input id="embeddedCameraX" type="range" min="0" max="94" step="1" value="70"><output id="embeddedCameraXOut">70%</output></label>
                       <label><span>Vertical position</span><input id="embeddedCameraY" type="range" min="0" max="94" step="1" value="5"><output id="embeddedCameraYOut">5%</output></label>
                       <label><span>Camera width</span><input id="embeddedCameraW" type="range" min="6" max="100" step="1" value="25"><output id="embeddedCameraWOut">25%</output></label>
                       <label><span>Camera height</span><input id="embeddedCameraH" type="range" min="6" max="100" step="1" value="30"><output id="embeddedCameraHOut">30%</output></label>
-                    </div>
+                      </div>
+                    </details>
                     <details class="embedded-content-focus">
                       <summary>Main screen focus</summary>
                       <p>Move the focus within the remaining camera-free screen area when the important content is off-center.</p>
@@ -417,10 +420,10 @@
                       <label><span>Vertical</span><input id="embeddedContentY" type="range" min="0" max="100" step="1" value="50"><output id="embeddedContentYOut">50%</output></label>
                     </details>
                     <div class="embedded-camera-actions">
-                      <button class="button primary" id="saveEmbeddedCamera" type="button">Save and use layout</button>
-                      <button class="button ghost" id="disableEmbeddedCamera" type="button">Disable embedded camera</button>
+                      <button class="button primary" id="saveEmbeddedCamera" type="button">Use camera layout</button>
+                      <button class="button ghost" id="disableEmbeddedCamera" type="button">Show original frame</button>
                     </div>
-                    <p class="embedded-camera-note">Move or resize the camera frame, then save. Camera fills the top 30%; the camera-free screen fills the bottom 70%.</p>
+                    <p class="embedded-camera-note">Drag the box onto your camera; drag its corner to resize. Changes preview immediately and save automatically. Camera: top 30% · screen: bottom 70%.</p>
                   </div>
                 </div>
               </section>
@@ -442,12 +445,17 @@
                 <fieldset class="source-layout-fieldset">
                   <legend>2. Choose what appears · saves immediately</legend>
                   <div class="source-layout-choices" id="sourceLayoutChoices">
-                    <button type="button" data-layout="auto"><i>AI</i><span>AI choice</span></button>
+                    <button type="button" data-layout="stacked" class="active" aria-pressed="true"><i>▰</i><span>Camera + screen</span></button>
                     <button type="button" data-layout="screen"><i>▣</i><span>Screen only</span></button>
                     <button type="button" data-layout="camera"><i>●</i><span>Camera only</span></button>
-                    <button type="button" data-layout="stacked" class="active" aria-pressed="true"><i>▰</i><span>Stacked</span></button>
-                    <button type="button" data-layout="side_by_side"><i>▥</i><span>Side by side</span></button>
-                    <button type="button" data-layout="pip"><i>◩</i><span>Picture in picture</span></button>
+                    <details class="more-source-layouts" id="moreSourceLayouts">
+                      <summary>More layouts</summary>
+                      <div class="layout-secondary-choices">
+                        <button type="button" data-layout="side_by_side"><i>▥</i><span>Side by side</span></button>
+                        <button type="button" data-layout="pip"><i>◩</i><span>Picture in picture</span></button>
+                        <button type="button" data-layout="auto"><i>AI</i><span>Style default</span></button>
+                      </div>
+                    </details>
                   </div>
                 </fieldset>
                 <div class="source-mixer-actions">
@@ -519,7 +527,7 @@
                 <label><span data-i18n="zoom">Zoom</span><input id="cropZoom" type="range" min="100" max="220" value="100"></label>
                 <button class="button ghost" id="resetCrop" data-i18n="resetFraming">Reset framing</button>
                 <details class="layout-default-disclosure"><summary>Next Director build default</summary><label><span>Default layout <small class="rebuild-chip" data-rebuild-chip>Draft rebuild</small></span><select id="layoutSelect"><option value="auto" data-i18n="auto">Automatic</option><option value="A">A only</option><option value="B">B only</option><option value="stacked" data-i18n="stacked">Stacked</option><option value="side_by_side" data-i18n="sideBySide">Side by side</option><option value="pip">Picture in Picture</option><option value="embedded_stack" data-i18n="embeddedCamera">Screen + embedded camera</option></select></label></details>
-                <p class="embedded-crop-help" id="embeddedCropHelp" hidden>Camera + screen layout is active here. Use the camera area and Main screen focus controls above, then apply the layout. General source crop controls do not affect this composition.</p>
+                <p class="embedded-crop-help" id="embeddedCropHelp" hidden>Camera + screen layout is active here. Use the camera area and Main screen focus controls above; changes save automatically. General source crop controls do not affect this composition.</p>
                 <div class="camera-detection" id="cameraDetection" hidden><b data-i18n="cameraFound">Camera window found</b><p data-i18n="cameraFoundHelp">A stable face area was found. Confirm it before using this composition.</p><button class="button ghost compact" id="useEmbeddedCamera" data-i18n="useLayout">Use layout</button></div>
               </div>
             </details>
@@ -736,6 +744,6 @@
       <footer class="connection-actions"><button class="button ghost" id="forgetCloudKey" type="button">Forget session key</button><button class="button primary" id="saveAIConnection" type="submit">Use this connection</button></footer>
     </form>
   </dialog>
-  <script type="module" src="/assets/app.js?v=1.1-beta-2"></script>
+  <script type="module" src="/assets/app.js?v=1.1-beta-3"></script>
 </body>
 </html>

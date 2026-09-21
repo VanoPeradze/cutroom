@@ -13,8 +13,10 @@ function element() {
   return {
     value: '', dataset: {}, src: '', currentTime: 0, paused: true, hidden: false,
     style: {setProperty(key, value) { this[key] = value; }},
-    classList: {add(...items) {items.forEach(item => classes.add(item));}, remove(...items) {items.forEach(item => classes.delete(item));}, contains: item => classes.has(item)},
-    querySelector: () => ({}), addEventListener() {}, load() {},
+    classList: {add(...items) {items.forEach(item => classes.add(item));}, remove(...items) {items.forEach(item => classes.delete(item));}, contains: item => classes.has(item),
+      toggle(item, force) { const enabled = force ?? !classes.has(item); if (enabled) classes.add(item); else classes.delete(item); return enabled; }},
+    listeners: {}, querySelector: () => ({}), querySelectorAll: () => [],
+    addEventListener(name, listener) {(this.listeners[name] ||= []).push(listener);}, load() {},
     pause() {this.paused = true;}, play() {this.paused = false; return Promise.resolve();},
     removeAttribute(key) {this[key] = '';},
   };
@@ -42,6 +44,170 @@ function app() {
 }
 
 const plain = value => JSON.parse(JSON.stringify(value));
+
+function embeddedEditingApp() {
+  const harness = app();
+  harness.run(`
+    for (const id of ['embeddedCameraEditor','embeddedCameraCanvas','embeddedCameraRect','embeddedCameraState','embeddedCameraHelp',
+      'embeddedCameraXOut','embeddedCameraYOut','embeddedCameraWOut','embeddedCameraHOut','embeddedContentXOut','embeddedContentYOut',
+      'embeddedCameraPresets','saveEmbeddedCamera','disableEmbeddedCamera']) elements[id] = element();
+    globalThis.savedCalls = []; globalThis.saveResolvers = []; globalThis.notifications = [];
+    globalThis.timers = new Map(); globalThis.timerId = 0;
+    setTimeout = callback => { const id=++timerId; timers.set(id,callback); return id; };
+    clearTimeout = id => timers.delete(id);
+    toast = message => notifications.push(message);
+    applyManualEdit = async (action, detail) => {
+      savedCalls.push({ action, ...detail });
+      state.manualEditBusy = true;
+      renderEmbeddedCameraEditor();
+      const saved = await new Promise(resolve => saveResolvers.push(resolve));
+      state.manualEditBusy = false;
+      if (!saved) return null;
+      state.project.manual.embedded_camera = { x:detail.x, y:detail.y, w:detail.w, h:detail.h,
+        content_focus:{x:detail.content_x,y:detail.content_y} };
+      state.project.settings.layout = state.project.draft.layout = 'embedded_stack';
+      state.project.draft.embedded_layout_confirmed = true;
+      state.project.draft.camera_plan=[{start:0,end:20,camera:'embedded_stack'}];
+      renderEmbeddedCameraEditor();
+      return state.project;
+    };
+    renderEmbeddedCameraEditor();
+    setupPreviewSources();
+    bindEmbeddedCameraEditorEvents();
+  `);
+  return harness;
+}
+
+test('opening camera controls does not activate or save a suggested/default rectangle', () => {
+  const {run} = embeddedEditingApp();
+  run(`delete state.project.manual.embedded_camera; state.project.draft.embedded_layout_confirmed=false;
+    state.project.draft.layout='A'; state.project.draft.camera_plan=[{start:0,end:20,camera:'A'}];
+    renderEmbeddedCameraEditor(); setupPreviewSources(); syncSecondaryPreview(2);`);
+  assert.equal(run('savedCalls.length'), 0);
+  assert.equal(run('timers.size'), 0);
+  assert.equal(run('embeddedLayoutConfirmed()'), false);
+  assert.equal(run('elements.previewB.src'), '');
+  assert.equal(run('elements.saveEmbeddedCamera.hidden'), false);
+});
+
+test('camera input changes the main composition immediately and coalesces changes before saving', async () => {
+  const {run} = embeddedEditingApp();
+  run(`state.project.draft.embedded_layout_confirmed=false; state.project.draft.layout='A';
+    state.project.draft.camera_plan=[{start:0,end:20,camera:'A'}]; setupPreviewSources();
+    elements.embeddedCameraH.value='20'; elements.embeddedCameraH.listeners.input[0]();`);
+  assert.equal(run('savedCalls.length'), 0);
+  assert.equal(run('elements.previewStage.classList.contains("layout-embedded_stack")'), true);
+  assert.equal(run('elements.previewB.src'), '/a.mp4');
+  assert.equal(run('elements.previewB.muted'), true);
+  assert.equal(run('state.project.manual.embedded_camera.h'), .3, 'Only the preview changes before persistence');
+  assert.equal(run('elements.embeddedCameraState.textContent'), 'Saving…');
+  const first = run('elements.previewA.style.top');
+  run(`elements.embeddedCameraH.value='25'; elements.embeddedCameraH.listeners.input[0]();`);
+  assert.notEqual(run('elements.previewA.style.top'), first);
+  assert.equal(run('timers.size'), 1);
+  const completion = run('flushEmbeddedCameraSave()');
+  await Promise.resolve();
+  assert.equal(run('savedCalls.length'), 1);
+  assert.equal(run('savedCalls[0].h'), .25);
+  run('saveResolvers.shift()(true)');
+  assert.equal(await completion, true);
+  assert.equal(run('elements.embeddedCameraState.textContent'), 'Saved');
+  assert.equal(run('elements.saveEmbeddedCamera.hidden'), true);
+});
+
+test('camera controls remain responsive during saving and old replies preserve newer geometry', async () => {
+  const {run} = embeddedEditingApp();
+  run(`elements.embeddedCameraH.value='20'; elements.embeddedCameraH.listeners.input[0]();`);
+  const completion = run('flushEmbeddedCameraSave()');
+  await Promise.resolve();
+  assert.equal(run('elements.embeddedCameraH.disabled'), false);
+  run(`elements.embeddedCameraH.value='25'; elements.embeddedCameraH.listeners.input[0]();
+    elements.embeddedContentY.value='90'; elements.embeddedContentY.listeners.input[0]();`);
+  assert.equal(run('savedCalls.length'), 1, 'Never send concurrent camera edits');
+  run('saveResolvers.shift()(true)');
+  await Promise.resolve(); await Promise.resolve();
+  assert.equal(run('savedCalls.length'), 2);
+  assert.equal(run('savedCalls[1].h'), .25);
+  assert.equal(run('savedCalls[1].content_y'), .9);
+  assert.equal(run('elements.embeddedCameraH.value'), '25');
+  assert.equal(run('embeddedCameraPreviewCandidate().content_focus.y'), .9);
+  assert.equal(run('state.embeddedEditor.dirty'), true);
+  run('saveResolvers.shift()(true)');
+  assert.equal(await completion, true);
+  assert.equal(run('state.project.manual.embedded_camera.h'), .25);
+  assert.equal(run('state.embeddedEditor.dirty'), false);
+});
+
+test('failed camera saves retain the preview and offer a retry that saves the latest geometry', async () => {
+  const {run} = embeddedEditingApp();
+  run(`elements.embeddedCameraH.value='24'; queueEmbeddedCameraSave();`);
+  const failed = run('flushEmbeddedCameraSave()');
+  await Promise.resolve(); run('saveResolvers.shift()(false)');
+  assert.equal(await failed, false);
+  assert.equal(run('elements.embeddedCameraState.textContent'), 'Save failed — retry');
+  assert.equal(run('elements.saveEmbeddedCamera.hidden'), false);
+  assert.equal(run('elements.saveEmbeddedCamera.textContent'), 'Retry save');
+  assert.equal(run('embeddedCameraPreviewCandidate().h'), .24);
+  const retry = run('saveEmbeddedCameraSelection()');
+  await Promise.resolve(); run('saveResolvers.shift()(true)');
+  assert.equal(await retry, true);
+  assert.equal(run('elements.embeddedCameraState.textContent'), 'Saved');
+});
+
+test('live camera edits preserve per-clip screen framing before and after saving', async () => {
+  const {run} = embeddedEditingApp();
+  run(`editedClipCrop = () => ({ x:1, y:0 });
+    elements.embeddedCameraH.value='20'; elements.embeddedContentX.value='0'; elements.embeddedContentY.value='100';
+    queueEmbeddedCameraSave();`);
+  const preview = plain(run('elements.previewA.style'));
+  const completion = run('flushEmbeddedCameraSave()');
+  await Promise.resolve(); run('saveResolvers.shift()(true)');
+  assert.equal(await completion, true);
+  assert.deepEqual(plain(run('elements.previewA.style')), preview,
+    'Persisting global camera geometry must not change the selected clip framing');
+});
+
+test('pending geometry cannot carry across a project view, source replacement, or added source B', async () => {
+  for (const change of [`state.project.id='other'`, `state.projectViewToken++`,
+    `state.project.sources.A.generation='replacement'`, `state.project.sources.B={url:'/b.mp4'}`]) {
+    const {run} = embeddedEditingApp();
+    run(`elements.embeddedCameraH.value='20'; queueEmbeddedCameraSave(); ${change};`);
+    assert.equal(run('liveEmbeddedCameraRequest()'), null);
+    assert.equal(await run('flushEmbeddedCameraSave()'), true);
+    run('renderEmbeddedCameraEditor()');
+    assert.equal(run('state.embeddedEditor.dirty'), false);
+    assert.equal(run('timers.size'), 0);
+    assert.equal(run('savedCalls.length'), 0);
+  }
+});
+
+test('another manual edit is awaited before persisting the latest embedded geometry', async () => {
+  const {run} = embeddedEditingApp();
+  run(`elements.embeddedCameraH.value='20'; queueEmbeddedCameraSave();
+    state.manualEditBusy=true; state.manualEditPromise=new Promise(resolve=>globalThis.finishOther=resolve);`);
+  const completion = run('flushEmbeddedCameraSave()');
+  await Promise.resolve();
+  assert.equal(run('savedCalls.length'), 0);
+  run('state.manualEditBusy=false; finishOther(); state.manualEditPromise=null;');
+  await Promise.resolve(); await Promise.resolve();
+  assert.equal(run('savedCalls.length'), 1);
+  run('saveResolvers.shift()(true)');
+  assert.equal(await completion, true);
+});
+
+test('queued A/B layout previews only its selected range and rolls back after a failed save', async () => {
+  const {run} = twoSourceComposition();
+  run(`state.project.draft.camera_plan=[{start:0,end:20,camera:'stacked'}];
+    state.manualSelection={start:5,end:10}; state.sourceMixerPreviewLayout=null; state.sourceMixerLayout='pip';
+    rangeInputPending=()=>false; layoutRangeEditable=()=>true; renderSourceMixer=()=>{}; syncSecondaryPreview=()=>{};
+    applyManualEdit=()=>new Promise(resolve=>globalThis.finishLayout=resolve);`);
+  const completion = run(`applySourceLayout('selection')`);
+  assert.equal(run('cameraAt(7)'), 'pip');
+  assert.equal(run('cameraAt(12)'), 'stacked');
+  run('finishLayout(null)');
+  await completion;
+  assert.equal(run('cameraAt(7)'), 'stacked');
+});
 
 function twoSourceComposition() {
   const harness = app();
