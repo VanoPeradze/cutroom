@@ -6,7 +6,7 @@ CUTROOM is beta software. There is no published long-term support schedule or gu
 
 Do not disclose a suspected vulnerability in a public issue or pull request.
 
-Open this repository's [Security tab](https://github.com/VanoPeradze/cutroom/security). If GitHub shows **Report a vulnerability**, use that private reporting form. Its availability depends on the repository's settings; this policy does not imply that private vulnerability reporting is enabled.
+Use GitHub's [private vulnerability reporting form](https://github.com/VanoPeradze/cutroom/security/advisories/new). Private vulnerability reporting is enabled for this repository. A report is not an ordinary public issue.
 
 If that option is unavailable, contact the repository owner privately through an existing trusted contact channel and ask where to send the report. If you received a beta build directly, you can use the private channel through which it was shared. Do not post exploit details or sensitive attachments while arranging contact.
 

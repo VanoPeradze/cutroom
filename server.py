@@ -27,7 +27,7 @@ from werkzeug.exceptions import BadRequest, HTTPException, RequestEntityTooLarge
 
 from cutroom import __version__, __version_label__
 from cutroom.config import ROOT, Settings, load_settings
-from cutroom.ai_runtime import AIRuntime, ollama_environment, resolve_ollama_executable
+from cutroom.ai_runtime import AIRuntime, ollama_environment, resolve_ollama_executable, open_ollama, read_ollama_json
 from cutroom.director import analyze_project, refine_project
 from cutroom.edit_styles import UnknownEditStyle, get_edit_style, public_edit_styles
 from cutroom.editing import ManualEditError, apply_manual_edit, strip_private_edit_history
@@ -760,6 +760,12 @@ def create_app(settings: Settings | None = None) -> Flask:
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"
         response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; "
+            "object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
+        )
+        response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
         response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
         response.headers["Cache-Control"] = "no-store" if request.path.startswith("/api/") else "public, max-age=300"
         return response
@@ -1951,8 +1957,8 @@ def _http_server_url(host: str, port: int) -> str:
 def _ollama_status(settings: Settings) -> dict[str, Any]:
     endpoint = str(settings.ai.get("ollama_url", "http://127.0.0.1:11434")).rstrip("/") + "/api/tags"
     try:
-        with urllib.request.urlopen(endpoint, timeout=2) as response:
-            payload = json.loads(response.read().decode("utf-8"))
+        with open_ollama(endpoint, timeout=2) as response:
+            payload = read_ollama_json(response, 2 * 1024 * 1024)
         return {"available": True, "models": [model.get("name") for model in payload.get("models", [])]}
     except Exception:
         return {"available": False, "models": []}

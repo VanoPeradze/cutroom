@@ -170,6 +170,20 @@ def test_instance_identity_endpoint_is_small_and_does_not_run_dependency_probes(
     }
 
 
+@pytest.mark.parametrize("path", ["/", "/api/instance", "/missing-resource"])
+def test_browser_security_headers_cover_pages_api_and_errors(app, path):
+    response = app.test_client().get(path)
+    assert response.headers["X-Content-Type-Options"] == "nosniff"
+    assert response.headers["X-Frame-Options"] == "DENY"
+    assert response.headers["Referrer-Policy"] == "no-referrer"
+    assert response.headers["Permissions-Policy"] == "camera=(), microphone=(), geolocation=()"
+    policy = response.headers["Content-Security-Policy"]
+    for directive in ("script-src 'self'", "connect-src 'self'", "frame-ancestors 'none'", "object-src 'none'"):
+        assert directive in policy.split("; ")
+    assert "unsafe-eval" not in policy
+    response.close()
+
+
 def test_system_endpoint_publishes_the_embedded_camera_detector_contract(
     app, monkeypatch: pytest.MonkeyPatch,
 ):

@@ -36,7 +36,7 @@ def _capture_requests(monkeypatch, *, retry=False):
         def __exit__(self, *_args):
             return False
 
-        def read(self):
+        def read(self, limit):
             content = '{"ok":' if retry and len(bodies) == 1 else '{"ok": true}'
             return json.dumps({"message": {"content": content}, "done_reason": "stop"}).encode()
 
@@ -44,7 +44,7 @@ def _capture_requests(monkeypatch, *, retry=False):
         bodies.append(json.loads(request.data.decode("utf-8")))
         return Response()
 
-    monkeypatch.setattr(intelligence.urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(intelligence, "open_ollama", fake_urlopen)
     return bodies
 
 

@@ -137,7 +137,7 @@ def test_story_requests_disable_thinking_to_preserve_json_budget(monkeypatch):
         def __exit__(self, *_args):
             return False
 
-        def read(self):
+        def read(self, limit):
             return json.dumps({"message": {"content": '{"ok": true}'}, "done_reason": "stop"}).encode()
 
     def fake_urlopen(request, timeout=0):
@@ -148,7 +148,7 @@ def test_story_requests_disable_thinking_to_preserve_json_budget(monkeypatch):
     class DummySettings:
         ai = {"ollama_url": "http://127.0.0.1:11434"}
 
-    monkeypatch.setattr(intelligence.urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(intelligence, "open_ollama", fake_urlopen)
     result = intelligence._call_ollama_strict(
         DummySettings(),
         {"model": "qwen3.5:4b", "stream": False, "format": "json", "messages": []},
@@ -175,8 +175,11 @@ def test_cancellable_story_request_streams_and_reassembles_structured_json(monke
         def __exit__(self, *_args):
             return False
 
-        def __iter__(self):
-            return iter([json.dumps(chunk).encode("utf-8") + b"\n" for chunk in chunks])
+        def __init__(self):
+            self.lines = iter([json.dumps(chunk).encode("utf-8") + b"\n" for chunk in chunks])
+
+        def readline(self, limit):
+            return next(self.lines, b"")
 
     def fake_urlopen(request, timeout=0):
         captured["body"] = json.loads(request.data.decode("utf-8"))
@@ -186,7 +189,7 @@ def test_cancellable_story_request_streams_and_reassembles_structured_json(monke
     class DummySettings:
         ai = {"ollama_url": "http://127.0.0.1:11434"}
 
-    monkeypatch.setattr(intelligence.urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(intelligence, "open_ollama", fake_urlopen)
     result = intelligence._call_ollama_strict(
         DummySettings(),
         {"model": "qwen3.5:4b", "stream": False, "format": "json", "messages": []},
@@ -214,10 +217,15 @@ def test_cancellable_story_request_closes_stream_when_cancelled(monkeypatch):
             state["closed"] = True
             return False
 
-        def __iter__(self):
-            for content in ("{", "\"ok\":true}"):
-                state["chunks"] += 1
-                yield json.dumps({"message": {"content": content}, "done": False}).encode("utf-8") + b"\n"
+        def __init__(self):
+            self.contents = iter(("{", "\"ok\":true}"))
+
+        def readline(self, limit):
+            content = next(self.contents, None)
+            if content is None:
+                return b""
+            state["chunks"] += 1
+            return json.dumps({"message": {"content": content}, "done": False}).encode("utf-8") + b"\n"
 
     class DummySettings:
         ai = {"ollama_url": "http://127.0.0.1:11434"}
@@ -226,7 +234,7 @@ def test_cancellable_story_request_closes_stream_when_cancelled(monkeypatch):
         if state["chunks"]:
             raise Cancelled("stop now")
 
-    monkeypatch.setattr(intelligence.urllib.request, "urlopen", lambda *_args, **_kwargs: Response())
+    monkeypatch.setattr(intelligence, "open_ollama", lambda *_args, **_kwargs: Response())
     with pytest.raises(Cancelled, match="stop now"):
         intelligence._call_ollama_strict(
             DummySettings(),
@@ -255,11 +263,10 @@ def test_cancellable_story_request_does_not_wait_for_next_stream_chunk(monkeypat
             self.close()
             return False
 
-        def __iter__(self):
+        def readline(self, limit):
             while not state["closed"]:
                 released.wait(0.05)
-            return
-            yield b""  # Keep this method an iterator without emitting a chunk.
+            return b""
 
         def close(self):
             state["closed"] = True
@@ -273,7 +280,7 @@ def test_cancellable_story_request_does_not_wait_for_next_stream_chunk(monkeypat
         if state["checks"] >= 4:
             raise Cancelled("cancel between chunks")
 
-    monkeypatch.setattr(intelligence.urllib.request, "urlopen", lambda *_args, **_kwargs: Response())
+    monkeypatch.setattr(intelligence, "open_ollama", lambda *_args, **_kwargs: Response())
     with pytest.raises(Cancelled, match="between chunks"):
         intelligence._call_ollama_strict(
             DummySettings(),
@@ -294,7 +301,7 @@ def test_empty_thinking_only_response_has_actionable_error(monkeypatch):
         def __exit__(self, *_args):
             return False
 
-        def read(self):
+        def read(self, limit):
             return json.dumps({
                 "message": {"content": "", "thinking": "reasoning consumed the budget"},
                 "done_reason": "length",
@@ -303,7 +310,7 @@ def test_empty_thinking_only_response_has_actionable_error(monkeypatch):
     class DummySettings:
         ai = {"ollama_url": "http://127.0.0.1:11434"}
 
-    monkeypatch.setattr(intelligence.urllib.request, "urlopen", lambda *_args, **_kwargs: Response())
+    monkeypatch.setattr(intelligence, "open_ollama", lambda *_args, **_kwargs: Response())
     with pytest.raises(intelligence.StoryPlanningError, match="output budget"):
         intelligence._call_ollama_strict(
             DummySettings(),
@@ -330,7 +337,7 @@ def test_truncated_story_json_retries_once_with_a_larger_budget(monkeypatch):
         def __exit__(self, *_args):
             return False
 
-        def read(self):
+        def read(self, limit):
             return json.dumps(self.payload).encode()
 
     def fake_urlopen(request, timeout=0):
@@ -340,7 +347,7 @@ def test_truncated_story_json_retries_once_with_a_larger_budget(monkeypatch):
     class DummySettings:
         ai = {"ollama_url": "http://127.0.0.1:11434"}
 
-    monkeypatch.setattr(intelligence.urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(intelligence, "open_ollama", fake_urlopen)
     result = intelligence._call_ollama_strict(
         DummySettings(),
         {

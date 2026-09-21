@@ -220,8 +220,10 @@ def test_probe_uses_tags_only_no_redirect_and_no_local_proxy(settings, monkeypat
     runtime = ai_runtime.AIRuntime(settings)
     assert runtime.ensure_ready()["models"] == ["qwen3.5:4b"]
     opener.open.assert_called_once_with("http://127.0.0.1:11434/api/tags", timeout=1.0)
-    proxy, redirect = build.call_args.args
+    proxy, redirect, http_handler, https_handler = build.call_args.args
     assert proxy.proxies == {}
+    assert isinstance(http_handler, ai_runtime.urllib.request.HTTPHandler)
+    assert isinstance(https_handler, ai_runtime.urllib.request.HTTPSHandler)
     assert redirect.redirect_request(None, None, 302, "redirect", {}, "http://remote.test") is None
 
 

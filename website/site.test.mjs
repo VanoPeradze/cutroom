@@ -1,8 +1,9 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
+import {readFileSync, readdirSync} from 'node:fs';
 
 const html = readFileSync(new URL('./public/index.html', import.meta.url), 'utf8');
+const privacy = readFileSync(new URL('./public/privacy.html', import.meta.url), 'utf8');
 const repository = 'https://github.com/VanoPeradze/cutroom';
 
 function region(tag, id) {
@@ -62,4 +63,47 @@ test('download instructions identify the single launcher and simple folder layou
   assert.match(html, /Just three items: START CUTROOM\.bat/);
   assert.match(html, /START HERE\.html for help, and App for technical files/);
   assert.doesNotMatch(html, /Double-click run_windows\.bat/);
+});
+
+test('the footer links to a privacy notice with readable English and Hebrew sections', () => {
+  const links = linksTo(region('footer'), '/privacy.html');
+  assert.equal(links.length, 1);
+  assertLocalized(links[0]);
+  for (const [id, language, direction] of [['english', 'en', 'ltr'], ['hebrew', 'he', 'rtl']]) {
+    assert.match(privacy, new RegExp(`<section id="${id}" lang="${language}" dir="${direction}"`));
+    assert.equal(linksTo(privacy, `#${id}`).length, 2);
+  }
+  assert.doesNotMatch(privacy, /<script\b|\bhidden\b/i, 'Both languages must be readable without scripts');
+  assert.equal(linksTo(privacy, '/?lang=he').length, 2);
+});
+
+test('the notice distinguishes hosting, local editing and optional cloud processing', () => {
+  assert.match(privacy, /website's own code does not set or read cookies/);
+  assert.match(privacy, /hosting or security providers can never use essential cookies/);
+  assert.match(privacy, /IP address, requested URL, request time and browser information/);
+  assert.match(privacy, /Visiting this website does not upload your recordings/);
+  assert.match(privacy, /If you choose and confirm cloud AI/);
+  assert.equal(linksTo(privacy, 'https://expo.dev/privacy').length, 2);
+  assert.doesNotMatch(privacy, /href="[^"]*\/issues\b/i, 'Privacy requests must not be sent to public issues');
+  assert.match(privacy, /trusted private channel/);
+  assert.match(privacy, /No dedicated privacy email or private contact form is currently published/);
+});
+
+test('website resources remain local with no tracking or browser-storage APIs', () => {
+  const publicRoot = new URL('./public/', import.meta.url);
+  for (const filename of readdirSync(publicRoot, {recursive: true}).filter(name => /\.(?:html|css|js)$/.test(name))) {
+    const source = readFileSync(new URL(filename.replaceAll('\\', '/'), publicRoot), 'utf8');
+    if (filename.endsWith('.html')) {
+      assert.doesNotMatch(source, /<(?:iframe|object|embed|form)\b|\b(?:srcset|ping)\s*=/i, filename);
+      for (const tag of source.matchAll(/<(?:script|img|link)\b[^>]*>/gi)) {
+        if (/<link\b/i.test(tag[0]) && /rel="canonical"/i.test(tag[0])) continue;
+        const url = tag[0].match(/\b(?:src|href)="([^"]+)"/i)?.[1];
+        assert.ok(url && (/^\/(?!\/)/.test(url) || url.startsWith('data:image/')), `Unexpected resource in ${filename}: ${tag[0]}`);
+      }
+    } else if (filename.endsWith('.css')) {
+      assert.doesNotMatch(source, /@import\b|url\(\s*["']?(?:https?:)?\/\//i, filename);
+    } else {
+      assert.doesNotMatch(source, /document\s*\.\s*cookie\b|\bcookieStore\b|\blocalStorage\b|\bsessionStorage\b|\bindexedDB\b|\bsendBeacon\b|\bfetch\s*\(|\bXMLHttpRequest\b|\bWebSocket\b|\bEventSource\b|\bserviceWorker\b/, filename);
+    }
+  }
 });

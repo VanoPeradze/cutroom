@@ -13,6 +13,7 @@ from difflib import SequenceMatcher
 from typing import Any, Callable
 
 from .cache_keys import stable_fingerprint
+from .ai_runtime import OLLAMA_RESPONSE_BYTES, open_ollama, read_ollama_json
 from .config import Settings
 from .utils import clamp, merge_ranges, normalize_text, range_duration
 
@@ -458,8 +459,8 @@ def _check_cancelled(cancel_check: Callable[[], None] | None) -> None:
 def _ollama_inventory(settings: Settings) -> tuple[bool, set[str]]:
     try:
         tags_endpoint = str(settings.ai.get("ollama_url", "http://127.0.0.1:11434")).rstrip("/") + "/api/tags"
-        with urllib.request.urlopen(tags_endpoint, timeout=2) as response:
-            payload = json.loads(response.read().decode("utf-8"))
+        with open_ollama(tags_endpoint, timeout=2) as response:
+            payload = read_ollama_json(response, 2 * 1024 * 1024)
         models = {
             str(item.get("name", "")).removesuffix(":latest")
             for item in payload.get("models", [])
@@ -555,8 +556,8 @@ def _call_ollama(settings: Settings, payload: dict[str, Any], timeout: int = 180
     clean_payload.setdefault("think", False)
     request = urllib.request.Request(endpoint, data=json.dumps(clean_payload).encode("utf-8"), headers={"Content-Type": "application/json"}, method="POST")
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            body = json.loads(response.read().decode("utf-8"))
+        with open_ollama(request, timeout=timeout) as response:
+            body = read_ollama_json(response)
         content = body.get("message", {}).get("content", "{}")
         parsed = json.loads(content)
         return parsed if isinstance(parsed, dict) else None
@@ -573,21 +574,34 @@ def _read_ollama_chat_response(
     """Read one Ollama chat response while keeping streamed work cancellable."""
 
     if not streaming:
-        return json.loads(response.read().decode("utf-8"))
+        return read_ollama_json(response)
 
-    line_queue: queue.Queue[tuple[str, Any]] = queue.Queue()
+    line_queue: queue.Queue[tuple[str, Any]] = queue.Queue(maxsize=8)
     stop_reader = threading.Event()
+
+    def enqueue(event, value):
+        while not stop_reader.is_set():
+            try:
+                line_queue.put((event, value), timeout=0.1)
+                return
+            except queue.Full:
+                continue
 
     def read_lines() -> None:
         try:
-            for raw_line in response:
-                if stop_reader.is_set():
+            total = 0
+            while not stop_reader.is_set():
+                raw_line = response.readline(256 * 1024 + 1)
+                if not raw_line:
                     break
-                line_queue.put(("line", raw_line))
+                total += len(raw_line)
+                if len(raw_line) > 256 * 1024 or total > OLLAMA_RESPONSE_BYTES:
+                    raise StoryPlanningError("Local AI returned an oversized streamed response.")
+                enqueue("line", raw_line)
         except BaseException as exc:  # Re-raised on the owning job thread below.
-            line_queue.put(("error", exc))
+            enqueue("error", exc)
         else:
-            line_queue.put(("done", None))
+            enqueue("done", None)
 
     reader = threading.Thread(target=read_lines, name="cutroom-ollama-stream", daemon=True)
     reader.start()
@@ -635,6 +649,9 @@ def _read_ollama_chat_response(
         stop_reader.set()
         if reader.is_alive():
             try:
+                abort = getattr(response, "cutroom_abort", None)
+                if abort:
+                    abort()
                 response.close()
             except OSError:
                 pass
@@ -758,7 +775,7 @@ def _call_ollama_strict(
             method="POST",
         )
         try:
-            with urllib.request.urlopen(request, timeout=timeout) as response:
+            with open_ollama(request, timeout=timeout) as response:
                 body = _read_ollama_chat_response(
                     response,
                     streaming=streaming,
@@ -766,6 +783,8 @@ def _call_ollama_strict(
                 )
         except urllib.error.HTTPError as exc:
             raise StoryAIUnavailableError(f"Story AI returned HTTP {exc.code}.") from exc
+        except ValueError as exc:
+            raise StoryAIUnavailableError("Local AI rejected its endpoint or response. Use a loopback Ollama address.") from exc
         except (OSError, urllib.error.URLError, TimeoutError) as exc:
             raise StoryAIUnavailableError(f"Story AI could not complete the request: {exc}") from exc
         last_message = body.get("message", {}) if isinstance(body.get("message"), dict) else {}

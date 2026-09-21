@@ -38,7 +38,7 @@ def settings(tmp_path, monkeypatch):
 def test_inventory_reads_files_without_network_or_inference(settings, monkeypatch):
     _speech_files(local_models.speech_cache_dir())
     monkeypatch.setattr(local_models, "_dependency_available", lambda _name: True)
-    monkeypatch.setattr(server.urllib.request, "urlopen", lambda *_a, **_k: pytest.fail("Inventory contacted a server"))
+    monkeypatch.setattr(server, "open_ollama", lambda *_a, **_k: pytest.fail("Inventory contacted a server"))
     monkeypatch.setattr(local_models.subprocess, "Popen", lambda *_a, **_k: pytest.fail("Inventory launched a process"))
     result = local_models.catalog(settings, {"state": "idle", "models": []}, engine_installed=False)
     rows = {row["model"]: row for row in result["models"]}
@@ -210,7 +210,7 @@ def app(settings, monkeypatch):
 
 
 def test_catalog_api_is_read_only_and_includes_global_download_jobs(app, monkeypatch):
-    monkeypatch.setattr(server.urllib.request, "urlopen", lambda *_a, **_k: pytest.fail("Network on inventory"))
+    monkeypatch.setattr(server, "open_ollama", lambda *_a, **_k: pytest.fail("Network on inventory"))
     client = app.test_client()
     result = client.get("/api/models/local")
     assert result.status_code == 200
