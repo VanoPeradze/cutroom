@@ -35,6 +35,10 @@ public CUTROOM repository. The legacy `PUBLISH.bat git` commands still require a
 private target and reject this public repository; keep that guard intact. See the
 [publishing guide](../docs/PUBLISHING.md) for the source and packaging workflow.
 
+The `master` branch is protected. Push a feature branch and open a pull request;
+repository checks, dependency audit and CodeQL must pass before merging. Direct
+pushes, force pushes and branch deletion are blocked, including for administrators.
+
 Install Node.js 22 or newer and sign in to the owning Expo account using its official CLI:
 
 ```sh
@@ -77,7 +81,7 @@ The ZIP is downloaded from the existing public Expo website. If that site is una
 provide the already-approved local archive instead:
 
 ```sh
-node prepare-download.mjs ../dist/CUTROOM-1.1-beta-20260921-130718.zip
+node prepare-download.mjs ../dist/CUTROOM-1.1-beta-20260921-131424.zip
 ```
 
 An existing ZIP with the wrong checksum is rejected, not overwritten. Review and move it

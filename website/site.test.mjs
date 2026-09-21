@@ -20,7 +20,8 @@ function linksTo(markup, url) {
 
 function assertLocalized(link) {
   assert.match(link[0], /\bdata-he=["'][^"']*[\u0590-\u05ff][^"']*["']/);
-  assert.match(link[2].replace(/<[^>]+>/g, ''), /[A-Za-z]/, 'The default link text must be English');
+  // Assert visible text in this static fixture; this is not an HTML sanitizer.
+  assert.match(link[0], />[^<>]*[A-Za-z][^<>]*</, 'The default link text must be English');
 }
 
 test('repository links appear in navigation, download section, and footer', () => {

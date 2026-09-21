@@ -58,7 +58,9 @@ class Job:
             "status": self.status,
             "progress": round(self.progress, 3),
             "message": self.message,
-            "result": self.result,
+            # Failed jobs retain internal diagnostics, including tracebacks, but
+            # the polling API exposes only the user-facing error message.
+            "result": None if self.status == "failed" else self.result,
             "error": self.error,
             "created_at": self.created_at,
             "updated_at": self.updated_at,

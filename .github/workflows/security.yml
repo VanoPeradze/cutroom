@@ -2,7 +2,7 @@ name: Security checks
 
 on:
   push:
-    branches: [master, 'codex/**']
+    branches: [master]
   pull_request:
   schedule:
     - cron: '20 7 * * 1'
