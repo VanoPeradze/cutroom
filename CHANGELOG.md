@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1 Beta — 2026-09-22
+
+- Added one-click 16:9 Landscape and 9:16 Vertical controls at the top of the editor, including manual projects. Format changes preview immediately and save for export without AI, rebuilding, seeking or changing clips.
+
 ## 1.1 Beta — 2026-09-21
 
 - Kept explicitly selected embedded-camera layouts through AI drafting, refinement and rebuilds, including higher-quality analysis passes.

@@ -13,6 +13,10 @@
 .studio-workspace .studio-header > div:first-child { flex: 0 1 auto; min-width: 0; }
 .studio-workspace .studio-header-actions { flex-wrap: wrap; flex: 1 1 auto; gap: 6px; }
 .studio-workspace .studio-draft-status { margin-left: auto; }
+.quick-aspect { display: flex; flex-wrap: wrap; gap: 4px; }
+.quick-aspect button { min-height: 32px; padding: 5px 9px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface-chrome); color: var(--paper); font-size: 11px; cursor: pointer; }
+.quick-aspect button[aria-pressed="true"] { border-color: var(--cyan); color: var(--cyan-text); }
+@media (max-width: 700px) { .quick-aspect button span { display: none; } }
 .workspace-display-status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .preview-column { position: relative; }
 .studio-workspace .studio-preview-dock .preview-column { --monitor-controls-space: 52px; gap: 8px; }
