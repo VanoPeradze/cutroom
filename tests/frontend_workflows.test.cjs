@@ -225,6 +225,76 @@ test("frame rate is numeric, legacy-safe and synchronized in both export control
   assert.equal(run("selectedFrameRate('999')"), 30);
 });
 
+function aspectApp() {
+  const fixture = settingsApp();
+  fixture.run(`
+    globalThis.aspectButtons = ['16:9', '9:16'].map(aspect => ({dataset: {outputAspect: aspect},
+      setAttribute(key, value) { this[key] = value; }}));
+    elements.quickAspectChoices.querySelectorAll = () => aspectButtons;
+    state.project.manual = { crops: [{start: 1, end: 4, x: .3}] };
+    state.project.editor_sequence = { tracks: {A: [{id:'clip-1', start: 1, end: 4}]} };
+    state.framingDraft = { crop: {x:.3}, scope: {start:1,end:4} };
+    globalThis.beforeAspectEdit = JSON.stringify([state.project.manual, state.project.editor_sequence, state.framingDraft]);
+    foregroundBusy = () => false;
+    editorProject = () => state.project;
+    previewPlaybackTime = () => 3;
+    applyPreviewPipGeometry = () => {};
+    syncSecondaryPreview = time => { globalThis.aspectPreviewTime = time; };
+    renderSourceCompositionPreview = mixer => { if (!mixer) throw new Error('Missing source mixer'); };
+    applyFramingPreview = () => { throw new Error('Aspect must not stage a crop or seek'); };
+    globalThis.aspectRequests = [];
+    api = async (url, options) => {
+      const patch = JSON.parse(options.body);
+      aspectRequests.push(patch);
+      return {project: {...state.project, settings: {...state.project.settings, ...patch.settings}, revision: 1}};
+    };
+  `);
+  return fixture;
+}
+
+test("manual aspect buttons update immediately and save only output format, without AI or clip changes", async () => {
+  const {run} = aspectApp();
+  for (const aspect of ['16:9', '9:16']) {
+    run(`setOutputAspect('${aspect}')`);
+    assert.equal(run('elements.previewStage.dataset.aspect'), aspect);
+    assert.equal(run('aspectPreviewTime'), 3);
+    assert.equal(run(`aspectButtons.find(button => button.dataset.outputAspect === '${aspect}')['aria-pressed']`), 'true');
+    assert.equal(run('JSON.stringify([state.project.manual, state.project.editor_sequence, state.framingDraft])'), run('beforeAspectEdit'));
+    assert.equal(run('state.draftDirtyReasons.size'), 0);
+    assert.match(run('elements.studioDraftStatus.textContent'), new RegExp(aspect));
+    await run("flushProjectSaves('p')");
+    assert.equal(run('state.project.settings.aspect'), aspect);
+    assert.equal(run('JSON.stringify(aspectRequests.at(-1).settings)'), JSON.stringify({aspect}));
+    run('hydrateSettings()');
+    assert.equal(run('elements.aspectSelect.value'), aspect);
+  }
+});
+
+test("aspect dropdown uses the same no-rebuild output path", async () => {
+  const {run} = aspectApp();
+  run("bindEvents(); elements.aspectSelect.value = '1:1'; elements.aspectSelect.listeners.change();");
+  assert.equal(run('elements.previewStage.dataset.aspect'), '1:1');
+  assert.equal(run("aspectButtons.every(button => button['aria-pressed'] === 'false')"), true);
+  await run("flushProjectSaves('p')");
+  assert.equal(run('state.project.settings.aspect'), '1:1');
+});
+
+test("quick aspect changes reject invalid formats and cannot mutate a busy edit", () => {
+  const {run} = aspectApp();
+  run("setOutputAspect('invalid'); foregroundBusy = () => true; setOutputAspect('16:9');");
+  assert.equal(run('elements.aspectSelect.value'), '9:16');
+  assert.equal(run('state.saveQueues.size'), 0);
+});
+
+test("busy aspect dropdown restores the accepted pending format instead of leaking a rejected choice", async () => {
+  const {run} = aspectApp();
+  run("bindEvents(); setOutputAspect('16:9'); state.manualEditBusy = true; elements.aspectSelect.value = '9:16'; elements.aspectSelect.listeners.change();");
+  assert.equal(run('elements.aspectSelect.value'), '16:9');
+  assert.equal(run('elements.previewStage.dataset.aspect'), '16:9');
+  await run("flushProjectSaves('p')");
+  assert.equal(run('state.project.settings.aspect'), '16:9');
+});
+
 test("changing FPS in the export dialog persists without an AI rebuild", () => {
   const { run } = settingsApp();
   run(`bindEvents();

@@ -8,7 +8,7 @@
   <title>CUTROOM 1.1 Beta — Your editing workspace</title>
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/assets/styles.css?v=1.1-beta-3">
-  <link rel="stylesheet" href="/assets/workspace.css?v=1.1-beta-2">
+  <link rel="stylesheet" href="/assets/workspace.css?v=1.1-beta-3">
   <link rel="stylesheet" href="/assets/welcome.css?v=1.1-beta-1">
 </head>
 <body class="welcome-mode">
@@ -341,6 +341,10 @@
         <div class="advanced-header studio-header">
           <div><p class="eyebrow">CUTROOM STUDIO</p><h2>Your creative workspace</h2></div>
           <div class="studio-header-actions">
+            <div class="quick-aspect" id="quickAspectChoices" role="group" aria-label="Video format">
+              <button type="button" data-output-aspect="16:9" aria-pressed="false" title="Landscape video. Changes preview and export; keeps your edits. No AI required.">16:9 <span>Landscape</span></button>
+              <button type="button" data-output-aspect="9:16" aria-pressed="false" title="Vertical video. Changes preview and export; keeps your edits. No AI required.">9:16 <span>Vertical</span></button>
+            </div>
             <span class="studio-draft-status" id="studioDraftStatus"></span>
             <button class="button render compact" id="studioRenderButton"><span class="render-dot" aria-hidden="true"></span><span data-i18n="render">Export</span></button>
             <button class="button ghost compact" id="closeAdvanced" data-i18n="backToDirector">Project overview</button>
@@ -744,6 +748,6 @@
       <footer class="connection-actions"><button class="button ghost" id="forgetCloudKey" type="button">Forget session key</button><button class="button primary" id="saveAIConnection" type="submit">Use this connection</button></footer>
     </form>
   </dialog>
-  <script type="module" src="/assets/app.js?v=1.1-beta-3"></script>
+  <script type="module" src="/assets/app.js?v=1.1-beta-4"></script>
 </body>
 </html>

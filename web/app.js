@@ -125,7 +125,7 @@ function cacheElements() {
     "layoutScopeBadge", "layoutScopeHelp", "layoutCurrentScene", "layoutWholeEdit", "manualRange", "manualLayout",
     "layoutRangeForm", "layoutRangeStart", "layoutRangeEnd", "layoutRangeSubmit", "layoutRangeStatus",
     "timelineRangeForm", "timelineRangeStart", "timelineRangeEnd", "timelineRangeSubmit", "timelineRangeStatus",
-    "cameraDetection", "useEmbeddedCamera", "transcriptSearch", "transcriptList", "transcriptLanguage", "aspectSelect", "resolutionSelect",
+    "cameraDetection", "useEmbeddedCamera", "transcriptSearch", "transcriptList", "transcriptLanguage", "aspectSelect", "quickAspectChoices", "resolutionSelect",
     "transcriptFilter", "transcriptResults", "transcriptRemove", "transcriptRestore", "transcriptEditForm", "transcriptEditText", "transcriptEditTime", "transcriptEditStatus", "transcriptSave", "transcriptDiscard", "transcriptPrevious", "transcriptNext", "transcriptSaveAll",
     "keyboardProfile", "keyboardHelpProfile", "keyboardHelp", "keyboardDialog", "keyboardDescription", "keyboardLimitations", "keyboardShortcutList", "clipTrimForm", "clipTrimIn", "clipTrimOut", "clipTrimTitle", "clipTrimApply", "clipTrimStatus", "timelineTarget", "timelineTargetField", "trackReset", "trackHelp", "clipSourceIn", "clipSourceField", "clipMove",
     "qualitySelect", "fpsSelect", "fpsHelp", "exportFpsSelect", "exportFpsHelp", "exportFrameRateField", "autoReframe", "effectsToggle", "captionsToggle", "burnCaptionsToggle", "studioBurnCaptionsToggle", "captionControlStatus", "captionLanguageStatus",
@@ -521,7 +521,12 @@ function bindEvents() {
   elements.timelineZoomOut.addEventListener("click", () => { state.timeline.setZoom(state.timeline.zoom / 1.35); updateZoomLabel(); });
   elements.timelineZoomSelection.addEventListener("click", () => { state.timeline.zoomToSelection(); updateZoomLabel(); });
 
-  [elements.aspectSelect, elements.resolutionSelect, elements.qualitySelect, elements.fpsSelect, elements.autoReframe, elements.effectsToggle, elements.captionsToggle].forEach((control) => control.addEventListener("change", () => {
+  elements.quickAspectChoices.addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-output-aspect]");
+    if (button) setOutputAspect(button.dataset.outputAspect);
+  });
+  elements.aspectSelect.addEventListener("change", () => setOutputAspect(elements.aspectSelect.value));
+  [elements.resolutionSelect, elements.qualitySelect, elements.fpsSelect, elements.autoReframe, elements.effectsToggle, elements.captionsToggle].forEach((control) => control.addEventListener("change", () => {
     applyFramingPreview();
     if (control === elements.fpsSelect) updateFrameRateControls(elements.fpsSelect.value);
     const requiresRebuild = control === elements.autoReframe;
@@ -962,6 +967,7 @@ function hydrateSettings() {
     hydrateSourceMixerLayout();
   }
   elements.aspectSelect.value = optionExists(elements.aspectSelect, settings.aspect) ? settings.aspect : "9:16";
+  renderQuickAspectChoices();
   elements.resolutionSelect.value = settings.resolution || "1080";
   elements.qualitySelect.value = settings.quality || "balanced";
   updateFrameRateControls(settings.fps ?? 30);
@@ -4570,11 +4576,44 @@ async function rebuildDraftFromStudio() {
   await generateDraft();
 }
 
+function renderQuickAspectChoices() {
+  if (!elements.quickAspectChoices) return;
+  const selected = elements.aspectSelect.value;
+  const aspect = selected === "source" ? sourceAspect() : selected;
+  $$('button[data-output-aspect]', elements.quickAspectChoices).forEach((button) => {
+    button.setAttribute("aria-pressed", String(button.dataset.outputAspect === aspect));
+  });
+}
+
+function setOutputAspect(aspect) {
+  if (!state.project) return;
+  if (foregroundBusy() || state.manualEditBusy) {
+    // The native select changes before its event fires; restore the latest
+    // accepted choice, including a queued save, if editing is currently locked.
+    elements.aspectSelect.value = reconcileProjectSnapshot(state.project).settings?.aspect || state.project.draft?.aspect || "9:16";
+    renderQuickAspectChoices();
+    return;
+  }
+  if (!["16:9", "9:16", "1:1", "4:5", "source"].includes(aspect)) return;
+  elements.aspectSelect.value = aspect;
+  const previewAspect = aspect === "source" ? sourceAspect() : aspect;
+  elements.previewStage.dataset.aspect = previewAspect;
+  if (elements.cropPreview) elements.cropPreview.style.aspectRatio = aspectCss(previewAspect);
+  // Output-only change: do not stage a crop, seek, rebuild or invoke AI.
+  schedulePatch({ settings: { aspect } });
+  applyPreviewPipGeometry(elements.previewStage);
+  syncSecondaryPreview(previewPlaybackTime());
+  renderSourceCompositionPreview(sourceMixerSettings());
+  renderQuickAspectChoices();
+  updateStudioStatus();
+}
+
 function updateStudioStatus() {
   if (!elements.studioDraftStatus) return;
   const draft = editorProject()?.draft;
   if (!draft) { elements.studioDraftStatus.textContent = ""; return; }
-  const aspect = draft.aspect === "source" ? sourceAspect() : (draft.aspect || "");
+  const selected = elements.aspectSelect?.value || state.project?.settings?.aspect || draft.aspect;
+  const aspect = selected === "source" ? sourceAspect() : (selected || "");
   const dirty = state.draftDirtyReasons.size ? ` · ${uiCopy("נדרש Rebuild", "Rebuild required")}` : "";
   elements.studioDraftStatus.textContent = `${formatTime(draft.output_duration || 0)} · ${aspect}${dirty}`;
 }

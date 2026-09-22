@@ -176,6 +176,8 @@ Captions follow edited timing and the selected audio source. Manual projects sta
 
 ## 9. Export and understand rebuilds
 
+Use **16:9 Landscape** or **9:16 Vertical** at the top of the editor for a one-click format change, including manual projects. The preview updates and the format saves automatically for export. No AI or rebuild is needed; your cuts stay intact. Use **Layout → Clip framing** if the subject needs repositioning in the new shape.
+
 Set **Aspect ratio** (9:16, 16:9, 1:1, 4:5 or Source), **Resolution** (720p/1080p), **Frame rate** (24/25/30/50/60 FPS) and **Export quality**. Higher settings can increase render time and size. 60 FPS preserves high-rate footage when available; lower-rate input repeats frames, not AI-generated motion.
 
 Controls marked **Draft rebuild** change editorial decisions and require **Rebuild Draft**. This is a new draft operation, not a preview refresh: save transcript corrections first and review afterward. Format and subtitle styling do not require rebuilding the story. **Performance mode** controls AI choices, not MP4 encoding quality. **Smart editorial effects** adds bounded emphasis; **Final loudness balance** adjusts exported sound levels.
