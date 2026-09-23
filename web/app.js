@@ -4162,6 +4162,7 @@ function syncIndependentMedia(slot, point, needed, forceSeek = false, sourceSlot
   const clipKey = `clip${slot}`;
   if (!active) {
     state.preview[clipKey] = null;
+    if (state.preview[pendingKey]) state.preview[pendingKey].cancelled = true;
     if (!video.paused) video.pause();
     return;
   }
@@ -4177,7 +4178,11 @@ function syncIndependentMedia(slot, point, needed, forceSeek = false, sourceSlot
   if (forceSeek || changedClip || Math.abs(video.currentTime - pictureTime) > .12) {
     try { video.currentTime = pictureTime; } catch { /* loadedmetadata/timeupdate can retry. */ }
   }
-  if (retimed && limit > 0 && rawPictureTime >= limit-.035) { video.pause(); return; }
+  if (retimed && limit > 0 && rawPictureTime >= limit-.035) {
+    if (state.preview[pendingKey]) state.preview[pendingKey].cancelled = true;
+    video.pause();
+    return;
+  }
   if (!state.preview.playing) { if (!video.paused) video.pause(); return; }
   if (!video.paused || state.preview[pendingKey]) return;
   const request = state.preview.playRequest;
@@ -4196,7 +4201,10 @@ function syncIndependentMedia(slot, point, needed, forceSeek = false, sourceSlot
       ? trackAt(playbackProject(), sourceSlot, previewPlaybackTime(), sourceMixerSettings().syncOffset) : null;
     if (request !== state.preview.playRequest || projectId !== state.project?.id || !state.preview.playing || !current || (video.hidden && video.muted)) video.pause();
   }).catch(error => {
-    if (request === state.preview.playRequest && state.preview.playing) {
+    // A gap or held picture can deliberately cancel a still-loading player.
+    // That cancellation must not stop the other track or the timeline clock.
+    if (error?.name === "AbortError" && pending.cancelled) return;
+    if (request === state.preview.playRequest && projectId === state.project?.id && state.preview.playing) {
       pauseAllMedia();
       toast(error.message || "Playback could not start. Press Play to retry.");
     }
@@ -4305,14 +4313,15 @@ function syncSecondaryPreview(globalTime) {
     }
   }
 
-  const audioFromB = mixer.audioSlot === "B" && Boolean(sourceB?.has_audio);
+  const mixerOwnsAudio = Boolean(state.mediaStudio && !previewUsesSourceTime());
+  const audioFromB = !mixerOwnsAudio && mixer.audioSlot === "B" && Boolean(sourceB?.has_audio);
   // Embedded B is only a second crop of A, never a second audio track. Refresh
   // mute state here too, since switching projects/layouts can leave stale media.
-  elements.previewA.muted = audioFromB;
-  elements.previewB.muted = !audioFromB;
+  elements.previewA.muted = mixerOwnsAudio || audioFromB;
+  elements.previewB.muted = mixerOwnsAudio || !audioFromB;
   if (independent) {
-    elements.previewA.muted = mixer.audioSlot !== "A" || !pointA || !sourceA?.has_audio;
-    elements.previewB.muted = mixer.audioSlot !== "B" || !pointB || !sourceB?.has_audio;
+    elements.previewA.muted = mixerOwnsAudio || mixer.audioSlot !== "A" || !pointA || !sourceA?.has_audio;
+    elements.previewB.muted = mixerOwnsAudio || mixer.audioSlot !== "B" || !pointB || !sourceB?.has_audio;
     syncIndependentMedia("A", pointA, showA || !elements.previewA.muted, state.preview.seeking);
     syncIndependentMedia("B", pointB, showB || !elements.previewB.muted, state.preview.seeking, embeddedB ? "A" : "B");
     state.preview.currentCamera = camera;
