@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1 Beta — 2026-09-24
+
+- Refreshed the application entrance with an ivory/violet palette, visual project choices and optional AI setup after the primary workflows. Kept the editing workspace dark with clearer selection and panel contrast.
+- Redesigned the English/Hebrew product website around a real editor preview, simpler workflow explanations and clearer download guidance, with responsive layouts and keyboard focus indicators.
+- This visual refresh does not change playback, timeline geometry, AI providers or saved projects.
+
 ## 1.1 Beta — 2026-09-23
 
 - Recovered preview audio when a browser rejects an already-connected media element. Audio graph failures now retry with a fresh player, then use clearly labelled basic playback if needed, instead of breaking Play/Pause. Fixed double attenuation when the mixer starts after the first Play gesture.

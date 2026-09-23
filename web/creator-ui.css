@@ -1,0 +1,140 @@
+/* Creator workspace: light project lobby, quiet dark editing room.
+   Visual layer only: transport, canvas geometry and source layouts stay intact. */
+:root {
+  --ink:#101516; --ink-2:#191e20; --ink-3:#232a2d; --ink-4:#30383c;
+  --surface-chrome:#151b1d; --surface-panel:#1d2427; --surface-inset:#111719;
+  --surface-raised:#283235; --surface-hover:#303c40; --surface-selected:#253d42;
+  --paper:#f4f5f1; --paper-dim:#c9d2d2; --muted:#a4b4b8;
+  --line:#313d40; --line-strong:#526467; --primary-fill:#7459a3;
+}
+.topbar { background:#151b1d; }
+.button.primary,.button.render { box-shadow:none; }
+.studio-workspace .studio-header { border-bottom:1px solid var(--line); }
+.studio-workspace .advanced-content { border-inline-end:1px solid var(--line); }
+.advanced-panel.studio-workspace .advanced-tabs button.active,
+.studio-workspace .advanced-tabs button[aria-selected="true"] {
+  color:#bcebf0; background:#22383d; box-shadow:inset 3px 0 #44b9c6;
+}
+.studio-workspace .studio-tool-intro h3 { font-weight:650; letter-spacing:-.025em; }
+.studio-workspace .preview-controls { border-radius:8px; background:var(--surface-chrome); }
+.studio-workspace .studio-preview-dock { background:#111719; }
+.studio-workspace .editor-toolbar-main { border-bottom:1px solid var(--line); }
+.director-panel { border-top:3px solid #44b9c6; }
+.director-panel .source-slot { background:#151e21; border-style:dashed; }
+.director-panel .source-slot:hover { border-color:#83cdd3; background:#1b2a2e; }
+
+/* The lobby owns its light tokens; modal dialogs retain dark editor tokens. */
+body.welcome-mode { background:#f6f5f1; }
+.welcome-mode .topbar { background:#f6f5f1; color:#202a2b; border-color:#dce0da; }
+.welcome-mode .topbar .brand { color:#172529; }
+.welcome-mode .topbar .brand small { color:#5a6669; }
+.welcome-mode .topbar .button { color:#384649; border-color:transparent; }
+.welcome-mode .topbar .button:hover { background:#e8eae5; }
+.welcome-mode .topbar .local-status { color:#296053; border-color:#c9dcd1; background:#e9f2eb; }
+.welcome-shell.home-hub {
+  --paper:#202a2b; --paper-dim:#49585b; --muted:#58696c;
+  --line:#d7ddd8; --line-strong:#a7b5b1; --surface-panel:#fff;
+  --surface-hover:#f0f3ef; --surface-inset:#edf0ea;
+  display:block; width:min(1280px,100%); padding:44px 40px 24px; color:var(--paper);
+}
+.home-hub .welcome-copy {
+  display:grid; grid-template-columns:minmax(0,1.12fr) minmax(0,1fr);
+  column-gap:52px; padding:0;
+}
+.home-hub .welcome-kicker { grid-column:1 / -1; margin-bottom:24px; }
+.home-hub .eyebrow { color:#63507e; font-size:10px; letter-spacing:.13em; }
+.home-hub .welcome-kicker > span { color:#5e6a6b; border:0; background:none; padding:0; }
+.home-hub .welcome-copy h1 {
+  grid-column:1; grid-row:2 / 4; margin:0; font-size:clamp(40px,5.2vw,68px);
+  letter-spacing:-.055em; line-height:1.04; font-weight:750;
+}
+.home-hub h1 em { color:#64418e; }
+.home-hub .welcome-lead { grid-column:2; margin:0 0 22px; font-size:16px; line-height:1.7; max-width:460px; }
+.home-hub .welcome-actions { grid-column:2; align-items:center; gap:12px 20px; }
+.home-hub .button.large { min-height:48px; padding:13px 20px; font-size:14px; }
+.home-hub .button.primary { color:#fff; background:#63418c; border-color:#63418c; }
+.home-hub .button.primary:hover { background:#503272; }
+.home-hub #newProjectButton,.home-hub #newProjectButton:hover:not(:disabled) { box-shadow:none; border-radius:8px; }
+.home-hub :focus-visible,.welcome-mode .topbar :focus-visible { outline:2px solid #64418e; outline-offset:3px; }
+.home-hub .home-text-link { color:#4c3969; }
+.home-hub .welcome-benefits {
+  grid-column:1 / -1; margin:30px 0 0; padding:18px 0 0; gap:14px 28px;
+  color:#546466; border-top:1px solid var(--line); font-size:12px;
+}
+.home-hub .welcome-benefits i { color:#246e67; }
+.home-hub .home-services { margin-top:32px; }
+.home-hub .home-section-head { margin-bottom:18px; }
+.home-hub .home-section-head h2 { font-size:25px; font-weight:650; }
+.home-hub .service-grid { gap:20px; }
+.home-hub .service-card {
+  grid-template-columns:minmax(0,1fr); border:1px solid #d6ddd8;
+  background:#fff; color:#202a2b; border-radius:14px;
+  transition:border-color 150ms,box-shadow 150ms;
+}
+.home-hub .service-card:hover { background:#fff; border-color:#8a70a5; box-shadow:0 8px 22px #28352b12; }
+.home-hub .service-card:focus-visible { outline:3px solid #64418e; outline-offset:4px; }
+.home-hub .service-art { min-height:140px; border:0; }
+.home-hub .short-art { background:#e9e0f4; }
+.home-hub .youtube-art { background:#dceeea; }
+.home-hub .manual-art { background:#e8ece2; }
+.home-hub .art-tag { top:14px; left:16px; width:auto; color:#4c5a60; font-size:10px; letter-spacing:.06em; }
+.home-hub .mini-phone { width:54px; height:98px; border:2px solid #624780; border-radius:9px; background:#7459a3; transform:rotate(-8deg); }
+.home-hub .mini-phone i { padding-top:5px; margin-bottom:12px; }
+.home-hub .mini-phone b { display:block; color:white; font-size:10px; line-height:1.35; text-align:center; }
+.home-hub .mini-landscape { width:146px; height:82px; border:3px solid #255b60; border-radius:7px; background:#3e777e; }
+.home-hub .mini-landscape i { color:#e4f4ee; font-size:24px; }
+.home-hub .mini-editor { position:relative; width:168px; padding:11px; border:1px solid #3e5554; border-radius:7px; background:#243b3e; }
+.home-hub .mini-editor > i { height:10px; margin-bottom:8px; }
+.home-hub .mini-editor > span { gap:5px; margin-bottom:5px; }
+.home-hub .mini-editor b { height:18px; }
+.home-hub .mini-editor em { position:absolute; top:6px; bottom:6px; left:62%; border-left:2px solid #e8cb62; }
+.home-hub .service-copy { padding:20px; gap:10px; }
+.home-hub .service-copy strong { font-size:18px; font-weight:650; }
+.home-hub .service-copy strong i { color:#72559b; }
+.home-hub .service-copy > span { font-size:13px; color:#516165; line-height:1.65; }
+.home-hub .service-copy small { color:#526369; font-size:11px; border-top:1px solid #e5e9e3; padding-top:12px; }
+.home-hub .recent-strip { margin-top:32px; }
+.home-hub .recent-project { background:#fff; color:#202a2b; border-radius:10px; }
+.home-hub .home-setup {
+  display:grid; grid-template-columns:1fr 1fr; gap:20px 32px; margin-top:36px;
+  padding:26px 30px; background:#e9eeea; border:0; border-radius:12px;
+}
+.home-hub .home-setup-heading { grid-column:1 / -1; }
+.home-hub .home-setup h2 { color:#243737; font-size:22px; }
+.home-hub .setup-symbol { background:#d4e5de; color:#305d54; }
+.home-hub .setup-check,.home-hub .home-setup-actions { margin:0; }
+.home-hub .setup-check > span { color:#466963; }
+.home-hub .setup-free-note { margin:0; align-self:center; }
+.home-hub .home-steps li > b { background:#e7deef; color:#60417d; }
+.home-hub .processing-overview article { border-color:#75a4a4; }
+.home-hub .home-processing-note { background:#e9eeea; }
+.home-hub .home-footer { padding-bottom:16px; }
+@media (max-width:1000px) {
+  .welcome-shell.home-hub { padding:32px 24px 24px; }
+  .home-hub .welcome-copy { column-gap:28px; }
+  .home-hub .welcome-actions { gap:12px; }
+  .home-hub .service-grid { gap:12px; }
+  .home-hub .service-copy { padding:16px; }
+}
+@media (max-width:800px) {
+  body.welcome-mode:not(.studio-open) .topbar { grid-template-columns:1fr; gap:8px; padding-block:12px; }
+  .welcome-mode .topbar .brand { justify-self:start; }
+  body.welcome-mode:not(.studio-open) .topbar .top-actions { justify-content:flex-start; }
+  .home-hub .welcome-copy { display:block; }
+  .home-hub .welcome-copy h1 { font-size:clamp(40px,8vw,60px); }
+  .home-hub .welcome-lead { margin:20px 0; }
+  .home-hub .service-card { grid-template-columns:120px minmax(0,1fr); }
+  .home-hub .service-art { min-height:170px; }
+  .home-hub .mini-landscape { width:98px; height:58px; }
+  .home-hub .mini-editor { width:98px; padding:7px; }
+  .home-hub .home-setup { grid-template-columns:1fr; padding:22px; }
+  .home-hub .home-setup-actions { flex-wrap:wrap; }
+}
+@media (max-width:440px) {
+  .welcome-shell.home-hub { padding-inline:18px; }
+  .home-hub .service-card { grid-template-columns:88px minmax(0,1fr); }
+  .home-hub .mini-landscape,.home-hub .mini-editor { width:70px; }
+  .home-hub .art-tag { left:8px; font-size:8px; }
+  .home-hub .service-copy strong { font-size:16px; }
+}
+@media (prefers-reduced-motion:reduce) { .home-hub .service-card { transition:none; } }

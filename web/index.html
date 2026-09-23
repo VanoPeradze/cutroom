@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="/assets/workspace.css?v=1.1-beta-3">
   <link rel="stylesheet" href="/assets/media-studio.css?v=1.1-beta-2">
   <link rel="stylesheet" href="/assets/welcome.css?v=1.1-beta-1">
+  <link rel="stylesheet" href="/assets/creator-ui.css?v=1.1-beta-2">
 </head>
 <body class="welcome-mode">
   <a class="skip-link" href="#main" data-i18n="skip">Skip to content</a>
@@ -51,12 +52,12 @@
           <p class="eyebrow">YOUR EDITING WORKSPACE</p>
           <span>1.1 BETA · OPEN SOURCE</span>
         </div>
-        <h1>Less busywork.<br><em>More creating.</em></h1>
-        <p class="welcome-lead">Turn your recordings into Shorts, YouTube videos and stories worth sharing. Start with an AI draft or edit by hand. You control the final cut.</p>
+        <h1>Your next video<br><em>starts here.</em></h1>
+        <p class="welcome-lead">A Short, a full-length video, or a cut of your own. Bring your footage. Start with an AI-assisted draft or take the timeline yourself.</p>
         <div class="welcome-actions">
           <button class="button primary large" id="newProjectButton">
             <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 5v14M5 12h14"/></svg>
-            <span>Choose what to create</span>
+            <span>Choose your project</span>
             <span class="new-project-arrow" aria-hidden="true">↗</span>
           </button>
           <button type="button" class="home-text-link" id="welcomeTourButton">First time? Start here <span aria-hidden="true">↗</span></button>
@@ -67,13 +68,6 @@
           <li><i aria-hidden="true">✓</i><span>Your final say</span></li>
         </ul>
       </div>
-      <aside class="home-setup" aria-labelledby="homeSetupTitle">
-        <div class="home-setup-heading"><span class="setup-symbol" aria-hidden="true">✦</span><div><p class="eyebrow">BEFORE YOUR FIRST AI EDIT</p><h2 id="homeSetupTitle">Your setup, made clear.</h2></div></div>
-        <div class="setup-check"><span aria-hidden="true">01</span><div><strong id="homeConnectionStatus">Choose your AI connection</strong><p id="homeConnectionDetail">Local for privacy. Cloud for less AI processing on your computer.</p></div></div>
-        <div class="setup-check"><span aria-hidden="true">02</span><div><strong id="homeLocalStatus">Local models are separate downloads</strong><p id="homeLocalDetail">Transcription understands speech. Story AI plans the draft. Check what you need before downloading.</p></div></div>
-        <div class="home-setup-actions"><button type="button" class="button primary" id="homeModelsButton">Set up local models</button><button type="button" class="button ghost" id="homeConnectionButton">Compare AI options</button></div>
-        <p class="setup-free-note">Just want to edit? Choose Manual below. No AI account or model needed.</p>
-      </aside>
       <section class="home-services" id="welcomeServices" aria-labelledby="welcomeServicesTitle" tabindex="-1">
         <div class="home-section-head"><div><p class="eyebrow">START A PROJECT</p><h2 id="welcomeServicesTitle">What are we making?</h2></div><p>Choose the result. Keep control of the details.</p></div>
         <div class="service-grid">
@@ -95,6 +89,13 @@
         <div class="section-label"><span data-i18n="recent">Recent projects</span><b id="recentCount">0</b></div>
         <div class="recent-list" id="recentList"></div>
       </div>
+      <aside class="home-setup" aria-labelledby="homeSetupTitle">
+        <div class="home-setup-heading"><span class="setup-symbol" aria-hidden="true">✦</span><div><p class="eyebrow">OPTIONAL AI ASSISTANCE</p><h2 id="homeSetupTitle">Your workspace. Your setup.</h2></div></div>
+        <div class="setup-check"><span aria-hidden="true">01</span><div><strong id="homeConnectionStatus">Choose your AI connection</strong><p id="homeConnectionDetail">Local for privacy. Cloud for less AI processing on your computer.</p></div></div>
+        <div class="setup-check"><span aria-hidden="true">02</span><div><strong id="homeLocalStatus">Local models are separate downloads</strong><p id="homeLocalDetail">Transcription understands speech. Story AI plans the draft. Check what you need before downloading.</p></div></div>
+        <div class="home-setup-actions"><button type="button" class="button primary" id="homeModelsButton">Set up local models</button><button type="button" class="button ghost" id="homeConnectionButton">Compare AI options</button></div>
+        <p class="setup-free-note">Manual editing needs no AI account or model. You can set up AI whenever you need it.</p>
+      </aside>
       <section class="home-workflow" aria-labelledby="homeWorkflowTitle">
         <div class="home-section-head"><div><p class="eyebrow">A SIMPLE WORKFLOW</p><h2 id="homeWorkflowTitle">From recording to ready.</h2></div></div>
         <ol class="home-steps">
