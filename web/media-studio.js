@@ -223,16 +223,47 @@ export class MediaStudio {
   player(key, kind, url) {
     let item = this.players.get(key);
     if (item && (item.url !== url || item.element.tagName.toLowerCase() !== kind)) { this.releasePlayer(key,item); item = null; }
-    if (!item) {
-      const element = document.createElement(kind); element.src = url; element.preload = 'metadata'; element.playsInline = true;
-      element.className = kind === 'audio' ? 'media-audio-player' : 'media-overlay-content';
-      item = {element,url,gain:null,node:null,token:0};
-      if (kind !== 'audio') { item.frame = document.createElement('div'); item.frame.className = 'media-overlay'; item.frame.append(element); this.stage.append(item.frame); }
-      else this.root.append(element);
-      this.players.set(key,item);
+    if (!item) item = this.createPlayer(key,kind,url);
+    if (kind === 'audio' && this.context && !item.node && !item.basicAudio) {
+      // A media element can only acquire one Web Audio source node in its
+      // lifetime, even after disconnect(). Never retry a rejected element.
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try { this.connectAudio(item); break; }
+        catch (error) {
+          const time = item.element.currentTime;
+          this.releasePlayer(key,item);
+          item = this.createPlayer(key,kind,url);
+          try { item.element.currentTime = time; } catch { /* syncPlayer restores the edit position. */ }
+          if (attempt === 1) {
+            item.basicAudio = true;
+            this.audioFallback = true;
+            this.status.textContent = 'Basic audio preview: the audio mixer connection failed. Playback and volume still work; preview boosts, metering and ducking are limited. Reload to retry. Export settings are unchanged.';
+            console.warn('CUTROOM audio preview is using basic playback:', error?.name || 'AudioError');
+          }
+        }
+      }
     }
-    if (kind === 'audio' && this.context && !item.node) { item.node = this.context.createMediaElementSource(item.element); item.gain = this.context.createGain(); item.analyser=this.context.createAnalyser();item.analyser.fftSize=256;item.node.connect(item.gain).connect(item.analyser).connect(this.master); }
     return item;
+  }
+  createPlayer(key,kind,url) {
+    const element = document.createElement(kind); element.src = url; element.preload = 'metadata'; element.playsInline = true;
+    element.className = kind === 'audio' ? 'media-audio-player' : 'media-overlay-content';
+    // After repeated graph failure, keep new audio in basic mode until reload;
+    // do not repeat the failed setup at every clip boundary or project switch.
+    const item = {element,url,gain:null,node:null,token:0,basicAudio:kind === 'audio' && Boolean(this.audioFallback)};
+    if (kind !== 'audio') { item.frame = document.createElement('div'); item.frame.className = 'media-overlay'; item.frame.append(element); this.stage.append(item.frame); }
+    else this.root.append(element);
+    this.players.set(key,item);
+    return item;
+  }
+  connectAudio(item) {
+    item.gain = this.context.createGain();
+    item.analyser = this.context.createAnalyser(); item.analyser.fftSize = 256;
+    item.node = this.context.createMediaElementSource(item.element);
+    item.node.connect(item.gain); item.gain.connect(item.analyser); item.analyser.connect(this.master);
+    // Before the first user gesture, volume may have provided basic attenuation.
+    // Once connected, gain nodes own it; keeping both would attenuate twice.
+    item.element.volume = 1;
   }
   syncPlayer(item, time, speed, playing, gain = 0) {
     const element = item.element; element.playbackRate = speed; element.preservesPitch = true;
@@ -280,7 +311,10 @@ export class MediaStudio {
       this.syncPlayer(item,source.point.sourceTime,1,playing,(mixer.source_muted ? 0 : 10**(Number(mixer.source_db||0)/20))*soloGain('source'));
     }
     for (const [key,item] of this.players) if (!active.has(key)) this.releasePlayer(key,item);
-    if (this.analyser && playing) {
+    if (this.audioFallback) {
+      this.root.querySelector('.mixer-meter').value = 0;
+      this.root.querySelector('.mixer-level-text').textContent = 'Basic audio preview — metering and ducking are limited. Reload to retry the full mixer.';
+    } else if (this.analyser && playing) {
       const bins = new Float32Array(this.analyser.fftSize); this.analyser.getFloatTimeDomainData(bins);
       const peak = bins.reduce((value, sample)=>Math.max(value,Math.abs(sample)),0);
       this.root.querySelector('.mixer-meter').value=peak;
