@@ -102,6 +102,10 @@ export class TimelineView {
     this.onLayoutSelect = options.onLayoutSelect;
     this.onToolStateChange = options.onToolStateChange;
     this.onTargetChange = options.onTargetChange;
+    this.onMediaSelect = options.onMediaSelect;
+    this.onMediaEdit = options.onMediaEdit;
+    this.onMediaPreview = options.onMediaPreview;
+    this.onMediaAction = options.onMediaAction;
     this.getTrackClips = options.getTrackClips;
     this.sourceReview = Boolean(options.sourceReview);
     this.editTarget = "edit";
@@ -350,6 +354,82 @@ export class TimelineView {
       this.images = images;
       this.scheduleDraw();
     }
+    this.mediaImages ||= new Map();
+    const extraUrls = [...(this.project?.sources?.B?.thumbnail_urls || []),
+      ...Object.values(this.project?.assets || {}).map(asset => asset.thumbnail_url).filter(Boolean)];
+    for (const url of extraUrls) if (!this.mediaImages.has(url)) {
+      this.mediaImages.set(url, null);
+      const image = new Image(); image.onload = () => { this.mediaImages.set(url,image); this.scheduleDraw(); }; image.src = url;
+    }
+  }
+
+  baseHeight() {
+    if (this.project?.manual?.sequence) return this.project.sources?.B ? 230 : 174;
+    return (this.sourceReview || this.scroll.closest?.('.studio-timeline-dock') ? 180 : 310) + (this.hasTrackLanes() ? 68 : 0);
+  }
+
+  mediaRows() {
+    if (this.sourceReview) return [];
+    const rows = [];
+    for (const clip of this.project?.manual?.media_clips || []) {
+      const asset = this.project.assets?.[clip.asset_id]; if (!asset) continue;
+      const group = asset.kind === 'audio' ? (clip.role || 'music') : 'visual';
+      let row = rows.find(row => row.group === group && row.clips.every(item => item.end <= clip.start || item.start >= clip.end));
+      if (!row) { row = {group,clips:[]}; rows.push(row); }
+      row.clips.push(clip);
+    }
+    return rows.map((row,index)=>({...row,top:this.baseHeight()+index*46,bottom:this.baseHeight()+(index+1)*46}));
+  }
+
+  mediaAtEvent(event) {
+    const y = event.clientY-this.canvas.getBoundingClientRect().top, time=this.timeFromEvent(event);
+    const row = this.mediaRows().find(row=>y>=row.top && y<row.bottom);
+    const clip = row?.clips.find(clip=>time>=clip.start && time<clip.end);
+    return clip ? {clip,row} : null;
+  }
+
+  drawMedia(ctx, px, width) {
+    const left = this.scroll.scrollLeft || 0, right=left+this.scroll.clientWidth;
+    for (const row of this.mediaRows()) {
+      ctx.fillStyle='#102027'; ctx.fillRect(0,row.top,width,42);
+      for (const saved of row.clips) {
+        const clip=this.gesture?.media?.id === saved.id ? {...saved,...this.gesture.patch} : saved;
+        const asset=this.project.assets[clip.asset_id], x=clip.start*px, w=(clip.end-clip.start)*px;
+        if (x+w<left || x>right) continue;
+        ctx.fillStyle=asset.kind==='audio' ? '#264e44' : '#51436b'; ctx.fillRect(x,row.top+1,w,40);
+        const image=this.mediaImages?.get(asset.thumbnail_url);
+        ctx.save(); ctx.beginPath(); ctx.rect(x+1,row.top+2,Math.max(0,w-2),38); ctx.clip();
+        if(image) { ctx.globalAlpha=.7; for(let ix=Math.max(x,left); ix<x+w && ix<right;ix+=62) ctx.drawImage(image,ix,row.top+2,60,38); ctx.globalAlpha=1; }
+        const waveform=asset.waveform || [];
+        if(waveform.length && asset.kind==='audio') {
+          ctx.strokeStyle='#86dcc0'; ctx.beginPath();
+          for(let ix=Math.max(x,left);ix<Math.min(x+w,right);ix+=3) {
+            const source=Number(clip.source_start||0)+(ix/px-clip.start);
+            const value=Number(waveform[Math.min(waveform.length-1,Math.floor(source/Math.max(.001,asset.duration)*waveform.length))])||0;
+            const amp=Math.min(15,Math.abs(value)*15); ctx.moveTo(ix,row.top+25-amp); ctx.lineTo(ix,row.top+25+amp);
+          } ctx.stroke();
+        }
+        ctx.fillStyle='rgba(0,0,0,.75)'; ctx.fillRect(Math.max(x,left),row.top+2,Math.min(w,300),14);
+        ctx.fillStyle='#f0edf5'; ctx.font='10px ui-monospace, monospace';
+        ctx.fillText(`${asset.kind==='audio' ? clip.role : asset.kind} · ${asset.name}${clip.speed!==1 ? ` · ${clip.speed}×` : ''}`,Math.max(x+5,left+5),row.top+12);
+        ctx.strokeStyle='#d4c84f';ctx.beginPath();
+        if(clip.fade_in>0){ctx.moveTo(x,row.top+40);ctx.lineTo(x+clip.fade_in*px,row.top+3);}
+        if(clip.fade_out>0){ctx.moveTo(x+w-clip.fade_out*px,row.top+3);ctx.lineTo(x+w,row.top+40);}ctx.stroke();
+        ctx.restore();
+        ctx.strokeStyle=this.mediaSelection===clip.id ? '#ffe174':'#b8a4d1'; ctx.lineWidth=this.mediaSelection===clip.id ? 2:1; ctx.strokeRect(x+.5,row.top+1.5,Math.max(0,w-1),39);
+        if(this.mediaSelection===clip.id){ctx.fillStyle='#fff';ctx.fillRect(x,row.top+11,3,20);ctx.fillRect(x+w-3,row.top+11,3,20);}
+      }
+    }
+    if((this.project?.settings?.burn_captions !== false || this.project?.settings?.captions) && this.project?.analysis?.transcript?.segments?.length) {
+      const top=this.baseHeight()+this.mediaRows().length*46;
+      ctx.fillStyle='#1c2630';ctx.fillRect(0,top,width,28);
+      for(const caption of this.audioTimelineRanges(this.project.analysis.transcript.segments)) {
+        const x=caption.start*px,w=(caption.end-caption.start)*px;
+        if(x+w<left || x>right)continue;
+        ctx.fillStyle='#384962';ctx.fillRect(x+1,top+1,Math.max(1,w-2),26);
+        ctx.save();ctx.beginPath();ctx.rect(x+2,top,Math.max(0,w-4),28);ctx.clip();ctx.fillStyle='#eef3ff';ctx.font='10px sans-serif';ctx.fillText(`Cc ${caption.text}`,Math.max(x+4,left),top+17);ctx.restore();
+      }
+    }
   }
 
   geometry() {
@@ -377,8 +457,8 @@ export class TimelineView {
     this.compact = this.sourceReview || Boolean(this.scroll.closest?.(".studio-timeline-dock"));
     const sequence = Boolean(this.project?.manual?.sequence);
     const extra = !sequence && this.hasTrackLanes() ? 68 : 0;
-    const cssHeight = sequence ? (this.project.sources?.B ? 230 : 174) : (this.compact ? 180 : 310) + extra;
-    const dpr = Math.min(1.5, window.devicePixelRatio || 1);
+    const cssHeight = this.baseHeight()+this.mediaRows().length*46+((this.project?.settings?.burn_captions !== false || this.project?.settings?.captions) && this.project?.analysis?.transcript?.segments?.length ? 30:0);
+    const dpr = Math.min(1.5, window.devicePixelRatio || 1, Math.sqrt(16000000/Math.max(1,width*cssHeight)));
     this.canvas.style.width = `${width}px`;
     this.canvas.style.height = `${cssHeight}px`;
     const targetWidth = Math.max(1, Math.floor(width * dpr));
@@ -407,6 +487,7 @@ export class TimelineView {
     this.drawWaveform(ctx, px, width);
     ctx.restore();
     this.drawLabels(ctx);
+    this.drawMedia(ctx,px,width);
     if (this.selection) this.drawSelection(ctx, this.selection, px, cssHeight);
     if (this.cutAnchor != null) this.drawPendingCut(ctx, px, cssHeight);
     if (this.hoverTime != null) this.drawHover(ctx, this.hoverTime, px, cssHeight);
@@ -493,13 +574,23 @@ export class TimelineView {
         const x = clip.start * px, width = (clip.end - clip.start) * px;
         ctx.fillStyle = slot === "A" ? "#23616d" : "#5e4580";
         ctx.fillRect(x + 1, top + 2, Math.max(1, width - 2), h - 4);
+        const thumbUrls=this.project.sources?.[slot]?.thumbnail_urls || [];
+        const frames=slot==='A' ? this.images : thumbUrls.map(url=>this.mediaImages?.get(url));
+        if(frames?.some(Boolean)) {
+          ctx.save();ctx.beginPath();ctx.rect(x+1,top+2,Math.max(0,width-2),h-4);ctx.clip();ctx.globalAlpha=.5;
+          for(let ix=Math.max(x,viewportLeft);ix<x+width && ix<viewportLeft+this.scroll.clientWidth;ix+=64) {
+            const sourceTime=clip.source_start+(ix/px-clip.start)*(clip.video_speed||1);
+            const index=Math.min(frames.length-1,Math.max(0,Math.floor(sourceTime/Math.max(.001,this.project.sources[slot].duration)*frames.length)));
+            if(frames[index])ctx.drawImage(frames[index],ix,top+2,64,h-4);
+          }ctx.restore();
+        }
         ctx.strokeStyle = active ? "#d3f4f4" : (slot === "A" ? "#44b9c6" : "#ab8bce");
         ctx.lineWidth = 1; ctx.strokeRect(x + .5, top + 2.5, Math.max(0, width - 1), h - 5);
         if (width > 65) {
           ctx.save(); ctx.beginPath(); ctx.rect(x + 3, top, width - 6, h); ctx.clip();
           ctx.fillStyle = "#eef5f7"; ctx.font = "10px ui-monospace, monospace";
           const clipNumber = clipIndex + 1;
-          ctx.fillText(`${slot}${clipNumber} · ${formatTime(clip.source_start, true)} · ${(clip.end - clip.start).toFixed(1)}s`, Math.max(x + 8, viewportLeft + 64), top + (h > 40 ? 29 : 19));
+          ctx.fillText(`${slot}${clipNumber} · ${formatTime(clip.source_start, true)} · ${(clip.end - clip.start).toFixed(1)}s${clip.video_speed && clip.video_speed!==1 ? ` · ${clip.video_speed}× picture` : ''}`, Math.max(x + 8, viewportLeft + 64), top + (h > 40 ? 29 : 19));
           ctx.restore();
         }
       }
@@ -880,6 +971,7 @@ export class TimelineView {
   }
 
   cancelGesture(notify = true) {
+    if(this.gesture?.kind==='media')this.onMediaPreview?.(this.gesture.media.id,null);
     const gesture = this.gesture;
     if (!gesture) return false;
     this.gesture = null;
@@ -956,6 +1048,19 @@ export class TimelineView {
     this.canvas.focus?.({ preventScroll: true });
     try { this.canvas.setPointerCapture?.(event.pointerId); } catch (_) { /* A cancelled pointer may no longer be capturable. */ }
     const time = this.timeFromEvent(event);
+    const media = this.mediaAtEvent(event);
+    if (media) {
+      this.mediaSelection=media.clip.id; this.onMediaSelect?.(media.clip.id);
+      if(this.tool==='blade'){
+        if(time-media.clip.start>=.08-1e-9 && media.clip.end-time>=.08-1e-9)this.onMediaAction?.('media_split',{clip_id:media.clip.id,time});
+        this.releasePointer(event.pointerId);return;
+      }
+      const px=this.geometry().px;
+      const edge=(media.clip.end-media.clip.start)*px>=22 ? (Math.abs(time-media.clip.start)*px<8 ? 'start' : Math.abs(time-media.clip.end)*px<8 ? 'end' : null) : null;
+      this.gesture={kind:'media',pointerId:event.pointerId,media:{...media.clip},startTime:time,edge,patch:{},
+        previousSelection:this.selection ? {...this.selection} : null,previousRangeSelection:this.selectionIsRange};this.scheduleDraw();return;
+    }
+    this.mediaSelection=null;
     this.hoverTime = time;
     const target = this.targetAtEvent(event);
     // Editing scope is an explicit choice. Merely touching B must not turn a
@@ -1013,6 +1118,27 @@ export class TimelineView {
 
   pointerMove(event) {
     if (this.gesture && this.gesture.pointerId !== event.pointerId) return;
+    if(this.gesture?.kind==='media') {
+      const g=this.gesture,clip=g.media,delta=this.timeFromEvent(event)-g.startTime,limit=timelineDuration(this.project);
+      const asset=this.project.assets?.[clip.asset_id],timed=asset?.kind!=='image',sourceStart=Number(clip.source_start)||0;
+      let patch;
+      if(g.edge==='start') {
+        const start=Math.max(0,timed ? clip.start-sourceStart : 0,Math.min(clip.end-.08,clip.start+delta));
+        patch={start};
+        if(timed)patch.source_start=sourceStart+start-clip.start;
+        if(asset?.kind==='video')patch.video_source_start=Math.max(0,Number(clip.video_source_start ?? sourceStart)+(start-clip.start)*(clip.speed||1));
+      }
+      else if(g.edge==='end') {
+        const available=Number(asset?.duration),maximum=timed ? (Number.isFinite(available) ? Math.min(limit,clip.start+available-sourceStart) : clip.end) : limit;
+        patch={end:Math.max(clip.start+.08,Math.min(maximum,clip.end+delta))};
+      }
+      else {const start=Math.max(0,Math.min(limit-(clip.end-clip.start),clip.start+delta));patch={start,end:start+clip.end-clip.start};}
+      const length=(patch.end ?? clip.end)-(patch.start ?? clip.start),fadeIn=Number(clip.fade_in)||0,fadeOut=Number(clip.fade_out)||0;
+      if(g.edge && fadeIn+fadeOut>length) {
+        const scale=length/(fadeIn+fadeOut);patch.fade_in=fadeIn*scale;patch.fade_out=fadeOut*scale;
+      }
+      g.patch=patch;this.onMediaPreview?.(clip.id,patch);this.scheduleDraw();return;
+    }
     const time = this.timeFromEvent(event);
     this.hoverTime = time;
     if (this.gesture && Math.hypot(event.clientX - this.gesture.clientX, event.clientY - this.gesture.clientY) > 6) this.gesture.dragged = true;
@@ -1066,6 +1192,16 @@ export class TimelineView {
   pointerUp(event) {
     const gesture = this.gesture;
     if (!gesture || gesture.pointerId !== event.pointerId) return;
+    if(this.gesture?.kind==='media') {
+      this.pointerMove(event);
+      const g=this.gesture;this.gesture=null;this.releasePointer(event.pointerId);this.onMediaPreview?.(g.media.id,null);
+      // The server derives the independent picture in-point from source_start.
+      // Keep that preview-only value out of the public media_update payload.
+      const patch={...g.patch};delete patch.video_source_start;
+      const changed=Object.entries(patch).some(([key,value])=>Math.abs(value-Number(g.media[key]||0))>1e-9);
+      if(changed && this.canEdit() && !this.editPending)Promise.resolve(this.onMediaEdit?.(g.media.id,patch)).catch(()=>{});
+      this.scheduleDraw();return;
+    }
     // Some devices coalesce the last pointermove into pointerup. Commit the
     // actual release position instead of leaving the preview one frame behind.
     this.pointerMove(event);
@@ -1108,6 +1244,10 @@ export class TimelineView {
       event.preventDefault(); event.stopPropagation?.(); return;
     }
     if (!this.canEdit() || this.editPending || event.ctrlKey || event.metaKey || event.altKey) return;
+    if(this.mediaSelection && ['Delete','Backspace'].includes(event.key)) {
+      event.preventDefault();event.stopPropagation?.();
+      if(!event.repeat)this.onMediaAction?.('media_remove',{clip_id:this.mediaSelection});return;
+    }
     if (event.key === "Enter" && !event.shiftKey && this.tool === "remove_between") {
       event.preventDefault(); event.stopPropagation?.();
       if (!event.repeat) this.cutOutAt(this.playhead);

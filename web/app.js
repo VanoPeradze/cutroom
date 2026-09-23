@@ -1,6 +1,7 @@
 import { applyTranslations, dictionaries } from "./i18n.js?v=1.1-beta-1";
-import { TimelineView, formatTime, editableClips, timelineDuration, sequenceBlocks, sequenceGaps, rippleMoveStart } from "./timeline.js?v=1.1-beta-1";
-import { SourceReview } from "./source-review.js?v=1.1-beta-1";
+import { TimelineView, formatTime, editableClips, timelineDuration, sequenceBlocks, sequenceGaps, rippleMoveStart } from "./timeline.js?v=1.1-beta-3";
+import { MediaStudio } from "./media-studio.js?v=1.1-beta-2";
+import { SourceReview } from "./source-review.js?v=1.1-beta-3";
 import { initWorkspace } from "./workspace.js?v=1.1-beta-1";
 import { KEYBOARD_PROFILES, resolveEditorShortcut, isEditorTransportSpace, shortcutRows } from "./keyboard.js?v=1.1-beta-2";
 import { AudioThresholdView } from "./audio-meter.js?v=1.1-beta-1";
@@ -191,6 +192,66 @@ async function api(path, options = {}) {
   return payload;
 }
 
+function initializeMediaStudio() {
+  if (typeof MediaStudio === "undefined") return;
+  const panel = document.getElementById("studioPanelMedia");
+  const tab = document.createElement("button");
+  tab.id = "studioTabMedia"; tab.type = "button"; tab.dataset.tab = "media";
+  tab.setAttribute("role", "tab"); tab.setAttribute("aria-selected", "false"); tab.setAttribute("aria-controls", "studioPanelMedia"); tab.tabIndex = -1;
+  tab.innerHTML = '<span aria-hidden="true">♫</span><span>Media</span><small>Clips & audio</small>';
+  elements.advancedPanel.querySelector(".advanced-tabs").append(tab);
+  // bindEvents already ran before this dynamically created tab.
+  tab.addEventListener("click", () => selectAdvancedTab("media"));
+  tab.addEventListener("keydown", handleStudioTabKeydown);
+  state.mediaStudio = new MediaStudio(panel, elements.previewStage, {
+    project: () => state.project, api, edit: applyManualEdit, pause: pauseAllMedia,
+    time: previewTimelineTime, duration: editorDuration, flushSettings: flushProjectSaves,
+    busy: () => Boolean(state.activeJob || state.activeUploads.size || state.jobStartLocks.size
+      || state.sourceSyncPending || (state.manualEditBusy && !state.mediaStudio?.saving)),
+    preview: () => { updateMediaPreview(); state.timeline?.scheduleDraw(); },
+    busyChanged: () => { renderReadiness(); renderManualControls(); },
+    acceptUpload: async (result, projectId) => {
+      if (result.project && state.project?.id === projectId) { state.project = reconcileProjectSnapshot(result.project); rememberProjectRevision(state.project); state.mediaStudio.render(); }
+      try {
+        if (result.job) await pollJob(result.job.id, {projectId, silent:true});
+      } finally {
+        // Failed/cancelled preparations must also reveal their Retry action.
+        const latest = await api(`/api/projects/${encodeURIComponent(projectId)}`);
+        if (state.project?.id === projectId) { state.project = reconcileProjectSnapshot(latest.project); rememberProjectRevision(state.project); renderDraft(); }
+      }
+    },
+  });
+  const speed = document.createElement("div"); speed.className = "picture-speed"; speed.dataset.editorShortcuts = "off";
+  speed.innerHTML = '<label>Picture speed <select aria-label="Picture speed"><option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="1">1×</option><option value="1.5">1.5×</option><option value="2">2×</option><option value="4">4×</option></select><span></span></label><p>Picture only: keeps clip length and speech timing. May lose lip sync or hold the last source frame. Select A or B to choose which picture changes.</p>';
+  elements.clipTrimForm.after(speed); state.pictureSpeed = speed;
+  speed.querySelector("select").addEventListener("change", async event => {
+    const clip = state.pictureSpeedClip; if (!clip || foregroundBusy()) return;
+    pauseAllMedia();
+    await runUiAction(() => applyManualEdit("sequence_speed", {slot:clip.slot,clip_id:clip.id,speed:Number(event.target.value)}), "Changing picture speed");
+  });
+}
+
+function updateMediaPreview() {
+  if (!state.mediaStudio || !state.project?.draft) return;
+  const project = playbackProject(), time = previewPlaybackTime(), sourceMode = previewUsesSourceTime();
+  const mixer = sourceMixerSettings(), slot = mixer.audioSlot || "A", source = project.sources?.[slot];
+  const point = previewUsesIndependentTracks() ? trackAt(project,slot,time,mixer.syncOffset)
+    : {sourceTime:time-(slot === "B" ? mixer.syncOffset : 0)};
+  state.mediaStudio.sync(sourceMode ? time : sourceToOutputTime(time),state.preview.playing,
+    {sourceMode,point,url:source ? sourceMediaUrl(source) : null,hasAudio:source?.has_audio});
+  if (!sourceMode) { elements.previewA.muted = true; elements.previewB.muted = true; }
+}
+
+function renderPictureSpeed() {
+  if (!state.pictureSpeed) return;
+  const slot = activeEditTarget() === "B" ? "B" : "A";
+  const start = state.manualSelection?.start;
+  const clip = start != null ? trackAt(editorProject(), slot, start + .0001)?.clip : null;
+  state.pictureSpeed.hidden = !clip;
+  state.pictureSpeedClip = clip ? {slot,id:clip.id} : null;
+  if (clip) { state.pictureSpeed.querySelector("select").value = String(clip.video_speed || 1); state.pictureSpeed.querySelector("span").textContent = `Source ${slot}`; }
+}
+
 function lastProjectStorageKey() {
   const instance = String(state.system?.instance_id || "").trim();
   return instance ? `cutroom-last-project:${instance}` : "cutroom-last-project";
@@ -321,11 +382,16 @@ async function boot() {
     },
   });
   initWorkspace({ document, window, onResize: () => state.timeline?.scheduleDraw(), openShortcuts: () => { renderKeyboardHelp(); elements.keyboardDialog.showModal(); } });
+  initializeMediaStudio();
   state.timeline = new TimelineView(elements.timelineCanvas, elements.timelineScroll,
     (time) => { pauseAllMedia(); seekSourcePreview(time); }, setManualSelection, handleTimelineEdit,
     { onToolStateChange: renderTimelineToolStatus, canEdit: () => !foregroundBusy() && !state.transcriptSaving,
       onLayoutSelect: openTimelineLayout, getTrackClips: trackClips,
-      onTargetChange: (target) => setEditTarget(target, true) });
+      onTargetChange: (target) => setEditTarget(target, true),
+      onMediaSelect: id => { pauseAllMedia(); state.mediaStudio?.select(id); selectAdvancedTab("media"); },
+      onMediaEdit: (id, patch) => { state.mediaStudio?.queueClip(id,patch); return state.mediaStudio?.flush(); },
+      onMediaPreview: (id, patch) => state.mediaStudio?.previewClip(id,patch),
+      onMediaAction: (action, detail) => runUiAction(() => applyManualEdit(action,detail), "Editing media") });
   initializeKeyboardProfile();
   state.audioMeter = new AudioThresholdView(elements.audioMeterCanvas);
   elements.audioMeterCanvas.addEventListener("cutroom-audio-seek", (event) => {
@@ -614,7 +680,7 @@ function bindEvents() {
   });
   bindKeyboardControls();
   window.addEventListener("beforeunload", (event) => {
-    if (state.transcriptBuffers.size || liveEmbeddedCameraRequest()) { event.preventDefault(); event.returnValue = ""; }
+    if (state.transcriptBuffers.size || liveEmbeddedCameraRequest() || state.mediaStudio?.pending.size) { event.preventDefault(); event.returnValue = ""; }
   });
   elements.burnCaptionsToggle.addEventListener("change", () => {
     setCaptionBurnEnabled(elements.burnCaptionsToggle.checked, true);
@@ -1883,6 +1949,7 @@ function isRevisionConflict(error) {
 }
 
 async function flushCurrentProjectSaves() {
+  if (state.mediaStudio && !(await state.mediaStudio.flush())) return false;
   const projectId = state.project?.id;
   if (!projectId) return true;
   try {
@@ -1900,7 +1967,7 @@ async function flushCurrentProjectSaves() {
 }
 
 function foregroundBusy() {
-  return Boolean(state.activeJob || state.activeUploads.size || state.manualEditBusy || state.sourceSyncPending || state.sourceMixerSavePending) || state.jobStartLocks.size > 0;
+  return Boolean(state.activeJob || state.activeUploads.size || state.mediaStudio?.uploading || state.manualEditBusy || state.sourceSyncPending || state.sourceMixerSavePending) || state.jobStartLocks.size > 0;
 }
 
 function projectHasForegroundWork(projectId) {
@@ -2031,6 +2098,7 @@ async function reconcileDirectorOutcome(projectId, message, { cancelled = false 
 }
 
 async function generateDraft() {
+  if (state.mediaStudio && !(await state.mediaStudio.flush())) return;
   if (!requireSavedTranscript()) return;
   if (!state.project?.sources?.A) {
     toast(t("waitingForVideo"));
@@ -2100,6 +2168,7 @@ async function ensureStoryAIReady(requestedGoal = null) {
 }
 
 async function refineDraft(command) {
+  if (state.mediaStudio && !(await state.mediaStudio.flush())) return;
   if (!requireSavedTranscript()) return;
   if (!state.project?.draft) return;
   if (state.draftDirtyReasons.size) { toast(t("rebuildBeforeRefine")); return; }
@@ -2604,6 +2673,7 @@ async function cancelActiveJob() {
 }
 
 function renderDraft() {
+  state.mediaStudio?.render();
   const draft = editorProject().draft;
   elements.draftTitle.textContent = draft.title || state.project.name;
   elements.draftSummary.textContent = draft.summary || "";
@@ -2877,16 +2947,16 @@ function previewExportDimensions() {
   const aspect = elements.aspectSelect?.value || state.project?.settings?.aspect || "9:16";
   const resolution = elements.resolutionSelect?.value || state.project?.settings?.resolution || "1080";
   const dimensions = {
-    "9:16": { "720": [720, 1280], "1080": [1080, 1920] },
-    "16:9": { "720": [1280, 720], "1080": [1920, 1080] },
-    "1:1": { "720": [720, 720], "1080": [1080, 1080] },
-    "4:5": { "720": [720, 900], "1080": [1080, 1350] },
+    "9:16": { "720": [720, 1280], "1080": [1080, 1920], "1440": [1440,2560], "2160": [2160,3840] },
+    "16:9": { "720": [1280, 720], "1080": [1920, 1080], "1440": [2560,1440], "2160": [3840,2160] },
+    "1:1": { "720": [720, 720], "1080": [1080, 1080], "1440": [1440,1440], "2160": [2160,2160] },
+    "4:5": { "720": [720, 900], "1080": [1080, 1350], "1440": [1440,1800], "2160": [2160,2700] },
   };
   if (aspect === "source") {
     const width = Math.trunc(Number(state.project?.sources?.A?.width));
     const height = Math.trunc(Number(state.project?.sources?.A?.height));
     if (Number.isFinite(width) && width > 0 && Number.isFinite(height) && height > 0) {
-      const scale = Math.min(1, (resolution === "1080" ? 1920 : 1280) / Math.max(width, height));
+      const scale = Math.min(1, ({"720":1280,"1080":1920,"1440":2560,"2160":3840}[resolution] || 1920) / Math.max(width, height));
       return [Math.max(2, Math.floor(width * scale / 2) * 2), Math.max(2, Math.floor(height * scale / 2) * 2)];
     }
   }
@@ -3901,6 +3971,7 @@ function togglePreview() {
 }
 
 async function playPreview() {
+  state.mediaStudio?.resumeAudio();
   const project = playbackProject();
   if (!project?.sources?.A || foregroundBusy() || elements.resultPanel.hidden) return;
   if (!previewUsesSourceTime() && !hasTimelineFootage()) return;
@@ -3949,6 +4020,7 @@ function stopPreviewPlayback() {
 }
 
 function pauseAllMedia() {
+  state.mediaStudio?.pause();
   state.preview.playRequest += 1;
   state.preview.clock?.pause();
   if (state.preview.frame != null) cancelAnimationFrame(state.preview.frame);
@@ -3960,6 +4032,7 @@ function pauseAllMedia() {
 }
 
 function releaseMediaHandles() {
+  state.mediaStudio?.clearPlayers();
   pauseAllMedia();
   document.querySelectorAll("video, audio").forEach((media) => {
     try {
@@ -3978,6 +4051,7 @@ function setPreviewPlaying(playing) {
     return;
   }
   state.preview.playing = playing;
+  updateMediaPreview();
   elements.previewStage.classList.toggle("playing", playing);
   elements.playButton.textContent = playing ? "❚❚" : "▶";
   elements.previewPlay.querySelector("span").textContent = playing ? "❚❚" : "▶";
@@ -4093,9 +4167,17 @@ function syncIndependentMedia(slot, point, needed, forceSeek = false, sourceSlot
   }
   const changedClip = state.preview[clipKey] !== point.clip.id;
   state.preview[clipKey] = point.clip.id;
-  if (forceSeek || changedClip || Math.abs(video.currentTime - point.sourceTime) > .12) {
-    try { video.currentTime = point.sourceTime; } catch { /* loadedmetadata/timeupdate can retry. */ }
+  const speed = Number(point.clip.video_speed) || 1;
+  const rawPictureTime = Number(point.clip.video_source_start ?? point.clip.source_start) + (point.sourceTime-point.clip.source_start)*speed;
+  const source = playbackProject()?.sources?.[sourceSlot];
+  const limit = Number(source?.video_duration || source?.duration || video.duration);
+  const retimed = speed !== 1 || point.clip.video_source_start != null;
+  const pictureTime = retimed ? Math.max(0, Math.min(rawPictureTime, limit > 0 ? Math.max(0,limit-.04) : rawPictureTime)) : point.sourceTime;
+  video.playbackRate = speed;
+  if (forceSeek || changedClip || Math.abs(video.currentTime - pictureTime) > .12) {
+    try { video.currentTime = pictureTime; } catch { /* loadedmetadata/timeupdate can retry. */ }
   }
+  if (retimed && limit > 0 && rawPictureTime >= limit-.035) { video.pause(); return; }
   if (!state.preview.playing) { if (!video.paused) video.pause(); return; }
   if (!video.paused || state.preview[pendingKey]) return;
   const request = state.preview.playRequest;
@@ -4234,9 +4316,11 @@ function syncSecondaryPreview(globalTime) {
     syncIndependentMedia("A", pointA, showA || !elements.previewA.muted, state.preview.seeking);
     syncIndependentMedia("B", pointB, showB || !elements.previewB.muted, state.preview.seeking, embeddedB ? "A" : "B");
     state.preview.currentCamera = camera;
+    updateMediaPreview();
     return;
   }
   const needsBPlayback = (showB || audioFromB) && Boolean(elements.previewB.src);
+  elements.previewA.playbackRate = 1; elements.previewB.playbackRate = 1;
   if (needsBPlayback) {
     const desired = camera === "embedded_stack" ? globalTime : sourceB ? globalTime - offset : globalTime;
     const withinSource = camera === "embedded_stack" || sourceBAvailable;
@@ -4248,6 +4332,7 @@ function syncSecondaryPreview(globalTime) {
     elements.previewB.pause();
   }
   state.preview.currentCamera = camera;
+  updateMediaPreview();
 }
 
 function cameraAt(time) {
@@ -5180,6 +5265,30 @@ function handleEditorShortcut(event) {
     return;
   }
   const action = resolveEditorShortcut(event, state.keyboardProfile);
+  const selectedMedia = event.target === elements.timelineCanvas && state.timeline?.mediaSelection
+    ? (state.project.manual?.media_clips || []).find(item => item.id === state.timeline.mediaSelection) : null;
+  if (selectedMedia && (["delete_selection", "split", "clear_selection"].includes(action)
+    || [event.key, event.code].some(key => ["Delete", "Del", "Backspace"].includes(key)))) {
+    // This capture listener runs before the canvas. Consume media commands here
+    // so neither stale base selections nor the canvas's generic Delete fallback run.
+    event.preventDefault();
+    event.stopPropagation?.();
+    if (!action || foregroundBusy() || state.transcriptSaving || event.repeat) return;
+    if (action === "clear_selection") {
+      state.timeline.cancelGesture?.();
+      state.timeline.mediaSelection = null;
+      state.mediaStudio?.select(null);
+      state.timeline.scheduleDraw?.();
+    } else if (action === "delete_selection") {
+      state.timeline.onMediaAction?.("media_remove", { clip_id: selectedMedia.id });
+    } else {
+      const mediaTime = previewTimelineTime();
+      if (mediaTime - selectedMedia.start >= .08 - 1e-9 && selectedMedia.end - mediaTime >= .08 - 1e-9) {
+        state.timeline.onMediaAction?.("media_split", { clip_id: selectedMedia.id, time: mediaTime });
+      }
+    }
+    return;
+  }
   if (!action || foregroundBusy() || state.transcriptSaving) return;
   const selection = state.manualSelection;
   const time = previewTimelineTime();
@@ -5266,6 +5375,7 @@ function handleEditorShortcut(event) {
 }
 
 function renderClipTrim() {
+  renderPictureSpeed();
   if (!elements.clipTrimForm) return;
   const range = state.manualSelection;
   const target = activeEditTarget();
@@ -5422,11 +5532,14 @@ async function applyManualEdit(action, detail = {}, { isCurrent = () => true } =
   const projectId = state.project.id;
   const preservedSelection = state.manualSelection ? { ...state.manualSelection } : null;
   const preservedTime = previewTimelineTime();
+  // Mixer and layer adjustments do not change the main playback clock. Keep
+  // auditioning while their automatic saves run, without reloading the video.
+  const liveMediaAction = action === "media_update" || action === "set_audio_mixer";
   let finishManualEdit;
   const manualEditPromise = new Promise((resolve) => { finishManualEdit = resolve; });
   state.manualEditPromise = manualEditPromise;
   state.manualEditBusy = true;
-  pausePreview();
+  if (!liveMediaAction) pausePreview();
   renderReadiness();
   renderManualControls();
   renderSourceMixer();
@@ -5459,6 +5572,12 @@ async function applyManualEdit(action, detail = {}, { isCurrent = () => true } =
     rememberProjectRevision(payload.project);
     if (state.project?.id !== projectId || !isCurrent()) return payload.project;
     state.project = payload.project;
+    if (liveMediaAction) {
+      state.mediaStudio?.render();
+      if (state.timeline) { state.timeline.project = editorProject(); state.timeline.scheduleDraw(); }
+      updateMediaPreview();
+      return state.project;
+    }
     elements.projectName.value = state.project.name || "";
     hydrateSettings();
     if (state.project.draft) renderDraft();
@@ -5646,6 +5765,22 @@ function renderTranscriptDetail(replaceText = true) {
   if (replaceText) elements.transcriptEditText.value = buffer?.text ?? String(segment.text || "");
   elements.transcriptEditText.disabled = busy;
   elements.transcriptEditTime.textContent = transcriptMappingLabel(segment, transcriptTimelineMapping(segment.start, segment.end));
+  const quality = state.project?.analysis?.transcript_quality;
+  const flagged = Array.isArray(quality?.review_segments) && quality.review_segments.some(item =>
+    item && String(item.segment_id) === String(segment.id));
+  let reviewNote = elements.transcriptEditForm.querySelector(".transcript-line-review");
+  if (!reviewNote && flagged) {
+    reviewNote = document.createElement("p");
+    reviewNote.className = "transcript-line-review";
+    reviewNote.id = "transcriptLineReview";
+    elements.transcriptEditForm.insertBefore(reviewNote, elements.transcriptEditText);
+  }
+  if (reviewNote) {
+    reviewNote.hidden = !flagged;
+    reviewNote.textContent = flagged
+      ? "Original AI confidence was low for this line. Listen and check names or mixed-language words. Saving text does not recheck the audio."
+      : "";
+  }
   const count = pendingTranscriptBuffers().length;
   elements.transcriptEditStatus.textContent = state.transcriptSaving ? "Saving…" : buffer ? `Unsaved · ${count} changed line${count === 1 ? "" : "s"}` : count ? `Saved · ${count} other unsaved line${count === 1 ? "" : "s"}` : "Saved · captions updated without rebuilding";
   elements.transcriptSave.disabled = busy || !buffer || !buffer.text.trim();
@@ -5680,6 +5815,26 @@ function renderTranscript() {
   const query = elements.transcriptSearch.value.trim().toLowerCase();
   const transcript = state.project?.analysis?.transcript;
   const segments = transcript?.segments || [];
+  const quality = state.project?.analysis?.transcript_quality;
+  const reviewIds = new Set((Array.isArray(quality?.review_segments) ? quality.review_segments : [])
+    .filter(item => item && item.segment_id != null).map(item => String(item.segment_id)));
+  const markedCount = segments.filter(segment => reviewIds.has(String(segment.id))).length;
+  const reportedCount = Number(quality?.review_segment_count);
+  const reviewCount = Math.min(segments.length, Math.max(markedCount, Number.isFinite(reportedCount) ? Math.trunc(reportedCount) : 0));
+  const transcriptCard = elements.transcriptList.parentElement;
+  let qualityNote = transcriptCard?.querySelector(".transcript-quality-note");
+  if (!qualityNote && reviewCount > 0 && transcriptCard) {
+    qualityNote = document.createElement("p");
+    qualityNote.className = "transcript-quality-note";
+    qualityNote.setAttribute("role", "status");
+    transcriptCard.insertBefore(qualityNote, elements.transcriptList);
+  }
+  if (qualityNote) {
+    qualityNote.hidden = reviewCount === 0;
+    qualityNote.textContent = reviewCount > 0
+      ? `AI review: ${reviewCount} line${reviewCount === 1 ? " was" : "s were"} flagged. Listen before using captions; confidence is not measured accuracy.${reviewCount > markedCount ? ` Only ${markedCount} ${markedCount === 1 ? "flag has" : "flags have"} line markers; search and filters may hide them.` : ""}`
+      : "";
+  }
   const previousScroll = elements.transcriptList.scrollTop;
   renderLanguageDetectionStatus();
   elements.transcriptLanguage.textContent = transcript
@@ -5708,6 +5863,15 @@ function renderTranscript() {
     seek.title = transcriptMappingLabel(segment, mapping);
     $(".transcript-text", seek).textContent = segment.text;
     $(".transcript-text", seek).setAttribute("dir", "auto");
+    if (reviewIds.has(String(segment.id))) {
+      const badge = document.createElement("small");
+      badge.className = "transcript-review-badge";
+      badge.textContent = "Review";
+      badge.setAttribute("dir", "ltr");
+      badge.title = "Original AI confidence was low. Listen and review this line.";
+      $(".transcript-text", seek).append(badge);
+      seek.title += " · AI review: low confidence";
+    }
     $("b", seek).textContent = mapping.independent && !mapping.ranges.length
       ? mapping.reason === "audio_changed" ? "Audio changed" : "Not on track"
       : removed ? "Removed" : "In edit";
@@ -5867,6 +6031,7 @@ function openExportDialog({ progress = false } = {}) {
 }
 
 async function startExport() {
+  if (state.mediaStudio && !(await state.mediaStudio.flush())) return;
   if (!requireSavedTranscript()) return;
   if (!state.project?.draft) return;
   if (!hasTimelineFootage()) { toast("Add footage to the timeline before exporting."); return; }

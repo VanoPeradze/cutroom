@@ -1,6 +1,6 @@
 # AI, on your terms
 
-CUTROOM is free and open source. AI can run locally, through your Groq account, or through a compatible cloud API provider. You can also skip AI and edit manually.
+CUTROOM is free and open source. AI can run locally, through your Groq account, or through a compatible cloud API provider. Manual cutting, imported media, audio mixing and MP4 export need no AI model, API key or provider account.
 
 ## Pick your connection
 
@@ -13,6 +13,8 @@ Open **AI connection** at the top of the app, choose an option, then select **Us
 **My own API account:** choose Groq or an OpenAI-compatible provider. For another provider, enter its public HTTPS base URL, transcription model ID and Story model ID. Your account's billing and limits apply; the selection does not purchase or upgrade anything. A chat subscription alone does not supply API access.
 
 The compatible endpoint must support both `/chat/completions` with JSON object response mode and `/audio/transcriptions` with `verbose_json` output and word timestamps. Both models must be available through the same base URL, API key and account. Compatibility with only chat completions is insufficient. HTTP, local and private-network destinations are rejected. Use the provider's API base URL, not its website or chat page.
+
+These models do different jobs: **transcription** listens to selected audio and returns words with timing; **Story AI** reads those words and returns a JSON edit plan. A text-only chat model does not replace a timed speech model. This integration currently uses one provider connection for both jobs; choosing separate providers for speech and Story is not supported. Check both model IDs and both capabilities with your provider before using a long recording.
 
 Thanks to Groq for making a free API tier available. CUTROOM is independent and is not sponsored or endorsed by Groq. [Groq rate limits](https://console.groq.com/docs/rate-limits) · [Billing FAQ](https://console.groq.com/docs/billing-faqs)
 
@@ -31,6 +33,8 @@ Models are separate downloads, not files bundled in the ZIP. **Transcription** t
 Downloading a model does **not** select that project's performance profile or switch between local/cloud AI. Choose the corresponding Lite, Balanced or Quality profile in the project; Hebrew Quality has a separate configured speech model. You do not need every model. Estimated download sizes are not total installation sizes or memory requirements. See the [English guide](USER_GUIDE_EN.md#local-models-what-to-download), [מדריך בעברית](USER_GUIDE_HE.md), and [model details](MODELS.md).
 
 The in-app model action does not silently install Ollama or approve operating-system permissions. Setup failures still need their cause resolved; use [first-run help](TEST_ON_ANOTHER_PC.md) or continue with Manual edit meanwhile.
+
+Hebrew local transcription uses a short Hebrew/English spelling hint. In Auto, that hint is used for recovery only after Hebrew text has been recognized. Balanced and Quality can recheck up to two weak units, each at most 30 seconds, with at most 48 seconds of audio retried per local pass. They reuse the loaded speech model; Lite adds no such pass. Replacements must pass confidence, timing, speech-coverage and recognized English-spelling checks. Uncertain passages remain marked for review. This is transcription, not translation or text rewriting by Story AI. See [quality limits](QUALITY_AND_LIMITS.md) for the separate existing model-upgrade paths and validation limits.
 
 ## What leaves your computer?
 

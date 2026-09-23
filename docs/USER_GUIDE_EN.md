@@ -12,7 +12,7 @@ Start with the short path below. The later sections explain the controls when yo
 4. Choose **Range**, drag over an unwanted passage and select **Remove from video**. Try **Undo**. Then select **Cut** and click once to split a clip.
 5. Open **Output**, confirm the shape and frame rate, then **Export → Start export → Download video**. Watch that downloaded file outside CUTROOM.
 
-Manual mode does not generate a transcript or AI story. When you are comfortable, start a Short/Reel or YouTube project and set up an AI connection.
+Manual mode does not generate a transcript or AI story. Adding library media, mixing audio and exporting also work without an API key or AI models. When you are comfortable, start a Short/Reel or YouTube project and set up an AI connection.
 
 ## 1. Pick the result before adding footage
 
@@ -69,6 +69,8 @@ Default chronological YouTube cleanup can work without a Story model; semantic S
 
 Choose **Groq** or an **OpenAI-compatible provider** under **My own API account**. For another provider, supply its public HTTPS API base URL and model IDs. Both models must use the same endpoint and account: `/chat/completions` must support JSON object mode, and `/audio/transcriptions` must return `verbose_json` with word timestamps. Chat-only APIs and chat subscriptions are insufficient; local/private-network endpoints are rejected. Enter your own key and confirm the destination and data-sharing notice before saving.
 
+The speech model supplies words and timing; the Story model supplies a structured edit based on that transcript. A stronger chat model cannot recover inaudible or missed words. The current connection cannot split these jobs between different providers.
+
 CUTROOM sends selected audio for transcription and transcript/editing context for Story AI. It does not send video frames. This content can include private speech, so use cloud processing only when you may share that material. Video previews and MP4 rendering still run on your computer: cloud AI is not an online render farm or a browser-only installation.
 
 Keys entered in the app stay in memory for the current CUTROOM session and are bound to the selected provider and base URL. Changing either requires a new key and fresh consent. Reconnect after restarting. **Forget session key** clears that key and selects local AI. A supplied key is not a successful connection test. Never include keys in screenshots or bug reports.
@@ -112,6 +114,7 @@ The overview shows the draft, before/after duration and **What changed**. If **R
 | --- | --- |
 | **Preview** | Watch and seek; compare Edited video with Full source; open video-only Full screen |
 | **Timeline** | Select, split, remove, restore, move and trim individual cuts |
+| **Media & audio** | Import extra video, images and sound; position media layers and balance the audio mix |
 | **Layout** | Arrange A/B, confirm an embedded camera and frame each clip |
 | **Captions** | Correct transcript text, remove/restore passages and style subtitles |
 | **Output** | Set shape, resolution, FPS and quality; advanced AI settings are separate |
@@ -146,7 +149,15 @@ Open **Original footage** to see the full recording and its kept/removed regions
 
 ### Familiar keyboard controls
 
-Open **More editing tools → Keys / Shortcuts**. Choose CUTROOM, DaVinci Resolve, Adobe Premiere Pro, Pro Tools or Final Cut Pro. The list shows supported commands, not a full emulation of those editors. Space plays/pauses. Shortcuts stay inactive while typing in caption or form fields. [Full shortcut reference](KEYBOARD_PROFILES.md)
+Open **More editing tools → Keys / Shortcuts** and choose a preset. The list shows the commands supported by CUTROOM. Space plays/pauses. Shortcuts stay inactive while typing in caption or form fields. [Full shortcut reference](KEYBOARD_PROFILES.md)
+
+### Add media and mix sound
+
+In **Media & audio**, choose **Add media** to import video, an image or audio into this project's library. Wait for preparation, place the yellow playhead and select **+ Add**. Drag the new clip or its edges in the waveform/timeline lanes; use its inspector for exact start/end, source in, volume and fades. Images can stay still, slowly zoom or pan. **Use clip audio** enables sound from an added video; check its **Audio group**.
+
+**Audio mixer** balances Original, Voiceover, Music, Effects and Master. Mute affects preview and export; Solo auditions a channel in the preview only. Watch the output meter while listening and leave some headroom. Media layers currently fit inside the existing edit duration; adding a file does not extend the whole edit or create more main A/B sources.
+
+For a selected main A/B clip, **Picture speed** changes only the picture, from 0.25× to 4×. Clip length and speech timing stay in place. It can lose lip sync, and reaching the end of the source can hold the last frame. Check the result before export; this control does not speed up the entire picture-and-sound edit.
 
 ## 7. Arrange and frame the video
 
@@ -174,11 +185,13 @@ Under **Subtitle style & speech language**:
 
 Captions follow edited timing and the selected audio source. Manual projects start without transcript text; enabling subtitles does not itself transcribe them.
 
+For mixed Hebrew/English, choose the main spoken language and review names and English terms. Local Balanced/Quality can recheck up to two weak units of at most 30 seconds each, within a 48-second audio budget per local pass, using the loaded model. Lite adds no such retry. Timing, confidence and spelling checks can keep the original instead. This does not translate or use Story AI to rewrite speech. Low-confidence warnings mean “listen and review,” not a measured accuracy score; automatic detection can still be wrong. [Recovery details and limits](QUALITY_AND_LIMITS.md)
+
 ## 9. Export and understand rebuilds
 
 Use **16:9 Landscape** or **9:16 Vertical** at the top of the editor for a one-click format change, including manual projects. The preview updates and the format saves automatically for export. No AI or rebuild is needed; your cuts stay intact. Use **Layout → Clip framing** if the subject needs repositioning in the new shape.
 
-Set **Aspect ratio** (9:16, 16:9, 1:1, 4:5 or Source), **Resolution** (720p/1080p), **Frame rate** (24/25/30/50/60 FPS) and **Export quality**. Higher settings can increase render time and size. 60 FPS preserves high-rate footage when available; lower-rate input repeats frames, not AI-generated motion.
+Set **Aspect ratio** (9:16, 16:9, 1:1, 4:5 or Source), **Resolution** (720p, 1080p, QHD 1440p or 4K 2160p), **Frame rate** (24/25/30/50/60 FPS) and **Export quality**. Higher settings can increase render time, memory use and size. Higher resolution does not recover missing source detail. 60 FPS preserves high-rate footage when available; lower-rate input repeats frames, not AI-generated motion.
 
 Controls marked **Draft rebuild** change editorial decisions and require **Rebuild Draft**. This is a new draft operation, not a preview refresh: save transcript corrections first and review afterward. Format and subtitle styling do not require rebuilding the story. **Performance mode** controls AI choices, not MP4 encoding quality. **Smart editorial effects** adds bounded emphasis; **Final loudness balance** adjusts exported sound levels.
 

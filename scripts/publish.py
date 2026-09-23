@@ -175,7 +175,14 @@ def package(root: Path) -> Path:
             # Envelope paths still need the same source-config privacy check.
             validate_config(payload[builder.WINDOWS_SOURCE_DIRECTORY + "/config.json"])
         output.mkdir(exist_ok=True)
-        target = output / staged.name
+        # Archive each build separately while keeping the downloaded name simple.
+        archive_dir = output / manifest["build_id"]
+        if archive_dir.exists() and (archive_dir.is_symlink() or builder._is_link(archive_dir)):
+            raise PublishError("Build output must not be a link/junction.")
+        if not archive_dir.resolve().is_relative_to(output.resolve()):
+            raise PublishError("Build output must stay inside dist.")
+        archive_dir.mkdir(exist_ok=True)
+        target = archive_dir / staged.name
         checksum = target.with_suffix(".zip.sha256")
         if target.exists() or checksum.exists():
             raise PublishError("A package with this timestamp already exists. Wait a second and retry; nothing is overwritten.")

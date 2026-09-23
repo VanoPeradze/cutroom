@@ -9,6 +9,7 @@
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/assets/styles.css?v=1.1-beta-3">
   <link rel="stylesheet" href="/assets/workspace.css?v=1.1-beta-3">
+  <link rel="stylesheet" href="/assets/media-studio.css?v=1.1-beta-2">
   <link rel="stylesheet" href="/assets/welcome.css?v=1.1-beta-1">
 </head>
 <body class="welcome-mode">
@@ -358,6 +359,7 @@
           <button id="studioTabSettings" role="tab" aria-selected="false" aria-controls="studioPanelSettings" tabindex="-1" data-tab="settings"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="2" fill="var(--surface-chrome)"/><circle cx="15" cy="17" r="2" fill="var(--surface-chrome)"/></svg><span>Output</span><small>Audio &amp; export</small></button>
         </div>
         <div class="advanced-content">
+          <div class="tab-panel" id="studioPanelMedia" role="tabpanel" aria-labelledby="studioTabMedia" tabindex="0" data-panel="media" hidden></div>
           
           <div class="tab-panel active" id="studioPanelTimeline" role="tabpanel" aria-labelledby="studioTabTimeline" tabindex="0" data-panel="timeline">
             <section id="emptyTimeline" class="empty-timeline" hidden><h3>Your timeline is empty</h3><p>Your original recordings are safe. Add footage or Undo to bring your edit back.</p><button id="emptyTimelineAdd" class="button primary" type="button">Add source footage</button></section>
@@ -580,7 +582,7 @@
                 <div class="studio-section-head"><b>Output format</b><small>Changes here apply on export.</small></div>
                 <div class="output-control-grid">
                   <label><span data-i18n="aspect">Aspect ratio</span><select id="aspectSelect"><option>9:16</option><option>16:9</option><option>1:1</option><option>4:5</option><option value="source" data-i18n="sourceRatio">Source</option></select></label>
-                  <label><span data-i18n="resolution">Resolution</span><select id="resolutionSelect"><option value="720">720p</option><option value="1080">1080p</option></select></label>
+                  <label><span data-i18n="resolution">Resolution</span><select id="resolutionSelect"><option value="720">720p</option><option value="1080">1080p</option><option value="1440">1440p · QHD</option><option value="2160">2160p · 4K</option></select><small>QHD / 4K take more render time and disk space. Upscaling does not recover missing detail.</small></label>
                   <label class="fps-field"><span id="fpsLabel">Frame rate</span><select id="fpsSelect" aria-labelledby="fpsLabel" aria-describedby="fpsHelp"><option value="24">24 FPS</option><option value="25">25 FPS</option><option value="30" selected>30 FPS</option><option value="50">50 FPS</option><option value="60">60 FPS</option></select><small id="fpsHelp">30 FPS balances smooth playback and render time.</small></label>
                   <label><span data-i18n="quality">Export quality</span><select id="qualitySelect"><option value="fast" data-i18n="fast">Fast</option><option value="balanced" data-i18n="balanced">Balanced</option><option value="quality" data-i18n="highQuality">High</option></select></label>
 
@@ -748,6 +750,6 @@
       <footer class="connection-actions"><button class="button ghost" id="forgetCloudKey" type="button">Forget session key</button><button class="button primary" id="saveAIConnection" type="submit">Use this connection</button></footer>
     </form>
   </dialog>
-  <script type="module" src="/assets/app.js?v=1.1-beta-4"></script>
+  <script type="module" src="/assets/app.js?v=1.1-beta-7"></script>
 </body>
 </html>

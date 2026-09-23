@@ -328,8 +328,10 @@ def test_story_model_is_required_before_semantic_director_runs():
 
 
 def test_job_manager_separates_background_and_foreground_work():
+    from cutroom.jobs import JobManager
+
     jobs = (ROOT / "cutroom" / "jobs.py").read_text(encoding="utf-8")
-    assert 'BACKGROUND_KINDS = {"prepare_source", "model_install"}' in jobs
+    assert {"prepare_source", "prepare_asset", "model_install"} <= JobManager.BACKGROUND_KINDS
     assert 'self.background_executor' in jobs
     assert 'executor = self.background_executor if kind in self.BACKGROUND_KINDS else self.executor' in jobs
 

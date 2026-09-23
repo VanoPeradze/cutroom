@@ -252,8 +252,14 @@ def build_package(root: Path, output_dir: Path, *, build_id: str | None = None) 
         "files": {name: hashlib.sha256(data).hexdigest() for name, data in sorted(payload.items())},
     }
     payload[WINDOWS_SOURCE_DIRECTORY + "/TEST_BUILD.json"] = _bytes_json(manifest)
-    output_dir.mkdir(parents=True, exist_ok=True)
-    target = output_dir / (folder + ".zip")
+    # Keep build provenance internally and in the local archive directory, not
+    # in the name downloaded by a creator. Never overwrite an earlier build.
+    archive_dir = output_dir / folder
+    archive_dir.mkdir(parents=True, exist_ok=True)
+    public_name = "CUTROOM-" + version_label.replace(" ", "-") + ".zip"
+    if not re.fullmatch(r"CUTROOM-[A-Za-z0-9.-]+\.zip", public_name):
+        raise ValueError("Unsafe release filename")
+    target = archive_dir / public_name
     checksum = target.with_suffix(".zip.sha256")
     if target.exists() or checksum.exists():
         raise FileExistsError(f"Package already exists: {target.name}")

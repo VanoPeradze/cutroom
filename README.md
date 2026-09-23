@@ -62,10 +62,11 @@ CUTROOM helps turn camera recordings, screen captures and gameplay into an **edi
 | Create Shorts or Reels | Start in 9:16, review AI-selected moments, adjust framing and add captions. |
 | Combine camera and screen | Use two recordings or define an embedded-camera region; review roles, layout and sync. |
 | Make the edit your own | Split, move, trim and restore independent clips; edit A/B together or separately, with Undo/Redo. |
+| Add media and sound | Import B-roll, images, music and voiceover into a project library; place them over the existing edit and mix audio with waveform lanes. |
 | Finish the details | Correct the transcript, style captions and export subtitles as SRT. |
-| Export your video | Create 720p or 1080p MP4s, with frame-rate options up to 60 FPS. |
+| Export your video | Create 720p, 1080p, QHD 1440p or 4K 2160p MP4s, with frame-rate options up to 60 FPS. |
 
-Lower-frame-rate footage does not gain new motion detail when exported at 60 FPS.
+Higher export settings do not create detail missing from the source. Library media fits within the current edit duration. A/B **Picture speed** changes the picture while preserving clip length and speech timing; it can lose lip sync or hold the last available frame.
 
 ## Get started
 
@@ -89,13 +90,15 @@ The editor and rendering stay on your computer in every mode. Open **AI connecti
 
 | Mode | What you need | What to expect |
 | --- | --- | --- |
-| **Manual editing** | Your footage | No AI models or AI account. Open the recording and start cutting. |
+| **Manual editing** | Your footage | No AI models or AI account. Cut, add library media, mix audio and export locally. |
 | **Local AI** | Downloaded models and enough computer resources | Transcription and Story AI on your machine, with no provider fees. |
 | **Optional cloud AI** | Your Groq account, or a compatible provider endpoint and API key | Groq Free tier is free within its quotas; paid accounts and other providers may charge. |
 
 Local models download only after you choose and confirm them. Selecting local mode alone does not install them. When you opt into cloud processing, selected audio and transcript/editing context are sent to the provider. CUTROOM does not automatically switch your provider or billing plan. Keys entered in the application last for the current session and are bound to the selected destination. Changing provider or endpoint requires a new key and consent.
 
 **My own API account** supports Groq or a public HTTPS endpoint compatible with OpenAI's chat and timed-transcription APIs. Both models must work through the same endpoint and account; a chat subscription alone is not an API connection. See the requirements in the connection guide below.
+
+The speech model recognizes words and timings. Story AI reads that transcript and returns a structured edit; a stronger chat model cannot recover speech the transcription missed. Hebrew/English local recovery is limited to short, low-confidence passages and retains the original when its checks fail. Review names, mixed-language terms and flagged passages yourself; no measured accuracy improvement is claimed.
 
 Thanks to Groq for making a free API tier available. CUTROOM is independent and is not sponsored or endorsed by Groq. [Groq rate limits](https://console.groq.com/docs/rate-limits) · [Billing FAQ](https://console.groq.com/docs/billing-faqs)
 
@@ -108,7 +111,7 @@ The workflow is available to try; the quality still needs real-world feedback.
 - Transcription and draft quality vary with language, noise, overlapping voices and recording length.
 - Camera detection, source roles, synchronization and suggested cuts may need manual correction.
 - Editing styles are pacing and selection presets, not replicas of individual creators.
-- There are two video sources, not unlimited professional editing tracks.
+- A/B remain the two main sources. Added media layers fit inside their existing edit; they do not extend its end automatically.
 - Fresh-computer installation and broad hardware coverage are still being validated.
 
 Use copies of your footage, not your only originals or an urgent client delivery. Automated tests and synthetic renders do not establish professional editorial quality.

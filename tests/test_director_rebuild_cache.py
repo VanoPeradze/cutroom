@@ -206,6 +206,72 @@ def test_rebuild_preserves_reordered_edit_sequence_beyond_original_source_durati
     assert editor_sequence_snapshot(after)["active"] is True
 
 
+def _add_media_layers(store, project_id, *, start=40, end=60, sequence=False, second_source=False):
+    from cutroom.editing import apply_manual_edit
+    from cutroom.sequence import editor_sequence_snapshot
+
+    def attach(current):
+        if second_source:
+            current["sources"]["B"] = {**current["sources"]["A"], "slot": "B"}
+            current["manual"]["source_mixer"]["default_layout"] = "stacked"
+        if sequence:
+            clip = editor_sequence_snapshot(current)["source_tracks"]["A"][0]
+            apply_manual_edit(current, {"action": "sequence_move", "slot": "A", "clip_id": clip["id"], "start": 320})
+        asset_id = "asset_" + "b" * 32
+        current["assets"] = {asset_id: {"id": asset_id, "name": "voice.wav", "kind": "audio", "duration": 300,
+                                        "has_audio": True, "status": "ready"}}
+        apply_manual_edit(current, {"action": "media_add", "asset_id": asset_id, "start": start, "end": end})
+        apply_manual_edit(current, {"action": "set_audio_mixer", "music_db": -9, "voice_db": -3, "ducking": True})
+    store.update(project_id, attach)
+
+
+@pytest.mark.parametrize("command", [None, "shorter", "new_variation", "focus_speaker"])
+def test_ai_rebuild_rejects_media_overhang_without_changing_any_project_state(semantic_project, monkeypatch, command):
+    from cutroom.media_library import MediaLibraryError
+
+    store, settings, project_id, _calls, context = semantic_project
+    _add_media_layers(store, project_id, second_source=command == "focus_speaker")
+    monkeypatch.setattr(director, "synchronize_sources", lambda *_args, **_kwargs: {"offset": 0, "confidence": 1, "method": "fixture"})
+    monkeypatch.setattr(director, "_enforce_short_target", lambda *_args, **_kwargs: ([{"start": 20, "end": 300}], 0))
+    before = store.load(project_id)
+    job_context = context()
+    with pytest.raises(MediaLibraryError, match="Trim, move, or remove"):
+        if command:
+            director.refine_project(job_context, project_id, store, settings, command)
+        else:
+            director.analyze_project(job_context, project_id, store, settings)
+    assert store.load(project_id) == before
+    assert not job_context.committed
+
+
+@pytest.mark.parametrize("sequence", [False, True])
+def test_compatible_refinement_preserves_media_and_mixer_on_effective_edit_clock(semantic_project, monkeypatch, sequence):
+    store, settings, project_id, _calls, context = semantic_project
+    _add_media_layers(store, project_id, start=325 if sequence else 2, end=330 if sequence else 4, sequence=sequence)
+    monkeypatch.setattr(director, "_enforce_short_target", lambda *_args, **_kwargs: ([{"start": 20, "end": 300}], 0))
+    before = store.load(project_id)
+    director.refine_project(context(), project_id, store, settings, "shorter")
+    after = store.load(project_id)
+    assert after["manual"]["media_clips"] == before["manual"]["media_clips"]
+    assert after["manual"]["audio_mixer"] == before["manual"]["audio_mixer"]
+    assert after["assets"] == before["assets"]
+    assert after["settings"]["pace"] == "dynamic"
+    assert after["draft"]["output_duration"] == 20
+
+
+def test_compatible_focus_refinement_commits_staged_routing_with_media(semantic_project, monkeypatch):
+    store, settings, project_id, _calls, context = semantic_project
+    _add_media_layers(store, project_id, start=2, end=4, second_source=True)
+    monkeypatch.setattr(director, "synchronize_sources", lambda *_args, **_kwargs: {"offset": 0, "confidence": 1, "method": "fixture"})
+    monkeypatch.setattr(director, "_enforce_short_target", lambda *_args, **_kwargs: ([{"start": 20, "end": 300}], 0))
+    before = store.load(project_id)
+    director.refine_project(context(), project_id, store, settings, "focus_speaker")
+    after = store.load(project_id)
+    assert after["manual"]["source_mixer"]["default_layout"] == "camera"
+    assert after["manual"]["media_clips"] == before["manual"]["media_clips"]
+    assert after["manual"]["audio_mixer"] == before["manual"]["audio_mixer"]
+
+
 @pytest.mark.parametrize("candidate_source", ["manual", "prepared"])
 def test_prepared_embedded_layout_survives_generation_refinement_and_rebuild(semantic_project, candidate_source):
     from cutroom.editing import apply_manual_edit
