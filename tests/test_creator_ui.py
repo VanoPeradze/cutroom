@@ -62,3 +62,11 @@ def test_header_and_progress_share_one_stack_and_theme_initializes_before_styles
     app = (ROOT / "web/app.js").read_text(encoding="utf-8")
     assert 'analysisPanel.offsetTop - 100' not in app
     assert 'panelTop - chromeHeight - 16' in app
+
+
+def test_layout_keeps_recovery_and_extra_monitors_in_disclosures():
+    html = (ROOT / "web/index.html").read_text(encoding="utf-8")
+    assert html.index('id="sourceSetupDisclosure"') < html.index('id="creatorFramePreset"') < html.index('id="sourceIdentityCards"')
+    assert '<details class="embedded-camera-editor"' in html
+    assert '<details class="framing-source-preview"><summary>Original source preview</summary>' in html
+    assert 'Restore 30/70 stack' in html

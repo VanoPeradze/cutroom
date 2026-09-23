@@ -619,6 +619,7 @@ function bindEvents() {
   });
   elements.useEmbeddedCamera.addEventListener("click", () => {
     if (!embeddedCameraCandidate()) {
+      if (elements.embeddedCameraEditor) elements.embeddedCameraEditor.open = true;
       elements.embeddedCameraEditor?.scrollIntoView({ behavior: "smooth", block: "center" });
       return;
     }
@@ -2830,7 +2831,8 @@ function sourceMixerSettings() {
   if (new Set([screenSlot, cameraSlot]).size !== 2 || ![screenSlot, cameraSlot].every((slot) => ["A", "B"].includes(slot))) {
     screenSlot = "A"; cameraSlot = "B";
   }
-  const firstSlot = ["A", "B"].includes(String(raw.first_slot || "").toUpperCase()) ? String(raw.first_slot).toUpperCase() : "A";
+  const vertical = (state.project?.settings?.aspect || "9:16") === "9:16";
+  const firstSlot = ["A", "B"].includes(String(raw.first_slot || "").toUpperCase()) ? String(raw.first_slot).toUpperCase() : vertical ? cameraSlot : "A";
   const primaryRole = ["screen", "camera"].includes(raw.primary_role) ? raw.primary_role : "screen";
   let audioSlot = ["A", "B"].includes(String(raw.audio_slot || "").toUpperCase()) ? String(raw.audio_slot).toUpperCase() : "A";
   if (!state.project?.sources?.[audioSlot]?.has_audio) {
@@ -2844,13 +2846,17 @@ function sourceMixerSettings() {
   const rawDefaultLayout = String(raw.default_layout || "").toLowerCase();
   const defaultLayoutExplicit = Object.hasOwn(raw, "default_layout") && allowedLayouts.includes(rawDefaultLayout);
   const defaultLayout = defaultLayoutExplicit ? rawDefaultLayout : "auto";
-  const stackFit = raw.stack_fit === "cover" ? "cover" : "contain";
+  const stackFit = ["cover", "contain"].includes(raw.stack_fit) ? raw.stack_fit : vertical ? "cover" : "contain";
   return { screenSlot, cameraSlot, firstSlot, primaryRole, audioSlot, syncOffset, hasManualSync, defaultLayout, defaultLayoutExplicit, stackFit };
 }
 
 function sourceMixerLayoutFromSetting(layout, mixer = sourceMixerSettings()) {
   if (layout === mixer.screenSlot) return "screen";
   if (layout === mixer.cameraSlot) return "camera";
+  const settings = state.project?.settings || {};
+  if ((!layout || layout === "auto") && !mixer.defaultLayoutExplicit && state.project?.sources?.B
+      && (settings.goal || "short") === "short" && (settings.aspect || "9:16") === "9:16"
+      && (settings.layout || "auto") === "auto") return "stacked";
   return ["auto", "screen", "camera", "stacked", "side_by_side", "pip"].includes(layout) ? layout : "auto";
 }
 
@@ -3041,9 +3047,9 @@ function renderSourceMixer() {
   const busy = sourceMixerControlBusy();
   renderSourceIdentity(mixer, busy);
   elements.sourceMixerTitle.textContent = hasTwoSources
-    ? uiCopy("שליטה במקורות A/B", "A/B source control")
+    ? uiCopy("שליטה במקורות A/B", "Screen + camera")
     : sourceA
-      ? uiCopy("שליטה במקור ובמצלמה", "Source and camera control")
+      ? uiCopy("שליטה במקור ובמצלמה", "Your recording")
       : uiCopy("שליטה במקורות", "Source control");
   elements.sourceMixerHelp.textContent = hasTwoSources && state.project.draft
     ? uiCopy("לחיצה על פריסה שומרת אותה מיד לטווח המסומן או לכל העריכה.", "Choosing a layout saves it immediately to the selection or the entire edit.")
@@ -3796,7 +3802,13 @@ function renderEmbeddedCameraEditor() {
   const candidateKey = embeddedEditorCandidateKey(candidate);
   const changedSource = state.embeddedEditor.projectId !== state.project.id || state.embeddedEditor.generation !== generation
     || state.embeddedEditor.viewToken !== state.projectViewToken;
-  if (changedSource) resetEmbeddedEditor();
+  if (changedSource) {
+    resetEmbeddedEditor();
+    // Once marked, keep the large source picker out of the way. Do not reopen
+    // it on every autosave or playback update, or discard the user's choice.
+    elements.embeddedCameraEditor.open = !embeddedCameraIsActive();
+  }
+  if (state.embeddedEditor.error) elements.embeddedCameraEditor.open = true;
   const changedSuggestion = !state.embeddedEditor.dirty && state.embeddedEditor.candidateKey !== candidateKey;
   if (changedSource || changedSuggestion) {
     state.embeddedEditor.projectId = state.project.id;
@@ -5057,6 +5069,7 @@ function renderRangeEditors() {
       : range ? `Changes only ${formatSourceTime(range.start)}–${formatSourceTime(range.end)} on the timeline.`
       : "Applies to the whole video.";
   }
+  if (elements.layoutWholeEdit) elements.layoutWholeEdit.hidden = !range;
 }
 
 function selectTypedRange(prefix) {
@@ -5097,6 +5110,7 @@ function openTimelineLayout(range) {
     seekSourcePreview(Number(range.start));
   }
   const target = state.project.sources?.B ? elements.layoutRangeForm : elements.embeddedCameraEditor;
+  if (target === elements.embeddedCameraEditor && target) target.open = true;
   (target?.closest?.(".layout-range-panel") || target)?.scrollIntoView({ block: "nearest", behavior: "auto" });
   return true;
 }

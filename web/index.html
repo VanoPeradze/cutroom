@@ -12,7 +12,7 @@
   <link rel="stylesheet" href="/assets/workspace.css?v=1.1-beta-3">
   <link rel="stylesheet" href="/assets/media-studio.css?v=1.1-beta-2">
   <link rel="stylesheet" href="/assets/welcome.css?v=1.1-beta-1">
-  <link rel="stylesheet" href="/assets/creator-ui.css?v=1.1-beta-5">
+  <link rel="stylesheet" href="/assets/creator-ui.css?v=1.1-beta-8">
 </head>
 <body class="welcome-mode">
   <a class="skip-link" href="#main" data-i18n="skip">Skip to content</a>
@@ -388,7 +388,7 @@
             <details class="editor-ai-suggestions"><summary>AI suggestions</summary><div id="studioDirectorDock"></div></details>
           </div>
           <div class="tab-panel" id="studioPanelFraming" role="tabpanel" aria-labelledby="studioTabFraming" tabindex="0" data-panel="framing">
-            <header class="studio-tool-intro"><div><p>02 · LAYOUT</p><h3>Frame your video</h3></div><span>See changes in the video as you make them. Layout changes save automatically.</span></header>
+            <header class="studio-tool-intro"><div><p>02 · LAYOUT</p><h3>Frame your video</h3></div><span>Choose a layout, then adjust the selected clip. Changes save automatically.</span></header>
             <section class="source-mixer" id="sourceMixer" aria-labelledby="sourceMixerTitle">
               <div class="source-mixer-head">
                 <div><p class="eyebrow">SOURCE MIXER</p><h3 id="sourceMixerTitle">Source control</h3><p id="sourceMixerHelp">AI suggests a layout; your choice always wins.</p></div>
@@ -397,7 +397,8 @@
               <div class="source-mixer-empty" id="sourceMixerEmpty">
                 <b>Add a video first</b><span>After upload, choose whether the camera is embedded in the recording or supplied as source B.</span>
               </div>
-              <section class="embedded-camera-editor" id="embeddedCameraEditor" aria-labelledby="embeddedCameraTitle" hidden>
+              <details class="embedded-camera-editor" id="embeddedCameraEditor" aria-labelledby="embeddedCameraTitle" hidden>
+                <summary>Camera area in this recording</summary>
                 <div class="embedded-camera-head">
                   <div><b id="embeddedCameraTitle">Screen and camera in one recording</b><span id="embeddedCameraHelp">If the camera is already embedded in the recording, mark its area here. Do not upload the same video again as source B.</span></div>
                   <span class="embedded-camera-state" id="embeddedCameraState" role="status"></span>
@@ -437,10 +438,10 @@
                     <p class="embedded-camera-note">Drag the box onto your camera; drag its corner to resize. Changes preview immediately and save automatically. Camera: top 30% · screen: bottom 70%.</p>
                   </div>
                 </div>
-              </section>
+              </details>
               <div class="source-mixer-body" id="sourceMixerBody" hidden>
                 <section class="layout-range-panel" aria-labelledby="layoutRangeTitle">
-                  <div class="source-section-heading"><h4 id="layoutRangeTitle">1. Choose where</h4><span id="layoutScopeBadge">Entire edit</span></div>
+                  <div class="source-section-heading"><h4 id="layoutRangeTitle">Apply to</h4><span id="layoutScopeBadge">Entire edit</span></div>
                   <p id="layoutScopeHelp">No range selected. A layout choice changes the entire edit.</p>
                   <button type="button" id="layoutWholeEdit" class="button ghost compact">Entire edit</button>
                   <details class="layout-exact-range"><summary>Exact range…</summary>
@@ -454,9 +455,9 @@
                   </details>
                 </section>
                 <fieldset class="source-layout-fieldset">
-                  <legend>2. Choose what appears · saves immediately</legend>
+                  <legend>Layout</legend>
                   <div class="source-layout-choices" id="sourceLayoutChoices">
-                    <button type="button" data-layout="stacked" class="active" aria-pressed="true"><i>▰</i><span>Camera + screen</span></button>
+                    <button type="button" data-layout="stacked" class="active" aria-pressed="true"><i class="stacked-layout-icon" aria-hidden="true"><b></b><b></b></i><span>Stacked</span></button>
                     <button type="button" data-layout="screen"><i>▣</i><span>Screen only</span></button>
                     <button type="button" data-layout="camera"><i>●</i><span>Camera only</span></button>
                     <details class="more-source-layouts" id="moreSourceLayouts">
@@ -469,15 +470,15 @@
                     </details>
                   </div>
                 </fieldset>
-                <div class="source-mixer-actions">
+                <div class="source-mixer-actions" hidden>
                   <button hidden class="button primary" id="applyLayoutSelection" type="button" disabled>Apply to selection</button>
                   <button hidden class="button ghost" id="applyLayoutAll" type="button">Apply to entire edit</button>
                   <span id="sourceMixerRange">Select a Timeline range to change only part of the video.</span>
                 </div>
-                <button class="creator-frame-preset" id="creatorFramePreset" type="button"><i aria-hidden="true"><span>CAM</span><span>SCREEN</span></i><span><b>Creator frame</b><small>Camera 30% on top · screen 70% below · keeps your output format</small></span></button>
-                <button class="button ghost compact" id="swapSourceOrder" type="button">Swap top / bottom · whole edit</button>
                 <details class="source-setup-disclosure" id="sourceSetupDisclosure">
-                  <summary>Source setup <small>Roles, audio &amp; sync · whole edit</small></summary>
+                  <summary>Advanced <small>Sources, fit &amp; sync</small></summary>
+                  <button class="creator-frame-preset" id="creatorFramePreset" type="button"><i aria-hidden="true"><span>CAM</span><span>SCREEN</span></i><span><b>Restore 30/70 stack</b><small>Camera on top · screen below · fill without stretching. Resets order and fit for the whole edit.</small></span></button>
+                  <button class="button ghost compact" id="swapSourceOrder" type="button">Swap top / bottom · whole edit</button>
                   <button class="button ghost compact" id="resetSourceLayout" type="button">Reset next-build layout default</button>
                   <p class="source-global-note">These settings affect the whole edit, even with a range selected. To change what appears during a section, use the layout choices above.</p>
                   <div id="sourceIdentityCards" class="source-identity-cards" aria-label="Available sources"></div>
@@ -530,7 +531,7 @@
             <details class="framing-layout framing-disclosure layout-disclosure" open>
               <summary>Clip framing</summary>
               <p id="cropScopeStatus" role="status">Select a clip to frame it independently.</p>
-              <div class="crop-preview" id="cropPreview"><video id="cropVideo" muted playsinline></video><div class="crop-thirds"><i></i><i></i><i></i><i></i></div></div>
+              <details class="framing-source-preview"><summary>Original source preview</summary><div class="crop-preview" id="cropPreview"><video id="cropVideo" muted playsinline></video><div class="crop-thirds"><i></i><i></i><i></i><i></i></div></div></details>
               <div class="framing-controls">
                 <label><span>Frame source</span><select id="cropSourceSelect"><option value="A">A</option><option value="B">B</option></select></label>
                 <label><span data-i18n="horizontalFocus">Horizontal focus</span><input id="cropX" type="range" min="0" max="100" value="50"></label>
@@ -755,6 +756,6 @@
       <footer class="connection-actions"><button class="button ghost" id="forgetCloudKey" type="button">Forget session key</button><button class="button primary" id="saveAIConnection" type="submit">Use this connection</button></footer>
     </form>
   </dialog>
-  <script type="module" src="/assets/app.js?v=1.1-beta-10"></script>
+  <script type="module" src="/assets/app.js?v=1.1-beta-12"></script>
 </body>
 </html>

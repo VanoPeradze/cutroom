@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .cache_keys import build_analysis_cache_fingerprints, cache_fingerprints_match, stable_fingerprint
-from .composition import select_embedded_candidate
+from .composition import default_reels_stack, select_embedded_candidate
 from .config import Settings
 from .edit_styles import enrich_brief_with_style
 from .editing import SOURCE_MIXER_DEFAULT_LAYOUTS, apply_camera_overrides, apply_timeline_overrides
@@ -1677,7 +1677,7 @@ def _effective_brief(project: dict[str, Any]) -> dict[str, Any]:
     # Product intent supplies safe defaults. An explicit Source Mixer choice is
     # applied last, so changing an edit style can never erase the user's framing.
     if goal == "short":
-        brief["aspect"] = "9:16"
+        brief.setdefault("aspect", "9:16")
     elif goal == "youtube":
         brief["aspect"] = "16:9"
         brief["layout"] = "A"
@@ -1695,6 +1695,8 @@ def _effective_brief(project: dict[str, Any]) -> dict[str, Any]:
     explicit_layout = _explicit_source_layout(project)
     if explicit_layout is not None:
         brief["layout"] = explicit_layout
+    elif default_reels_stack(project):
+        brief["layout"] = "stacked"
     elif (project.get("sources") or {}).get("B"):
         # Streamer presets historically carried physical ``A`` defaults, which
         # silently hid a valid second source. Resolve those defaults through the

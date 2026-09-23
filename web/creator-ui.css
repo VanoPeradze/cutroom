@@ -275,3 +275,26 @@ html[data-theme="dark"] .welcome-mode .topbar .button:hover { background:var(--s
 html[data-theme="dark"] .welcome-mode .topbar .local-status { color:#a5dac5; border-color:#37594c; background:#203b30; }
 html[data-theme="dark"] .home-hub :focus-visible,
 html[data-theme="dark"] .welcome-mode .topbar :focus-visible { outline-color:#bfa6df; }
+
+/* Layout: composition first; source setup and duplicate monitors on demand. */
+.source-mixer .source-mixer-head .eyebrow { display:none; }
+.source-mixer .source-mixer-head h3 { font-size:16px; }
+.source-mixer .source-section-heading h4 { font-size:12px; }
+.source-mixer .layout-range-panel { padding:10px; border-radius:8px; }
+.source-mixer .source-layout-fieldset { margin-block:12px; }
+.source-layout-choices .stacked-layout-icon { display:grid; grid-template-rows:3fr 7fr; gap:2px; width:24px; height:36px; margin:auto; border:1px solid var(--line-strong); border-radius:3px; overflow:hidden; }
+.stacked-layout-icon b:first-child { background:var(--signal); }
+.stacked-layout-icon b:last-child { background:var(--cyan); }
+details.embedded-camera-editor > summary,
+.framing-source-preview > summary { padding:12px 0; cursor:pointer; font-size:12px; font-weight:650; color:var(--paper); }
+details.embedded-camera-editor:not([open]) { padding-block:0; border-color:var(--line); background:var(--surface-inset); }
+.framing-source-preview { margin-bottom:12px; }
+.framing-source-preview .crop-preview { margin-block:8px; }
+.source-setup-disclosure .creator-frame-preset { margin-block:12px; }
+.studio-workspace .source-mixer { padding:0; border:0; border-radius:0; background:none; box-shadow:none; }
+.studio-workspace .source-mixer-head { flex-direction:column; gap:8px; }
+.studio-workspace .source-mixer-head > div { display:none; }
+.studio-workspace .source-mixer-status { max-width:100%; }
+html[data-theme="light"] .source-layout-choices button { color:var(--paper); background:var(--surface-inset); border-color:var(--line-strong); }
+html[data-theme="light"] .source-layout-choices button.active,
+html[data-theme="light"] .source-layout-choices button[aria-pressed="true"] { color:#573378; background:#e7dff0; border-color:#8b6ba9; }

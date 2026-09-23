@@ -4,6 +4,7 @@ from __future__ import annotations
 import copy
 from typing import Any
 
+from .composition import default_reels_stack
 from .source_tracks import (
     EPSILON, MAX_SEQUENCE_SECONDS, SourceTrackError, _duration, _finite, _new_id,
     _number, _validated, _shift_video_start, has_sequence, minimum_clip_seconds,
@@ -146,7 +147,7 @@ def _automatic_layout(project: dict[str, Any]) -> str:
 
     Once clips are rearranged, their edit-clock ranges no longer identify the
     original Storyline intervals. An explicit mixer default is authoritative;
-    otherwise show the primary semantic role (or the sole source).
+    otherwise use the Reels stack or primary semantic role (or the sole source).
     """
     if not (project.get("sources") or {}).get("B"):
         draft = project.get("draft") or {}
@@ -159,6 +160,8 @@ def _automatic_layout(project: dict[str, Any]) -> str:
     default = str(mixer.get("default_layout") or "auto")
     if default in SEQUENCE_LAYOUTS - {"embedded_stack"}:
         return default
+    if default_reels_stack(project):
+        return "stacked"
     return "camera" if mixer.get("primary_role") == "camera" else "screen"
 
 

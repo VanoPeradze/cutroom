@@ -2,6 +2,8 @@
 
 ## 1.1 Beta — 2026-09-24
 
+- Made new two-source Reels default to a filled 30/70 camera-above-screen stack in upload setup, AI drafts, manual drafts, preview and export. Explicit source order, fit choices and nonvertical layouts remain intact; confirmed embedded-camera layouts use the same proportions.
+- Simplified Layout: three primary choices, source routing/fit/sync under Advanced, and optional reference monitors. The embedded camera picker starts folded once configured, with an automatic reopen if saving needs a retry.
 - Added a persistent Day/Night switch for the app, including the project lobby, editing controls and Guide. Preview imagery and captions retain their original colors.
 - Stabilized the header and working-status banner as a single measured stack. Wrapped navigation no longer overlaps progress or the editor, and starting analysis no longer triggers the old smooth scrolling jump.
 - Refreshed the application entrance with an ivory/violet palette, visual project choices and optional AI setup after the primary workflows. Kept the editing workspace dark with clearer selection and panel contrast.

@@ -27,6 +27,19 @@ MAX_FACE_CAM_AREA = 0.60
 _BOUNDARY_EPSILON = 1e-6
 
 
+def default_reels_stack(project: Mapping[str, Any]) -> bool:
+    """Use a two-source Reels stack only before an explicit layout is chosen."""
+    settings = project.get("settings") or {}
+    mixer = (project.get("manual") or {}).get("source_mixer") or {}
+    return bool(
+        (project.get("sources") or {}).get("B")
+        and str(settings.get("goal") or "short") == "short"
+        and str(settings.get("aspect") or "9:16") == "9:16"
+        and str(settings.get("layout") or "auto") == "auto"
+        and "default_layout" not in mixer
+    )
+
+
 def _finite_number(value: Any) -> float | None:
     """Return a JSON-style finite number, rejecting booleans and strings."""
     if isinstance(value, bool) or not isinstance(value, Real):
