@@ -503,9 +503,8 @@ def _inferred_source_mixer(project: dict[str, Any]) -> dict[str, Any]:
         "camera_slot": camera_slot,
         "primary_role": "screen",
         "audio_slot": audio_slot,
-        # Physical ordering is deliberately predictable; the Source Mixer can
-        # change this independently from semantic screen/camera roles.
-        "first_slot": "A",
+        # New vertical stacks put the camera above the larger screen panel.
+        "first_slot": camera_slot if str((project.get("settings") or {}).get("aspect") or "9:16") == "9:16" else "A",
     }
 
 
@@ -522,9 +521,11 @@ def _preserved_source_mixer(project: dict[str, Any], previous: dict[str, Any]) -
     primary_role = str(previous.get("primary_role") or "screen").lower()
     if primary_role not in {"screen", "camera"}:
         primary_role = "screen"
-    first_slot = str(previous.get("first_slot") or "A").upper()
+    vertical = str((project.get("settings") or {}).get("aspect") or "9:16") == "9:16"
+    default_first_slot = camera_slot if vertical else "A"
+    first_slot = str(previous.get("first_slot") or default_first_slot).upper()
     if first_slot not in {"A", "B"}:
-        first_slot = "A"
+        first_slot = default_first_slot
     audio_slot = str(previous.get("audio_slot") or "A").upper()
     if audio_slot not in {"A", "B"} or not (sources.get(audio_slot) or {}).get("has_audio"):
         audio_slot = (

@@ -7,9 +7,11 @@ import subprocess
 import pytest
 
 from cutroom.config import load_settings
+from cutroom.director import _effective_brief
 from cutroom.editing import ManualEditError, apply_manual_edit
+from cutroom.manual_start import start_manual_draft
 from cutroom.render import build_filter_graph
-from server import create_app
+from server import _inferred_source_mixer, create_app
 
 
 def _project(camera_slot: str = "B") -> dict:
@@ -106,9 +108,13 @@ def test_local_api_accepts_creator_cover_and_preserves_it_on_later_edits(monkeyp
 
 
 @pytest.mark.parametrize("camera_slot", ["A", "B"])
-def test_creator_graph_routes_camera_above_screen_and_fills_30_70_panels(camera_slot):
+@pytest.mark.parametrize("explicit", [False, True])
+def test_creator_graph_routes_camera_above_screen_and_fills_30_70_panels(camera_slot, explicit):
     project = _project(camera_slot)
-    project["manual"]["source_mixer"]["stack_fit"] = "cover"
+    if explicit:
+        project["manual"]["source_mixer"]["stack_fit"] = "cover"
+    else:
+        project["manual"]["source_mixer"].pop("first_slot")
     graph, _, has_audio = build_filter_graph(project, 360, 640)
     camera_input = "av0" if camera_slot == "A" else "bv0"
     screen_input = "bv0" if camera_slot == "A" else "av0"
@@ -120,10 +126,31 @@ def test_creator_graph_routes_camera_above_screen_and_fills_30_70_panels(camera_
     assert "force_original_aspect_ratio=decrease" not in graph
     assert "pad=360:" not in graph
 
-    # Older projects that did not opt into cover retain their complete frames.
-    project["manual"]["source_mixer"].pop("stack_fit")
+    # An explicit full-frame choice keeps its padding, including saved projects.
+    project["manual"]["source_mixer"]["stack_fit"] = "contain"
     legacy, _, _ = build_filter_graph(project, 360, 640)
     assert "pad=360:192:" in legacy and "pad=360:448:" in legacy
+
+
+@pytest.mark.parametrize("aspect", ["16:9", "1:1", "4:5", "source"])
+def test_nonvertical_stack_keeps_full_frames_and_original_order(aspect):
+    project = _project()
+    project["settings"]["aspect"] = aspect
+    project["manual"]["source_mixer"].pop("first_slot")
+    graph, _, _ = build_filter_graph(project, 640, 360)
+    assert "[screen0][face0]vstack=inputs=2" in graph
+    assert "pad=640:108:" in graph and "pad=640:252:" in graph
+
+
+def test_saved_reordered_camera_primary_stack_keeps_its_manual_choices():
+    project = _project()
+    project["manual"]["source_mixer"].update(first_slot="A", primary_role="camera", stack_fit="contain")
+    apply_manual_edit(project, {"action": "set_source_mixer", "screen_slot": "A", "camera_slot": "B",
+                                "primary_role": "camera", "audio_slot": "A"})
+    graph, _, _ = build_filter_graph(project, 360, 640)
+    assert "[screen0][face0]vstack=inputs=2" in graph
+    assert "scale=360:448:force_original_aspect_ratio=decrease" in graph
+    assert "pad=360:448:" in graph and "pad=360:192:" in graph
 
 
 @pytest.mark.parametrize("camera_slot", ["A", "B"])
@@ -132,7 +159,7 @@ def test_real_creator_frame_has_red_camera_above_blue_gameplay_without_black_bar
     if not ffmpeg:
         pytest.skip("FFmpeg runtime is not installed")
     project = _project(camera_slot)
-    project["manual"]["source_mixer"]["stack_fit"] = "cover"
+    project["manual"]["source_mixer"].pop("first_slot")
     graph, maps, has_audio = build_filter_graph(project, 360, 640)
     assert has_audio is False
     inputs = []
@@ -159,6 +186,50 @@ def test_real_creator_frame_has_red_camera_above_blue_gameplay_without_black_bar
                 assert red > 200 and green < 35 and blue < 35, (x, y, red, green, blue)
             else:
                 assert blue > 200 and red < 35 and green < 35, (x, y, red, green, blue)
+
+
+@pytest.mark.parametrize("camera_slot", ["A", "B"])
+def test_new_reels_upload_and_manual_start_default_to_camera_above_screen(camera_slot):
+    project = _project(camera_slot)
+    project["settings"].update(goal="short", layout="auto")
+    for slot, source in project["sources"].items():
+        source["name"] = "creator-facecam.mp4" if slot == camera_slot else "gameplay-screen.mp4"
+    project["manual"]["source_mixer"] = _inferred_source_mixer(project)
+    assert project["manual"]["source_mixer"]["first_slot"] == camera_slot
+    project["draft"] = None
+    start_manual_draft(project)
+    assert project["draft"]["layout"] == "stacked"
+    assert project["draft"]["camera_plan"] == [{"start": 0.0, "end": 1.0, "camera": "stacked"}]
+    graph, _, _ = build_filter_graph(project, 360, 640)
+    assert "[face0][screen0]vstack=inputs=2" in graph
+    assert "crop=360:192:" in graph and "crop=360:448:" in graph
+    assert "pad=360:" not in graph
+
+
+@pytest.mark.parametrize("explicit_layout", [None, "auto", "screen", "camera", "pip", "side_by_side", "stacked"])
+def test_reels_director_and_sequence_default_stack_respect_explicit_mixer_layout(explicit_layout):
+    project = _project()
+    project["settings"].update(goal="short", layout="auto")
+    mixer = project["manual"]["source_mixer"]
+    if explicit_layout is None:
+        mixer.pop("default_layout")
+    else:
+        mixer["default_layout"] = explicit_layout
+    expected = explicit_layout if explicit_layout is not None else "stacked"
+    assert _effective_brief(project)["layout"] == expected
+    apply_manual_edit(project, {"action": "sequence_layout", "start": 0, "end": 1, "layout": "auto"})
+    # Explicit Auto retains the existing sequence behavior of showing the primary role.
+    assert project["manual"]["sequence"]["camera_plan"][0]["camera"] == ("screen" if expected == "auto" else expected)
+
+
+@pytest.mark.parametrize("aspect,layout", [("16:9", "auto"), ("source", "auto"), ("9:16", "pip"), ("9:16", "side_by_side")])
+def test_reels_director_does_not_override_saved_aspect_or_layout(aspect, layout):
+    project = _project()
+    project["manual"]["source_mixer"].pop("default_layout")
+    project["settings"].update(goal="short", aspect=aspect, layout=layout)
+    brief = _effective_brief(project)
+    assert brief["aspect"] == aspect
+    assert brief["layout"] == layout
 
 
 @pytest.mark.parametrize("width,height", [(360, 640), (640, 360), (320, 180)])

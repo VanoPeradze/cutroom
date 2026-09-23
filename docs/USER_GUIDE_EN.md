@@ -89,7 +89,7 @@ The Free tier label does not verify your plan or prevent a paid key from incurri
 
 **Camera already inside one recording:** add that combined file only as A. In **Layout**, choose a reference frame and move/resize the camera rectangle. The video updates immediately and changes save automatically; wait for **Saved**. To accept the suggested rectangle unchanged, choose **Use camera layout** once. Do not upload the same file again as B. The camera fills the top 30%; the remaining screen fills the bottom 70%. This choice carries into the AI draft and rebuilds. It crops one recording into two views—it cannot recover hidden pixels or a separate camera file. A camera that moves during recording needs review.
 
-In **Source setup**, **Source B offset** adjusts sync for the whole edit. Positive values place B later; negative values earlier. The one-frame buttons nudge precisely. Source roles, audio, order and sync are whole-edit settings, even with a short range selected.
+In **Advanced**, **Source B offset** adjusts sync for the whole edit. Positive values place B later; negative values earlier. The one-frame buttons nudge precisely. Source roles, audio, order and sync are whole-edit settings, even with a short range selected.
 
 ## 4. Prepare an AI draft
 
@@ -165,11 +165,11 @@ For a selected main A/B clip, **Picture speed** changes only the picture, from 0
 
 Select **where** a layout applies: a timeline range, exact From/To times or **Entire edit**. Then choose **Screen only**, **Camera only**, **Stacked**, **Side by side** or **Picture in picture**. The choice saves immediately. **AI choice** returns that scope to the proposed composition.
 
-**Creator frame** places the camera top 30% and screen bottom 70%, keeping the selected output shape. **First in layout** means top in stacked or left in split. **Primary source** sets emphasis in relevant layouts. **Swap top / bottom** changes order for the whole edit.
+New two-source Reels default to **Stacked**: camera top 30%, screen bottom 70%, filling both panels without stretching. Saved manual choices stay intact. To restore this composition in an existing project, open **Advanced → Restore 30/70 stack**; it resets order and fit for the whole edit. **First in layout**, **Primary source**, **Swap top / bottom**, audio and sync are also under **Advanced**.
 
 **Fill frame** crops edges to fill the panel. **Fit entire source** keeps the full picture with bars when needed; it does not squeeze the image. In **Clip framing**, choose A/B and adjust horizontal focus, vertical focus and zoom. Check the scope label: changes affect the selected clip/range, or the clip at the playhead—not automatically every cut. Crops follow clips when moved/copied. Full source browsing does not enable per-cut framing edits.
 
-For an embedded camera, drag its rectangle; open **Precise camera position** only when you need numeric controls. **Main screen focus** sets the default screen position; a clip's own framing takes priority. **More layouts** contains side-by-side, picture-in-picture and the style default. A fixed rectangle does not track a moving camera. **Source order preview** checks routing; **Layout by section** lists existing composition blocks. If saving fails, the panel says so and offers **Retry save**; do not close the editor until it shows **Saved**.
+For an embedded camera, open **Camera area in this recording** and drag its rectangle; the picker starts folded once configured. Open **Precise camera position** only when you need numeric controls. **Main screen focus** sets the default screen position; a clip's own framing takes priority. **More layouts** contains side-by-side, picture-in-picture and the style default. A fixed rectangle does not track a moving camera. **Original source preview** and **Source order preview** are optional reference monitors; **Layout by section** lists composition blocks. If saving fails, the camera picker opens and offers **Retry save**; do not close the editor until it shows **Saved**.
 
 ## 8. Correct words and control captions
 

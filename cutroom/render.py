@@ -439,9 +439,14 @@ def _source_mixer(project: dict[str, Any]) -> dict[str, str]:
     primary_role = str(raw.get("primary_role") or "screen").lower()
     if primary_role not in {"screen", "camera"}:
         primary_role = "screen"
-    first_slot = str(raw.get("first_slot") or "A").upper()
+    vertical = str((project.get("settings") or {}).get("aspect") or "9:16") == "9:16"
+    default_first_slot = camera_slot if vertical else "A"
+    first_slot = str(raw.get("first_slot") or default_first_slot).upper()
     if first_slot not in {"A", "B"}:
-        first_slot = "A"
+        first_slot = default_first_slot
+    stack_fit = raw.get("stack_fit")
+    if stack_fit not in ("cover", "contain"):
+        stack_fit = "cover" if vertical else "contain"
     audio_slot = str(raw.get("audio_slot") or project.get("settings", {}).get("audio_source") or "A").upper()
     sources = project.get("sources", {})
     if audio_slot not in {"A", "B"} or not (sources.get(audio_slot) or {}).get("has_audio"):
@@ -452,7 +457,7 @@ def _source_mixer(project: dict[str, Any]) -> dict[str, str]:
         "primary_role": primary_role,
         "audio_slot": audio_slot,
         "first_slot": first_slot,
-        "stack_fit": "cover" if raw.get("stack_fit") == "cover" else "contain",
+        "stack_fit": stack_fit,
     }
 
 

@@ -722,7 +722,9 @@ def _set_source_mixer(project: dict[str, Any], payload: dict[str, Any]) -> None:
         raise ManualEditError("Choose a source that contains audio")
     manual = project.setdefault("manual", {})
     previous_mixer = manual.get("source_mixer") if isinstance(manual.get("source_mixer"), dict) else {}
-    first_slot = str(payload.get("first_slot", previous_mixer.get("first_slot", "A")) or "").upper()
+    vertical = str((project.get("settings") or {}).get("aspect") or "9:16") == "9:16"
+    default_first_slot = camera_slot if vertical else "A"
+    first_slot = str(payload.get("first_slot", previous_mixer.get("first_slot", default_first_slot)) or "").upper()
     if first_slot not in {"A", "B"}:
         raise ManualEditError("First source must be A or B")
     source_mixer = {

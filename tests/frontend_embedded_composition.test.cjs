@@ -242,6 +242,47 @@ test('source-order composition uses the output ratio and preserves the 30/70 cre
   assert.equal(run('elements.sourceCompositionCanvas.style["--composition-first-share"]'), '30%');
 });
 
+test('unconfigured Reels stack defaults to camera top 30 percent with proportional fill', () => {
+  const {run} = twoSourceComposition();
+  for (const [screen, camera] of [['A','B'], ['B','A']]) {
+    run(`state.project.manual.source_mixer={screen_slot:'${screen}',camera_slot:'${camera}'};
+      renderSourceCompositionPreview(sourceMixerSettings());`);
+    assert.equal(run('sourceMixerSettings().firstSlot'), camera);
+    assert.equal(run('sourceMixerSettings().stackFit'), 'cover');
+    assert.equal(run('elements.sourceCompositionCanvas.style["--composition-first-share"]'), '30%');
+    assert.equal(run('elements.sourceCompositionCanvas.dataset.stackFit'), 'cover');
+    assert.equal(run(`sourceMixerLayoutFromSetting('auto')`), 'stacked');
+  }
+  run(`state.project.settings.aspect='16:9'`);
+  assert.equal(run('sourceMixerSettings().firstSlot'), 'A');
+  assert.equal(run('sourceMixerSettings().stackFit'), 'contain');
+  assert.equal(run(`sourceMixerLayoutFromSetting('auto')`), 'auto');
+});
+
+test('Reels defaults preserve saved fit, source order, explicit Auto and YouTube', () => {
+  const {run} = twoSourceComposition();
+  run(`state.project.manual.source_mixer={first_slot:'A',stack_fit:'contain',default_layout:'auto'};`);
+  assert.equal(run('sourceMixerSettings().firstSlot'), 'A');
+  assert.equal(run('sourceMixerSettings().stackFit'), 'contain');
+  assert.equal(run(`sourceMixerLayoutFromSetting('auto')`), 'auto');
+  run(`delete state.project.manual.source_mixer.default_layout; state.project.settings.goal='youtube';`);
+  assert.equal(run(`sourceMixerLayoutFromSetting('auto')`), 'auto');
+  run(`state.project.settings.goal='short'; state.project.settings.layout='A';`);
+  assert.equal(run(`sourceMixerLayoutFromSetting('A')`), 'screen');
+  assert.equal(run(`sourceMixerLayoutFromSetting('auto')`), 'auto');
+});
+
+test('confirmed embedded camera picker stays folded unless opened or a save needs retry', () => {
+  const {run} = embeddedEditingApp();
+  assert.equal(run('elements.embeddedCameraEditor.open'), false);
+  run('elements.embeddedCameraEditor.open=true; renderEmbeddedCameraEditor();');
+  assert.equal(run('elements.embeddedCameraEditor.open'), true);
+  run('elements.embeddedCameraEditor.open=false; renderEmbeddedCameraEditor();');
+  assert.equal(run('elements.embeddedCameraEditor.open'), false);
+  run('state.embeddedEditor.error=true; renderEmbeddedCameraEditor();');
+  assert.equal(run('elements.embeddedCameraEditor.open'), true);
+});
+
 test('stack fit is centred and uncropped in both previews, while Fill restores saved source framing', () => {
   const {run} = twoSourceComposition();
   const original = plain(run('state.project.manual.crop'));
