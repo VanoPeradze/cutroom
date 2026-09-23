@@ -1,6 +1,6 @@
 import { applyTranslations, dictionaries } from "./i18n.js?v=1.1-beta-1";
 import { TimelineView, formatTime, editableClips, timelineDuration, sequenceBlocks, sequenceGaps, rippleMoveStart } from "./timeline.js?v=1.1-beta-3";
-import { MediaStudio } from "./media-studio.js?v=1.1-beta-2";
+import { MediaStudio } from "./media-studio.js?v=1.1-beta-3";
 import { SourceReview } from "./source-review.js?v=1.1-beta-3";
 import { initWorkspace } from "./workspace.js?v=1.1-beta-1";
 import { KEYBOARD_PROFILES, resolveEditorShortcut, isEditorTransportSpace, shortcutRows } from "./keyboard.js?v=1.1-beta-2";

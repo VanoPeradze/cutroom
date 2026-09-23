@@ -4,9 +4,9 @@ const path = require('node:path');
 const vm = require('node:vm');
 const test = require('node:test');
 
-function load() {
+function load(globals = {}) {
   const source = fs.readFileSync(path.join(__dirname, '../web/media-studio.js'), 'utf8').replace(/^export /gm, '');
-  const context = vm.createContext({window: {}, document: {}, FormData: class {append() {}}, performance: {now: () => 1000}, setTimeout: () => 1, clearTimeout() {}});
+  const context = vm.createContext({window: {}, document: {}, FormData: class {append() {}}, performance: {now: () => 1000}, setTimeout: () => 1, clearTimeout() {}, ...globals});
   vm.runInContext(source + '\nglobalThis.api = {MediaStudio, clipEnvelope, mediaGain};', context);
   return context.api;
 }
@@ -17,8 +17,8 @@ function deferred() {
   return {promise, resolve, reject};
 }
 
-function studioHarness(edit) {
-  const {MediaStudio} = load();
+function studioHarness(edit, globals) {
+  const {MediaStudio} = load(globals);
   let project = {id:'one', manual:{media_clips:[]}};
   const studio = Object.create(MediaStudio.prototype);
   Object.assign(studio, {
@@ -155,4 +155,90 @@ test('a successful old-project save cannot clear same-id edits in a new project'
   old.resolve({id:'one'}); await saving;
   assert.equal(studio.overrides.get('clip1').volume_db,-12);
   assert.equal(studio.pending.get('clip1').volume_db,-12);
+});
+
+function audioGraphHarness({alwaysReject = false, failConnect = false} = {}) {
+  const associated = new WeakSet(), attempts = [], nodes = [], controls = new Map();
+  const node = () => {
+    const result = {gain:{value:1},connect() {if(failConnect)throw new Error('Graph failed');},disconnect(){this.disconnected=true;},getFloatTimeDomainData() {}};
+    nodes.push(result); return result;
+  };
+  const document = {createElement(kind) {return {
+    tagName:kind.toUpperCase(),currentTime:0,paused:true,volume:1,
+    pause(){this.paused=true;},play(){this.paused=false;return Promise.resolve();},
+    removeAttribute(){},load(){},remove(){this.removed=true;},
+  };}};
+  const {studio} = studioHarness(async()=>({id:'one'}), {document, console:{warn(){}}});
+  studio.root = {append(){},querySelector(selector) {if(!controls.has(selector))controls.set(selector,{});return controls.get(selector);}};
+  studio.context = {createGain:node,createAnalyser:node,createMediaElementSource(element) {
+    attempts.push(element);
+    if(alwaysReject || associated.has(element))throw Object.assign(new Error('HTMLMediaElement already connected'),{name:'InvalidStateError'});
+    associated.add(element); return node();
+  }};
+  studio.master = node();
+  return {studio,associated,attempts,nodes};
+}
+
+test('repeated sync, pause and resume reuse one Web Audio connection per element', async () => {
+  const {studio,attempts} = audioGraphHarness();
+  const source={url:'/main',point:{sourceTime:2},hasAudio:true};
+  studio.sync(2,true,source); await Promise.resolve();
+  const first=studio.players.get('source');
+  for(let i=0;i<5;i++) {studio.pause();studio.sync(2,false,source);studio.sync(2,true,source);}
+  assert.equal(attempts.length,1);
+  assert.equal(studio.players.get('source'),first);
+  studio.pause(); assert.equal(first.element.paused,true);
+  studio.clearPlayers(); studio.sync(2,false,source);
+  assert.equal(attempts.length,2);
+  assert.notEqual(attempts[0],attempts[1]);
+  assert.equal(first.element.removed,true);
+});
+
+test('already-associated audio recovers on a fresh element and pause never throws', () => {
+  const {studio,associated,attempts,nodes}=audioGraphHarness();
+  const old=studio.createPlayer('source','audio','/main'); old.element.currentTime=7; old.element.paused=false;
+  associated.add(old.element); // Exact browser condition in the reported InvalidStateError.
+  const source={url:'/main',point:{sourceTime:7},hasAudio:true};
+  assert.doesNotThrow(()=>{studio.pause();studio.sync(7,false,source);});
+  const fresh=studio.players.get('source');
+  assert.notEqual(fresh.element,old.element);
+  assert.equal(fresh.element.src,'/main'); assert.equal(fresh.element.currentTime,7);
+  assert.equal(fresh.element.paused,true); assert.equal(old.element.removed,true);
+  assert.equal(old.element.paused,true); assert.ok(fresh.node);
+  studio.sync(7,false,source);
+  assert.equal(attempts.length,2,'never retries the already-associated element');
+  assert.ok(nodes.slice(1,3).every(n=>n.disconnected),'failed partial graph is released');
+});
+
+test('persistent graph errors use bounded basic playback with volume and mute intact', async () => {
+  for(const options of [{alwaysReject:true},{failConnect:true}]) {
+    const {studio,attempts}=audioGraphHarness(options);
+    studio.mixerOverride={source_db:-6,master_db:-6};
+    const source={url:'/main',point:{sourceTime:3},hasAudio:true};
+    studio.sync(3,true,source); await Promise.resolve();
+    const item=studio.players.get('source');
+    assert.equal(item.basicAudio,true); assert.equal(item.element.paused,false);
+    assert.ok(Math.abs(item.element.volume-10**(-12/20))<1e-9);
+    assert.match(studio.status.textContent,/Basic audio preview/);
+    studio.mixerOverride={source_muted:true}; studio.sync(3,true,source);
+    assert.equal(item.element.volume,0);
+    studio.pause(); studio.sync(3,false,source);
+    assert.equal(item.element.paused,true); assert.equal(attempts.length,2);
+    assert.equal(studio.players.size,1,'failed players do not accumulate');
+    studio.clearPlayers(); studio.sync(3,false,{...source,url:'/next-project'});
+    assert.equal(studio.players.get('source').basicAudio,true);
+    assert.equal(attempts.length,2,'basic mode persists until reload, without retry loops');
+  }
+});
+
+test('upgrading basic audio after first gesture removes duplicate attenuation', () => {
+  const {studio,attempts}=audioGraphHarness();
+  const context=studio.context; studio.context=null;
+  const item=studio.player('source','audio','/main');
+  studio.syncPlayer(item,0,1,false,.25); assert.equal(item.element.volume,.25);
+  studio.context=context;
+  assert.equal(studio.player('source','audio','/main'),item);
+  studio.syncPlayer(item,0,1,false,.25);
+  assert.equal(item.element.volume,1); assert.equal(item.gain.gain.value,.25);
+  assert.equal(attempts.length,1);
 });

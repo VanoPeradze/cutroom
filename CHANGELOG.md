@@ -2,6 +2,7 @@
 
 ## 1.1 Beta — 2026-09-23
 
+- Recovered preview audio when a browser rejects an already-connected media element. Audio graph failures now retry with a fresh player, then use clearly labelled basic playback if needed, instead of breaking Play/Pause. Fixed double attenuation when the mixer starts after the first Play gesture.
 - Fixed preview playback conflicts between the audio mixer and hidden A/B videos. Deliberately stopping a loading player at a gap or held frame no longer stops the entire timeline; genuine playback errors are still reported.
 - Added a project media library for extra video, images, music and voiceover, with editable timeline layers, waveforms, image motion and audio fades. Added a mixer for original audio, voiceover, music, effects and master level; Solo is preview-only. These tools need no AI account, and added media fits within the current edit duration.
 - Added A/B picture-speed controls that preserve clip length and speech timing. Picture speed can lose lip sync or hold the last source frame; it does not retime the whole picture-and-sound edit.
