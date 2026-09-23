@@ -2,6 +2,7 @@
 
 ## 1.1 Beta — 2026-09-23
 
+- Fixed preview playback conflicts between the audio mixer and hidden A/B videos. Deliberately stopping a loading player at a gap or held frame no longer stops the entire timeline; genuine playback errors are still reported.
 - Added a project media library for extra video, images, music and voiceover, with editable timeline layers, waveforms, image motion and audio fades. Added a mixer for original audio, voiceover, music, effects and master level; Solo is preview-only. These tools need no AI account, and added media fits within the current edit duration.
 - Added A/B picture-speed controls that preserve clip length and speech timing. Picture speed can lose lip sync or hold the last source frame; it does not retime the whole picture-and-sound edit.
 - Added QHD 1440p and 4K 2160p export options alongside 720p and 1080p. Higher output resolution does not restore missing source detail.
