@@ -70,6 +70,7 @@ class ProjectStore:
             "updated_at": created,
             "language": "auto",
             "sources": {"A": None, "B": None},
+            "assets": {},
             "settings": {
                 "edit_style": "smart",
                 "goal": "short",
@@ -173,7 +174,7 @@ class ProjectStore:
         revision = project.get("revision")
         if revision is not None and (isinstance(revision, bool) or not isinstance(revision, int) or revision < 1):
             raise ProjectStateError(f"Project {project_id} has an invalid revision")
-        for key in ("sources", "settings", "pre_analysis", "manual"):
+        for key in ("sources", "settings", "pre_analysis", "manual", "assets"):
             if key in project and not isinstance(project.get(key), dict):
                 raise ProjectStateError(f"Project {project_id} has invalid {key}")
         # Old projects predate subtitle appearance controls. Supplying defaults
@@ -189,6 +190,16 @@ class ProjectStore:
         if "exports" in project and not isinstance(project.get("exports"), list):
             raise ProjectStateError(f"Project {project_id} has invalid exports")
         project_root = self.project_dir(project_id).resolve()
+        from .media_library import ASSET_ID_RE, safe_asset_path
+        for asset_id, asset in project.setdefault("assets", {}).items():
+            if not ASSET_ID_RE.fullmatch(asset_id) or not isinstance(asset, dict) or asset.get("id") != asset_id:
+                raise ProjectStateError(f"Project {project_id} has invalid asset metadata")
+            for key in ("path", "preview_path", "thumbnail_path"):
+                if key in asset:
+                    try:
+                        safe_asset_path(project_root, asset[key])
+                    except FileNotFoundError as exc:
+                        raise ProjectStateError(f"Project {project_id} has unsafe asset path") from exc
         sources = project.get("sources") or {}
         for slot, source in sources.items():
             if source is None:

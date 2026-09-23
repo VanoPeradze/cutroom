@@ -14,6 +14,7 @@ from .audio import analyze_audio, audio_policy, build_audio_actions, constrain_g
 from .intelligence import PACE_LIMITS, StoryPlanningError, build_story_beats, language_from_text, plan_edit
 from .jobs import JobCancelled, JobContext
 from .media import detect_scenes
+from .media_library import validate_media_bounds
 from .projects import ProjectStore
 from .source_tracks import source_sync_offset
 from .sync import MIN_AUTOMATIC_SYNC_CONFIDENCE, synchronize_sources
@@ -1721,16 +1722,38 @@ def analyze_project(
     brief_patch: dict[str, Any] | None = None,
     *,
     selection_variant: int = 0,
+    source_mixer_patch: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     context.checkpoint()
     project = store.load(project_id)
+    # Rebuilding a project with independent media must be all-or-nothing: a
+    # rejected shorter draft must not leave the refinement's settings applied.
+    staged_brief = brief_patch if (project.get("manual") or {}).get("media_clips") else None
+    original_settings = copy.deepcopy(project.get("settings") or {})
     if brief_patch:
         context.checkpoint()
-        project = store.update(
-            project_id,
-            lambda current: current.setdefault("settings", {}).update(brief_patch),
-        )
+        if staged_brief:
+            project.setdefault("settings", {}).update(staged_brief)
+        else:
+            project = store.update(
+                project_id,
+                lambda current: current.setdefault("settings", {}).update(brief_patch),
+            )
     manual_input_fingerprint = stable_fingerprint("director-manual-input", project.get("manual") or {})
+    if source_mixer_patch:
+        project.setdefault("manual", {}).setdefault("source_mixer", {}).update(source_mixer_patch)
+
+    def proposed_inputs(latest: dict[str, Any]) -> dict[str, Any]:
+        if not staged_brief and not source_mixer_patch:
+            return latest
+        current_settings = latest.get("settings") or {}
+        if any(current_settings.get(key) != original_settings.get(key) for key in staged_brief or {}):
+            raise RuntimeError("project_changed_during_analysis")
+        candidate = copy.deepcopy(latest)
+        candidate.setdefault("settings", {}).update(staged_brief or {})
+        if source_mixer_patch:
+            candidate.setdefault("manual", {}).setdefault("source_mixer", {}).update(source_mixer_patch)
+        return candidate
     source_a = _source_path(store, project, "A")
     source_b = _source_path(store, project, "B") if project.get("sources", {}).get("B") else None
     duration = float(project["sources"]["A"]["duration"])
@@ -2505,7 +2528,8 @@ def analyze_project(
     context.checkpoint()
 
     def commit_analysis(latest: dict[str, Any]) -> None:
-        latest_brief = _effective_brief(latest)
+        proposed = proposed_inputs(latest)
+        latest_brief = _effective_brief(proposed)
         latest_paths: dict[str, Path | None] = {}
         for slot in ("A", "B"):
             latest_source = latest.get("sources", {}).get(slot)
@@ -2515,7 +2539,7 @@ def analyze_project(
                 else None
             )
         latest_fingerprints = build_analysis_cache_fingerprints(
-            latest,
+            proposed,
             settings,
             latest_brief,
             latest_paths,
@@ -2527,11 +2551,18 @@ def analyze_project(
             ("pipeline", "source", "transcript", "scenes", "vision", "story"),
         ):
             raise RuntimeError("project_changed_during_analysis")
+        unchanged_variation = normalized_selection_variant > 0 and not variation_changed
+        if not unchanged_variation:
+            validate_media_bounds({**proposed, "draft": draft})
+        context.commit()
+        latest.setdefault("settings", {}).update(staged_brief or {})
+        if source_mixer_patch:
+            latest.setdefault("manual", {}).setdefault("source_mixer", {}).update(source_mixer_patch)
         latest.setdefault("settings", {})["aspect"] = brief.get("aspect", latest.get("settings", {}).get("aspect", "9:16"))
         if goal == "youtube" and explicit_source_layout is None and not embedded_layout_confirmed:
             latest["settings"]["layout"] = "A"
         latest["analysis"] = analysis
-        if normalized_selection_variant > 0 and not variation_changed:
+        if unchanged_variation:
             # Keep the user's timeline, export state and Undo history when an
             # alternate request yields exactly the same source selection.
             return
@@ -2554,7 +2585,6 @@ def analyze_project(
 
     # After this boundary a late cancellation must not hide a Draft that was
     # successfully saved. The UI will receive a completed authoritative job.
-    context.commit()
     saved_project = store.update(project_id, commit_analysis)
     message = "Your first edit is ready"
     if normalized_selection_variant > 0 and not variation_changed:
@@ -2606,6 +2636,7 @@ def refine_project(context: JobContext, project_id: str, store: ProjectStore, se
     restore_focus_layout = False
     previous_layout_present = False
     previous_layout: Any = None
+    staged_mixer: dict[str, Any] | None = None
     if command == "shorter":
         patch["target_duration"] = max(8, round(float(current.get("target_duration", 60)) * 0.78))
         patch["pace"] = "dynamic"
@@ -2628,8 +2659,11 @@ def refine_project(context: JobContext, project_id: str, store: ProjectStore, se
                 current_mixer = current_project.setdefault("manual", {}).setdefault("source_mixer", {})
                 current_mixer["default_layout"] = "camera"
 
-            store.update(project_id, focus_camera)
-            restore_focus_layout = True
+            if (project.get("manual") or {}).get("media_clips"):
+                staged_mixer = {"default_layout": "camera"}
+            else:
+                store.update(project_id, focus_camera)
+                restore_focus_layout = True
         else:
             patch["layout"] = "A"
     elif command == "new_variation":
@@ -2650,6 +2684,8 @@ def refine_project(context: JobContext, project_id: str, store: ProjectStore, se
                 patch,
                 selection_variant=selection_variant,
             )
+        if staged_mixer:
+            return analyze_project(context, project_id, store, settings, patch, source_mixer_patch=staged_mixer)
         return analyze_project(context, project_id, store, settings, patch)
     except Exception:
         if restore_focus_layout:

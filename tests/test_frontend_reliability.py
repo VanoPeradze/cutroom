@@ -124,7 +124,13 @@ def test_upload_slots_and_studio_tabs_have_keyboard_contracts():
     assert 'slotElement.addEventListener("keydown"' in APP
     assert '["Enter", " "].includes(event.key)' in APP
     assert HTML.count('role="tab"') == 4
-    assert HTML.count('role="tabpanel"') == 4
+    assert HTML.count('role="tabpanel"') == 5
+    assert 'id="studioPanelMedia" role="tabpanel" aria-labelledby="studioTabMedia"' in HTML
+    media_tab = APP.split("function initializeMediaStudio()", 1)[1].split("\nfunction ", 1)[0]
+    assert 'tab.id = "studioTabMedia"' in media_tab
+    assert 'tab.setAttribute("role", "tab")' in media_tab
+    assert 'tab.setAttribute("aria-controls", "studioPanelMedia")' in media_tab
+    assert 'tab.addEventListener("keydown", handleStudioTabKeydown)' in media_tab
     assert "aria-selected" in HTML
     assert "function handleStudioTabKeydown" in APP
 

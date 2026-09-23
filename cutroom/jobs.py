@@ -203,7 +203,7 @@ class JobContext:
 
 
 class JobManager:
-    BACKGROUND_KINDS = {"prepare_source", "model_install"}
+    BACKGROUND_KINDS = {"prepare_source", "prepare_asset", "model_install"}
 
     def __init__(
         self,

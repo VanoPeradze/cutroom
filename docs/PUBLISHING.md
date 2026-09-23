@@ -28,6 +28,8 @@ The existing allowlist builder includes application source, user guides, tests a
 
 The ZIP contains your **current source files**, including intentional uncommitted changes. A ZIP and a Git push are different operations: the Git workflow only accepts a clean, committed checkout. Review the displayed inventory before sharing either one.
 
+The download is named `CUTROOM-1.1-Beta.zip`. Each build is stored under its own timestamped folder inside `dist`, so older packages are preserved. The internal `App/TEST_BUILD.json` records the build ID and file checksums.
+
 Send the ZIP together with its `.sha256` file. Ask the tester to use **Extract All** and double-click **START CUTROOM.bat**. The extracted folder has three top-level entries: **START CUTROOM.bat**, **START HERE.html** (offline help), and **App** (source, technical files and saved work). Keep them together. The launcher runs the existing `App/run_windows.bat` setup/startup flow; Git source checkouts and older flat packages still use `run_windows.bat` directly.
 
 The first setup still downloads dependencies; optional local AI models require their own downloads. This is a source-based test package, not a fully offline or single-file installer.

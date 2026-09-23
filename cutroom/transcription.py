@@ -4,6 +4,7 @@ import copy
 import json
 import os
 import math
+import re
 import subprocess
 import sys
 import tempfile
@@ -93,6 +94,103 @@ _HEBREW_FUNCTION_WORDS = {
     "הוא", "היא", "היה", "זה", "זאת", "יש", "כי", "כן", "לא", "מה", "מי",
     "עכשיו", "על", "עם", "פה", "רוצה", "של", "שם", "צריך",
 }
+_BILINGUAL_TRANSCRIPTION_HINT = (
+    "תמלול בעברית ובאנגלית. English names and terms stay in English."
+)
+
+
+def _segment_confidence(segment: dict[str, Any]) -> dict[str, Any]:
+    """ASR confidence is a review signal, never a measured accuracy score."""
+    logprob = _finite_number(segment.get("avg_logprob"), float("nan"))
+    probabilities = [
+        value for word in (segment.get("words") or []) if isinstance(word, dict)
+        for value in [_finite_number(word.get("probability"), float("nan"))]
+        if math.isfinite(value) and 0.0 <= value <= 1.0
+    ]
+    low_words = sum(value < 0.35 for value in probabilities)
+    reasons = []
+    if math.isfinite(logprob) and logprob < -0.92:
+        reasons.append("low_segment_confidence")
+    if low_words:
+        reasons.append("low_word_confidence")
+    return {
+        "reasons": reasons,
+        "avg_logprob": round(logprob, 4) if math.isfinite(logprob) else None,
+        "minimum_word_probability": round(min(probabilities), 4) if probabilities else None,
+        "low_word_count": low_words,
+        "word_count": len(probabilities),
+    }
+
+
+def _trusted_english_terms(transcript: dict[str, Any]) -> set[str]:
+    terms: set[str] = set()
+    for segment in transcript.get("segments", []):
+        words = [word for word in (segment.get("words") or []) if isinstance(word, dict)]
+        if words:
+            texts = [str(word.get("word") or "") for word in words
+                     if _finite_number(word.get("probability"), -1.0) >= 0.65]
+        else:
+            # Older/local extensions may not have word confidence. Keeping their
+            # existing English spelling is safer than silently transliterating it.
+            texts = [str(segment.get("text") or "")]
+        for text in texts:
+            terms.update(token.casefold() for token in re.findall(r"[A-Za-z][A-Za-z0-9+#'-]+", text))
+    return terms
+
+
+def _missing_english_terms(original: dict[str, Any], candidate: dict[str, Any]) -> bool:
+    candidate_terms = {token.casefold() for token in re.findall(
+        r"[A-Za-z][A-Za-z0-9+#'-]+", str(candidate.get("text") or ""),
+    )}
+    return not _trusted_english_terms(original).issubset(candidate_terms)
+
+
+def _retry_acceptance(original: dict[str, Any], candidate: dict[str, Any], duration: float) -> str | None:
+    """Reject uncertain replacements; preserve the original unit as a whole."""
+    if (candidate.get("coverage") or {}).get("complete") is not True:
+        return "incomplete_candidate"
+    if abs(_finite_number(candidate.get("duration")) - duration) > 0.5:
+        return "duration_mismatch"
+    rows = candidate.get("segments") or []
+    if not rows or not str(candidate.get("text") or "").strip():
+        return "empty_candidate"
+    previous_end = 0.0
+    for row in rows:
+        start, end = _finite_number(row.get("start"), -1.0), _finite_number(row.get("end"), -1.0)
+        if start < 0.0 or end <= start or end > duration + 0.05 or start < previous_end - 0.05:
+            return "invalid_candidate_timing"
+        previous_end = end
+        last_word_end = start
+        for word in row.get("words") or []:
+            word_start = _finite_number(word.get("start"), -1.0)
+            word_end = _finite_number(word.get("end"), -1.0)
+            if (word_start < start - 0.05 or word_end > end + 0.05 or word_end <= word_start
+                    or word_start < last_word_end - 0.05):
+                return "invalid_candidate_timing"
+            last_word_end = word_end
+    if _missing_english_terms(original, candidate):
+        return "english_terms_not_preserved"
+    if _BILINGUAL_TRANSCRIPTION_HINT in str(candidate.get("text") or ""):
+        return "prompt_echo"
+    if (_script_profile(str(original.get("text") or ""))["hebrew_letters"] >= 8
+            and _script_profile(str(candidate.get("text") or ""))["hebrew_letters"] < 8):
+        return "hebrew_speech_not_preserved"
+    original_ranges = _merged_time_ranges(original.get("segments"), duration)
+    candidate_ranges = _merged_time_ranges(rows, duration)
+    original_speech = sum(row["end"] - row["start"] for row in original_ranges)
+    retained_speech = sum(max(0.0, min(old["end"], new["end"]) - max(old["start"], new["start"]))
+                          for old in original_ranges for new in candidate_ranges)
+    if retained_speech < original_speech * 0.8:
+        return "speech_timing_not_preserved"
+    old_confidence = [_segment_confidence(row) for row in original.get("segments", [])]
+    new_confidence = [_segment_confidence(row) for row in rows]
+    old_logprobs = [row["avg_logprob"] for row in old_confidence if row["avg_logprob"] is not None]
+    new_logprobs = [row["avg_logprob"] for row in new_confidence if row["avg_logprob"] is not None]
+    if (not old_logprobs or not new_logprobs
+            or sum(new_logprobs) / len(new_logprobs) < sum(old_logprobs) / len(old_logprobs) + 0.12
+            or sum(bool(row["reasons"]) for row in new_confidence) >= sum(bool(row["reasons"]) for row in old_confidence)):
+        return "confidence_not_improved"
+    return None
 
 
 def _clamp_probability(value: Any) -> float:
@@ -575,6 +673,9 @@ def _decode_with_model(
     mode: str,
     progress: Callable[[float, str], None] | None,
     cancel_check: Callable[[], None] | None,
+    *,
+    bilingual_hint: bool = False,
+    recovery: bool = False,
 ) -> dict[str, Any]:
     """Decode one bounded media unit with cooperative checks between segments."""
 
@@ -583,14 +684,17 @@ def _decode_with_model(
     segments_iter, info = model.transcribe(
         str(media_path),
         language=requested_language,
-        beam_size=1 if mode == "lite" else (3 if mode == "balanced" else 5),
+        task="transcribe",
+        initial_prompt=_BILINGUAL_TRANSCRIPTION_HINT if requested_language == "he" or bilingual_hint else None,
+        beam_size=5 if recovery else (1 if mode == "lite" else (3 if mode == "balanced" else 5)),
         vad_filter=True,
         vad_parameters={"min_silence_duration_ms": 350, "speech_pad_ms": 180},
         word_timestamps=mode != "lite",
         # Long recordings are split before this call. Quality mode can still use
         # prior text within each bounded unit without making cancellation wait for
         # an unbounded VAD region.
-        condition_on_previous_text=mode == "quality",
+        condition_on_previous_text=mode == "quality" and not recovery,
+        **({"temperature": 0.0} if recovery else {}),
     )
     if cancel_check:
         cancel_check()
@@ -675,6 +779,82 @@ def _decode_with_model(
     }
 
 
+def _decode_with_quality_retry(
+    model: Any,
+    media_path: Path,
+    model_name: str,
+    device: str,
+    compute: str,
+    requested_language: str | None,
+    mode: str,
+    progress: Callable[[float, str], None] | None,
+    cancel_check: Callable[[], None] | None,
+    recovery_state: dict[str, Any],
+    source_start: float = 0.0,
+) -> dict[str, Any]:
+    decoded = _decode_with_model(
+        model, media_path, model_name, device, compute, requested_language, mode, progress, cancel_check,
+    )
+    duration = _finite_number(decoded.get("duration"))
+    # Lite stays a single pass. The retry uses the already loaded local model and
+    # is limited across the entire recording, not once for every chunk.
+    if (mode == "lite" or duration <= 0.0 or duration > 30.0
+            or recovery_state["attempted_units"] >= 2
+            or recovery_state["retried_audio_seconds"] + duration > 48.0):
+        return decoded
+    profile = _script_profile(str(decoded.get("text") or ""))
+    hebrew_implicated = requested_language == "he" or (
+        requested_language is None and profile["hebrew_letters"] >= 8
+        and _language_code(decoded.get("language")) != "yi"
+    )
+    signals = [_segment_confidence(row) for row in decoded.get("segments", [])]
+    weak_speech = any(
+        "low_segment_confidence" in row["reasons"]
+        or (row["low_word_count"] >= 2 and row["low_word_count"] >= row["word_count"] * 0.25)
+        for row in signals
+    )
+    if not hebrew_implicated or not weak_speech:
+        return decoded
+    if cancel_check:
+        cancel_check()
+    recovery_state["attempted_units"] += 1
+    recovery_state["retried_audio_seconds"] = round(recovery_state["retried_audio_seconds"] + duration, 3)
+    outcome = {"start": round(source_start, 3), "end": round(source_start + duration, 3), "status": "kept_original"}
+    recovery_state["units"].append(outcome)
+    if progress:
+        progress(0.96, "Checking a low-confidence Hebrew/English passage")
+    try:
+        # Keep automatic language selection automatic. The hint supplies spelling
+        # context after real Hebrew evidence; it never translates the transcript.
+        candidate = _decode_with_model(
+            model, media_path, model_name, device, compute, requested_language, mode,
+            (lambda _value, message: progress(0.96, message)) if progress else None,
+            cancel_check, bilingual_hint=True, recovery=True,
+        )
+        reason = _retry_acceptance(decoded, candidate, duration)
+        if reason is not None:
+            outcome["reason"] = reason
+            return decoded
+        recovery_state["accepted_units"] += 1
+        outcome["status"] = "accepted"
+        return candidate
+    except JobCancelled:
+        raise
+    except Exception:
+        # Recovery is advisory: a transient second-decode error must not discard
+        # a completed unit or trigger device/cloud/model fallback.
+        outcome["reason"] = "retry_failed"
+        return decoded
+
+
+def _new_quality_recovery() -> dict[str, Any]:
+    return {
+        "version": 1, "strategy": "bounded_same_model",
+        "attempted_units": 0, "accepted_units": 0, "retried_audio_seconds": 0.0,
+        "max_units": 2, "max_audio_seconds": 48.0, "units": [],
+    }
+
+
 def _chunk_policy(settings: Settings, device: str, source_duration: float) -> tuple[bool, float]:
     """Return whether to bound decoding and the maximum audio seconds per unit."""
 
@@ -706,6 +886,7 @@ def _transcribe_chunked(
     chunk_seconds: float,
     progress: Callable[[float, str], None] | None,
     cancel_check: Callable[[], None] | None,
+    recovery_state: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Transcribe long media as short, disposable PCM units.
 
@@ -715,6 +896,8 @@ def _transcribe_chunked(
     """
 
     segments: list[dict[str, Any]] = []
+    if recovery_state is None:
+        recovery_state = _new_quality_recovery()
     words: list[dict[str, Any]] = []
     decoded_units: list[dict[str, Any]] = []
     processed_chunks: list[dict[str, Any]] = []
@@ -742,7 +925,7 @@ def _transcribe_chunked(
 
             try:
                 _extract_audio_chunk(media_path, target, settings, chunk_start, unit_duration, cancel_check)
-                decoded = _decode_with_model(
+                decoded = _decode_with_quality_retry(
                     model,
                     target,
                     model_name,
@@ -752,6 +935,8 @@ def _transcribe_chunked(
                     mode,
                     unit_progress,
                     cancel_check,
+                    recovery_state,
+                    chunk_start,
                 )
             except JobCancelled:
                 raise
@@ -853,6 +1038,7 @@ def _transcribe_once(
     progress: Callable[[float, str], None] | None,
     cancel_check: Callable[[], None] | None = None,
     source_duration: float = 0.0,
+    recovery_state: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     if cancel_check:
         cancel_check()
@@ -861,6 +1047,8 @@ def _transcribe_once(
         cancel_check()
     if progress:
         progress(0.08, f"Transcribing with {model_name}")
+    if recovery_state is None:
+        recovery_state = _new_quality_recovery()
     should_chunk, chunk_seconds = _chunk_policy(settings, device, float(source_duration or 0.0))
     if requested_language is None and float(source_duration or 0.0) > max(36.0, chunk_seconds * 1.5):
         # Whisper's single-file language probe is biased toward the opening
@@ -882,9 +1070,10 @@ def _transcribe_once(
             chunk_seconds,
             progress,
             cancel_check,
+            recovery_state,
         )
     else:
-        result = _decode_with_model(
+        result = _decode_with_quality_retry(
             model,
             media_path,
             model_name,
@@ -894,6 +1083,7 @@ def _transcribe_once(
             mode,
             progress,
             cancel_check,
+            recovery_state,
         )
         if source_duration > 0.0 and isinstance(result.get("coverage"), dict):
             chunks = result["coverage"].get("chunks", [])
@@ -906,6 +1096,7 @@ def _transcribe_once(
     decoded_language_units = result.pop("_decoded_language_units", None)
     result["segments"] = _split_oversized_segments(list(result.get("segments") or []))
     result["text"] = " ".join(str(segment.get("text") or "").strip() for segment in result["segments"]).strip()
+    result["quality_recovery"] = recovery_state
     return _resolve_language_evidence(result, requested_language, decoded_language_units)
 
 
@@ -1009,6 +1200,7 @@ def _transcribe_in_process(
                     refined = _transcribe_once(
                         media_path, settings, hebrew_model, device, compute,
                         "he", attempt_mode, progress, cancel_check, duration,
+                        recovery_state=result.get("quality_recovery"),
                     )
                     refined["language"] = "he"
                     # The second pass is intentionally language-locked; its 1.0
@@ -1027,7 +1219,11 @@ def _transcribe_in_process(
                     )
                     refined["language_detection"] = detection
                     refined_quality = transcript_quality_report(refined)
-                    if (
+                    if _missing_english_terms(result, refined):
+                        result["hebrew_refine_warning"] = (
+                            "Hebrew refinement did not preserve recognized English terms; kept the original transcript."
+                        )
+                    elif (
                         transcript_quality_report(result)["usable_for_story"]
                         and not refined_quality["usable_for_story"]
                     ):
@@ -1516,6 +1712,25 @@ def transcript_quality_report(transcript: dict[str, Any] | None) -> dict[str, An
         reasons.append("low_transcript_confidence")
     if longest_segment > 90.0:
         reasons.append("implausibly_long_segment")
+    review_segments = []
+    review_segment_count = 0
+    for index, segment in enumerate(segments):
+        confidence = _segment_confidence(segment)
+        if not confidence["reasons"]:
+            continue
+        review_segment_count += 1
+        if len(review_segments) < 100:
+            review_segments.append({
+                "segment_id": str(segment.get("id") or f"s{index + 1:04d}"),
+                "start": round(max(0.0, _finite_number(segment.get("start"))), 3),
+                "end": round(max(0.0, _finite_number(segment.get("end"))), 3),
+                **confidence,
+            })
+    warnings = list(coverage["warnings"])
+    if review_segment_count:
+        warnings.append("low_confidence_segments")
+    if transcript.get("hebrew_refine_warning"):
+        warnings.append("hebrew_refinement_kept_original")
     return {
         "usable_for_story": not reasons,
         "reasons": reasons,
@@ -1532,7 +1747,11 @@ def transcript_quality_report(transcript: dict[str, Any] | None) -> dict[str, An
         "speech_ratio": round(speech_ratio, 6),
         "coverage": coverage,
         "coverage_status": coverage["status"],
-        "warnings": coverage["warnings"],
+        "warnings": warnings,
+        "needs_review": bool(reasons or warnings),
+        "review_segments": review_segments,
+        "review_segment_count": review_segment_count,
+        "quality_recovery": copy.deepcopy(transcript.get("quality_recovery") or {}),
     }
 
 

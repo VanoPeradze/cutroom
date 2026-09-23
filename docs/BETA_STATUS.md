@@ -2,6 +2,14 @@
 
 **An exploratory Windows beta for feedback from creators and editors. Not a production release, security certification or promise of professional-quality automatic edits.** Public access to a download does not change those quality boundaries.
 
+## Media, mixing and quality update — 2026-09-23
+
+- All 1,410 Python regressions and 420 frontend checks passed in this update. Synthetic FFmpeg checks cover added video/images/audio, fades, mixer buses, picture-only speed, cancellation and QHD/4K output dimensions. AI/provider responses were mocked; no billable requests or model downloads were used.
+- An isolated browser project verified image/audio import, visible media lanes, waveforms, autosaved volume and fades, continuous mixer playback and scrollable timeline bounds. Failed/cancelled imports expose Retry; imports release editing controls when finished.
+- Added media currently fits inside the existing edit. Main-timeline changes and AI rebuilds that would strand those clips are rejected without deleting them. Picture speed keeps duration and original speech timing, so it can lose lip sync or hold the final picture. Solo is preview-only; export normalization/limiting may change final loudness.
+- Local bilingual recovery is bounded and flags low-confidence lines for human review. These tests do not demonstrate a measured improvement on real Hebrew/English recordings. Clean-PC setup, long 4K sessions and multilingual accuracy still need real-user validation.
+- The public archive is named `CUTROOM-1.1-Beta.zip`; its internal manifest retains a unique build ID and checksums. Models, runtimes and private projects remain excluded.
+
 ## Keyboard preset update — 2026-09-20
 
 - All 1,260 Python regressions and 378 frontend checks passed, including new tests for profile focus, per-binding help, snapping, Premiere Extract and reviewing original footage without a selection.
@@ -43,7 +51,7 @@ The results below describe that packaging pass, not a continuously updated test 
 
 ## Boundaries
 
-Default YouTube cleanup is chronological, not a full narrative rewrite. Styles are pacing/selection presets, not creator replicas or reliable visual gameplay-event detectors. Camera proposals need confirmation. There are two sources, not unlimited NLE tracks. Source-only edits may intentionally leave gaps or change synchronization. Lower-rate footage exported at 60 FPS repeats frames.
+Default YouTube cleanup is chronological, not a full narrative rewrite. Styles are pacing/selection presets, not creator replicas or reliable visual gameplay-event detectors. Camera proposals need confirmation. There are two main sources plus bounded library layers, not unlimited NLE tracks. Source-only edits may intentionally leave gaps or change synchronization. Lower-rate footage exported at 60 FPS repeats frames.
 
 Keep backups and use copies, not urgent client deliveries. Review the exported file. Do not expose the server publicly. This is not a frozen offline executable: allowed dependency versions can change between installations.
 

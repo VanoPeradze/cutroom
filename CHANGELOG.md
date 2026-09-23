@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.1 Beta — 2026-09-23
+
+- Added a project media library for extra video, images, music and voiceover, with editable timeline layers, waveforms, image motion and audio fades. Added a mixer for original audio, voiceover, music, effects and master level; Solo is preview-only. These tools need no AI account, and added media fits within the current edit duration.
+- Added A/B picture-speed controls that preserve clip length and speech timing. Picture speed can lose lip sync or hold the last source frame; it does not retime the whole picture-and-sound edit.
+- Added QHD 1440p and 4K 2160p export options alongside 720p and 1080p. Higher output resolution does not restore missing source detail.
+- Added bounded local Hebrew/English recovery with timing and English-term safeguards, plus per-line low-confidence transcript review notes. Lite adds no recovery pass; this change makes no measured accuracy claim and adds no cloud requests.
+- Updated English/Hebrew guides and website help with API role requirements, provider compatibility, costs, privacy and current feature limits.
+- Simplified the public download name to `CUTROOM-1.1-Beta.zip`; internal manifests retain build provenance. Added scrollable media lanes, live mixer autosave and transactional protection against rebuilds that would discard added media.
+
 ## 1.1 Beta — 2026-09-22
 
 - Added one-click 16:9 Landscape and 9:16 Vertical controls at the top of the editor, including manual projects. Format changes preview immediately and save for export without AI, rebuilding, seeking or changing clips.

@@ -48,8 +48,12 @@ from cutroom.captions import (
     CAPTION_WORDS_PER_LINE_RANGE,
 )
 from cutroom.jobs import JobAdmissionError, JobCancelled, JobContext, JobManager
-from cutroom.frame_rates import validate_export_fps
+from cutroom.frame_rates import validate_export_fps, validate_export_resolution
 from cutroom.media import VIDEO_EXTENSIONS, UploadTooLargeError, copy_upload, create_proxy, extract_thumbnails, probe_media
+from cutroom.media_library import (
+    ASSET_ID_RE, MAX_ASSETS, MEDIA_ACTION_FIELDS, MediaLibraryError,
+    asset_kind, asset_size_limit, prepare_asset, probe_asset, safe_asset_path,
+)
 from cutroom.projects import ProjectStateError, ProjectStore
 from cutroom.render import InsufficientStorageError, available_encoders, ensure_render_storage, render_project
 from cutroom.utils import sanitize_filename
@@ -135,7 +139,7 @@ SETTING_CHOICES = {
     "layout": {"auto", "A", "B", "screen", "camera", "stacked", "side_by_side", "pip", "embedded_stack"},
     "audio_source": {"A", "B"},
     "quality": {"fast", "balanced", "quality"},
-    "resolution": {"720", "1080"},
+    "resolution": {"720", "1080", "1440", "2160"},
     "performance_mode": {"auto", "lite", "balanced", "quality"},
     "caption_style": CAPTION_STYLE_CHOICES,
     "caption_position": CAPTION_POSITION_CHOICES,
@@ -584,6 +588,10 @@ def _reset_manual_after_source_change(
     # local media mapping is obsolete, however, and must never reach its new
     # recording. Preserve explicit [] as an intentional empty A track.
     previous_tracks = previous.get("source_tracks")
+    if keep_a_timeline:
+        for key in ("media_clips", "audio_mixer"):
+            if key in previous:
+                project["manual"][key] = copy.deepcopy(previous[key])
     if keep_a_timeline and isinstance(previous_tracks, dict) and "A" in previous_tracks:
         project["manual"]["source_tracks"] = {"A": copy.deepcopy(previous_tracks["A"])}
     previous_sequence = previous.get("sequence")
@@ -710,6 +718,8 @@ def create_app(settings: Settings | None = None) -> Flask:
         **kwargs,
     ):
         with project_job_gate:
+            if active_uploads.get(project_id, 0) or jobs.active(project_id=project_id, kind="prepare_asset"):
+                raise APIInputError("project_busy", "Wait for media import to finish before processing this project.", 409)
             downloading = jobs.active(kind="model_install", limit=1)
             if downloading and kind in FOREGROUND_JOB_KINDS:
                 raise JobAdmissionError(
@@ -951,7 +961,23 @@ def create_app(settings: Settings | None = None) -> Flask:
 
     @app.get("/api/projects/<project_id>")
     def get_project(project_id: str):
-        return jsonify({"project": _public_project(store.load(project_id))})
+        with project_job_gate:
+            current = store.load(project_id)
+            recovered = {}
+            for asset_id, asset in current.get("assets", {}).items():
+                if asset.get("status") != "preparing":
+                    continue
+                latest = jobs.latest(project_id, "prepare_asset", dedupe_key=asset_id)
+                if latest is None or latest.status not in {"queued", "running"}:
+                    recovered[asset_id] = "cancelled" if latest and latest.status == "cancelled" else "failed"
+            if recovered:
+                def reconcile(latest_project):
+                    for asset_id, status in recovered.items():
+                        asset = latest_project["assets"].get(asset_id)
+                        if asset and asset.get("status") == "preparing":
+                            asset["status"] = status
+                current = store.update(project_id, reconcile)
+        return jsonify({"project": _public_project(current)})
 
     @app.patch("/api/projects/<project_id>")
     def patch_project(project_id: str):
@@ -979,9 +1005,10 @@ def create_app(settings: Settings | None = None) -> Flask:
         payload = _json_object()
         action = str(payload.get("action") or "").strip().lower()
         track_fields = SEQUENCE_ACTION_FIELDS.get(action, SOURCE_TRACK_EDIT_FIELDS.get(action))
+        media_fields = MEDIA_ACTION_FIELDS.get(action)
         _reject_unknown_fields(
             payload,
-            {"action", "expected_revision", *track_fields} if track_fields is not None else {
+            {"action", "expected_revision", *media_fields} if media_fields is not None else {"action", "expected_revision", *track_fields} if track_fields is not None else {
                 "action", "start", "end", "new_start", "new_end", "time", "segment_id", "text", "layout",
                 "screen_slot", "camera_slot", "primary_role", "audio_slot", "first_slot", "sync_offset", "default_layout", "stack_fit",
                 "enabled", "x", "y", "w", "h", "content_x", "content_y",
@@ -998,8 +1025,8 @@ def create_app(settings: Settings | None = None) -> Flask:
             _require_optional_string(payload, "clip_id", max_length=128)
             _require_optional_string(payload, "mode", max_length=16)
         expected_revision = payload.pop("expected_revision", None)
-        if action in SEQUENCE_ACTION_FIELDS and expected_revision is None:
-            raise APIInputError("invalid_field", "Sequence edits require the displayed project's expected_revision.")
+        if (action in SEQUENCE_ACTION_FIELDS or media_fields is not None) and expected_revision is None:
+            raise APIInputError("invalid_field", "Timeline edits require the displayed project's expected_revision.")
         if expected_revision is not None and (
             isinstance(expected_revision, bool)
             or not isinstance(expected_revision, int)
@@ -1007,14 +1034,116 @@ def create_app(settings: Settings | None = None) -> Flask:
         ):
             raise APIInputError("invalid_field", "expected_revision must be a positive integer.")
         try:
-            project = store.update(
-                project_id,
-                lambda current: apply_manual_edit(current, payload),
-                expected_revision=expected_revision,
-            )
+            with project_job_gate:
+                if media_fields is not None and (active_uploads.get(project_id, 0) or jobs.active(project_id=project_id)):
+                    raise APIInputError("project_busy", "Wait for active processing or media import to finish before editing media.", 409)
+                project = store.update(
+                    project_id,
+                    lambda current: apply_manual_edit(current, payload),
+                    expected_revision=expected_revision,
+                )
         except ManualEditError as error:
             raise APIInputError("invalid_manual_edit", str(error)) from error
         return jsonify({"project": _public_project(project)})
+
+    @app.post("/api/projects/<project_id>/assets")
+    def upload_asset(project_id: str):
+        project_root = store.project_dir(project_id)
+        request.max_content_length = min(max_upload_bytes, 2 * 1024**3) + 1024**2
+        with project_job_gate:
+            current = store.load(project_id)
+            if active_uploads.get(project_id, 0) or jobs.active(project_id=project_id):
+                raise APIInputError("project_busy", "Wait for active processing or import to finish before adding media.", 409)
+            if len(current.get("assets") or {}) >= MAX_ASSETS:
+                raise APIInputError("asset_limit", f"A project can contain at most {MAX_ASSETS} media assets.")
+            active_uploads[project_id] = active_uploads.get(project_id, 0) + 1
+        folder = None
+        durable = False
+        try:
+            uploaded = request.files.get("file")
+            if not uploaded or not uploaded.filename:
+                raise APIInputError("missing_file", "Choose a media file to import.")
+            filename = sanitize_filename(uploaded.filename)
+            kind = asset_kind(filename)
+            limit = asset_size_limit(kind, max_upload_bytes)
+            if request.content_length and request.content_length > limit + 1024**2:
+                raise APIInputError("file_too_large", f"This {kind} exceeds the {limit // 1024**2} MB import limit.", 413)
+            if shutil.disk_usage(settings.data_dir).free < int(request.content_length or limit) + 1024**3:
+                raise APIInputError("insufficient_storage", "There is not enough free space to import this media.", 507)
+            asset_id = "asset_" + uuid.uuid4().hex
+            path = safe_asset_path(project_root, f"media/assets/{asset_id}/original{Path(filename).suffix.lower()}")
+            folder = path.parent
+            folder.mkdir(parents=True)
+            copy_upload(uploaded, path, limit)
+            metadata = probe_asset(path, kind, settings)
+            asset = {"id": asset_id, "name": filename, **metadata, "path": path.relative_to(project_root).as_posix(), "status": "preparing", "waveform": []}
+            with project_job_gate:
+                current = store.update(project_id, lambda value: value.setdefault("assets", {}).update({asset_id: asset}))
+                durable = True
+                try:
+                    job = jobs.submit("prepare_asset", project_id, prepare_asset, project_id, asset_id, store, settings, dedupe_key=asset_id)
+                except JobAdmissionError:
+                    def discard_asset(value):
+                        value["assets"].pop(asset_id, None)
+                    store.update(project_id, discard_asset)
+                    durable = False
+                    raise
+            public = _public_project(current)
+            return jsonify({"project": public, "asset": public["assets"][asset_id], "asset_id": asset_id, "job": job.public()}), 202
+        except MediaLibraryError as exc:
+            raise APIInputError("invalid_media", str(exc)) from exc
+        except UploadTooLargeError as exc:
+            raise APIInputError("file_too_large", "The file is larger than the media import limit.", 413) from exc
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, json.JSONDecodeError) as exc:
+            raise APIInputError("invalid_media", "The media could not be read. Choose a valid video, image, or audio file.") from exc
+        finally:
+            if folder is not None and not durable:
+                # This path was generated under the validated project namespace.
+                shutil.rmtree(folder, ignore_errors=True)
+            with project_job_gate:
+                remaining = active_uploads.get(project_id, 0) - 1
+                if remaining > 0:
+                    active_uploads[project_id] = remaining
+                else:
+                    active_uploads.pop(project_id, None)
+
+    @app.get("/api/projects/<project_id>/assets/<asset_id>/media")
+    def asset_media(project_id: str, asset_id: str):
+        return serve_asset(project_id, asset_id, thumbnail=False)
+
+    @app.post("/api/projects/<project_id>/assets/<asset_id>/prepare")
+    def retry_asset_preparation(project_id: str, asset_id: str):
+        with project_job_gate:
+            current = store.load(project_id)
+            asset = (current.get("assets") or {}).get(asset_id)
+            if not ASSET_ID_RE.fullmatch(asset_id) or not asset:
+                raise FileNotFoundError(asset_id)
+            if active_uploads.get(project_id, 0) or jobs.active(project_id=project_id):
+                raise APIInputError("project_busy", "Wait for active processing or import to finish before retrying.", 409)
+            if asset.get("status") == "ready":
+                return jsonify({"project": _public_project(current)})
+            current = store.update(project_id, lambda value: value["assets"][asset_id].update(status="preparing"))
+            try:
+                job = jobs.submit("prepare_asset", project_id, prepare_asset, project_id, asset_id, store, settings, dedupe_key=asset_id)
+            except JobAdmissionError:
+                store.update(project_id, lambda value: value["assets"][asset_id].update(status="failed"))
+                raise
+            return jsonify({"project": _public_project(current), "job": job.public()}), 202
+
+    @app.get("/api/projects/<project_id>/assets/<asset_id>/thumbnail")
+    def asset_thumbnail(project_id: str, asset_id: str):
+        return serve_asset(project_id, asset_id, thumbnail=True)
+
+    def serve_asset(project_id: str, asset_id: str, *, thumbnail: bool):
+        if not ASSET_ID_RE.fullmatch(asset_id):
+            raise FileNotFoundError(asset_id)
+        asset = (store.load(project_id).get("assets") or {}).get(asset_id)
+        if not asset or asset.get("status") != "ready":
+            raise FileNotFoundError(asset_id)
+        path = safe_asset_path(store.project_dir(project_id), asset.get("thumbnail_path" if thumbnail else "preview_path"))
+        if not path.is_file():
+            raise FileNotFoundError(asset_id)
+        return send_file(path, conditional=True)
 
     @app.delete("/api/projects/<project_id>")
     def delete_project(project_id: str):
@@ -1645,7 +1774,12 @@ def create_app(settings: Settings | None = None) -> Flask:
     @app.post("/api/projects/<project_id>/render")
     def render(project_id: str):
         payload = _json_object()
-        _reject_unknown_fields(payload, {"quality", "fps"})
+        _reject_unknown_fields(payload, {"quality", "fps", "resolution"})
+        if "resolution" in payload:
+            try:
+                validate_export_resolution(payload["resolution"])
+            except ValueError as exc:
+                raise APIInputError("invalid_field", str(exc)) from exc
         if "fps" in payload:
             try:
                 validate_export_fps(payload["fps"])
@@ -1713,6 +1847,15 @@ def create_app(settings: Settings | None = None) -> Flask:
         # network failure to a polling client.
         accepted = jobs.cancel(job_id)
         latest = jobs.get(job_id) or job
+        if accepted and latest.status == "cancelled" and latest.kind == "prepare_asset":
+            def mark_asset_cancelled(project):
+                asset = (project.get("assets") or {}).get(latest.dedupe_key)
+                if asset and asset.get("status") != "ready":
+                    asset["status"] = "cancelled"
+            try:
+                store.update(latest.project_id, mark_asset_cancelled)
+            except FileNotFoundError:
+                pass
         response = {
             "ok": True,
             "accepted": bool(accepted),
@@ -2310,6 +2453,14 @@ def _public_project(project: dict[str, Any]) -> dict[str, Any]:
         # without silently replacing its footage with a different sequence.
         public["editor_sequence"] = {"error": "The saved timeline is invalid. Review your clips or restore an earlier edit."}
     project_id = public["id"]
+    asset_fields = {"id", "name", "kind", "duration", "width", "height", "has_audio", "status", "waveform"}
+    for asset_id, asset in public.setdefault("assets", {}).items():
+        thumbnail = bool(asset.get("thumbnail_path"))
+        asset = {key: value for key, value in asset.items() if key in asset_fields}
+        public["assets"][asset_id] = asset
+        asset["url"] = f"/api/projects/{project_id}/assets/{asset_id}/media"
+        if thumbnail:
+            asset["thumbnail_url"] = f"/api/projects/{project_id}/assets/{asset_id}/thumbnail"
     for slot, source in public.get("sources", {}).items():
         if source:
             source.pop("relative_path", None)
