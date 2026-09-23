@@ -2,6 +2,8 @@
 
 ## 1.1 Beta — 2026-09-24
 
+- Added a persistent Day/Night switch for the app, including the project lobby, editing controls and Guide. Preview imagery and captions retain their original colors.
+- Stabilized the header and working-status banner as a single measured stack. Wrapped navigation no longer overlaps progress or the editor, and starting analysis no longer triggers the old smooth scrolling jump.
 - Refreshed the application entrance with an ivory/violet palette, visual project choices and optional AI setup after the primary workflows. Kept the editing workspace dark with clearer selection and panel contrast.
 - Redesigned the English/Hebrew product website around a real editor preview, simpler workflow explanations and clearer download guidance, with responsive layouts and keyboard focus indicators.
 - This visual refresh does not change playback, timeline geometry, AI providers or saved projects.

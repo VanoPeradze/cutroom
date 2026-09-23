@@ -2236,7 +2236,9 @@ function showAnalysis() {
   $$(".analysis-checks li").forEach((item) => item.classList.remove("done", "active"));
   $(".analysis-checks li")?.classList.add("active");
   elements.generateButton.disabled = true;
-  window.scrollTo({ top: elements.analysisPanel.offsetTop - 100, behavior: "smooth" });
+  const chromeHeight = document.getElementById("appChrome")?.getBoundingClientRect().height || 64;
+  const panelTop = window.scrollY + elements.analysisPanel.getBoundingClientRect().top;
+  window.scrollTo({ top: Math.max(0, panelTop - chromeHeight - 16), behavior: "instant" });
 }
 
 function friendlyDirectorError(message) {
