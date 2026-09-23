@@ -21,6 +21,33 @@ def main():
         settings = load_settings()
         settings.raw["ai"]["enabled"] = False
         app = create_app(settings)
+        if "--header-progress" in sys.argv:
+            @app.get("/test-header-progress.js")
+            def header_progress_script():
+                from flask import Response
+                return Response("""
+                    document.addEventListener('DOMContentLoaded', () => {
+                      const button = document.createElement('button');
+                      button.id = 'testHeaderProgress';
+                      button.textContent = 'Simulate progress';
+                      button.className = 'button compact';
+                      document.querySelector('.top-actions').append(button);
+                      button.addEventListener('click', () => {
+                        const bar = document.getElementById('activeJobBar');
+                        bar.hidden = !bar.hidden;
+                        document.getElementById('activeJobDetail').textContent = 'Test-only progress: preparing a long recording with two sources, captions and audio. No AI calls.';
+                      });
+                    });
+                    """, mimetype="application/javascript")
+
+            @app.after_request
+            def inject_header_progress_fixture(response):
+                if response.mimetype == "text/html":
+                    response.direct_passthrough = False
+                    response.set_data(response.get_data().replace(
+                        b"</head>", b'<script src="/test-header-progress.js"></script></head>'
+                    ))
+                return response
         if "--audio-graph-conflict" in sys.argv:
             @app.get("/test-audio-graph-conflict.js")
             def audio_graph_conflict_script():

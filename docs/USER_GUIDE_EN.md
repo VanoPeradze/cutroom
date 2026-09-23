@@ -4,6 +4,8 @@ CUTROOM is a free, open-source video editor in beta. It helps turn recordings in
 
 Start with the short path below. The later sections explain the controls when you need them.
 
+Use **Day / Night** in the top bar to change the app's appearance; your choice is saved in this browser. The video preview keeps its original colors. **Guide** opens searchable help from any screen. While a job is running, its status and **Stop process** stay together below the navigation.
+
 ## The quick path
 
 1. Use **Extract All** on the ZIP and double-click **`START CUTROOM.bat`** in the extracted folder. Let first-time setup finish and keep the launch window open. The other two items are **START HERE.html** (offline help) and **App** (technical files and saved work); leave them beside the launcher. Older flat packages and GitHub source checkouts still use `run_windows.bat`.

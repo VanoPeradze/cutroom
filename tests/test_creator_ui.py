@@ -49,3 +49,16 @@ def test_visual_layer_has_mobile_and_motion_rules_without_media_geometry():
     assert ".home-hub :focus-visible" in css
     for media_geometry in ("object-fit", "aspect-ratio", "--workspace-timeline-height", "#timelineCanvas"):
         assert media_geometry not in css
+
+
+def test_header_and_progress_share_one_stack_and_theme_initializes_before_styles():
+    html = (ROOT / "web/index.html").read_text(encoding="utf-8")
+    assert html.index('id="appChrome"') < html.index('class="topbar"') < html.index('id="activeJobBar"') < html.index('<main')
+    assert html.index('/assets/ui-shell.js?') < html.index('rel="stylesheet"')
+    assert 'id="themeToggle"' in html and 'aria-label="Night mode"' in html
+    css = (ROOT / "web/creator-ui.css").read_text(encoding="utf-8")
+    assert 'inset-block-start:var(--app-chrome-height)' in css
+    assert 'height:calc(100dvh - var(--app-chrome-height))' in css
+    app = (ROOT / "web/app.js").read_text(encoding="utf-8")
+    assert 'analysisPanel.offsetTop - 100' not in app
+    assert 'panelTop - chromeHeight - 16' in app

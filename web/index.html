@@ -4,17 +4,19 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#081013">
-  <meta name="color-scheme" content="dark">
+  <meta name="color-scheme" content="dark light">
+  <script src="/assets/ui-shell.js?v=1.1-beta-1"></script>
   <title>CUTROOM 1.1 Beta — Your editing workspace</title>
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/assets/styles.css?v=1.1-beta-3">
   <link rel="stylesheet" href="/assets/workspace.css?v=1.1-beta-3">
   <link rel="stylesheet" href="/assets/media-studio.css?v=1.1-beta-2">
   <link rel="stylesheet" href="/assets/welcome.css?v=1.1-beta-1">
-  <link rel="stylesheet" href="/assets/creator-ui.css?v=1.1-beta-2">
+  <link rel="stylesheet" href="/assets/creator-ui.css?v=1.1-beta-5">
 </head>
 <body class="welcome-mode">
   <a class="skip-link" href="#main" data-i18n="skip">Skip to content</a>
+  <div class="app-chrome" id="appChrome">
   <header class="topbar">
       <button class="brand" id="homeButton" aria-label="CUTROOM AI home">
         <span class="brand-mark" aria-hidden="true"><i></i><i></i></span>
@@ -25,9 +27,10 @@
       <span class="save-state" id="saveState" role="status" aria-live="polite" aria-atomic="true" data-i18n="saved">Saved</span>
     </div>
     <nav class="top-actions" aria-label="Primary actions">
-      <button class="button ghost compact" id="welcomeHelpButton" type="button">Help & guide</button>
+      <button class="button ghost compact" id="welcomeHelpButton" type="button" title="Help & guide">Guide</button>
       <button class="button ghost compact" id="aiConnectionButton" type="button">AI connection</button>
       <button class="button ghost compact" id="projectsButton" data-i18n="projects">Projects</button>
+      <button class="button ghost compact theme-toggle" id="themeToggle" type="button" aria-label="Night mode" aria-pressed="false" title="Switch to night mode"><span id="themeIcon" aria-hidden="true">☀</span><span id="themeLabel">Day</span></button>
       <span class="local-status"><i aria-hidden="true"></i><span id="processingBadge">Local AI</span></span>
       <button class="button ghost compact" id="advancedButton" aria-expanded="false" data-i18n="studio">Studio</button>
       <button class="button render compact" id="renderButton" disabled>
@@ -44,6 +47,7 @@
     </div>
     <button class="button danger compact" id="globalCancelJobButton" type="button" data-i18n="stopProcess">Stop process</button>
   </aside>
+  </div>
 
   <main id="main">
     <section class="welcome-shell home-hub" id="welcomeView" aria-label="Welcome to CUTROOM">
@@ -751,6 +755,6 @@
       <footer class="connection-actions"><button class="button ghost" id="forgetCloudKey" type="button">Forget session key</button><button class="button primary" id="saveAIConnection" type="submit">Use this connection</button></footer>
     </form>
   </dialog>
-  <script type="module" src="/assets/app.js?v=1.1-beta-9"></script>
+  <script type="module" src="/assets/app.js?v=1.1-beta-10"></script>
 </body>
 </html>
