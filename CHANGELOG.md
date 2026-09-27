@@ -2,12 +2,16 @@
 
 ## 1.1 Beta — 2026-09-28
 
+- Added Open editor, Rename and confirmed permanent Delete to the lobby and Projects, plus project search and sorting. Renaming keeps the active edit in place; deletion refuses active work without cancelling it and explains that imported copies and CUTROOM exports are removed while original files stay untouched.
+- Added custom titles and captions with their own timeline layers, immediate preview and automatic saving after typing pauses. Move or trim them on the edited-video clock, choose Top/Center/Bottom, Clean/Bold/Boxed and size, or import UTF-8 SRT/VTT files up to 1 MiB and 2,000 cues. These tools require no AI account or model.
+- Custom text always appears in exported video independently of the AI-caption burn setting. Optional SRT output combines AI and custom captions, excluding titles. Imports do not replace the AI transcript; invalid imports and edits that would shorten the video past a text layer are rejected without losing saved work. Text does not automatically ripple with source edits.
+- Softened the app and website with quieter surfaces and controls, and removed decorative diagonal arrows. Existing Day/Night choices remain available.
 - Improved precision editing: visible Snap control, playhead/cross-track/media alignment, constrained trim snapping, a named alignment guide and output-frame time readouts. Alt bypasses snapping; existing free scrubbing and default Snap-off behavior remain intact.
 - Added persistent A/B locks under **Edit → Track protection**. Lock a finished source while editing the other; footage remains visible and audible in preview and export. Clip changes, Together edits and Undo/Redo that would alter a protected lane are rejected without consuming history.
 - Kept protection separate from Undo/Redo: lock choices survive reopening and history navigation. Unlock protected sources before rebuilding/refining the draft or replacing/removing source media. Shared layout, audio mixing and added-media edits remain available; protected clip framing, picture speed and source timing stay guarded.
 - Fixed late trim responses changing selection after switching projects or edit targets, and stale selection restoration after a revision conflict.
 - Undo/Redo now clears outdated clip selections while retaining the playhead, so the inspector cannot display the old trim range as the restored clip.
-- Added a six-round editor roadmap: precision, track control, trim modes, source organization, performance and release qualification. This increment covers precision and A/B protection; mixed-layer ripple and arbitrary user-created lanes remain planned work. Every completed, verified increment must reach GitHub, a matching downloadable ZIP and the Expo website before publication is considered complete.
+- Added a six-round editor roadmap: precision, track control, trim modes, source organization, performance and release qualification. Delivered scope includes precision, A/B protection, project management and custom text; mixed-layer ripple and arbitrary user-created lanes remain planned work. Every completed, verified increment must reach GitHub, a matching downloadable ZIP and the Expo website before publication is considered complete.
 
 ## 1.1 Beta — 2026-09-27
 

@@ -56,6 +56,7 @@ from cutroom.media_library import (
     asset_kind, asset_size_limit, prepare_asset, probe_asset, safe_asset_path,
 )
 from cutroom.projects import ProjectStateError, ProjectStore
+from cutroom.text_clips import MAX_CAPTION_IMPORT_BYTES, TEXT_ACTION_FIELDS
 from cutroom.render import InsufficientStorageError, available_encoders, ensure_render_storage, render_project
 from cutroom.utils import sanitize_filename
 from cutroom.vision import VISION_ANALYSIS_VERSION, analyze_faces_and_embedded_camera, normalized_vision_sample_count
@@ -242,7 +243,7 @@ def _validate_json_sanity(value: Any, *, depth: int = 0) -> None:
     raise APIInputError("invalid_json", "JSON contains an unsupported value.")
 
 
-def _json_object() -> dict[str, Any]:
+def _json_object(*, caption_import: bool = False) -> dict[str, Any]:
     if request.content_length == 0:
         return {}
     if request.content_length is None and not request.is_json:
@@ -255,7 +256,16 @@ def _json_object() -> dict[str, Any]:
         raise APIInputError("invalid_json", "Request body is not valid JSON.") from exc
     if not isinstance(payload, dict):
         raise APIInputError("invalid_json_type", "JSON request body must be an object.")
-    _validate_json_sanity(payload)
+    if caption_import and payload.get("action") == "text_import" and isinstance(payload.get("content"), str):
+        try:
+            content_bytes = len(payload["content"].encode("utf-8"))
+        except UnicodeEncodeError as exc:
+            raise APIInputError("invalid_field", "Caption file must contain valid Unicode.") from exc
+        if content_bytes > MAX_CAPTION_IMPORT_BYTES:
+            raise APIInputError("invalid_field", "Caption files must be no larger than 1 MiB.")
+        _validate_json_sanity({key: value for key, value in payload.items() if key != "content"})
+    else:
+        _validate_json_sanity(payload)
     return payload
 
 
@@ -591,7 +601,7 @@ def _reset_manual_after_source_change(
     # recording. Preserve explicit [] as an intentional empty A track.
     previous_tracks = previous.get("source_tracks")
     if keep_a_timeline:
-        for key in ("media_clips", "audio_mixer"):
+        for key in ("media_clips", "text_clips", "audio_mixer"):
             if key in previous:
                 project["manual"][key] = copy.deepcopy(previous[key])
     if keep_a_timeline and isinstance(previous_tracks, dict) and "A" in previous_tracks:
@@ -754,8 +764,11 @@ def create_app(settings: Settings | None = None) -> Flask:
         if not request.path.startswith("/api/"):
             return None
         if request.endpoint in JSON_BODY_ENDPOINTS or request.endpoint in {"save_ai_connection", "manual_draft"}:
-            request.max_content_length = JSON_BODY_LIMIT
-            if request.content_length is not None and request.content_length > JSON_BODY_LIMIT:
+            # JSON may escape each Unicode character using six ASCII bytes;
+            # the decoded subtitle content has its own strict 1 MiB limit.
+            body_limit = MAX_CAPTION_IMPORT_BYTES * 6 + 4096 if request.endpoint == "manual_edit" else JSON_BODY_LIMIT
+            request.max_content_length = body_limit
+            if request.content_length is not None and request.content_length > body_limit:
                 raise RequestEntityTooLarge()
         if configured_loopback and not _is_loopback_host(_host_name(request.host)):
             raise APIInputError("invalid_host", "CUTROOM's local API only accepts loopback hosts.", 421)
@@ -1008,13 +1021,14 @@ def create_app(settings: Settings | None = None) -> Flask:
 
     @app.post("/api/projects/<project_id>/manual/edit")
     def manual_edit(project_id: str):
-        payload = _json_object()
+        payload = _json_object(caption_import=True)
         action = str(payload.get("action") or "").strip().lower()
         track_fields = {"slot", "locked"} if action == "set_track_lock" else SEQUENCE_ACTION_FIELDS.get(action, SOURCE_TRACK_EDIT_FIELDS.get(action))
         media_fields = MEDIA_ACTION_FIELDS.get(action)
+        text_fields = TEXT_ACTION_FIELDS.get(action)
         _reject_unknown_fields(
             payload,
-            {"action", "expected_revision", *media_fields} if media_fields is not None else {"action", "expected_revision", *track_fields} if track_fields is not None else {
+            {"action", "expected_revision", *text_fields} if text_fields is not None else {"action", "expected_revision", *media_fields} if media_fields is not None else {"action", "expected_revision", *track_fields} if track_fields is not None else {
                 "action", "start", "end", "new_start", "new_end", "time", "segment_id", "text", "layout",
                 "screen_slot", "camera_slot", "primary_role", "audio_slot", "first_slot", "sync_offset", "default_layout", "stack_fit",
                 "enabled", "x", "y", "w", "h", "content_x", "content_y",
@@ -1031,7 +1045,7 @@ def create_app(settings: Settings | None = None) -> Flask:
             _require_optional_string(payload, "clip_id", max_length=128)
             _require_optional_string(payload, "mode", max_length=16)
         expected_revision = payload.pop("expected_revision", None)
-        if (action in SEQUENCE_ACTION_FIELDS or media_fields is not None or action == "set_track_lock") and expected_revision is None:
+        if (action in SEQUENCE_ACTION_FIELDS or media_fields is not None or text_fields is not None or action == "set_track_lock") and expected_revision is None:
             raise APIInputError("invalid_field", "Timeline edits require the displayed project's expected_revision.")
         if expected_revision is not None and (
             isinstance(expected_revision, bool)
@@ -1046,8 +1060,8 @@ def create_app(settings: Settings | None = None) -> Flask:
                     or any(job.kind in {"director", "refine"} for job in jobs.active(project_id=project_id))
                 ):
                     raise APIInputError("project_busy", "Wait for active editing or source import to finish before changing track locks.", 409)
-                if media_fields is not None and (active_uploads.get(project_id, 0) or jobs.active(project_id=project_id)):
-                    raise APIInputError("project_busy", "Wait for active processing or media import to finish before editing media.", 409)
+                if (media_fields is not None or text_fields is not None) and (active_uploads.get(project_id, 0) or jobs.active(project_id=project_id)):
+                    raise APIInputError("project_busy", "Wait for active processing or media import to finish before editing media or text.", 409)
                 project = store.update(
                     project_id,
                     lambda current: apply_manual_edit(current, payload),
@@ -1166,12 +1180,11 @@ def create_app(settings: Settings | None = None) -> Flask:
                     "A source upload is still in progress. Cancel it or wait before deleting the project.",
                     409,
                 )
-            jobs.cancel_project(project_id)
             active = jobs.active(project_id=project_id)
             if active:
                 raise APIInputError(
                     "project_busy",
-                    "Project jobs are being cancelled. Try deleting again in a moment.",
+                    "This project has active work. Wait for it to finish or stop it in the editor before deleting the project.",
                     409,
                 )
             for transaction_key in [key for key in upload_transactions if key[0] == project_id]:

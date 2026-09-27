@@ -7,6 +7,7 @@ from .composition import build_manual_embedded_candidate
 from .source_tracks import TRACK_ACTIONS, SourceTrackError, prepare_source_track_edit, validate_source_track_sync
 from .sequence import SEQUENCE_ACTIONS, prepare_sequence_edit
 from .media_library import MEDIA_ACTION_FIELDS, MediaLibraryError, prepare_media_edit, validate_media_bounds
+from .text_clips import TEXT_ACTION_FIELDS, TextClipError, prepare_text_edit, public_text_clips, validate_text_bounds
 from .track_locks import locked_tracks, require_tracks_unlocked, validate_locked_track_changes
 from .utils import clamp, invert_ranges, merge_ranges, now_iso, range_duration
 
@@ -291,6 +292,8 @@ def _timeline_snapshot(project: dict[str, Any]) -> dict[str, Any]:
         "manual_sequence": copy.deepcopy(manual.get("sequence")),
         "manual_media_clips_present": "media_clips" in manual,
         "manual_media_clips": copy.deepcopy(manual.get("media_clips")),
+        "manual_text_clips_present": "text_clips" in manual,
+        "manual_text_clips": copy.deepcopy(manual.get("text_clips")),
         "manual_audio_mixer_present": "audio_mixer" in manual,
         "manual_audio_mixer": copy.deepcopy(manual.get("audio_mixer")),
         # Embedded composition changes both project-level intent and the live
@@ -315,7 +318,7 @@ def _restore_timeline(project: dict[str, Any], snapshot: dict[str, Any]) -> None
     manual["cuts"] = copy.deepcopy(snapshot.get("manual_cuts") or [])
     manual["keeps"] = copy.deepcopy(snapshot.get("manual_keeps") or [])
     manual["camera_overrides"] = copy.deepcopy(snapshot.get("manual_camera_overrides") or [])
-    for key in ("media_clips", "audio_mixer"):
+    for key in ("media_clips", "text_clips", "audio_mixer"):
         if f"manual_{key}_present" in snapshot:
             if snapshot[f"manual_{key}_present"]:
                 manual[key] = copy.deepcopy(snapshot[f"manual_{key}"])
@@ -906,7 +909,8 @@ def apply_manual_edit(project: dict[str, Any], payload: dict[str, Any]) -> dict[
     action = str(payload.get("action") or "").strip().lower() if isinstance(payload, dict) else ""
     guarded = SEQUENCE_ACTIONS | {"delete_range", "trim_clip", "apply_reel_candidate"}
     protected = bool(locked_tracks(project))
-    if protected or action in guarded and (project.get("manual") or {}).get("media_clips"):
+    manual = project.get("manual") or {}
+    if protected or action in guarded and (manual.get("media_clips") or manual.get("text_clips")):
         candidate = copy.deepcopy(project)
         try:
             if action in SEQUENCE_ACTIONS | TRACK_ACTIONS and payload.get("slot"):
@@ -915,7 +919,8 @@ def apply_manual_edit(project: dict[str, Any], payload: dict[str, Any]) -> dict[
             validate_locked_track_changes(project, candidate)
             if action in guarded:
                 validate_media_bounds(candidate)
-        except (MediaLibraryError, SourceTrackError) as exc:
+                validate_text_bounds(candidate)
+        except (MediaLibraryError, SourceTrackError, TextClipError) as exc:
             raise ManualEditError(str(exc)) from exc
         project.clear()
         project.update(candidate)
@@ -946,10 +951,13 @@ def _apply_manual_edit(project: dict[str, Any], payload: dict[str, Any]) -> dict
         sequence_edit = prepare_sequence_edit(project, payload) if action in SEQUENCE_ACTIONS else None
         tracks = prepare_source_track_edit(project, payload) if action in TRACK_ACTIONS else None
         media_edit = prepare_media_edit(project, {**payload, "action": action}) if action in MEDIA_ACTION_FIELDS else None
+        text_edit = prepare_text_edit(project, {**payload, "action": action}) if action in TEXT_ACTION_FIELDS else None
         if action == "set_source_mixer":
             validate_source_track_sync(project, payload)
-    except (SourceTrackError, MediaLibraryError) as exc:
+    except (SourceTrackError, MediaLibraryError, TextClipError) as exc:
         raise ManualEditError(str(exc)) from exc
+    if action in TEXT_ACTION_FIELDS and text_edit is None:
+        return project
     if action in MEDIA_ACTION_FIELDS and media_edit is None:
         return project
     if action in TRACK_ACTIONS and tracks is None:
@@ -998,11 +1006,15 @@ def _apply_manual_edit(project: dict[str, Any], payload: dict[str, Any]) -> dict
         }
         _set_transcript_text(project, segment_id, new_text)
         entry["after_words"] = {"present": "words" in segment, "words": copy.deepcopy(segment.get("words"))}
-    elif action in SEQUENCE_ACTIONS | TRACK_ACTIONS | set(MEDIA_ACTION_FIELDS) | {"delete_range", "restore_range", "trim_clip", "split", "set_camera_layout", "set_source_mixer", "set_embedded_camera", "apply_reel_candidate"}:
+    elif action in SEQUENCE_ACTIONS | TRACK_ACTIONS | set(MEDIA_ACTION_FIELDS) | set(TEXT_ACTION_FIELDS) | {"delete_range", "restore_range", "trim_clip", "split", "set_camera_layout", "set_source_mixer", "set_embedded_camera", "apply_reel_candidate"}:
         if not isinstance(project.get("draft"), dict):
             raise ManualEditError("Generate a draft before editing the timeline")
         before = _timeline_snapshot(project)
-        if action in MEDIA_ACTION_FIELDS:
+        if action in TEXT_ACTION_FIELDS:
+            project.setdefault("manual", {}).update(text_edit)
+            project["draft"]["edited_at"] = now_iso()
+            project["draft"]["status"] = "ready"
+        elif action in MEDIA_ACTION_FIELDS:
             project.setdefault("manual", {}).update(media_edit)
             project["draft"]["edited_at"] = now_iso()
             project["draft"]["status"] = "ready"
@@ -1107,3 +1119,5 @@ def strip_private_edit_history(project: dict[str, Any]) -> None:
     manual = project.get("manual")
     if isinstance(manual, dict):
         manual.pop("_history", None)
+        if "text_clips" in manual:
+            manual["text_clips"] = public_text_clips(manual["text_clips"])

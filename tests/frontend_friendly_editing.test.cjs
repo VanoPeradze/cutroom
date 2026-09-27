@@ -349,3 +349,45 @@ test('legacy non-sequence frame stepping retains original-source FPS',()=>{
     state.timeline.playhead=2;handleEditorShortcut({key:'ArrowRight',target:elements.timelineCanvas,preventDefault(){}});`);
   assert.ok(Math.abs(run('seeks.at(-1)')-(2+1/24))<1e-10);
 });
+
+test('deleting a removed layer again cannot delete an older footage selection',()=>{
+  const {run}=app();
+  run(`state.project.manual.text_clips=[{id:'text_a',start:1,end:2}];
+    state.timeline.mediaSelection='text_a';state.manualSelection={start:1,end:2};
+    globalThis.layerEdits=[];globalThis.footageEdits=[];globalThis.prevented=0;
+    state.timeline.onMediaAction=(action,detail)=>{layerEdits.push({action,detail});state.project.manual.text_clips=[];};
+    applyManualEdit=(action,detail)=>footageEdits.push({action,detail});
+    globalThis.deleteKey=()=>({key:'Delete',code:'Delete',target:elements.timelineCanvas,preventDefault(){prevented++;},stopPropagation(){}});
+    handleEditorShortcut(deleteKey());handleEditorShortcut(deleteKey());handleEditorShortcut(deleteKey());`);
+  assert.deepEqual(plain(run('layerEdits')),[{action:'media_remove',detail:{clip_id:'text_a'}}]);
+  assert.deepEqual(plain(run('footageEdits')),[]);
+  assert.equal(run('state.manualSelection'),null);
+  assert.equal(run('state.timeline.mediaSelection'),null);
+  assert.equal(run('prevented'),2);
+});
+
+test('a stale layer Split is consumed without splitting the underlying footage',()=>{
+  const {run}=app();
+  run(`state.timeline.mediaSelection='text_replaced';state.manualSelection={start:1,end:2};
+    globalThis.edits=[];globalThis.prevented=0;handleTimelineEdit=edit=>edits.push(edit);
+    handleEditorShortcut({key:'s',code:'KeyS',target:elements.timelineCanvas,preventDefault(){prevented++;},stopPropagation(){}});`);
+  assert.deepEqual(plain(run('edits')),[]);
+  assert.equal(run('state.manualSelection'),null);
+  assert.equal(run('state.timeline.mediaSelection'),null);
+  assert.equal(run('prevented'),1);
+});
+
+test('text selection replaces footage selection and removal respects a different active layer',()=>{
+  const {run}=app();
+  run(`globalThis.TextStudio=class {constructor(root,stage,options){this.options=options;}};
+    globalThis.revealed=[];state.timeline.scheduleDraw=()=>{};state.timeline.revealMedia=id=>revealed.push(id);
+    initializeTextStudio();state.manualSelection={start:1,end:2};state.textStudio.options.selected('text_a');`);
+  assert.equal(run('state.manualSelection'),null);
+  assert.equal(run('state.timeline.mediaSelection'),'text_a');
+  assert.deepEqual(plain(run('revealed')),['text_a']);
+  run(`state.timeline.mediaSelection='media_other';state.textStudio.options.selectionRemoved('text_a');`);
+  assert.equal(run('state.timeline.mediaSelection'),'media_other');
+  run(`state.timeline.mediaSelection='text_a';state.manualSelection={start:1,end:2};state.textStudio.options.selectionRemoved('text_a');`);
+  assert.equal(run('state.timeline.mediaSelection'),null);
+  assert.equal(run('state.manualSelection'),null);
+});

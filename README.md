@@ -64,12 +64,16 @@ CUTROOM helps turn camera recordings, screen captures and gameplay into an **edi
 | Make the edit your own | Split, move, trim and restore independent clips; edit A/B together or separately, with Undo/Redo. |
 | Keep precise edits safe | Snap to the playhead and clip/media edges with visible alignment feedback; protect a finished A/B source under Edit → Track protection while editing the other. |
 | Add media and sound | Import B-roll, images, music and voiceover into a project library; place them over the existing edit and mix audio with waveform lanes. |
-| Finish the details | Correct the transcript, style captions and export subtitles as SRT. |
+| Add text and captions | Type titles or captions, import SRT/VTT, move and trim text layers, preview changes immediately and save automatically. No AI needed. |
+| Manage your projects | Open, rename or confirm permanent deletion from the lobby or Projects; search and sort saved work. |
+| Finish the details | Correct the AI transcript, style subtitles and optionally export AI/custom captions together as SRT. |
 | Export your video | Create 720p, 1080p, QHD 1440p or 4K 2160p MP4s, with frame-rate options up to 60 FPS. |
 
 Higher export settings do not create detail missing from the source. Library media fits within the current edit duration. A/B **Picture speed** changes the picture while preserving clip length and speech timing; it can lose lip sync or hold the last available frame.
 
 Track protection leaves preview, sound and export active. Locks persist with the project outside Undo/Redo; an edit or history step that would change a protected source is rejected until you unlock it. Shared layout, audio mixing and added media remain editable. [Precision and protection guide](docs/USER_GUIDE_EN.md#protect-a-finished-source)
+
+Custom text uses the edited video's timing and always appears in the MP4, independently of the AI subtitle switch. SRT/VTT import accepts UTF-8 files up to 1 MiB and 2,000 cues; optional SRT export includes captions, not titles. Text and media layers stay within the existing edit and do not automatically follow source reordering. [Text and caption guide](docs/USER_GUIDE_EN.md#8-add-text-and-control-captions)
 
 ## Get started
 
@@ -93,7 +97,7 @@ The editor and rendering stay on your computer in every mode. Open **AI connecti
 
 | Mode | What you need | What to expect |
 | --- | --- | --- |
-| **Manual editing** | Your footage | No AI models or AI account. Cut, add library media, mix audio and export locally. |
+| **Manual editing** | Your footage | No AI models or AI account. Cut, add media and text, import captions, mix audio and export locally. |
 | **Local AI** | Downloaded models and enough computer resources | Transcription and Story AI on your machine, with no provider fees. |
 | **Optional cloud AI** | Your Groq account, or a compatible provider endpoint and API key | Groq Free tier is free within its quotas; paid accounts and other providers may charge. |
 
@@ -114,7 +118,8 @@ The workflow is available to try; the quality still needs real-world feedback.
 - Transcription and draft quality vary with language, noise, overlapping voices and recording length.
 - Camera detection, source roles, synchronization and suggested cuts may need manual correction.
 - Editing styles are pacing and selection presets, not replicas of individual creators.
-- A/B remain the two main sources. Added media layers fit inside their existing edit; they do not extend its end automatically.
+- A/B remain the two main sources. Added media and text layers fit inside their existing edit; they do not extend its end or ripple with source edits automatically. Shortening that would leave a layer past the new end is refused until you trim, move or remove that layer.
+- Text uses three positions and three style presets; overlapping text can collide. This remains a bounded editor, not a full professional NLE.
 - Fresh-computer installation and broad hardware coverage are still being validated.
 
 Use copies of your footage, not your only originals or an urgent client delivery. Automated tests and synthetic renders do not establish professional editorial quality.

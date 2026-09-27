@@ -15,6 +15,7 @@ from .intelligence import PACE_LIMITS, StoryPlanningError, build_story_beats, la
 from .jobs import JobCancelled, JobContext
 from .media import detect_scenes
 from .media_library import validate_media_bounds
+from .text_clips import validate_text_bounds
 from .projects import ProjectStore
 from .source_tracks import source_sync_offset
 from .track_locks import require_tracks_unlocked
@@ -1732,7 +1733,7 @@ def analyze_project(
     require_tracks_unlocked(project)
     # Rebuilding a project with independent media must be all-or-nothing: a
     # rejected shorter draft must not leave the refinement's settings applied.
-    staged_brief = brief_patch if (project.get("manual") or {}).get("media_clips") else None
+    staged_brief = brief_patch if any((project.get("manual") or {}).get(key) for key in ("media_clips", "text_clips")) else None
     original_settings = copy.deepcopy(project.get("settings") or {})
     if brief_patch:
         context.checkpoint()
@@ -2558,6 +2559,7 @@ def analyze_project(
         unchanged_variation = normalized_selection_variant > 0 and not variation_changed
         if not unchanged_variation:
             validate_media_bounds({**proposed, "draft": draft})
+            validate_text_bounds({**proposed, "draft": draft})
         context.commit()
         latest.setdefault("settings", {}).update(staged_brief or {})
         if source_mixer_patch:
@@ -2664,7 +2666,7 @@ def refine_project(context: JobContext, project_id: str, store: ProjectStore, se
                 current_mixer = current_project.setdefault("manual", {}).setdefault("source_mixer", {})
                 current_mixer["default_layout"] = "camera"
 
-            if (project.get("manual") or {}).get("media_clips"):
+            if any((project.get("manual") or {}).get(key) for key in ("media_clips", "text_clips")):
                 staged_mixer = {"default_layout": "camera"}
             else:
                 store.update(project_id, focus_camera)

@@ -49,7 +49,8 @@ def test_render_storage_failure_is_actionable_and_localized():
 def test_destructive_source_actions_are_blocked_while_project_work_is_active():
     assert "function projectHasForegroundWork(projectId)" in APP
     assert "if (projectHasForegroundWork(state.project.id))" in APP
-    assert "if (projectHasForegroundWork(project.id))" in APP
+    assert "if (projectLibraryBusy(project.id))" in APP
+    assert "return projectHasForegroundWork(projectId)" in APP
 
 
 def test_async_ui_entry_points_report_failures_instead_of_leaking_rejections():

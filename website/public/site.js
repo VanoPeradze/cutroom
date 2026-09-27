@@ -10,14 +10,14 @@
   let language = new URL(location.href).searchParams.get('lang') === 'he' ? 'he' : 'en';
   let currentShot = 'editor';
   const shots = {
-    editor: {en: 'Snap cuts into place and protect finished A/B tracks from accidental edits. Locks leave playback and export enabled. This is synthetic test footage, not an AI-generated result.', he: 'הצמידו חיתוכים במדויק ונעלו ערוצי A/B כדי למנוע שינויים לא מכוונים. הנעילה לא מפריעה לניגון או לייצוא. זהו חומר בדיקה סינתטי, לא תוצאה שנוצרה ב־AI.', alt: {en: 'CUTROOM editor with protected A/B timeline tracks and synthetic test footage', he: 'עורך CUTROOM עם ערוצי טיימליין A/B מוגנים וחומר בדיקה סינתטי'}},
+    editor: {en: 'Add your own text or import SRT/VTT captions, then move and trim each layer on the timeline. No AI needed. This is synthetic test footage, not an AI-generated result.', he: 'הוסיפו טקסט או ייבאו כתוביות SRT/VTT, והזיזו וקצרו כל שכבה בטיימליין. ללא צורך ב־AI. זהו חומר בדיקה סינתטי, לא תוצאה שנוצרה ב־AI.', alt: {en: 'CUTROOM editor with custom text, imported captions and independent A/B timeline tracks; synthetic test footage', he: 'עורך CUTROOM עם טקסט אישי, כתוביות מיובאות וערוצי A/B עצמאיים; חומר בדיקה סינתטי'}},
     welcome: {en: 'Choose a Short, a YouTube video or a manual edit. Local model setup is visible before your first AI edit.', he: 'בחרו Short, סרטון יוטיוב או עריכה ידנית. הכנת המודלים המקומיים מופיעה לפני העריכה הראשונה עם AI.', alt: {en: 'CUTROOM welcome screen with three workflows and local setup guidance', he: 'מסך הכניסה של CUTROOM עם שלושה מסלולי עריכה והכוונה להגדרת AI מקומי'}},
     'ai-options': {en: 'Choose local models, Groq Free tier or your compatible API. Model downloads require confirmation; the models shown as downloaded are already installed on this demo computer, not bundled with CUTROOM.', he: 'בחירה בין מודלים מקומיים, המסלול החינמי של Groq או API תואם משלכם. הורדות מודלים דורשות אישור; המודלים שמסומנים כמותקנים כבר נמצאים במחשב ההדגמה, ולא כלולים בהורדת CUTROOM.', alt: {en: 'CUTROOM 1.1 Beta AI options and local model downloads in day mode', he: 'אפשרויות AI והורדת מודלים מקומיים ב־CUTROOM 1.1 Beta במצב יום'}}
   };
   function renderShot() {
-    tourImage.src = '/assets/' + currentShot + '.png?v=' + (currentShot === 'editor' ? '20260928' : '20260927');
-    tourImage.width = currentShot === 'editor' ? 1280 : 1440;
-    tourImage.height = currentShot === 'editor' ? 720 : 900;
+    tourImage.src = '/assets/' + currentShot + '.png?v=20260928-text2';
+    tourImage.width = currentShot === 'editor' ? 1440 : 1280;
+    tourImage.height = currentShot === 'editor' ? 900 : 720;
     tourImage.alt = shots[currentShot].alt[language];
     caption.textContent = shots[currentShot][language];
     tourButtons.forEach(button => button.setAttribute('aria-pressed', String(button.dataset.shot === currentShot)));

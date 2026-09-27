@@ -14,7 +14,7 @@ Use **Day / Night** in the top bar to change the app's appearance; your choice i
 4. Choose **Range**, drag over an unwanted passage and select **Remove from video**. Try **Undo**. Then select **Cut** and click once to split a clip.
 5. Open **Output**, confirm the shape and frame rate, then **Export → Start export → Download video**. Watch that downloaded file outside CUTROOM.
 
-Manual mode does not generate a transcript or AI story. Adding library media, mixing audio and exporting also work without an API key or AI models. When you are comfortable, start a Short/Reel or YouTube project and set up an AI connection.
+Manual mode does not generate a transcript or AI story. Adding library media, typing titles/captions, importing subtitles, mixing audio and exporting work without an API key or AI models. When you are comfortable, start a Short/Reel or YouTube project and set up an AI connection.
 
 ## 1. Pick the result before adding footage
 
@@ -26,7 +26,11 @@ Manual mode does not generate a transcript or AI story. Adding library media, mi
 
 These are starting settings, not irreversible decisions. **Output** changes the format later. A YouTube cleanup is not the same as a short highlight reel: preserving useful structure matters more than reaching a tiny target duration.
 
-Rename a project in the top bar. **Projects** and the welcome screen reopen saved work. The save indicator tells you whether changes have finished saving. Avoid editing the same project in multiple tabs.
+The welcome screen and **Projects** offer **Open editor**, **Rename** and **Delete** beside each project. In Projects, search by name and sort by **Recently edited**, **Name A–Z** or **Oldest first**. Rename opens a name field; choose **Save name** to apply it without reopening the edit. You can also rename in the editor's top bar.
+
+**Delete** opens a confirmation. **Keep project** cancels; **Delete project permanently** removes the project, imported media copies, saved edits, previews and exports stored by CUTROOM. Original files outside CUTROOM are not deleted. There is no undo for project deletion. Wait for an import or active job to finish, or stop the job in the editor first; deleting does not cancel it for you.
+
+The save indicator tells you whether changes have finished saving. Avoid editing the same project in multiple tabs.
 
 ## 2. Choose where AI runs
 
@@ -118,7 +122,7 @@ The overview shows the draft, before/after duration and **What changed**. If **R
 | **Timeline** | Select, split, remove, restore, move and trim individual cuts |
 | **Media & audio** | Import extra video, images and sound; position media layers and balance the audio mix |
 | **Layout** | Arrange A/B, confirm an embedded camera and frame each clip |
-| **Captions** | Correct transcript text, remove/restore passages and style subtitles |
+| **Captions** | Add custom text/captions, import SRT/VTT, or correct and style an AI transcript |
 | **Output** | Set shape, resolution, FPS and quality; advanced AI settings are separate |
 | **Project overview** | Return to the summary and AI refinement choices |
 
@@ -183,21 +187,39 @@ New two-source Reels default to **Stacked**: camera top 30%, screen bottom 70%, 
 
 For an embedded camera, open **Camera area in this recording** and drag its rectangle; the picker starts folded once configured. Open **Precise camera position** only when you need numeric controls. **Main screen focus** sets the default screen position; a clip's own framing takes priority. **More layouts** contains side-by-side, picture-in-picture and the style default. A fixed rectangle does not track a moving camera. **Original source preview** and **Source order preview** are optional reference monitors; **Layout by section** lists composition blocks. If saving fails, the camera picker opens and offers **Retry save**; do not close the editor until it shows **Saved**.
 
-## 8. Correct words and control captions
+## 8. Add text and control captions
+
+### Your own titles and subtitles
+
+Open **Captions → Your text & captions** after creating a draft or opening the manual editor. Place the playhead, then choose **Add text** for a title or **Add caption** for a subtitle. Select the new item and type. Changes preview immediately and save automatically after a short pause in typing; wait for **Saved** before leaving. A failed save keeps your pending text and offers **Retry save** or **Discard unsaved text changes**.
+
+Each item appears on its own timeline layer. Drag the item to move it or drag its edges to change its duration; **Start / End (seconds)** provide exact placement. **Preview at start** seeks to it. Choose **Top**, **Center** or **Bottom**, **Clean**, **Bold** or **Boxed**, and a size from 75% to 150%. Use **Find custom text** to search, **Remove text** to delete an item, and Undo/Redo to reverse saved text edits.
+
+These times refer to the **edited video**, not the original recording. Custom text stays at its edit time when you reorder source footage; it does not automatically ripple with A/B. Text must fit inside the current edit. If shortening the video would leave text past its new end, CUTROOM rejects that edit: first trim, move or remove the affected text.
+
+### Import SRT or VTT
+
+Choose **Import SRT / VTT** and select a UTF-8 `.srt` or `.vtt` file, no larger than **1 MiB (1,048,576 bytes)** and containing at most **2,000 cues**. Its times must already match the edited video and fit its duration. Import keeps text and timing; file-specific fonts, markup and VTT positioning are replaced by CUTROOM's editable style presets.
+
+Imports add to your custom captions by default. Select **Replace my existing custom captions when importing** to replace those captions only; titles and the AI transcript stay in place. Invalid imports leave the existing text unchanged, and Undo reverses a successful import in one step. A project can contain up to 2,000 custom text items, with at most 16 simultaneous items and 1,000 characters per item. Items sharing a position can overlap, so review the picture.
+
+Custom titles and captions are always burned into the exported video. The AI **Burn into video** switch does not hide them. Optional **Export SRT file** combines timed AI and custom captions, excluding titles. To avoid duplicate subtitles, turn off AI burning when you use custom captions instead; importing does not remove the AI transcript or its captions from an enabled SRT export. These text tools require no AI processing or paid account.
+
+### Correct an AI transcript
 
 Search the transcript or filter **All lines / In the edit / Removed**. Click a line to seek; Shift-click selects a passage. **Remove passage / Restore passage** changes footage. Correcting text alone neither removes footage nor generates replacement speech.
 
 Edit **Correct selected line**, then **Save text**. **Save all changes** saves pending line edits; **Discard changes** drops the current unsaved correction. Check Saved/Unsaved before closing the browser—unsaved text buffers are not a backup.
 
-Under **Subtitle style & speech language**:
+Under **AI subtitle style & speech language**:
 
-- **Burn into video:** permanently render captions into the exported picture.
-- **Export SRT file:** create a separate editable subtitle file beside the video.
+- **Burn into video:** permanently render AI captions into the exported picture; custom text remains visible independently.
+- **Export SRT file:** create a separate editable subtitle file containing AI and custom captions, without titles.
 - **Style / Position / Size:** control appearance; check faces, graphics and platform overlays yourself.
 - **Words per caption:** shorter or longer caption chunks, not different transcription.
 - **Speech language:** affects AI transcription and can require rebuilding; it is not a translation target.
 
-Captions follow edited timing and the selected audio source. Manual projects start without transcript text; enabling subtitles does not itself transcribe them.
+AI captions follow edited timing and the selected audio source. Manual projects start without transcript text; enabling subtitles does not itself transcribe them. You can still type or import your own captions above.
 
 For mixed Hebrew/English, choose the main spoken language and review names and English terms. Local Balanced/Quality can recheck up to two weak units of at most 30 seconds each, within a 48-second audio budget per local pass, using the loaded model. Lite adds no such retry. Timing, confidence and spelling checks can keep the original instead. This does not translate or use Story AI to rewrite speech. Low-confidence warnings mean “listen and review,” not a measured accuracy score; automatic detection can still be wrong. [Recovery details and limits](QUALITY_AND_LIMITS.md)
 
@@ -213,7 +235,7 @@ Choose **Export**, check the summary, then **Start export**. Rendering uses orig
 
 ## 10. Save, recover and report a problem
 
-Projects live on the computer running CUTROOM, not in a cloud account. Default folders are `data/projects` for projects/imported media, `data/exports` for exports and `data/cache` for caches. Keep backups. Do not delete these folders as a generic fix. Deleting a project can remove its imported copies and exports; original files outside CUTROOM are separate.
+Projects live on the computer running CUTROOM, not in a cloud account. Default folders are `data/projects` for projects/imported media, `data/exports` for exports and `data/cache` for caches. Keep backups. Do not delete these folders as a generic fix. Use the confirmed **Delete** action in the lobby or Projects when you intend to remove a project and its imported copies/exports; original files outside CUTROOM remain untouched.
 
 Closing the browser does not stop the application. Save text, wait for the save indicator, and finish or cancel jobs before closing the launcher. Model caches can live outside the app folder. [Setup logs and recovery](TEST_ON_ANOTHER_PC.md)
 
@@ -226,5 +248,6 @@ Closing the browser does not stop the application. Save text, wait for the save 
 | A/B drift or black areas | Sync, source durations and independent-track gaps |
 | Track locked / Undo refused | Open Edit → Track protection; unlock the affected lane, or choose the other source for an independent edit |
 | Rebuild required | Save text and rebuild after editorial-setting changes |
+| Text prevents shortening the edit | Trim, move or remove the custom text that would be past the new end; text does not ripple automatically |
 
 Report the exact action/error, build name, input length/language and a redacted screenshot with the [feedback form](BETA_FEEDBACK.md). Never include API keys or the entire private `data` folder. The beta is not certified across all PCs, languages or footage; [limitations](BETA_STATUS.md) distinguish automated checks from real-world validation.

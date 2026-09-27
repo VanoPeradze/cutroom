@@ -382,9 +382,11 @@ export class TimelineView {
   mediaRows() {
     if (this.sourceReview) return [];
     const rows = [];
-    for (const clip of this.project?.manual?.media_clips || []) {
-      const asset = this.project.assets?.[clip.asset_id]; if (!asset) continue;
-      const group = asset.kind === 'audio' ? (clip.role || 'music') : 'visual';
+    for (const clip of [...(this.project?.manual?.media_clips || []), ...(this.project?.manual?.text_clips || [])]) {
+      const text = clip.id?.startsWith('text_');
+      const asset = this.project.assets?.[clip.asset_id]; if (!asset && !text) continue;
+      if (!Number.isFinite(clip.start) || !Number.isFinite(clip.end) || clip.end <= clip.start) continue;
+      const group = text ? clip.kind : asset.kind === 'audio' ? (clip.role || 'music') : 'visual';
       let row = rows.find(row => row.group === group && row.clips.every(item => item.end <= clip.start || item.start >= clip.end));
       if (!row) { row = {group,clips:[]}; rows.push(row); }
       row.clips.push(clip);
@@ -399,15 +401,23 @@ export class TimelineView {
     return clip ? {clip,row} : null;
   }
 
+  revealMedia(id) {
+    const row = this.mediaRows().find(row => row.clips.some(clip => clip.id === id));
+    if (!row) return;
+    if (row.top < this.scroll.scrollTop) this.scroll.scrollTop = row.top;
+    else if (row.bottom > this.scroll.scrollTop + this.scroll.clientHeight)
+      this.scroll.scrollTop = Math.max(0, row.bottom - this.scroll.clientHeight + 8);
+  }
+
   drawMedia(ctx, px, width) {
     const left = this.scroll.scrollLeft || 0, right=left+this.scroll.clientWidth;
     for (const row of this.mediaRows()) {
       ctx.fillStyle='#102027'; ctx.fillRect(0,row.top,width,42);
       for (const saved of row.clips) {
         const clip=this.gesture?.media?.id === saved.id ? {...saved,...this.gesture.patch} : saved;
-        const asset=this.project.assets[clip.asset_id], x=clip.start*px, w=(clip.end-clip.start)*px;
+        const asset=clip.id?.startsWith('text_') ? {kind:'text',name:clip.text} : this.project.assets[clip.asset_id], x=clip.start*px, w=(clip.end-clip.start)*px;
         if (x+w<left || x>right) continue;
-        ctx.fillStyle=asset.kind==='audio' ? '#264e44' : '#51436b'; ctx.fillRect(x,row.top+1,w,40);
+        ctx.fillStyle=asset.kind==='text' ? '#665127' : asset.kind==='audio' ? '#264e44' : '#51436b'; ctx.fillRect(x,row.top+1,w,40);
         const image=this.mediaImages?.get(asset.thumbnail_url);
         ctx.save(); ctx.beginPath(); ctx.rect(x+1,row.top+2,Math.max(0,w-2),38); ctx.clip();
         if(image) { ctx.globalAlpha=.7; for(let ix=Math.max(x,left); ix<x+w && ix<right;ix+=62) ctx.drawImage(image,ix,row.top+2,60,38); ctx.globalAlpha=1; }
@@ -422,7 +432,7 @@ export class TimelineView {
         }
         ctx.fillStyle='rgba(0,0,0,.75)'; ctx.fillRect(Math.max(x,left),row.top+2,Math.min(w,300),14);
         ctx.fillStyle='#f0edf5'; ctx.font='10px ui-monospace, monospace';
-        ctx.fillText(`${asset.kind==='audio' ? clip.role : asset.kind} · ${asset.name}${clip.speed!==1 ? ` · ${clip.speed}×` : ''}`,Math.max(x+5,left+5),row.top+12);
+        ctx.fillText(`${asset.kind==='text' ? clip.kind==='title' ? 'Text' : 'Caption' : asset.kind==='audio' ? clip.role : asset.kind} · ${asset.name}${Number.isFinite(clip.speed)&&clip.speed!==1 ? ` · ${clip.speed}×` : ''}`,Math.max(x+5,left+5),row.top+12);
         ctx.strokeStyle='#d4c84f';ctx.beginPath();
         if(clip.fade_in>0){ctx.moveTo(x,row.top+40);ctx.lineTo(x+clip.fade_in*px,row.top+3);}
         if(clip.fade_out>0){ctx.moveTo(x+w-clip.fade_out*px,row.top+3);ctx.lineTo(x+w,row.top+40);}ctx.stroke();
@@ -971,6 +981,9 @@ export class TimelineView {
       // moves. Do not advertise a shifted edge that the backend will not move.
       addEdges(clip, this.project.assets[clip.asset_id].kind === "audio" ? "Audio edge" : "Media edge");
     }
+    if (!this.sourceReview) for (const clip of this.project?.manual?.text_clips || []) {
+      if (clip.id !== g?.media?.id) addEdges(clip, clip.kind === 'title' ? 'Text edge' : 'Caption edge');
+    }
     // Pointerdown seeks the preview. Keep the user's original yellow marker
     // as the target throughout a drag rather than chasing that seek.
     points.push({time: g?.snapPlayhead ?? this.playhead, label: "Playhead"});
@@ -1208,7 +1221,7 @@ export class TimelineView {
       if (Math.hypot(event.clientX-this.gesture.clientX,event.clientY-this.gesture.clientY)>6) this.gesture.dragged=true;
       if (!this.gesture.dragged) return; // Selecting near a magnet must not edit the media.
       const g=this.gesture,clip=g.media,delta=this.timeFromEvent(event)-g.startTime,limit=timelineDuration(this.project);
-      const asset=this.project.assets?.[clip.asset_id],timed=asset?.kind!=='image',sourceStart=Number(clip.source_start)||0;
+      const asset=this.project.assets?.[clip.asset_id],timed=!clip.id?.startsWith('text_') && asset?.kind!=='image',sourceStart=Number(clip.source_start)||0;
       let patch;
       if(g.edge==='start') {
         const start=Math.max(0,timed ? clip.start-sourceStart : 0,Math.min(clip.end-.08,this.snappedTime(clip.start+delta,event)));

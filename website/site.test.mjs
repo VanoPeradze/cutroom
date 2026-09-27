@@ -58,7 +58,7 @@ test('the editorial introduction keeps a bilingual heading and an identifiable r
   }
   assert.match(hero, /class="hero-aside"/);
   assert.match(hero, /class="hero-stage"/);
-  const image = hero.match(/<img\b[^>]*src="\/assets\/editor\.png\?v=20260928"[^>]*>/)?.[0];
+  const image = hero.match(/<img\b[^>]*src="\/assets\/editor\.png\?v=[a-zA-Z0-9-]+"[^>]*>/)?.[0];
   assert.ok(image, 'The introductory image must show the actual editor');
   assert.match(image, /\balt="[^"]+"/);
   assert.match(image, /\bdata-he-alt="[^"]*[\u0590-\u05ff]/);

@@ -8,11 +8,12 @@
   <script src="/assets/ui-shell.js?v=1.1-beta-2"></script>
   <title>CUTROOM 1.1 Beta — Your editing workspace</title>
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/assets/styles.css?v=1.1-beta-3">
+  <link rel="stylesheet" href="/assets/styles.css?v=1.1-beta-4">
   <link rel="stylesheet" href="/assets/workspace.css?v=1.1-beta-3">
   <link rel="stylesheet" href="/assets/media-studio.css?v=1.1-beta-2">
+  <link rel="stylesheet" href="/assets/text-studio.css?v=1.1-beta-2">
   <link rel="stylesheet" href="/assets/welcome.css?v=1.1-beta-2">
-  <link rel="stylesheet" href="/assets/creator-ui.css?v=1.1-beta-11">
+  <link rel="stylesheet" href="/assets/creator-ui.css?v=1.1-beta-12">
 </head>
 <body class="welcome-mode">
   <a class="skip-link" href="#main" data-i18n="skip">Skip to content</a>
@@ -62,9 +63,8 @@
           <button class="button primary large" id="newProjectButton">
             <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 5v14M5 12h14"/></svg>
             <span>Start an edit</span>
-            <span class="new-project-arrow" aria-hidden="true">↗</span>
           </button>
-          <button type="button" class="home-text-link" id="welcomeTourButton">First time? Start here <span aria-hidden="true">↗</span></button>
+          <button type="button" class="home-text-link" id="welcomeTourButton">First time? Start here</button>
         </div>
         <ul class="welcome-benefits">
           <li><i aria-hidden="true">✓</i><span data-i18n="trustOpen">Free & open source</span></li>
@@ -76,16 +76,16 @@
         <div class="home-section-head"><div><p class="eyebrow">START A PROJECT</p><h2 id="welcomeServicesTitle">Pick your starting point.</h2></div><p>Every path leads to an editable timeline.</p></div>
         <div class="service-grid">
           <button class="service-card" type="button" data-start-workflow="short">
-            <span class="service-art short-art" aria-hidden="true"><span class="service-number">01</span><span class="format-mark portrait-mark"></span><span class="art-tag">9:16</span></span>
-            <span class="service-copy"><strong>Create a Short / Reel <i aria-hidden="true">↗</i></strong><span>Find a focused story in your recording. Frame it vertically for Shorts, Reels or TikTok.</span><small>AI draft · Vertical video · Editable captions</small></span>
+            <span class="service-art short-art" aria-hidden="true"><svg class="service-illustration" viewBox="0 0 120 96" focusable="false"><rect class="art-secondary" x="13" y="19" width="36" height="58" rx="8"/><rect class="art-screen" x="40" y="5" width="53" height="86" rx="10"/><rect class="art-scene" x="45" y="10" width="43" height="76" rx="6"/><circle class="art-subject" cx="67" cy="34" r="10"/><path class="art-subject" d="M49 68c0-15 8-23 18-23s17 8 17 23v12H49Z"/><rect class="art-caption" x="50" y="64" width="32" height="5" rx="2.5"/><rect class="art-caption" x="56" y="73" width="20" height="4" rx="2"/><rect class="art-detail" x="21" y="33" width="11" height="4" rx="2"/><rect class="art-detail" x="21" y="42" width="11" height="4" rx="2"/><circle class="art-highlight" cx="96" cy="21" r="9"/><path class="art-play" d="m94 17 6 4-6 4Z"/></svg><span class="art-tag">9:16 · VERTICAL</span></span>
+            <span class="service-copy"><strong>Create a Short / Reel</strong><span>Find a focused story in your recording. Frame it vertically for Shorts, Reels or TikTok.</span><small>AI draft · Vertical video · Editable captions</small></span>
           </button>
           <button class="service-card" type="button" data-start-workflow="youtube">
-            <span class="service-art youtube-art" aria-hidden="true"><span class="service-number">02</span><span class="format-mark landscape-mark"></span><span class="art-tag">16:9</span></span>
-            <span class="service-copy"><strong>Edit a YouTube video <i aria-hidden="true">↗</i></strong><span>Clean up pauses and shape a longer recording while keeping its original sequence.</span><small>AI-assisted cleanup · Horizontal video</small></span>
+            <span class="service-art youtube-art" aria-hidden="true"><svg class="service-illustration" viewBox="0 0 120 96" focusable="false"><rect class="art-screen" x="5" y="14" width="110" height="67" rx="9"/><rect class="art-scene" x="10" y="19" width="100" height="48" rx="5"/><rect class="art-detail" x="18" y="27" width="43" height="5" rx="2.5"/><rect class="art-secondary" x="18" y="38" width="59" height="4" rx="2"/><rect class="art-secondary" x="18" y="48" width="34" height="4" rx="2"/><rect class="art-subject" x="79" y="37" width="24" height="24" rx="5"/><circle class="art-caption" cx="91" cy="45" r="4"/><path class="art-caption" d="M83 59c0-6 3-9 8-9s8 3 8 9Z"/><rect class="art-secondary" x="17" y="72" width="86" height="3" rx="1.5"/><rect class="art-highlight" x="17" y="72" width="51" height="3" rx="1.5"/><circle class="art-highlight" cx="68" cy="73.5" r="3"/></svg><span class="art-tag">16:9 · WIDESCREEN</span></span>
+            <span class="service-copy"><strong>Edit a YouTube video</strong><span>Clean up pauses and shape a longer recording while keeping its original sequence.</span><small>AI-assisted cleanup · Horizontal video</small></span>
           </button>
           <button class="service-card" type="button" data-start-workflow="manual">
-            <span class="service-art manual-art" aria-hidden="true"><span class="service-number">03</span><span class="format-mark cut-mark"></span><span class="art-tag">NO AI</span></span>
-            <span class="service-copy"><strong>Edit it yourself <i aria-hidden="true">↗</i></strong><span>Start with your full recording. Split, move and trim individual clips on your own timeline.</span><small>No AI required · Full manual control</small></span>
+            <span class="service-art manual-art" aria-hidden="true"><svg class="service-illustration" viewBox="0 0 120 96" focusable="false"><rect class="art-screen" x="5" y="10" width="110" height="78" rx="9"/><rect class="art-scene" x="12" y="17" width="57" height="29" rx="4"/><path class="art-subject" d="m14 42 14-16 12 10 9-8 17 16H14Z"/><rect class="art-detail" x="78" y="20" width="27" height="4" rx="2"/><rect class="art-secondary" x="78" y="29" width="20" height="4" rx="2"/><rect class="art-secondary" x="78" y="38" width="25" height="4" rx="2"/><rect class="art-subject" x="12" y="54" width="31" height="10" rx="3"/><rect class="art-detail" x="46" y="54" width="30" height="10" rx="3"/><rect class="art-subject" x="79" y="54" width="28" height="10" rx="3"/><rect class="art-scene" x="12" y="68" width="42" height="10" rx="3"/><rect class="art-scene" x="57" y="68" width="50" height="10" rx="3"/><path class="art-playhead" d="M62 50v32"/><path class="art-highlight" d="m58 49 4 5 4-5Z"/></svg><span class="art-tag">YOUR TIMELINE</span></span>
+            <span class="service-copy"><strong>Edit it yourself</strong><span>Start with your full recording. Split, move and trim individual clips on your own timeline.</span><small>No AI required · Full manual control</small></span>
           </button>
         </div>
       </section>
@@ -335,7 +335,7 @@
                 <button class="refine-wide" data-command="new_variation"><b>↝</b><span data-i18n="anotherCut">Try another cut</span></button>
                 <button data-command="shorter"><b>−</b><span data-i18n="shorter">Shorter</span></button>
                 <button data-command="keep_more"><b>＋</b><span data-i18n="keepMore">Keep more</span></button>
-                <button data-command="more_energy"><b>↗</b><span data-i18n="moreEnergy">More energy</span></button>
+                <button data-command="more_energy"><b>+</b><span data-i18n="moreEnergy">More energy</span></button>
                 <button data-command="fewer_switches"><b>≈</b><span data-i18n="fewerSwitches">Fewer switches</span></button>
                 <button data-command="focus_speaker"><b>◎</b><span data-i18n="focusSpeaker">Focus speaker</span></button>
               </div>
@@ -553,15 +553,16 @@
             </details>
           </div>
           <div class="tab-panel" id="studioPanelTranscript" role="tabpanel" aria-labelledby="studioTabTranscript" tabindex="0" data-panel="transcript">
-            <header class="studio-tool-intro"><div><p>03 / CAPTIONS</p><h3>Transcript &amp; captions</h3></div><span>Select a line, Shift-click to select a passage, then remove or restore its footage.</span></header>
-            <details class="caption-settings-disclosure"><summary>Subtitle style &amp; speech language</summary>
+            <header class="studio-tool-intro"><div><p>03 / TEXT &amp; CAPTIONS</p><h3>Make every word count</h3></div><span>Add your own text, import subtitles, or correct an AI transcript.</span></header>
+            <section id="textStudio" class="text-studio" aria-label="Custom text and captions"></section>
+            <details class="caption-settings-disclosure"><summary>AI subtitle style &amp; speech language</summary>
             <section class="caption-control-panel" aria-labelledby="captionControlTitle">
               <div class="caption-control-head">
                 <div><h4 id="captionControlTitle">Subtitle output</h4><p id="captionControlStatus">Burned captions are enabled.</p></div>
                 <span class="caption-live-badge">LIVE PREVIEW</span>
               </div>
               <div class="caption-switch-grid">
-                <label class="caption-toggle-card"><span><b>Burn into video</b><small>Render captions directly into the MP4.</small></span><input id="studioBurnCaptionsToggle" type="checkbox" checked></label>
+                <label class="caption-toggle-card"><span><b>Burn AI subtitles</b><small>Render transcript subtitles into the MP4. Your custom text and imported captions are always included.</small></span><input id="studioBurnCaptionsToggle" type="checkbox" checked></label>
                 <label class="caption-toggle-card"><span><b>Export SRT file</b><small>Save an editable subtitle file beside the video.</small></span><input id="captionsToggle" type="checkbox"></label>
               </div>
               <div class="caption-option-grid">
@@ -690,18 +691,43 @@
       <div class="source-review-actions"><p data-review="selection" aria-live="polite"></p><div><select data-review="scope" aria-label="Original footage edit scope"><option value="edit">Together (A+B)</option><option value="source">This source only</option></select><button class="button primary" data-review="restore" type="button">Restore to edit</button><button data-review="remove" type="button">Remove from edit</button><button data-review="undo" type="button">Undo</button><button class="source-review-exact" data-review="exact" type="button">Insert a copy by time…</button></div><p data-review="effect"></p><p data-review="status" role="status">Click a section to preview it. Drag to select your own range. Use the ruler to seek anywhere.</p></div>
     </div>
   </dialog>
-  <dialog id="projectsDialog" class="sheet-dialog">
-    <form method="dialog" class="dialog-shell">
-      <header><div><p class="eyebrow">CUTROOM</p><h2 data-i18n="projects">Projects</h2></div><button class="icon-button" value="cancel" aria-label="Close">×</button></header>
+  <dialog id="projectsDialog" class="sheet-dialog" aria-labelledby="projectsTitle">
+    <div class="dialog-shell">
+      <header><div><p class="eyebrow">YOUR WORKSPACE</p><h2 id="projectsTitle" data-i18n="projects">Projects</h2></div><button type="button" class="icon-button" id="closeProjectsDialog" aria-label="Close projects">×</button></header>
+      <p>Open an edit, give it a clearer name, or remove a project you no longer need.</p>
+      <div class="project-library-tools">
+        <label class="project-library-search">Find a project<input id="projectSearch" type="search" placeholder="Search project names" autocomplete="off"></label>
+        <label class="project-library-sort">Sort by<select id="projectSort"><option value="recent">Recently edited</option><option value="name">Name A–Z</option><option value="oldest">Oldest first</option></select></label>
+      </div>
+      <p id="projectLibrarySummary" class="project-library-summary" role="status" aria-live="polite"></p>
       <div class="dialog-projects" id="dialogProjects"></div>
       <button class="button primary full" type="button" id="dialogNewProject" data-i18n="newProject">Create project</button>
+    </div>
+  </dialog>
+
+  <dialog id="projectRenameDialog" class="sheet-dialog project-confirm-dialog" aria-labelledby="projectRenameTitle" aria-describedby="projectRenameHelp">
+    <form id="projectRenameForm" class="dialog-shell project-rename-form">
+      <header><div><p class="eyebrow">PROJECT DETAILS</p><h2 id="projectRenameTitle">Rename project</h2></div><button type="button" class="icon-button" id="closeProjectRename" aria-label="Close rename">×</button></header>
+      <p id="projectRenameHelp">Choose a name you can find easily. Your edit and media stay in place.</p>
+      <label for="projectRenameInput">Project name</label><input id="projectRenameInput" name="name" type="text" maxlength="120" required autocomplete="off" dir="auto" aria-describedby="projectRenameError">
+      <p id="projectRenameError" class="project-action-error" role="alert" hidden></p>
+      <div class="project-rename-actions"><button type="button" class="button ghost" id="cancelProjectRename">Cancel</button><button type="submit" class="button primary" id="saveProjectRename">Save name</button></div>
     </form>
+  </dialog>
+
+  <dialog id="projectDeleteDialog" class="sheet-dialog project-confirm-dialog" aria-labelledby="projectDeleteTitle" aria-describedby="projectDeleteCopy">
+    <div class="dialog-shell">
+      <header><div><p class="eyebrow">REMOVE PROJECT</p><h2 id="projectDeleteTitle">Delete this project?</h2></div><button type="button" class="icon-button" id="closeProjectDelete" aria-label="Close delete confirmation">×</button></header>
+      <p id="projectDeleteName" class="project-delete-name" dir="auto"></p>
+      <p id="projectDeleteCopy" class="project-delete-copy">This permanently deletes the project, its imported media copies, saved edits, previews and exports stored by CUTROOM. Your original files outside CUTROOM are not deleted. This cannot be undone.</p>
+      <p id="projectDeleteError" class="project-action-error" role="alert" hidden></p>
+      <div class="project-rename-actions"><button type="button" class="button ghost" id="cancelProjectDelete" autofocus>Keep project</button><button type="button" class="button danger" id="confirmProjectDelete">Delete project permanently</button></div>
+    </div>
   </dialog>
 
   <dialog id="exportDialog" class="export-dialog">
     <div class="dialog-shell export-shell">
       <button class="icon-button dialog-close" id="closeExportDialog" aria-label="Close">×</button>
-      <div class="export-icon" aria-hidden="true">↗</div>
       <p class="eyebrow" data-i18n="export">Export</p>
       <h2 id="exportTitle" data-i18n="readyToExport">Ready to export?</h2>
       <p id="exportDescription" data-i18n="exportHelp">Export uses the original full-quality files, not a proxy.</p>
@@ -739,7 +765,7 @@
       <fieldset class="connection-modes"><legend>Compare your options</legend><label><input type="radio" name="connectionMode" value="local" checked><span><strong>On my computer</strong><small class="connection-cost">No provider fees</small><small>Private, local transcription + Story AI.</small><small>Needs model downloads, disk space and processing power. No AI account.</small></span></label><label><input type="radio" name="connectionMode" value="free"><span><strong>Online — Free tier</strong><small class="connection-cost">Free with your Groq Free account</small><small>Cloud transcription + Story AI.</small><small>Needs internet and your API key. Free within provider quotas; not unlimited.</small></span></label><label><input type="radio" name="connectionMode" value="own"><span><strong>My own API account</strong><small class="connection-cost">Your provider, models and plan</small><small>Groq or an OpenAI-compatible API that meets CUTROOM's requirements.</small><small>Needs JSON chat + word-timed transcription. Provider fees may apply.</small></span></label></fieldset>
       <section id="localModelsPanel" class="local-models-panel" aria-labelledby="localModelsTitle">
         <div class="local-models-heading"><div><h3 id="localModelsTitle">Prepare local AI</h3><p>Download once, reuse in your projects. Start with one transcription model and one Story model.</p></div><button id="refreshLocalModels" type="button" class="button ghost compact">Refresh status</button></div>
-        <div class="local-runtime"><div><strong id="localRuntimeTitle">Checking the Story engine…</strong><p id="localRuntimeDetail">Story AI uses Ollama; transcription has a separate model.</p></div><a id="localRuntimeInstall" class="button ghost compact" href="https://ollama.com/download" target="_blank" rel="noopener noreferrer" hidden>Get Ollama ↗</a><button type="button" id="startLocalEngine" class="button ghost compact" hidden>Start local engine</button></div>
+        <div class="local-runtime"><div><strong id="localRuntimeTitle">Checking the Story engine…</strong><p id="localRuntimeDetail">Story AI uses Ollama; transcription has a separate model.</p></div><a id="localRuntimeInstall" class="button ghost compact" href="https://ollama.com/download" target="_blank" rel="noopener noreferrer" hidden>Get Ollama</a><button type="button" id="startLocalEngine" class="button ghost compact" hidden>Start local engine</button></div>
         <div id="localModelCards" class="local-model-grid"></div>
         <div id="modelDownloadConfirm" class="download-confirm" hidden><p id="modelDownloadSummary"></p><div><button type="button" class="button primary" id="confirmModelDownload">Confirm download</button><button type="button" class="button ghost" id="dismissModelDownload">Not now</button></div></div>
         <div id="localDownloadJob" class="local-download-job" hidden><div><strong id="localDownloadLabel">Preparing download…</strong><button type="button" id="cancelLocalDownload" class="button danger compact">Cancel download</button></div><progress id="localDownloadProgress" max="1" value="0" aria-label="Model download progress"></progress></div>
@@ -748,7 +774,7 @@
       </section>
       <section id="cloudConnectionFields" hidden aria-label="Cloud AI connection details">
         <label id="cloudProviderField" class="connection-field" hidden>API provider<select id="cloudProvider"><option value="groq">Groq</option><option value="openai-compatible">OpenAI-compatible API</option></select></label>
-        <div class="connection-provider"><strong id="cloudProviderLabel">Groq</strong><span id="cloudProviderSummary">Cloud transcription + Story AI</span><a id="groqKeyLink" href="https://console.groq.com/keys" target="_blank" rel="noopener noreferrer">Get a Groq API key ↗</a></div>
+        <div class="connection-provider"><strong id="cloudProviderLabel">Groq</strong><span id="cloudProviderSummary">Cloud transcription + Story AI</span><a id="groqKeyLink" href="https://console.groq.com/keys" target="_blank" rel="noopener noreferrer">Get a Groq API key</a></div>
         <div id="compatibleConnectionFields" hidden>
           <label class="connection-field">API base URL<input id="cloudBaseURL" type="url" maxlength="512" placeholder="https://api.your-provider.com/v1" spellcheck="false" autocomplete="off" aria-describedby="cloudProviderHelp"></label>
           <label class="connection-field">Transcription model ID<input id="cloudTranscriptModel" type="text" maxlength="128" placeholder="Your provider's word-timed speech model" spellcheck="false" autocomplete="off"></label>
@@ -765,6 +791,6 @@
       <footer class="connection-actions"><button class="button ghost" id="forgetCloudKey" type="button">Forget session key</button><button class="button primary" id="saveAIConnection" type="submit">Use this connection</button></footer>
     </form>
   </dialog>
-  <script type="module" src="/assets/app.js?v=1.1-beta-15"></script>
+  <script type="module" src="/assets/app.js?v=1.1-beta-17"></script>
 </body>
 </html>
