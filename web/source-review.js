@@ -1,4 +1,4 @@
-import { TimelineView, formatTime } from "./timeline.js?v=1.1-beta-3";
+import { TimelineView, formatTime } from "./timeline.js?v=1.1-beta-6";
 
 // Project current edit clips onto the original recording, including copies.
 // The original draft's keep mask is intentionally not authoritative anymore.
@@ -130,26 +130,35 @@ export class SourceReview {
     n.quote.textContent=segment?.text || "Preview the original footage here. Your edited preview stays separate.";
   }
 
+  protectedSlots() {
+    const project = this.getProject(), scope = this.nodes.scope.value;
+    return ['A','B'].filter(slot => project?.sources?.[slot] && project?.manual?.track_locks?.[slot] === true && (scope === 'edit' || slot === this.slot));
+  }
+
   updateControls() {
     const n=this.nodes,stats=reviewSelectionStats(this.ranges,this.selection);
     const fps=Number(this.getProject()?.settings?.fps);
     const minimum=1/([24,25,30,50,60].includes(fps)?fps:30)-1e-6;
-    n.restore.disabled=this.busy || stats.removed<minimum;
-    n.remove.disabled=this.busy || stats.kept<minimum;
+    const locked=this.protectedSlots();
+    n.restore.disabled=this.busy || locked.length>0 || stats.removed<minimum;
+    n.remove.disabled=this.busy || locked.length>0 || stats.kept<minimum;
     const history=this.getProject()?.manual?.history || this.getProject()?.manual_history || {};
     n.undo.disabled=this.busy || !(history.undo_count ?? history.undo?.length);
     for (const key of ["slot","scope","exact"]) n[key].disabled=Boolean(this.busy);
+    n.exact.disabled ||= locked.length>0;
     const time=this.selection?.start ?? n.video.currentTime;
     n.previous.disabled=!this.ranges.removed.some(r=>r.start<time-1e-6);
     n.next.disabled=!this.ranges.removed.some(r=>r.start>time+1e-6);
     n.selection.textContent=this.selection ? `${formatTime(this.selection.start,true)} – ${formatTime(this.selection.end,true)} · ${stats.kept.toFixed(1)}s in edit · ${stats.removed.toFixed(1)}s removed` : "Click a kept or removed section, or drag to select any range.";
     n.summary.textContent=`Original ${formatTime(this.ranges.duration)} · ${this.ranges.removed.length} removed ${this.ranges.removed.length===1 ? "section" : "sections"}`;
     n.effect.textContent=n.scope.value === "edit" ? "Restore inserts only missing footage near its source neighbors, with synchronized A/B. Remove cuts all uses of the selection from both tracks and closes the gap." : `Source ${this.slot} only. Remove leaves a gap; restore fills it when possible, otherwise inserts on this track. Other-source clips stay still.`;
+    if (locked.length) n.effect.textContent=`Track ${locked.join(' + ')} is locked. You can preview; unlock in Edit → Track protection before changing this scope.`;
     this.updateQuote();
   }
 
   async edit(action) {
     if (this.busy || this.getProject()?.id!==this.projectId || (!this.selection && action!=="undo")) return;
+    if (action!=="undo" && this.protectedSlots().length) { this.updateControls(); return; }
     this.busy=true; this.nodes.video.pause(); this.updateControls();
     this.nodes.status.textContent="Updating edit…";
     try {

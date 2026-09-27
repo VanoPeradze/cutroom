@@ -296,6 +296,9 @@ details.embedded-camera-editor > summary,
 .framing-source-preview > summary { padding:12px 0; cursor:pointer; font-size:12px; font-weight:650; color:var(--paper); }
 details.embedded-camera-editor:not([open]) { padding-block:0; border-color:var(--line); background:var(--surface-inset); }
 .framing-source-preview { margin-bottom:12px; }
+.track-protection summary span { margin-inline-start:8px; color:var(--muted); font-size:11px; font-weight:400; }
+.track-protection > p { margin:0; padding:0 12px 12px; color:var(--muted); font-size:12px; line-height:1.6; }
+.track-protection button[aria-pressed="true"] { border-color:var(--room-accent); color:var(--paper); background:var(--surface-inset); }
 .framing-source-preview .crop-preview { margin-block:8px; }
 .source-setup-disclosure .creator-frame-preset { margin-block:12px; }
 .studio-workspace .source-mixer { padding:0; border:0; border-radius:0; background:none; box-shadow:none; }

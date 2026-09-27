@@ -17,6 +17,7 @@ from .media import detect_scenes
 from .media_library import validate_media_bounds
 from .projects import ProjectStore
 from .source_tracks import source_sync_offset
+from .track_locks import require_tracks_unlocked
 from .sync import MIN_AUTOMATIC_SYNC_CONFIDENCE, synchronize_sources
 from .transcription import cuda_available, transcribe, transcript_quality_report
 from .cloud_ai import CloudAIError, enabled as cloud_enabled
@@ -1728,6 +1729,7 @@ def analyze_project(
 ) -> dict[str, Any]:
     context.checkpoint()
     project = store.load(project_id)
+    require_tracks_unlocked(project)
     # Rebuilding a project with independent media must be all-or-nothing: a
     # rejected shorter draft must not leave the refinement's settings applied.
     staged_brief = brief_patch if (project.get("manual") or {}).get("media_clips") else None
@@ -2632,6 +2634,7 @@ def _plan_edit_with_cancel(
 def refine_project(context: JobContext, project_id: str, store: ProjectStore, settings: Settings, command: str) -> dict[str, Any]:
     context.checkpoint()
     project = store.load(project_id)
+    require_tracks_unlocked(project)
     current = project.get("settings", {})
     patch: dict[str, Any] = {}
     selection_variant = 0

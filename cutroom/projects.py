@@ -11,6 +11,7 @@ from typing import Any, Callable
 from .captions import DEFAULT_CAPTION_SETTINGS
 from .config import Settings
 from .frame_rates import DEFAULT_EXPORT_FPS
+from .track_locks import validate_locked_track_changes
 from .utils import atomic_write_json, new_id, now_iso
 
 
@@ -239,6 +240,7 @@ class ProjectStore:
             current_revision = int(current.get("revision", 0))
             if expected_revision is not None and current_revision != int(expected_revision):
                 raise RuntimeError("revision_conflict")
+            validate_locked_track_changes(current, project)
         candidate = copy.deepcopy(project)
         candidate["updated_at"] = now_iso()
         candidate["revision"] = current_revision + 1 if path.exists() else max(1, int(candidate.get("revision", 1)))

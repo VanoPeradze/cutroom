@@ -27,6 +27,16 @@ function fixture() {
   return {review,nodes,dialog,context,requests,get current(){return current;},set current(p){current=p;},get paused(){return paused;}};
 }
 
+test('source protection permits review but disables changing protected scope',async()=>{
+  const f=fixture();f.current.manual={track_locks:{A:true}};
+  f.review.open('edit');f.review.select({start:0,end:5});
+  assert.equal(f.nodes.restore.disabled,true);assert.equal(f.nodes.remove.disabled,true);
+  assert.match(f.nodes.effect.textContent,/locked/);
+  await f.review.edit('sequence_source_remove');assert.equal(f.requests.length,0);
+  f.review.slot='B';f.nodes.scope.value='B';f.review.refresh(true);
+  assert.equal(f.review.protectedSlots().length,0);
+});
+
 test('original timeline unions current clips, including copies and moved clips, not stale draft keeps',()=>{
   const f=fixture(),p=project();
   p.draft={keep_ranges:[{start:0,end:12}]};

@@ -2,6 +2,16 @@
 
 **An exploratory Windows beta for feedback from creators and editors. Not a production release, security certification or promise of professional-quality automatic edits.** Public access to a download does not change those quality boundaries.
 
+## Editor precision and track protection — 2026-09-28
+
+- All 1,492 Python regressions and 481 frontend checks passed. Python coverage includes frontend wrappers, so these totals are not independent scenarios. This includes 43 new backend protection checks. Repository link and diff-whitespace checks passed.
+- An isolated synthetic two-source browser project verified Snap-on extension into a gap, the bounded saved edge, Undo/Redo and reselection with the restored duration, Space play/pause, and Original footage review. Toolbar layouts at 390 and 768 pixels had no page-level horizontal overflow. No real AI calls, model downloads or user footage were used.
+- Snap is optional and starts off. It aligns trims/ranges and source reorder starts; added-media moves can align either edge. Added media remains on its independent clock during A/B reordering. Frame readouts use integer output FPS, not source/drop-frame timecode or a guarantee of frame-exact browser decoding.
+- A/B edit locks persist when reopening and stay outside Undo/Redo. Browser checks verified protected pointer/keyboard edits, editing and undoing on the other source, toggling protection without stopping playback, and read-only Original footage on a locked scope. No browser warnings/errors were observed; the new protection controls introduced no page-level horizontal overflow at 390 pixels.
+- Synthetic FFmpeg smoke exports passed at 60 FPS in 16:9 and 9:16. Locks leave the rendering graph and render-input fingerprint unchanged. This is not a long-4K benchmark or a clean-machine installation test.
+- Website checks passed (24; two file-symlink cases skipped on Windows). The public editor image is an actual capture of the current synthetic project, not a mockup.
+- This increment is prepared for the source ZIP and matching website download. The website release manifest identifies the exact downloadable archive; [the editor roadmap](EDITOR_ROADMAP.md) describes remaining gaps and subsequent verification gates. Packaging or deployment failure must be reported, not treated as a release.
+
 ## Media, mixing and quality update — 2026-09-23
 
 - All 1,410 Python regressions and 420 frontend checks passed in this update. Synthetic FFmpeg checks cover added video/images/audio, fades, mixer buses, picture-only speed, cancellation and QHD/4K output dimensions. AI/provider responses were mocked; no billable requests or model downloads were used.

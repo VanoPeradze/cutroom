@@ -62,11 +62,14 @@ CUTROOM helps turn camera recordings, screen captures and gameplay into an **edi
 | Create Shorts or Reels | Start in 9:16, review AI-selected moments, adjust framing and add captions. |
 | Combine camera and screen | Use two recordings or define an embedded-camera region; review roles, layout and sync. |
 | Make the edit your own | Split, move, trim and restore independent clips; edit A/B together or separately, with Undo/Redo. |
+| Keep precise edits safe | Snap to the playhead and clip/media edges with visible alignment feedback; protect a finished A/B source under Edit → Track protection while editing the other. |
 | Add media and sound | Import B-roll, images, music and voiceover into a project library; place them over the existing edit and mix audio with waveform lanes. |
 | Finish the details | Correct the transcript, style captions and export subtitles as SRT. |
 | Export your video | Create 720p, 1080p, QHD 1440p or 4K 2160p MP4s, with frame-rate options up to 60 FPS. |
 
 Higher export settings do not create detail missing from the source. Library media fits within the current edit duration. A/B **Picture speed** changes the picture while preserving clip length and speech timing; it can lose lip sync or hold the last available frame.
+
+Track protection leaves preview, sound and export active. Locks persist with the project outside Undo/Redo; an edit or history step that would change a protected source is rejected until you unlock it. Shared layout, audio mixing and added media remain editable. [Precision and protection guide](docs/USER_GUIDE_EN.md#protect-a-finished-source)
 
 ## Get started
 

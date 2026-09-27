@@ -113,6 +113,7 @@ export class TimelineView {
     this.cutAnchor = null;
     this.editPending = false;
     this.snapping = false;
+    this.snapGuide = null;
     this.project = null;
     this.zoom = 1;
     this.zoomFocusPending = false;
@@ -134,7 +135,7 @@ export class TimelineView {
     canvas.addEventListener("pointerup", (event) => this.pointerUp(event));
     canvas.addEventListener("pointercancel", (event) => this.pointerCancel(event));
     canvas.addEventListener("lostpointercapture", (event) => this.pointerCancel(event));
-    canvas.addEventListener("pointerleave", () => { if (!this.gesture) { this.hoverTime = null; this.scheduleDraw(); } });
+    canvas.addEventListener("pointerleave", () => { if (!this.gesture) { this.hoverTime = null; this.snapGuide = null; this.scheduleDraw(); } });
     canvas.addEventListener("keydown", (event) => this.keyDown(event));
     scroll.addEventListener("wheel", (event) => this.handleWheel(event), { passive: false });
     scroll.addEventListener("scroll", () => this.scheduleDraw(), { passive: true });
@@ -142,6 +143,7 @@ export class TimelineView {
   }
 
   setProject(project) {
+    this.snapGuide = null;
     this.zoomFocusPending = false;
     this.cancelGesture(false);
     this.cancelPendingCut();
@@ -159,6 +161,7 @@ export class TimelineView {
     if (!["select", "range", "blade", "remove_between", "move"].includes(tool)) return false;
     this.cancelGesture();
     this.cancelPendingCut();
+    this.snapGuide = null;
     this.tool = tool;
     this.canvas.style.cursor = tool === "select" ? "default" : "crosshair";
     this.scheduleDraw();
@@ -187,6 +190,11 @@ export class TimelineView {
       : (this.getTrackClips?.(this.project, this.editTarget) || []);
   }
 
+  lockedTargets(target = this.editTarget) {
+    return ["A", "B"].filter(slot => this.project?.sources?.[slot]
+      && this.project?.manual?.track_locks?.[slot] === true && (target === "edit" || target === slot));
+  }
+
   trackLane(slot) {
     if (this.project?.manual?.sequence) { const top = slot === "B" ? 92 : 36; return { top, bottom: top + 48 }; }
     const compact = Boolean(this.scroll.closest?.(".studio-timeline-dock"));
@@ -212,6 +220,8 @@ export class TimelineView {
 
   setSnapping(enabled) {
     this.snapping = Boolean(enabled);
+    this.snapGuide = null;
+    this.scheduleDraw();
     this.onToolStateChange?.();
   }
 
@@ -225,7 +235,7 @@ export class TimelineView {
 
   cutOutAt(time) {
     const duration = timelineDuration(this.project);
-    if (this.tool !== "remove_between" || !this.project?.draft || !this.onEdit || this.editPending || !this.canEdit()
+    if (this.tool !== "remove_between" || !this.project?.draft || !this.onEdit || this.editPending || !this.canEdit() || this.lockedTargets().length
       || !Number.isFinite(time) || time < 0 || time > duration) return false;
     if (this.cutAnchor == null) {
       this.clearSelection();
@@ -299,8 +309,9 @@ export class TimelineView {
   }
 
   updateAccessiblePlayhead() {
-    this.canvas.setAttribute("aria-valuenow", String(Math.round(this.playhead * 10) / 10));
-    this.canvas.setAttribute("aria-valuetext", formatTime(this.playhead, true));
+    const precise = this.project?.manual?.sequence || this.sourceReview;
+    this.canvas.setAttribute("aria-valuenow", String(precise ? this.playhead : Math.round(this.playhead * 10) / 10));
+    this.canvas.setAttribute("aria-valuetext", precise ? `${formatFrameTime(this.playhead, 1 / sequenceFrame(this.project))} at ${Math.round(1 / sequenceFrame(this.project))} FPS` : formatTime(this.playhead, true));
   }
 
   setSelection(selection, notify = true, asRange = false) {
@@ -492,6 +503,7 @@ export class TimelineView {
     if (this.cutAnchor != null) this.drawPendingCut(ctx, px, cssHeight);
     if (this.hoverTime != null) this.drawHover(ctx, this.hoverTime, px, cssHeight);
     this.drawPlayhead(ctx, px, cssHeight);
+    if (this.snapGuide) this.drawSnapGuide(ctx, px, cssHeight);
   }
 
   drawRuler(ctx, duration, width, px) {
@@ -608,9 +620,10 @@ export class TimelineView {
           ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, bottom); ctx.stroke();
         }
       }
-      ctx.fillStyle = "rgba(8,16,19,.94)"; ctx.fillRect(viewportLeft + 4, top + 4, 52, 21);
+      const protectedTrack = this.lockedTargets(slot).length > 0;
+      ctx.fillStyle = "rgba(8,16,19,.94)"; ctx.fillRect(viewportLeft + 4, top + 4, protectedTrack ? 96 : 52, 21);
       ctx.fillStyle = active ? "#ffffff" : "#8da1a6";
-      ctx.font = "700 9px ui-monospace, monospace"; ctx.fillText(`VIDEO ${slot}`, viewportLeft + 9, top + 18);
+      ctx.font = "700 9px ui-monospace, monospace"; ctx.fillText(`VIDEO ${slot}${protectedTrack ? " · LOCKED" : ""}`, viewportLeft + 9, top + 18);
     }
   }
 
@@ -821,15 +834,32 @@ export class TimelineView {
 
   drawHover(ctx, time, px, height) {
     if (this.gesture?.kind === "move" && Number.isFinite(this.gesture.moveStart)) time = this.gesture.moveStart;
+    if (this.gesture?.kind === "trim" && Number.isFinite(this.gesture.trimTime)) time = this.gesture.trimTime;
     const x = time * px;
     ctx.strokeStyle = "rgba(255,255,255,.28)"; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(x, 30); ctx.lineTo(x, height); ctx.stroke();
-    const label = `${this.gesture?.kind === "move" ? this.gesture.target === "edit" ? "Move together · " : `Move ${this.gesture.target} · ` : ""}${formatTime(time, true)}`;
+    const operation = this.gesture?.kind === "trim" ? `Trim ${this.gesture.edge} · `
+      : this.gesture?.kind === "move" ? this.gesture.target === "edit" ? "Move together · " : `Move ${this.gesture.target} · ` : "";
+    const stamp = this.project?.manual?.sequence || this.sourceReview ? formatFrameTime(time, 1 / sequenceFrame(this.project)) : formatTime(time, true);
+    const label = `${operation}${stamp}`;
     ctx.font = "10px ui-monospace, monospace";
     const w = ctx.measureText(label).width + 12;
     const labelX = Math.max(2, Math.min(this.geometry().width - w - 2, x - w / 2));
     ctx.fillStyle = "#f4f7f7"; ctx.fillRect(labelX, 31, w, 20);
     ctx.fillStyle = "#081013"; ctx.fillText(label, labelX + 6, 45);
+  }
+
+  drawSnapGuide(ctx, px, height) {
+    const { time, label } = this.snapGuide, x = time * px;
+    ctx.save(); ctx.strokeStyle = "#a6f1ed"; ctx.lineWidth = 1.5; ctx.setLineDash([4, 3]);
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, height); ctx.stroke(); ctx.setLineDash([]);
+    const text = `Snap · ${label}`;
+    ctx.font = "11px ui-monospace, monospace";
+    const width = ctx.measureText(text).width + 12;
+    const left = this.scroll.scrollLeft || 0;
+    const labelX = Math.max(left + 2, Math.min(left + this.scroll.clientWidth - width - 2, x + 6));
+    ctx.fillStyle = "#a6f1ed"; ctx.fillRect(labelX, 4, width, 20);
+    ctx.fillStyle = "#081013"; ctx.fillText(text, labelX + 6, 18); ctx.restore();
   }
 
   drawPendingCut(ctx, px, height) {
@@ -906,18 +936,64 @@ export class TimelineView {
       || (time === timelineDuration(this.project) ? clips.find((clip) => clip.end === time) : null);
   }
 
-  snappedTime(time, event) {
+  snapPoints() {
+    const duration = timelineDuration(this.project), g = this.gesture;
+    const moving = g?.kind === "move" ? g.clip : null;
+    const ripple = Boolean(moving && this.project?.manual?.sequence);
+    const length = moving ? moving.end - moving.start : 0;
+    const points = [{time: 0, label: "Start"}, {time: duration, label: "End"}];
+    if (ripple && this.editTarget === "edit") points[1].time -= length;
+    const addEdges = (clip, label, affected = false) => {
+      for (let time of [clip.start, clip.end]) {
+        if (moving && affected && time > moving.start && time < moving.end) continue;
+        if (ripple && affected && time >= moving.end) time -= length;
+        points.push({time, label});
+      }
+    };
+    if (!this.sourceReview && this.hasTrackLanes()) {
+      for (const slot of ["A", "B"]) {
+        if (!this.project.sources?.[slot]) continue;
+        const affected = this.editTarget === "edit" || this.editTarget === slot;
+        for (const clip of this.getTrackClips(this.project, slot)) {
+          if (affected && (moving || g?.kind === "trim") && clip.start >= g.clip.start && clip.end <= g.clip.end) continue;
+          addEdges(clip, `${slot} edit`, affected);
+        }
+      }
+    } else {
+      for (const clip of this.targetClips()) {
+        if (moving && clip.id === moving.id) continue;
+        addEdges(clip, "Edit", true);
+      }
+    }
+    if (!this.sourceReview) for (const clip of this.project?.manual?.media_clips || []) {
+      if (clip.id === g?.media?.id || !this.project.assets?.[clip.asset_id]) continue;
+      // Added media currently stays on its own edit clock even in Together
+      // moves. Do not advertise a shifted edge that the backend will not move.
+      addEdges(clip, this.project.assets[clip.asset_id].kind === "audio" ? "Audio edge" : "Media edge");
+    }
+    // Pointerdown seeks the preview. Keep the user's original yellow marker
+    // as the target throughout a drag rather than chasing that seek.
+    points.push({time: g?.snapPlayhead ?? this.playhead, label: "Playhead"});
+    return points.filter(point => Number.isFinite(point.time) && point.time >= 0 && point.time <= duration);
+  }
+
+  snappedTime(time, event, offsets = [0]) {
+    this.snapGuide = null;
     if (this.sourceReview) time = Math.max(0, Math.min(timelineDuration(this.project), Math.round(time / sequenceFrame(this.project)) * sequenceFrame(this.project)));
     if (!this.snapping || event.altKey) return time;
-    const { px, duration } = this.geometry();
+    const { px } = this.geometry();
     const threshold = Math.min(.5, 8 / Math.max(px, .0001));
-    const boundaries = [0, duration, ...this.targetClips().flatMap((clip) => [clip.start, clip.end])];
     let nearest = time, distance = threshold;
-    for (const boundary of boundaries) {
-      const delta = Math.abs(time - boundary);
-      if (delta <= distance) { nearest = boundary; distance = delta; }
+    for (const point of this.snapPoints()) for (const offset of offsets) {
+      const delta = Math.abs(time + offset - point.time);
+      if (delta <= distance) { nearest = point.time - offset; distance = delta; this.snapGuide = point; }
     }
     return nearest;
+  }
+
+  validateSnap(times) {
+    // Source limits, collisions and ripple clamping always win over magnets.
+    if (this.snapGuide && !times.some(time => Math.abs(time - this.snapGuide.time) < 1e-6)) this.snapGuide = null;
   }
 
   selectionEdge(event, time) {
@@ -930,6 +1006,7 @@ export class TimelineView {
   }
 
   trimTarget() {
+    if (this.lockedTargets().length) return null;
     if (!this.project?.manual?.sequence || this.tool !== "select" || !this.selection) return null;
     if ((this.selection.end-this.selection.start)*this.geometry().px < 22) return null; // Zoom in for small clip handles; its body must stay draggable.
     return this.targetClips().find(c=>Math.abs(c.start-this.selection.start)<1e-6 && Math.abs(c.end-this.selection.end)<1e-6) || null;
@@ -971,6 +1048,7 @@ export class TimelineView {
   }
 
   cancelGesture(notify = true) {
+    this.snapGuide = null;
     if(this.gesture?.kind==='media')this.onMediaPreview?.(this.gesture.media.id,null);
     const gesture = this.gesture;
     if (!gesture) return false;
@@ -1000,6 +1078,7 @@ export class TimelineView {
   }
 
   updatePointerCursor(event, time) {
+    if (this.inEditLane(event) && this.lockedTargets().length && this.tool !== "range") { this.canvas.style.cursor = "not-allowed"; return; }
     if (this.gesture?.kind === "move") { this.canvas.style.cursor = "grabbing"; return; }
     const hoverTarget = this.project?.manual?.sequence ? this.targetAtEvent(event) : null;
     const lane = this.inEditLane(event);
@@ -1030,6 +1109,7 @@ export class TimelineView {
   }
 
   canSplitAt(time) {
+    if (this.lockedTargets().length) return false;
     time = this.splitTime(time);
     if (!this.project?.manual?.sequence || this.editTarget !== "edit") return this.canSplitClip(this.clipAt(time), time);
     // At an existing A cut, B can still run across the playhead (and vice
@@ -1048,6 +1128,7 @@ export class TimelineView {
     this.canvas.focus?.({ preventScroll: true });
     try { this.canvas.setPointerCapture?.(event.pointerId); } catch (_) { /* A cancelled pointer may no longer be capturable. */ }
     const time = this.timeFromEvent(event);
+    this.snapGuide = null;
     const media = this.mediaAtEvent(event);
     if (media) {
       this.mediaSelection=media.clip.id; this.onMediaSelect?.(media.clip.id);
@@ -1057,7 +1138,8 @@ export class TimelineView {
       }
       const px=this.geometry().px;
       const edge=(media.clip.end-media.clip.start)*px>=22 ? (Math.abs(time-media.clip.start)*px<8 ? 'start' : Math.abs(time-media.clip.end)*px<8 ? 'end' : null) : null;
-      this.gesture={kind:'media',pointerId:event.pointerId,media:{...media.clip},startTime:time,edge,patch:{},
+      this.gesture={kind:'media',pointerId:event.pointerId,media:{...media.clip},startTime:time,edge,patch:{},snapPlayhead:this.playhead,
+        clientX:event.clientX,clientY:event.clientY,dragged:false,
         previousSelection:this.selection ? {...this.selection} : null,previousRangeSelection:this.selectionIsRange};this.scheduleDraw();return;
     }
     this.mediaSelection=null;
@@ -1071,10 +1153,13 @@ export class TimelineView {
     const edge = !event.shiftKey && !["blade", "remove_between", "move"].includes(this.tool) ? this.selectionEdge(event, time) : null;
     this.selectionCursor = null;
     this.selectionAnchor = null;
-    this.gesture = { pointerId: event.pointerId, previousSelection: this.selection ? { ...this.selection } : null, clientX: event.clientX, clientY: event.clientY, startTime: time, kind: "scrub" };
+    this.gesture = { pointerId: event.pointerId, previousSelection: this.selection ? { ...this.selection } : null, clientX: event.clientX, clientY: event.clientY, startTime: time, snapPlayhead: this.playhead, kind: "scrub" };
     this.gesture.previousRangeSelection = this.selectionIsRange;
     const trimEdge = this.trimEdgeAt(event,time);
-    if (trimEdge) {
+    if (lane && this.lockedTargets().length && this.tool !== "range" && !event.shiftKey) {
+      this.gesture.kind = "locked";
+      this.setSelection(this.selectableRangeAt(time), false);
+    } else if (trimEdge) {
       this.gesture.kind = "trim"; this.gesture.edge = trimEdge;
       this.gesture.clip = {...this.trimTarget()}; this.gesture.target = this.editTarget;
     } else if (lane && !event.shiftKey && (this.tool === "move" || (this.project?.manual?.sequence && this.tool === "select")) && (this.editTarget !== "edit" || this.project?.manual?.sequence) && this.clipAt(time)) {
@@ -1118,21 +1203,25 @@ export class TimelineView {
 
   pointerMove(event) {
     if (this.gesture && this.gesture.pointerId !== event.pointerId) return;
+    this.snapGuide = null;
     if(this.gesture?.kind==='media') {
+      if (Math.hypot(event.clientX-this.gesture.clientX,event.clientY-this.gesture.clientY)>6) this.gesture.dragged=true;
+      if (!this.gesture.dragged) return; // Selecting near a magnet must not edit the media.
       const g=this.gesture,clip=g.media,delta=this.timeFromEvent(event)-g.startTime,limit=timelineDuration(this.project);
       const asset=this.project.assets?.[clip.asset_id],timed=asset?.kind!=='image',sourceStart=Number(clip.source_start)||0;
       let patch;
       if(g.edge==='start') {
-        const start=Math.max(0,timed ? clip.start-sourceStart : 0,Math.min(clip.end-.08,clip.start+delta));
+        const start=Math.max(0,timed ? clip.start-sourceStart : 0,Math.min(clip.end-.08,this.snappedTime(clip.start+delta,event)));
         patch={start};
         if(timed)patch.source_start=sourceStart+start-clip.start;
         if(asset?.kind==='video')patch.video_source_start=Math.max(0,Number(clip.video_source_start ?? sourceStart)+(start-clip.start)*(clip.speed||1));
       }
       else if(g.edge==='end') {
         const available=Number(asset?.duration),maximum=timed ? (Number.isFinite(available) ? Math.min(limit,clip.start+available-sourceStart) : clip.end) : limit;
-        patch={end:Math.max(clip.start+.08,Math.min(maximum,clip.end+delta))};
+        patch={end:Math.max(clip.start+.08,Math.min(maximum,this.snappedTime(clip.end+delta,event)))};
       }
-      else {const start=Math.max(0,Math.min(limit-(clip.end-clip.start),clip.start+delta));patch={start,end:start+clip.end-clip.start};}
+      else {const start=Math.max(0,Math.min(limit-(clip.end-clip.start),this.snappedTime(clip.start+delta,event,[0,clip.end-clip.start])));patch={start,end:start+clip.end-clip.start};}
+      this.validateSnap(g.edge ? [patch[g.edge]] : [patch.start,patch.end]);
       const length=(patch.end ?? clip.end)-(patch.start ?? clip.start),fadeIn=Number(clip.fade_in)||0,fadeOut=Number(clip.fade_out)||0;
       if(g.edge && fadeIn+fadeOut>length) {
         const scale=length/(fadeIn+fadeOut);patch.fade_in=fadeIn*scale;patch.fade_out=fadeOut*scale;
@@ -1151,7 +1240,8 @@ export class TimelineView {
     this.updatePointerCursor(event, time);
     if (this.gesture?.kind === "trim") {
       const {clip,edge} = this.gesture;
-      this.gesture.trimTime = this.trimEdgeTime(clip,edge,time);
+      this.gesture.trimTime = this.trimEdgeTime(clip,edge,this.snappedTime(time,event));
+      this.validateSnap([this.gesture.trimTime]);
       this.setSelection({...clip,[edge]:this.gesture.trimTime},false);
     }
     if (this.gesture?.kind === "move") {
@@ -1169,6 +1259,7 @@ export class TimelineView {
         ? rippleMoveStart(this.project,clip.start,clip.end,start,this.editTarget === "edit" ? null : this.editTarget,this.getTrackClips)
         : start;
       this.gesture.collision = !this.project?.manual?.sequence && this.targetClips().some((other) => other.id !== clip.id && other.start < start + clip.end - clip.start - .000001 && other.end > start + .000001);
+      this.validateSnap(this.gesture.collision ? [] : [this.gesture.moveStart]);
     }
     if (["clip", "layout"].includes(this.gesture?.kind) && Math.abs(event.clientX - this.gesture.clientX) > 3) {
       this.gesture.kind = "range";
@@ -1176,7 +1267,10 @@ export class TimelineView {
       this.selecting = true;
     }
     if (this.scrubbing || ["range", "edge", "blade", "remove_between"].includes(this.gesture?.kind)) this.seekGesture(time);
-    if (this.gesture?.kind === "range" && this.selectionAnchor != null) this.setSelection({ start: this.selectionAnchor, end: this.snappedTime(time, event) }, false, true);
+    if (this.gesture?.kind === "range" && this.selectionAnchor != null) {
+      this.setSelection({ start: this.selectionAnchor, end: this.snappedTime(time, event) }, false, true);
+      this.validateSnap(this.selection ? [this.selection.start, this.selection.end] : []);
+    }
     if (this.gesture?.kind === "edge") {
       const previous = this.gesture.previousSelection;
       const snapped = this.snappedTime(time, event);
@@ -1185,6 +1279,7 @@ export class TimelineView {
         ? { start: Math.min(snapped, previous.end - minimum), end: previous.end }
         : { start: previous.start, end: Math.max(snapped, previous.start + minimum) };
       this.setSelection(next, false, true);
+      this.validateSnap(this.selection ? [this.selection[this.gesture.edge]] : []);
     }
     this.scheduleDraw();
   }
@@ -1195,6 +1290,7 @@ export class TimelineView {
     if(this.gesture?.kind==='media') {
       this.pointerMove(event);
       const g=this.gesture;this.gesture=null;this.releasePointer(event.pointerId);this.onMediaPreview?.(g.media.id,null);
+      this.snapGuide=null;
       // The server derives the independent picture in-point from source_start.
       // Keep that preview-only value out of the public media_update payload.
       const patch={...g.patch};delete patch.video_source_start;
@@ -1206,6 +1302,7 @@ export class TimelineView {
     // actual release position instead of leaving the preview one frame behind.
     this.pointerMove(event);
     this.gesture = null;
+    this.snapGuide = null;
     this.scrubbing = false;
     this.selecting = false;
     this.selectionAnchor = null;
@@ -1223,7 +1320,7 @@ export class TimelineView {
           : { action: "track_move", slot: gesture.target, clip_id: gesture.clip.id, start: gesture.moveStart });
       }
     }
-    if (["range", "edge", "clip", "layout"].includes(gesture.kind)) this.onSelectionChange?.(this.selection);
+    if (["range", "edge", "clip", "layout", "locked"].includes(gesture.kind)) this.onSelectionChange?.(this.selection);
     if (gesture.kind === "layout" && !gesture.dragged && this.canEdit()) this.onLayoutSelect?.({ ...gesture.layout });
     if (gesture.kind === "remove_between" && !gesture.dragged && this.inEditLane(event)) this.cutOutAt(this.timeFromEvent(event));
     if (gesture.kind === "blade" && !gesture.dragged && this.inEditLane(event) && this.canEdit()) {
@@ -1296,6 +1393,15 @@ export class TimelineView {
       this.scroll.scrollLeft += event.deltaX + event.deltaY;
     }
   }
+}
+
+// Output frame time, not source timecode or drop-frame notation. All supported
+// project rates are integer FPS; keep the existing duration formatter intact.
+export function formatFrameTime(seconds, fps = 30) {
+  fps = [24, 25, 30, 50, 60].includes(Math.round(fps)) ? Math.round(fps) : 30;
+  const value = Number(seconds), total = Math.max(0, Math.round((Number.isFinite(value) ? value : 0) * fps));
+  const frames = total % fps, whole = Math.floor(total / fps);
+  return [Math.floor(whole / 3600), Math.floor(whole / 60) % 60, whole % 60, frames].map(part => String(part).padStart(2, "0")).join(":");
 }
 
 export function formatTime(seconds, withMillis = false) {
