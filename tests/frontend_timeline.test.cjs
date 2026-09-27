@@ -94,6 +94,177 @@ function mediaFixture(options = {}) {
   return h;
 }
 
+test('snap includes other source and added-media edges without changing the edit target', () => {
+  const h = mediaFixture(); h.timeline.setEditTarget('A'); h.timeline.setSnapping(true);
+  assert.equal(h.timeline.snappedTime(4.06, {}), 4);
+  assert.equal(h.timeline.snapGuide.label, 'B edit');
+  assert.equal(h.timeline.snappedTime(2.06, {}), 2);
+  assert.equal(h.timeline.snapGuide.label, 'Media edge');
+  h.project.assets.video.kind = 'audio';
+  h.timeline.snappedTime(2.06, {}); assert.equal(h.timeline.snapGuide.label, 'Audio edge');
+  assert.equal(h.timeline.editTarget, 'A');
+});
+
+for (const tool of ['select','move','blade','remove_between']) test(`locked A rejects ${tool} gestures but keeps seeking and selection`, () => {
+  const h=sequenceFixture(); h.project.manual.track_locks={A:true}; h.timeline.setEditTarget('A'); h.timeline.setTool(tool);
+  h.timeline.selectRange(0,3);
+  const original=JSON.stringify(h.project);
+  h.timeline.pointerDown(h.point(1,60)); h.timeline.pointerUp(h.point(5,60));
+  assert.deepEqual(h.edits,[]); assert.ok(h.seeks.length); assert.ok(h.timeline.selection);
+  assert.equal(h.timeline.canSplitAt(1),false); assert.equal(h.timeline.cutOutAt(1),false);
+  assert.equal(JSON.stringify(h.project),original);
+  h.timeline.draw(); assert.ok(h.draws.some(d=>d.text==='VIDEO A · LOCKED'));
+});
+
+test('Together never silently skips a locked track, while an unlocked B can split', () => {
+  const h=sequenceFixture(); h.project.manual.track_locks={A:true};
+  assert.equal(h.timeline.canSplitAt(1),false);
+  h.timeline.setEditTarget('B'); assert.equal(h.timeline.canSplitAt(1),true);
+  h.timeline.setTool('blade'); h.timeline.pointerDown(h.point(1,110)); h.timeline.pointerUp(h.point(1,110));
+  assert.equal(h.edits[0].target,'B');
+});
+
+test('source locks do not block dragging added media or ruler seeking', () => {
+  const h=mediaFixture(); h.project.manual.track_locks={A:true,B:true};
+  h.timeline.pointerDown(h.point(4,15)); h.timeline.pointerUp(h.point(5,15));
+  assert.equal(h.seeks.at(-1),5);
+  h.timeline.pointerDown(h.mediaPoint(4)); h.timeline.pointerUp(h.mediaPoint(5));
+  assert.equal(h.mediaEdits[0].patch.start,3);
+});
+
+test('display padding is not a snap destination, and Alt keeps free selection', () => {
+  const h = sequenceFixture(); h.timeline.setSnapping(true);
+  const tail = h.timeline.geometry().duration - .03;
+  assert.equal(h.timeline.snappedTime(tail, {}), tail);
+  assert.equal(h.timeline.snapGuide, null);
+  h.timeline.playhead = 6.5;
+  assert.equal(h.timeline.snappedTime(6.56, {}), 6.5);
+  assert.equal(h.timeline.snapGuide.label, 'Playhead');
+  assert.equal(h.timeline.snappedTime(6.56, {altKey:true}), 6.56);
+  assert.equal(h.timeline.snapGuide, null);
+});
+
+test('trim snaps to the pre-drag playhead and commits only on release', () => {
+  const h = sequenceFixture(); h.timeline.setEditTarget('A'); h.timeline.setSnapping(true);
+  h.timeline.playhead = 7; h.timeline.onSeek = time => h.timeline.setPlayhead(time);
+  h.timeline.selectRange(3, 6); const saved = JSON.stringify(h.project);
+  h.timeline.pointerDown(h.point(6, 60));
+  assert.equal(h.timeline.playhead, 6, 'preview seek still works');
+  h.timeline.pointerMove(h.point(7.08, 60));
+  assert.equal(h.timeline.gesture.trimTime, 7);
+  assert.equal(h.timeline.snapGuide.label, 'Playhead');
+  h.timeline.draw();
+  assert.ok(h.draws.some(d => d.text === 'Snap · Playhead'));
+  assert.ok(h.draws.some(d => d.text === 'Trim end · 00:00:07:00'));
+  assert.deepEqual(h.edits, []); assert.equal(JSON.stringify(h.project), saved);
+  h.timeline.pointerUp(h.point(7.08, 60));
+  assert.equal(h.edits[0].time, 7); assert.equal(h.edits[0].slot, 'A');
+  assert.equal(h.timeline.snapGuide, null);
+});
+
+test('source/neighbor limits override snap and trim feedback shows the allowed edge', () => {
+  const h = sequenceFixture(); h.timeline.setEditTarget('A'); h.timeline.setSnapping(true);
+  h.timeline.playhead = 9; h.timeline.selectRange(3, 6);
+  h.timeline.pointerDown(h.point(6, 60)); h.timeline.pointerMove(h.point(9.04, 60));
+  assert.equal(h.timeline.gesture.trimTime, 8);
+  assert.equal(h.timeline.snapGuide, null);
+  h.timeline.draw(); assert.ok(h.draws.some(d => d.text === 'Trim end · 00:00:08:00'));
+  h.timeline.keyDown({key:'Escape',preventDefault(){},stopPropagation(){}});
+  assert.deepEqual(plain(h.timeline.selection), {start:3,end:6}); assert.deepEqual(h.edits, []);
+});
+
+test('source handles cannot be extended by snapping beyond the original recording', () => {
+  const h = sequenceFixture(); h.timeline.setEditTarget('A'); h.timeline.setSnapping(true);
+  h.project.manual.source_tracks.A[1].source_start = 27;
+  h.timeline.playhead = 7; h.timeline.selectRange(3, 6);
+  h.timeline.pointerDown(h.point(6, 60)); h.timeline.pointerUp(h.point(7.04, 60));
+  assert.deepEqual(h.edits, []); assert.equal(h.timeline.snapGuide, null);
+});
+
+test('range handle minimum length cannot advertise a snap to its fixed opposite edge', () => {
+  const h = sequenceFixture(); h.timeline.setSnapping(true); h.timeline.setTool('range');
+  h.timeline.playhead = 7; h.timeline.selectRange(2, 7);
+  h.timeline.pointerDown(h.point(2, 60)); h.timeline.pointerMove(h.point(7, 60));
+  assert.equal(h.timeline.selection.start, 7-1/60);
+  assert.equal(h.timeline.snapGuide, null); assert.deepEqual(h.edits, []);
+});
+
+test('snap distance is screen-pixel based at multiple zooms and prefers the nearest target', () => {
+  const h = sequenceFixture(); h.timeline.setSnapping(true); h.timeline.playhead = 6.5;
+  for (const zoom of [1,4,16]) {
+    h.timeline.zoom = zoom; const px = h.timeline.geometry().px;
+    assert.equal(h.timeline.snappedTime(6.5+7/px, {}), 6.5);
+    assert.equal(h.timeline.snappedTime(6.5+9/px, {}), 6.5+9/px);
+  }
+  h.timeline.zoom = 1; h.timeline.playhead = 4;
+  h.timeline.snappedTime(4.02, {}); assert.equal(h.timeline.snapGuide.label, 'Playhead', 'playhead wins an identical-position tie');
+  h.timeline.setSnapping(false); assert.equal(h.timeline.snapGuide, null);
+});
+
+test('ripple reorder snap anchors use the remaining track clock, not removed footage', () => {
+  const h = sequenceFixture(); h.timeline.setEditTarget('A'); h.timeline.setSnapping(true);
+  h.timeline.pointerDown(h.point(1, 60));
+  const points = plain(h.timeline.snapPoints());
+  assert.ok(points.some(p => p.label === 'A edit' && p.time === 5), 'old A start 8 becomes 5 after removing 0..3');
+  assert.ok(points.some(p => p.label === 'B edit' && p.time === 4), 'B remains fixed in A-only mode');
+  h.timeline.pointerUp(h.point(6.08, 60));
+  assert.equal(h.edits[0].start, 5); assert.equal(h.edits[0].slot, 'A');
+});
+
+test('Together reorder does not remap independent added-media snap targets', () => {
+  const h = mediaFixture(); h.timeline.setSnapping(true);
+  h.timeline.pointerDown(h.point(1, 60));
+  const mediaPoints = plain(h.timeline.snapPoints()).filter(p => p.label === 'Media edge').map(p => p.time);
+  assert.deepEqual(mediaPoints, [2, 6]);
+});
+
+for (const edge of ['start', 'end', 'body']) {
+  test(`added media ${edge} snaps without changing source footage and clears on cancel`, () => {
+    const h = mediaFixture(); h.timeline.setSnapping(true); h.timeline.playhead = 7;
+    const saved = JSON.stringify(h.project);
+    const from = edge === 'start' ? 2 : edge === 'end' ? 5.99 : 4;
+    const to = edge === 'start' ? 3.06 : edge === 'end' ? 7.05 : 5.06;
+    h.timeline.pointerDown(h.mediaPoint(from)); h.timeline.pointerMove(h.mediaPoint(to));
+    assert.equal(h.timeline.gesture.patch[edge === 'start' ? 'start' : 'end'], edge === 'start' ? 3 : 7);
+    assert.ok(h.timeline.snapGuide);
+    assert.equal(JSON.stringify(h.project), saved); assert.deepEqual(h.mediaEdits, []);
+    h.timeline.pointerCancel({pointerId:1});
+    assert.equal(h.timeline.snapGuide, null); assert.deepEqual(h.mediaEdits, []);
+    assert.equal(h.mediaPreviews.at(-1).patch, null);
+  });
+}
+
+test('media body snap excludes its own edges and can align its trailing edge', () => {
+  const h = mediaFixture(); h.timeline.setSnapping(true); h.timeline.playhead = 7;
+  h.timeline.pointerDown(h.mediaPoint(4)); h.timeline.pointerUp(h.mediaPoint(5.06));
+  assert.equal(h.mediaEdits[0].patch.start, 3); assert.equal(h.mediaEdits[0].patch.end, 7);
+  assert.equal(h.timeline.snapGuide, null);
+});
+
+for (const offset of [0, .025]) for (const position of [3.06, 5, 7.05]) {
+  test(`Snap-on media selection at ${position} with ${offset} jitter is not an edit`, () => {
+    const h = mediaFixture(); h.timeline.setSnapping(true);
+    Object.assign(h.project.manual.media_clips[0], {start:3.06,end:7.06});
+    h.timeline.pointerDown(h.mediaPoint(position)); h.timeline.pointerUp(h.mediaPoint(position+offset));
+    assert.deepEqual(h.mediaEdits, []);
+    assert.equal(h.timeline.mediaSelection, 'visual'); assert.equal(h.timeline.snapGuide, null);
+  });
+}
+
+test('frame readout distinguishes neighboring frames at every supported output rate', () => {
+  const h = sequenceFixture();
+  for (const fps of [24,25,30,50,60]) {
+    const value = vm.runInContext(`formatFrameTime(${1/fps}, ${fps})`, h.scope);
+    assert.equal(value, '00:00:00:01');
+    assert.equal(vm.runInContext(`formatFrameTime(${60-1/fps}, ${fps})`, h.scope), `00:00:59:${fps-1}`);
+  }
+  assert.equal(vm.runInContext('formatFrameTime(3600, 60)', h.scope), '01:00:00:00');
+  assert.equal(vm.runInContext('formatFrameTime(NaN)', h.scope), '00:00:00:00');
+  h.timeline.setPlayhead(1/60);
+  assert.equal(h.canvas.attrs['aria-valuetext'], '00:00:00:01 at 60 FPS');
+  assert.equal(Number(h.canvas.attrs['aria-valuenow']), 1/60);
+});
+
 test('media rows pack nonoverlapping visuals and keep overlapping clips and audio groups distinct', () => {
   const h = mediaFixture();
   h.project.manual.media_clips = [
@@ -381,7 +552,7 @@ test("Together drag moves one atomic time block with a linked insertion preview"
     h.timeline.pointerMove(h.point(6.5, y)); h.timeline.draw();
     const ghosts = h.draws.filter((draw) => draw.fill === "rgba(185,244,213,.6)");
     assert.deepEqual(ghosts.map((draw) => draw.y), [36, 92]);
-    assert.ok(h.draws.some((draw) => draw.text === "Move together · 00:06.0"));
+    assert.ok(h.draws.some((draw) => draw.text === "Move together · 00:00:06:00"));
     h.timeline.pointerUp(h.point(6.5, y));
     assert.deepEqual(h.edits, [{ action: "sequence_move_range", start: 3, end: 4, to: 6 }]);
     assert.deepEqual(h.notifications, [{ start: 3, end: 4 }]);

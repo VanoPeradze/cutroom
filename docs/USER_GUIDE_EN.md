@@ -132,7 +132,9 @@ On larger screens, drag the preview/timeline divider to resize either area; doub
 
 **Cut:** click once to split. This alone removes nothing. **Cut out**, in More editing tools, removes the interval between two clicks; Escape cancels the pending first cut.
 
-Click the ruler to move the yellow playhead. **+ / −** zoom around it; **Fit** shows the full edit. **Zoom to selection** focuses a marked range. **Snap** helps align boundaries; turn it off for freer selection. Undo/Redo reverse manual edits without changing original media.
+Click the ruler to move the yellow playhead. **+ / −** zoom around it; **Fit** shows the full edit. **Zoom to selection** focuses a marked range. Undo/Redo reverse manual edits without changing original media.
+
+**Snap** is beside Undo/Redo in the timeline toolbar. Switch it on to align a trim, range or moved clip to the yellow playhead, A/B cuts or added media/audio edges. A cyan guide names the alignment target. **Alt** temporarily bypasses snapping; **Esc** cancels a drag without saving. Snap starts off, and never makes ruler seeking jump to a cut. Reordering source clips aligns the leading edge and closes the old position; added media can align either edge without reordering the base footage. Source limits still apply: snapping cannot reveal frames that do not exist. The timeline hover readout uses **hours:minutes:seconds:frames** at the output frame rate; a trim shows its actual allowed edge, not an unreachable pointer position.
 
 ### Together or one source?
 
@@ -142,6 +144,16 @@ Click the ruler to move the yellow playhead. **+ / −** zoom around it; **Fit**
 | **A only / B only** | Only that track; the other stays still | Removal can leave an intentional gap; movement shifts only that track |
 
 Together helps preserve synchronization. Choose A/B only for deliberately independent timing. **Close gaps** removes empty time in the chosen scope; Together closes only where both tracks are empty. When one source is missing, the other fills the frame; when both are missing, it is black. Audio follows the selected audio source and is silent in its gaps.
+
+### Protect a finished source
+
+Open **Edit → Track protection**, then choose **Lock A** or **Lock B**. The control appears after a draft exists. A lock protects that source's cuts, moves, trims, clip framing, picture speed and source timing. It does not mute or hide the footage: preview, audio and export continue normally. Choose **A only / B only** for the other, unlocked source to keep editing it.
+
+Protection is saved with the project and survives reopening. Lock/unlock choices sit outside Undo/Redo and preserve the existing history. A Together edit or an Undo/Redo step that would change a locked lane is rejected without changing the edit or consuming that history step. Unlock the affected source and retry; Undo does not switch a lock off for you.
+
+Unlock all protected sources before rebuilding/refining the draft or replacing/removing source footage, because those operations can reset the shared draft. **Reset to AI draft** also requires unlocking any protected lane it would change. Shared layout, the audio mixer and added media remain editable; per-clip framing on a protected source remains locked. Changing B's sync offset requires B to be unlocked.
+
+These controls protect the existing A/B lanes. Added media does not automatically ripple with them, and arbitrary user-created source tracks are not part of this increment.
 
 ### Restore removed footage
 
@@ -212,6 +224,7 @@ Closing the browser does not stop the application. Save text, wait for the save 
 | Bad transcript | Audio source, speech language, source sound; then model choice/manual correction |
 | Wrong layout | Source roles, selected scope, output aspect, Fill versus Fit |
 | A/B drift or black areas | Sync, source durations and independent-track gaps |
+| Track locked / Undo refused | Open Edit → Track protection; unlock the affected lane, or choose the other source for an independent edit |
 | Rebuild required | Save text and rebuild after editorial-setting changes |
 
 Report the exact action/error, build name, input length/language and a redacted screenshot with the [feedback form](BETA_FEEDBACK.md). Never include API keys or the entire private `data` folder. The beta is not certified across all PCs, languages or footage; [limitations](BETA_STATUS.md) distinguish automated checks from real-world validation.

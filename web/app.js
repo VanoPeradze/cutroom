@@ -1,13 +1,14 @@
 import { applyTranslations, dictionaries } from "./i18n.js?v=1.1-beta-1";
-import { TimelineView, formatTime, editableClips, timelineDuration, sequenceBlocks, sequenceGaps, rippleMoveStart } from "./timeline.js?v=1.1-beta-3";
+import { TimelineView, formatTime, editableClips, timelineDuration, sequenceBlocks, sequenceGaps, rippleMoveStart } from "./timeline.js?v=1.1-beta-6";
 import { MediaStudio } from "./media-studio.js?v=1.1-beta-3";
-import { SourceReview } from "./source-review.js?v=1.1-beta-3";
-import { initWorkspace } from "./workspace.js?v=1.1-beta-1";
+import { SourceReview } from "./source-review.js?v=1.1-beta-6";
+import { initWorkspace } from "./workspace.js?v=1.1-beta-3";
 import { KEYBOARD_PROFILES, resolveEditorShortcut, isEditorTransportSpace, shortcutRows } from "./keyboard.js?v=1.1-beta-2";
 import { AudioThresholdView } from "./audio-meter.js?v=1.1-beta-1";
 import { initWelcome, workflowSettings, cloudProviderName } from "./welcome.js?v=1.1-beta-1";
 import { initLocalModels } from "./local-models.js?v=1.1-beta-1";
 import { trackClips, trackAt, hasSourceTracks, SourceTimelineClock } from "./source-tracks.js?v=1.1-beta-1";
+import { initTrackProtection } from "./track-protection.js?v=1.1-beta-1";
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -383,9 +384,12 @@ async function boot() {
   });
   initWorkspace({ document, window, onResize: () => state.timeline?.scheduleDraw(), openShortcuts: () => { renderKeyboardHelp(); elements.keyboardDialog.showModal(); } });
   initializeMediaStudio();
+  state.trackProtection = initTrackProtection({ document, getProject: () => state.project,
+    busy: () => state.manualEditBusy || foregroundBusy(),
+    change: (slot, locked) => applyManualEdit("set_track_lock", { slot, locked }) });
   state.timeline = new TimelineView(elements.timelineCanvas, elements.timelineScroll,
     (time) => { pauseAllMedia(); seekSourcePreview(time); }, setManualSelection, handleTimelineEdit,
-    { onToolStateChange: renderTimelineToolStatus, canEdit: () => !foregroundBusy() && !state.transcriptSaving,
+    { onToolStateChange: renderTimelineToolStatus, canEdit: () => !foregroundBusy() && !state.transcriptSaving && !state.manualEditBusy,
       onLayoutSelect: openTimelineLayout, getTrackClips: trackClips,
       onTargetChange: (target) => setEditTarget(target, true),
       onMediaSelect: id => { pauseAllMedia(); state.mediaStudio?.select(id); selectAdvancedTab("media"); },
@@ -5209,15 +5213,22 @@ function renderTimelineToolStatus() {
 
 async function handleTimelineEdit(edit) {
   const target = edit.target || activeEditTarget();
+  const locked = state.trackProtection?.lockedNames(edit.slot || target) || [];
+  if (locked.length) { toast(`Track ${locked.join(" + ")} is locked. Unlock it in Edit → Track protection.`); return null; }
   if (edit.action === "sequence_trim_edge") {
     const projectId = state.project?.id;
     const {action,...detail} = edit;
     const updated = await applyManualEdit(action,detail);
-    if (updated && state.project?.id === projectId) {
+    if (state.project?.id !== projectId || activeEditTarget() !== target) return updated;
+    if (updated) {
       const start = edit.edge === "start" ? (!edit.slot && edit.time > edit.start ? edit.start : edit.time) : edit.start;
       const end = edit.edge === "end" ? edit.time : edit.end-(!edit.slot ? Math.max(0,edit.time-edit.start) : 0);
       state.timeline?.selectRange(start,end); seekSourcePreview(start);
-    } else state.timeline?.selectRange(edit.start,edit.end);
+    } else if (state.manualSelection) {
+      // A failed request leaves the saved selection available for a retry.
+      // A revision conflict clears it; never restore stale clip coordinates.
+      state.timeline?.selectRange(state.manualSelection.start,state.manualSelection.end);
+    } else state.timeline?.clearSelection();
     return updated;
   }
   if (edit.action === "split" && state.project?.editor_sequence) {
@@ -5522,6 +5533,13 @@ function renderManualControls() {
   if (elements.emptyTimelineAdd) elements.emptyTimelineAdd.disabled = busy;
   if (elements.clipDuplicate) elements.clipDuplicate.disabled = !sequence || !selectedTimelineClip() || busy;
   renderClipTrim();
+  state.trackProtection?.render();
+  const locked = state.trackProtection?.lockedNames(target) || [];
+  if (locked.length) {
+    for (const control of [elements.manualDelete,elements.manualSplit,elements.clipDuplicate,elements.trackReset,gapButton,
+      elements.clipTrimIn,elements.clipTrimOut,elements.clipTrimApply,elements.clipSourceIn,elements.clipMove]) if (control) control.disabled = true;
+    elements.timelineSelectionHint.textContent = `${locked.join(" + ")} locked · Unlock in Edit → Track protection. Playback is unchanged.`;
+  }
   renderTranscriptDetail(false);
 }
 
@@ -5559,7 +5577,7 @@ async function applyManualEdit(action, detail = {}, { isCurrent = () => true } =
   const preservedTime = previewTimelineTime();
   // Mixer and layer adjustments do not change the main playback clock. Keep
   // auditioning while their automatic saves run, without reloading the video.
-  const liveMediaAction = action === "media_update" || action === "set_audio_mixer";
+  const liveMediaAction = action === "media_update" || action === "set_audio_mixer" || action === "set_track_lock";
   let finishManualEdit;
   const manualEditPromise = new Promise((resolve) => { finishManualEdit = resolve; });
   state.manualEditPromise = manualEditPromise;
@@ -5597,6 +5615,12 @@ async function applyManualEdit(action, detail = {}, { isCurrent = () => true } =
     rememberProjectRevision(payload.project);
     if (state.project?.id !== projectId || !isCurrent()) return payload.project;
     state.project = payload.project;
+    if (action === "set_track_lock") {
+      state.timeline?.cancelGesture?.();
+      if (state.timeline) { state.timeline.project = editorProject(); state.timeline.scheduleDraw(); }
+      state.trackProtection?.render();
+      return state.project;
+    }
     if (liveMediaAction) {
       state.mediaStudio?.render();
       if (state.timeline) { state.timeline.project = editorProject(); state.timeline.scheduleDraw(); }
@@ -5614,6 +5638,12 @@ async function applyManualEdit(action, detail = {}, { isCurrent = () => true } =
       state.timeline?.clearSelection();
       state.markIn = null;
       seekSourcePreview(Math.min(action === "sequence_close_gaps" ? preservedTime : Number(detail.start), editorDuration()));
+    } else if (action === "undo" || action === "redo") {
+      // History can restore different clip boundaries. Old selection bounds
+      // must not turn the restored clip into a stale movable range.
+      state.timeline?.clearSelection();
+      state.markIn = null;
+      seekSourcePreview(preservedTime);
     } else {
       if (preservedSelection) state.timeline.selectRange(preservedSelection.start, preservedSelection.end);
       else setManualSelection(null);

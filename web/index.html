@@ -12,7 +12,7 @@
   <link rel="stylesheet" href="/assets/workspace.css?v=1.1-beta-3">
   <link rel="stylesheet" href="/assets/media-studio.css?v=1.1-beta-2">
   <link rel="stylesheet" href="/assets/welcome.css?v=1.1-beta-2">
-  <link rel="stylesheet" href="/assets/creator-ui.css?v=1.1-beta-10">
+  <link rel="stylesheet" href="/assets/creator-ui.css?v=1.1-beta-11">
 </head>
 <body class="welcome-mode">
   <a class="skip-link" href="#main" data-i18n="skip">Skip to content</a>
@@ -374,11 +374,16 @@
             <header class="studio-tool-intro"><div><p>01 / EDIT</p><h3>Clip controls</h3></div><span>Select a clip in the timeline to adjust it. Drag its middle to move it, or its edges to trim. Use Range to select a section to remove.</span></header>
             <form class="clip-trim-bar" id="clipTrimForm" hidden><strong id="clipTrimTitle">Selected clip</strong><label>Timeline start <input id="clipTrimIn" type="number" step="0.001" min="0" required></label><label>Timeline end <input id="clipTrimOut" type="number" step="0.001" min="0" required></label><label id="clipSourceField" hidden>Source in <input id="clipSourceIn" type="number" step="0.001" min="0"></label><span>seconds</span><button id="clipTrimApply" type="submit">Apply trim</button><button id="clipMove" type="button" hidden>Move to start</button><span id="clipTrimStatus" role="status"></span></form>
             <form class="clip-trim-bar" id="sourceInsertForm" hidden><strong id="sourceInsertTitle">Add source footage</strong><label>Source <select id="sourceInsertSlot" aria-label="Footage source"><option value="A">A</option><option value="B">B</option></select></label><label>Source in <input id="sourceInsertIn" type="text" inputmode="decimal" value="0" required></label><label>Source out <input id="sourceInsertOut" type="text" inputmode="decimal" required></label><label>Insert at (edit time) <input id="sourceInsertAt" type="text" inputmode="decimal" value="0" required></label><button type="submit">Insert footage</button><button type="button" id="sourceInsertCancel">Cancel</button><span id="sourceInsertStatus" role="status">Original source times · seconds or mm:ss.mmm. Inserts on this track only.</span></form>
+            <details class="editor-more track-protection" id="trackProtection" hidden>
+              <summary>Track protection <span id="trackProtectionSummary">Unlocked</span></summary>
+              <div class="editor-more-panel"><button id="trackLockA" type="button" aria-pressed="false">Lock A</button><button id="trackLockB" type="button" aria-pressed="false" hidden>Lock B</button></div>
+              <p id="trackProtectionStatus" role="status">Locks protect edits without muting or hiding footage.</p>
+            </details>
             <details class="editor-more" id="editorMoreTools"><summary>More editing tools</summary><div class="editor-more-panel">
               <button id="manualSplit" type="button" disabled>Split at playhead</button><button id="manualRestore" type="button" disabled>Add to edit</button><button id="manualClear" type="button" disabled>Clear selection</button>
               <button id="clipDuplicate" type="button" disabled>Duplicate clip</button><button id="manualRange" type="button" aria-expanded="false" aria-controls="timelineRangeForm">Range…</button><button id="manualLayout" type="button" disabled>Layout…</button>
               <button type="button" data-timeline-tool="remove_between" aria-pressed="false">Cut out</button><button type="button" data-timeline-tool="move" aria-pressed="false" disabled hidden>Move clip</button><button type="button" id="trackReset" hidden>Reset track</button>
-              <button id="timelineZoomSelection" type="button" disabled>Zoom to selection</button><button id="timelineSnap" type="button" aria-pressed="false">Snap: off</button>
+              <button id="timelineZoomSelection" type="button" disabled>Zoom to selection</button>
               <label class="keyboard-profile-label">Keys <select id="keyboardProfile" aria-label="Keyboard shortcut profile"><option value="cutroom">CUTROOM</option></select></label><button type="button" id="keyboardHelp">Shortcuts</button>
             </div></details>
           <form id="timelineRangeForm" class="source-range-form timeline-range-form" novalidate hidden>
@@ -652,6 +657,7 @@
             <button id="reviewSourceButton" type="button" disabled title="See the entire original video and restore removed footage">Original footage</button>
             <button id="closeTimelineGaps" type="button" hidden>Close gaps</button>
             <span class="manual-history-actions"><button id="manualUndo" type="button" disabled aria-label="Undo manual correction" title="Undo">↶</button><button id="manualRedo" type="button" disabled aria-label="Redo manual correction" title="Redo">↷</button></span>
+            <button id="timelineSnap" type="button" aria-pressed="false" title="Align trims and moves to the playhead, A/B cuts and added media. Hold Alt to bypass; Esc cancels a drag.">Snap: off</button>
             <div class="timeline-zoom-controls"><button id="timelineZoomOut" aria-label="Zoom out" title="Zoom out around the yellow playhead">−</button><span id="timelineZoomLabel">100%</span><button id="timelineZoomIn" aria-label="Zoom in" title="Zoom in around the yellow playhead">＋</button><button id="timelineFit" data-i18n="fit">Fit</button></div>
             <button id="editorMoreButton" type="button" aria-controls="editorMoreTools">More tools</button>
           </div>
@@ -759,6 +765,6 @@
       <footer class="connection-actions"><button class="button ghost" id="forgetCloudKey" type="button">Forget session key</button><button class="button primary" id="saveAIConnection" type="submit">Use this connection</button></footer>
     </form>
   </dialog>
-  <script type="module" src="/assets/app.js?v=1.1-beta-12"></script>
+  <script type="module" src="/assets/app.js?v=1.1-beta-15"></script>
 </body>
 </html>

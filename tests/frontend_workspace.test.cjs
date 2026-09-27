@@ -185,6 +185,7 @@ test("invalid display preferences or blocked storage do not break the editor", (
 
 test("guide explains clip tools and opens existing shortcut help", () => {
   const h = harness(); h.controller.openGuide(); const guide = h.el("workspaceGuideDialog");
+  for (const text of ["Snap", "cyan guide", "Alt", "hours:minutes:seconds:frames"]) assert.ok(guide.textContent.includes(text), text);
   for (const text of ["Select", "Range", "Together", "Cut", "Layout", "divider", "both tracks", "Escape", "Original footage", "Restore to edit", "A only", "B only", "60 FPS", "Save", "Undo", "white edges", "Close gaps", "without overwriting"]) assert.ok(guide.textContent.includes(text), text);
   for (const obsolete of ["Hide inspector", "Preview focus", "Larger timeline", "whole editor", "Editing stays within A's original duration"]) assert.equal(guide.textContent.includes(obsolete), false);
   h.el("workspaceGuideShortcuts").click(); assert.equal(guide.open, false); assert.equal(h.counts().shortcuts, 1);

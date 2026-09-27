@@ -33,6 +33,7 @@ from cutroom.edit_styles import UnknownEditStyle, get_edit_style, public_edit_st
 from cutroom.editing import ManualEditError, apply_manual_edit, strip_private_edit_history
 from cutroom.sequence import SEQUENCE_ACTION_FIELDS, editor_sequence_snapshot
 from cutroom.source_tracks import SourceTrackError
+from cutroom.track_locks import TrackLockedError, require_tracks_unlocked
 from cutroom.intelligence import story_ai_status
 from cutroom.cloud_ai import ConnectionStore, CloudAIError, enabled as cloud_enabled, require_connection
 from cutroom.manual_start import start_manual_draft
@@ -785,6 +786,10 @@ def create_app(settings: Settings | None = None) -> Flask:
     def handle_api_input(error: APIInputError):
         return jsonify({"error": error.code, "message": error.message}), error.status
 
+    @app.errorhandler(TrackLockedError)
+    def handle_track_locked(error: TrackLockedError):
+        return jsonify({"error": "track_locked", "message": str(error)}), 409
+
     @app.errorhandler(CloudAIError)
     def handle_cloud_error(error):
         return jsonify({"error": "cloud_ai_unavailable", "message": str(error)}), 409
@@ -1005,7 +1010,7 @@ def create_app(settings: Settings | None = None) -> Flask:
     def manual_edit(project_id: str):
         payload = _json_object()
         action = str(payload.get("action") or "").strip().lower()
-        track_fields = SEQUENCE_ACTION_FIELDS.get(action, SOURCE_TRACK_EDIT_FIELDS.get(action))
+        track_fields = {"slot", "locked"} if action == "set_track_lock" else SEQUENCE_ACTION_FIELDS.get(action, SOURCE_TRACK_EDIT_FIELDS.get(action))
         media_fields = MEDIA_ACTION_FIELDS.get(action)
         _reject_unknown_fields(
             payload,
@@ -1026,7 +1031,7 @@ def create_app(settings: Settings | None = None) -> Flask:
             _require_optional_string(payload, "clip_id", max_length=128)
             _require_optional_string(payload, "mode", max_length=16)
         expected_revision = payload.pop("expected_revision", None)
-        if (action in SEQUENCE_ACTION_FIELDS or media_fields is not None) and expected_revision is None:
+        if (action in SEQUENCE_ACTION_FIELDS or media_fields is not None or action == "set_track_lock") and expected_revision is None:
             raise APIInputError("invalid_field", "Timeline edits require the displayed project's expected_revision.")
         if expected_revision is not None and (
             isinstance(expected_revision, bool)
@@ -1036,6 +1041,11 @@ def create_app(settings: Settings | None = None) -> Flask:
             raise APIInputError("invalid_field", "expected_revision must be a positive integer.")
         try:
             with project_job_gate:
+                if action == "set_track_lock" and (
+                    active_uploads.get(project_id, 0)
+                    or any(job.kind in {"director", "refine"} for job in jobs.active(project_id=project_id))
+                ):
+                    raise APIInputError("project_busy", "Wait for active editing or source import to finish before changing track locks.", 409)
                 if media_fields is not None and (active_uploads.get(project_id, 0) or jobs.active(project_id=project_id)):
                     raise APIInputError("project_busy", "Wait for active processing or media import to finish before editing media.", 409)
                 project = store.update(
@@ -1217,7 +1227,7 @@ def create_app(settings: Settings | None = None) -> Flask:
         installed_destination = False
         previous_source: dict[str, Any] | None = None
         with project_job_gate:
-            store.load(project_id)
+            require_tracks_unlocked(store.load(project_id))
             now = time.monotonic()
             prune_upload_transactions(now)
             existing_transaction = upload_transactions.get(transaction_key)
@@ -1303,6 +1313,9 @@ def create_app(settings: Settings | None = None) -> Flask:
 
             def commit_upload(project: dict[str, Any]) -> None:
                 nonlocal installed_destination, previous_source, previous_media_path, rollback_path
+                # Source replacement clears the shared draft, so every locked
+                # lane must be checked before any physical file is moved.
+                require_tracks_unlocked(project)
                 current = project.setdefault("sources", {}).get(slot)
                 previous_source = json.loads(json.dumps(current)) if isinstance(current, dict) else None
                 if previous_source is not None:
@@ -1473,6 +1486,7 @@ def create_app(settings: Settings | None = None) -> Flask:
                         isinstance(rollback_path, Path) and rollback_path.is_file()
                     )
                     if rollback_available:
+                        require_tracks_unlocked(project)
                         for active_job in jobs.active(project_id=project_id, kind="prepare_source"):
                             if str(active_job.dedupe_key) == f"{slot}:{generation}":
                                 jobs.cancel(active_job.id)
@@ -1605,6 +1619,7 @@ def create_app(settings: Settings | None = None) -> Flask:
             _reset_manual_after_source_change(project, slot)
 
         with project_job_gate:
+            require_tracks_unlocked(store.load(project_id))
             for active_job in jobs.active(project_id=project_id, kind="prepare_source"):
                 if str(active_job.dedupe_key).split(":", 1)[0] == slot:
                     jobs.cancel(active_job.id)
@@ -1699,6 +1714,7 @@ def create_app(settings: Settings | None = None) -> Flask:
         payload = _json_object()
         _validate_settings_payload(payload)
         project = store.load(project_id)
+        require_tracks_unlocked(project)
         if not project.get("sources", {}).get("A"):
             return jsonify({"error": "source_required", "message": "Add source A before generating an edit."}), 400
         effective = dict(project.get("settings", {}))
@@ -1724,6 +1740,7 @@ def create_app(settings: Settings | None = None) -> Flask:
                     "recommended_model": status["recommended_model"],
                 }), 409
         def require_source(latest: dict[str, Any]) -> None:
+            require_tracks_unlocked(latest)
             if not latest.get("sources", {}).get("A"):
                 raise APIInputError("source_required", "Add source A before generating an edit.")
 
@@ -1749,6 +1766,7 @@ def create_app(settings: Settings | None = None) -> Flask:
         if command not in {"shorter", "keep_more", "more_energy", "fewer_switches", "focus_speaker", "new_variation"}:
             raise APIInputError("invalid_command", "Unknown refinement command.")
         def require_draft(latest: dict[str, Any]) -> None:
+            require_tracks_unlocked(latest)
             if not latest.get("sources", {}).get("A") or not latest.get("draft"):
                 raise APIInputError("draft_required", "Generate a draft before refining it.")
             if command == "new_variation" and (

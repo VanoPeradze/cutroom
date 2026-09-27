@@ -7,6 +7,7 @@ from .composition import build_manual_embedded_candidate
 from .source_tracks import TRACK_ACTIONS, SourceTrackError, prepare_source_track_edit, validate_source_track_sync
 from .sequence import SEQUENCE_ACTIONS, prepare_sequence_edit
 from .media_library import MEDIA_ACTION_FIELDS, MediaLibraryError, prepare_media_edit, validate_media_bounds
+from .track_locks import locked_tracks, require_tracks_unlocked, validate_locked_track_changes
 from .utils import clamp, invert_ranges, merge_ranges, now_iso, range_duration
 
 
@@ -901,14 +902,19 @@ def _apply_history_entry(project: dict[str, Any], entry: dict[str, Any], side: s
 
 
 def apply_manual_edit(project: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
-    """Stage main-timeline changes when they could invalidate added media."""
+    """Stage protected edits so rejection cannot consume history or alter state."""
     action = str(payload.get("action") or "").strip().lower() if isinstance(payload, dict) else ""
     guarded = SEQUENCE_ACTIONS | {"delete_range", "trim_clip", "apply_reel_candidate"}
-    if action in guarded and (project.get("manual") or {}).get("media_clips"):
+    protected = bool(locked_tracks(project))
+    if protected or action in guarded and (project.get("manual") or {}).get("media_clips"):
         candidate = copy.deepcopy(project)
-        _apply_manual_edit(candidate, payload)
         try:
-            validate_media_bounds(candidate)
+            if action in SEQUENCE_ACTIONS | TRACK_ACTIONS and payload.get("slot"):
+                require_tracks_unlocked(project, (str(payload["slot"]).upper(),))
+            _apply_manual_edit(candidate, payload)
+            validate_locked_track_changes(project, candidate)
+            if action in guarded:
+                validate_media_bounds(candidate)
         except (MediaLibraryError, SourceTrackError) as exc:
             raise ManualEditError(str(exc)) from exc
         project.clear()
@@ -922,6 +928,18 @@ def _apply_manual_edit(project: dict[str, Any], payload: dict[str, Any]) -> dict
     if not isinstance(payload, dict):
         raise ManualEditError("Request body must be an object")
     action = str(payload.get("action") or "").strip().lower()
+    if action == "set_track_lock":
+        slot = payload.get("slot")
+        if not isinstance(slot, str) or slot not in {"A", "B"}:
+            raise ManualEditError("Choose an existing source track A or B")
+        if not isinstance(payload.get("locked"), bool):
+            raise ManualEditError("locked must be a boolean")
+        if not isinstance(project.get("draft"), dict) or not (project.get("sources") or {}).get(slot):
+            raise ManualEditError("Open a timeline with this source before locking its track")
+        # Protection is an editor preference, outside media history. Undo/redo
+        # keep the current locks and cannot unlock a track through old snapshots.
+        project.setdefault("manual", {}).setdefault("track_locks", {})[slot] = payload["locked"]
+        return project
     # Validate independent track operations before creating history or touching
     # the project. Failed edits and genuine no-ops must preserve the whole state.
     try:
