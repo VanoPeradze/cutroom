@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1 Beta — 2026-09-27
+
+- Gave the app and public website a shared editing-room identity: warm paper, charcoal, restrained color and editorial typography, without new fonts, trackers or animation libraries.
+- Replaced the lobby's oversized illustrated cards with direct, numbered project choices. Kept AI setup secondary and moved supporting workflow explanations into a keyboard-accessible guide disclosure.
+- Clarified the clip inspector and reduced decorative control styling without changing playback, source framing or timeline behavior.
+- Fixed low-contrast AI connection and local-model controls in day mode. Refreshed the real product screenshots and improved the website's Hebrew typography and product-tour labels.
+
 ## 1.1 Beta — 2026-09-24
 
 - Made new two-source Reels default to a filled 30/70 camera-above-screen stack in upload setup, AI drafts, manual drafts, preview and export. Explicit source order, fit choices and nonvertical layouts remain intact; confirmed embedded-camera layouts use the same proportions.

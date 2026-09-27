@@ -4,6 +4,8 @@ import {readFileSync, readdirSync} from 'node:fs';
 
 const html = readFileSync(new URL('./public/index.html', import.meta.url), 'utf8');
 const privacy = readFileSync(new URL('./public/privacy.html', import.meta.url), 'utf8');
+const css = readFileSync(new URL('./public/styles.css', import.meta.url), 'utf8');
+const script = readFileSync(new URL('./public/site.js', import.meta.url), 'utf8');
 const repository = 'https://github.com/VanoPeradze/cutroom';
 
 function region(tag, id) {
@@ -43,6 +45,48 @@ test('language switching cannot replace links with plain text', () => {
   for (const element of html.matchAll(/<([a-z][\w-]*)\b([^>]*\bdata-he=["'][^"']*["'][^>]*)>([\s\S]*?)<\/\1>/gi)) {
     assert.doesNotMatch(element[3], /<a\b/i, 'Put data-he on the link or its text, not an ancestor');
   }
+});
+
+test('the editorial introduction keeps a bilingual heading and an identifiable real product image', () => {
+  const hero = region('section');
+  assert.equal([...html.matchAll(/<h1\b/g)].length, 1);
+  const heading = hero.match(/<h1>([\s\S]*?)<\/h1>/)?.[1];
+  assert.ok(heading);
+  for (const line of heading.matchAll(/<(?:span|em)\b([^>]*)>([^<]+)<\/(?:span|em)>/g)) {
+    assert.match(line[1], /data-he="[^"]*[\u0590-\u05ff]/);
+    assert.match(line[2], /[A-Za-z]/);
+  }
+  assert.match(hero, /class="hero-aside"/);
+  assert.match(hero, /class="hero-stage"/);
+  const image = hero.match(/<img\b[^>]*src="\/assets\/editor\.png\?v=20260927"[^>]*>/)?.[0];
+  assert.ok(image, 'The introductory image must show the actual editor');
+  assert.match(image, /\balt="[^"]+"/);
+  assert.match(image, /\bdata-he-alt="[^"]*[\u0590-\u05ff]/);
+  assert.match(image, /fetchpriority="high"/);
+  assert.match(hero, /Actual editor · Synthetic demo footage/);
+});
+
+test('product-tour controls retain accessible targets and bilingual group labels', () => {
+  const tour = region('section', 'inside');
+  assert.match(tour, /class="tour-controls" role="group" aria-label="Product tour"/);
+  const controls = [...tour.matchAll(/<button\b[^>]*\bdata-shot="([^"]+)"[^>]*>/g)];
+  assert.deepEqual(controls.map(control => control[1]), ['editor', 'welcome', 'ai-options']);
+  assert.equal(controls.filter(control => /aria-pressed="true"/.test(control[0])).length, 1);
+  for (const control of controls) {
+    assert.match(control[0], /aria-controls="tourImage tourCaption"/);
+    assert.match(control[0], /aria-pressed="(?:true|false)"/);
+  }
+  assert.match(tour, /id="tourCaption" aria-live="polite"/);
+  assert.match(script, /querySelector\('\.tour-controls'\)\.setAttribute\('aria-label', language === 'he' \? '[^']*[\u0590-\u05ff][^']*' : 'Product tour'\)/);
+  assert.match(script, /querySelector\('\.format-strip'\)\.setAttribute\('aria-label', language === 'he' \? '[^']*[\u0590-\u05ff][^']*' : 'Video formats'\)/);
+});
+
+test('the editorial stylesheet provides visible focus and a reduced-motion path', () => {
+  assert.match(css, /:focus-visible\s*\{[^}]*outline:\s*3px solid/);
+  const reducedMotion = css.slice(css.indexOf('@media(prefers-reduced-motion:reduce)'));
+  assert.match(reducedMotion, /html\s*\{scroll-behavior:auto\}/);
+  assert.match(reducedMotion, /transition:none!important/);
+  assert.match(reducedMotion, /animation:none!important/);
 });
 
 test('public website copy does not describe the repository as private', () => {

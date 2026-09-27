@@ -123,7 +123,7 @@ dialog.connection-dialog { width:min(1050px,calc(100vw - 32px)); }
 .welcome-dialog h2 { margin:5px 0 0; font-size:28px; letter-spacing:-.035em; }
 .welcome-dialog p { font-size:13px; color:var(--paper-dim); line-height:1.7; }
 .tour-steps { padding-left:23px; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:20px 32px; margin:24px 0; }
-.tour-steps li { padding-left:4px; color:#cbb1ee; }
+.tour-steps li { padding-left:4px; color:var(--room-accent); }
 .tour-steps h3 { color:var(--paper); font-size:15px; margin:0 0 6px; } .tour-steps p { margin:0; }
 .guide-search { display:grid; gap:10px; font-size:13px; font-weight:600; margin-top:24px; }
 .guide-search input { width:100%; padding:12px; border:1px solid #6a7790; border-radius:8px; background:var(--surface-inset); color:var(--paper); }
@@ -132,34 +132,34 @@ dialog.connection-dialog { width:min(1050px,calc(100vw - 32px)); }
 .connection-modes { margin:22px 0; padding:0; border:0; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
 .connection-modes legend { margin-bottom:10px; font-size:13px; color:var(--muted); }
 .connection-modes label { display:flex; gap:10px; align-items:start; padding:16px; border:1px solid var(--line-strong); border-radius:10px; cursor:pointer; }
-.connection-modes label:has(input:checked) { background:#342b45; border-color:#bca2df; box-shadow:inset 0 0 0 1px #bca2df; }
+.connection-modes label:has(input:checked) { background:var(--surface-selected); border-color:var(--room-accent); box-shadow:inset 0 0 0 1px var(--room-accent); }
 .connection-modes input { accent-color:#c4a5ee; width:18px; height:18px; flex:0 0 18px; margin-top:1px; }
 .connection-modes strong,.connection-modes small { display:block; }
 .connection-modes strong { font-size:14px; }
 .connection-modes small { font-size:12px; color:var(--paper-dim); margin-top:8px; line-height:1.5; }
-.connection-modes .connection-cost { color:#9bddda; }
+.connection-modes .connection-cost { color:var(--cyan-text); }
 .local-models-heading { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:start; gap:12px; border-top:1px solid var(--line); padding-top:20px; }
 .local-models-heading h3 { margin:0; font-size:20px; } .local-models-heading p { margin:6px 0 14px; }
-.local-runtime { display:flex; flex-wrap:wrap; align-items:center; gap:12px; background:#202a35; border:1px solid #4c6275; padding:14px; border-radius:8px; margin-bottom:16px; }
+.local-runtime { display:flex; flex-wrap:wrap; align-items:center; gap:12px; background:var(--surface-inset); border:1px solid var(--line-strong); padding:14px; border-radius:8px; margin-bottom:16px; }
 .local-runtime > div { flex:1 1 260px; } .local-runtime strong { font-size:14px; } .local-runtime p { margin:4px 0 0; font-size:12px; }
 .local-model-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
 .local-model-card { display:flex; flex-direction:column; min-width:0; background:var(--surface-inset); border:1px solid var(--line); border-radius:10px; padding:18px; }
 .local-model-card h4 { font-size:16px; margin:0 0 6px; } .local-model-card p { font-size:12px; margin:0 0 12px; }
 .local-model-card label { display:grid; gap:8px; font-size:12px; color:var(--muted); }
-.local-model-card select { width:100%; min-width:0; padding:10px; color:var(--paper); background:#212938; border:1px solid #6b7990; border-radius:6px; }
-.local-model-card .model-description { margin-top:12px; min-height:36px; } .local-model-card .model-facts { color:#a8d9dd; }
+.local-model-card select { width:100%; min-width:0; padding:10px; color:var(--paper); background:var(--surface-raised); border:1px solid var(--line-strong); border-radius:6px; }
+.local-model-card .model-description { margin-top:12px; min-height:36px; } .local-model-card .model-facts { color:var(--cyan-text); }
 .local-model-card button { margin-top:auto; width:100%; }
 .local-models-status { min-height:1.6em; }
-.download-confirm { padding:16px; margin-top:16px; background:#2d2940; border:1px solid #9b83ba; border-radius:8px; }
+.download-confirm { padding:16px; margin-top:16px; background:var(--surface-selected); border:1px solid var(--room-accent); border-radius:8px; }
 .download-confirm p { margin-top:0; } .download-confirm > div { display:flex; flex-wrap:wrap; gap:10px; }
 .local-download-job { padding:16px; margin-top:16px; border:1px solid #65a1a9; border-radius:8px; }
 .local-download-job > div { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:12px; font-size:13px; }
 .local-download-job progress { width:100%; height:9px; margin-top:14px; accent-color:#6cc9ca; }
 .connection-provider { display:flex; align-items:center; flex-wrap:wrap; gap:8px 14px; padding-block:6px 16px; }
 .connection-provider span,.connection-provider a { font-size:12px; color:var(--paper-dim); }
-.connection-provider a { margin-left:auto; color:#9edce2; }
+.connection-provider a { margin-left:auto; color:var(--cyan-text); }
 .connection-field { display:grid; gap:8px; font-size:14px; }
-.connection-field input,.connection-field select { width:100%; min-width:0; padding:12px; background:#111721; color:var(--paper); border:1px solid #778397; border-radius:8px; }
+.connection-field input,.connection-field select { width:100%; min-width:0; padding:12px; background:var(--surface-inset); color:var(--paper); border:1px solid var(--line-strong); border-radius:8px; }
 #compatibleConnectionFields .connection-field { margin-block:14px; }
 #cloudDestinationName { overflow-wrap:anywhere; }
 .home-footer .provider-credit { flex-basis:100%; font-size:12px; }
@@ -171,7 +171,7 @@ dialog.connection-dialog { width:min(1050px,calc(100vw - 32px)); }
 .connection-consent { display:flex; align-items:start; gap:12px; font-size:13px; line-height:1.65; color:var(--paper); }
 .connection-consent input { margin-top:4px; flex:0 0 18px; height:18px; accent-color:#ac88de; }
 .connection-actions { display:flex; flex-wrap:wrap; justify-content:space-between; gap:12px; padding-top:16px; margin-top:16px; border-top:1px solid var(--line); }
-.connection-status { min-height:1.5em; } .connection-status[data-error="true"] { color:#ffb1b7; }
+.connection-status { min-height:1.5em; } .connection-status[data-error="true"] { color:var(--danger); }
 
 @media (max-width:1100px) {
   .welcome-shell.home-hub { gap:0 28px; padding:30px 24px 20px; }

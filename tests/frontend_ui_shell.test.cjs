@@ -75,7 +75,7 @@ for (const theme of ["light", "dark"]) {
     const h = harness({ stored: theme, systemDark: theme !== "dark" });
     assert.equal(h.root.dataset.theme, theme);
     assert.equal(h.root.style.colorScheme, theme);
-    assert.equal(h.meta.attrs.content, theme === "dark" ? "#101516" : "#f6f5f1");
+    assert.equal(h.meta.attrs.content, theme === "dark" ? "#171817" : "#f2f0e9");
     h.ready();
     assert.equal(h.nodes.get("themeToggle").attrs["aria-pressed"], String(theme === "dark"));
     assert.equal(h.nodes.get("themeLabel").textContent, theme === "dark" ? "Night" : "Day");
@@ -104,7 +104,7 @@ test("toggling synchronizes theme, accessible state, label, icon, meta color and
     assert.equal(h.nodes.get("themeToggle").title, dark ? "Switch to day mode" : "Switch to night mode");
     assert.equal(h.nodes.get("themeLabel").textContent, dark ? "Night" : "Day");
     assert.equal(h.nodes.get("themeIcon").textContent, dark ? "☾" : "☀");
-    assert.equal(h.meta.attrs.content, dark ? "#101516" : "#f6f5f1");
+    assert.equal(h.meta.attrs.content, dark ? "#171817" : "#f2f0e9");
   }
 });
 

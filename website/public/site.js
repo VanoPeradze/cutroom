@@ -12,10 +12,10 @@
   const shots = {
     editor: {en: 'Independent A/B tracks, editable layouts and a live preview. The image uses synthetic test footage, not an AI-generated result.', he: 'ערוצי A/B נפרדים, פריסות ניתנות לשינוי ותצוגה מקדימה. התמונה משתמשת בחומר בדיקה סינתטי, לא בתוצאה שנוצרה ב־AI.', alt: {en: 'CUTROOM editor with separate A/B timeline tracks and synthetic test footage', he: 'עורך CUTROOM עם ערוצי טיימליין A/B נפרדים וחומר בדיקה סינתטי'}},
     welcome: {en: 'Choose a Short, a YouTube video or a manual edit. Local model setup is visible before your first AI edit.', he: 'בחרו Short, סרטון יוטיוב או עריכה ידנית. הכנת המודלים המקומיים מופיעה לפני העריכה הראשונה עם AI.', alt: {en: 'CUTROOM welcome screen with three workflows and local setup guidance', he: 'מסך הכניסה של CUTROOM עם שלושה מסלולי עריכה והכוונה להגדרת AI מקומי'}},
-    'ai-options': {en: 'Local model setup in an earlier beta. Downloads require confirmation. In 1.1 Beta, My own API also supports compatible provider endpoints, as explained below.', he: 'הגדרת מודלים מקומיים בבטא קודמת. הורדות דורשות אישור. בגרסת 1.1 Beta, האפשרות My own API תומכת גם בספקי API תואמים, כפי שמוסבר בהמשך.', alt: {en: 'CUTROOM local model setup example from an earlier beta', he: 'דוגמה להגדרת המודלים המקומיים של CUTROOM מבטא קודמת'}}
+    'ai-options': {en: 'Choose local models, Groq Free tier or your compatible API. Model downloads require confirmation; the models shown as downloaded are already installed on this demo computer, not bundled with CUTROOM.', he: 'בחירה בין מודלים מקומיים, המסלול החינמי של Groq או API תואם משלכם. הורדות מודלים דורשות אישור; המודלים שמסומנים כמותקנים כבר נמצאים במחשב ההדגמה, ולא כלולים בהורדת CUTROOM.', alt: {en: 'CUTROOM 1.1 Beta AI options and local model downloads in day mode', he: 'אפשרויות AI והורדת מודלים מקומיים ב־CUTROOM 1.1 Beta במצב יום'}}
   };
   function renderShot() {
-    tourImage.src = '/assets/' + currentShot + '.png';
+    tourImage.src = '/assets/' + currentShot + '.png?v=20260927';
     tourImage.alt = shots[currentShot].alt[language];
     caption.textContent = shots[currentShot][language];
     tourButtons.forEach(button => button.setAttribute('aria-pressed', String(button.dataset.shot === currentShot)));
@@ -39,6 +39,8 @@
       ? 'עריכת וידאו חינמית בקוד פתוח ליוצרי תוכן. התחילו מטיוטה בעזרת AI או ערכו ידנית. הורידו את הבטא ל־Windows ולמדו איך מתחילים.'
       : 'Free, open-source video editing for creators. Start with an AI-assisted draft or edit manually. Download the Windows beta and learn how to get started.';
     document.querySelector('nav').setAttribute('aria-label', language === 'he' ? 'ניווט ראשי' : 'Main navigation');
+    document.querySelector('.tour-controls').setAttribute('aria-label', language === 'he' ? 'סיור במוצר' : 'Product tour');
+    document.querySelector('.format-strip').setAttribute('aria-label', language === 'he' ? 'סוגי סרטונים' : 'Video formats');
     document.getElementById('expandShot').setAttribute('aria-label', language === 'he' ? 'הגדלת תמונת המוצר' : 'Enlarge product screenshot');
     dialog.setAttribute('aria-label', language === 'he' ? 'תמונת המוצר' : 'Product screenshot');
     renderShot();
