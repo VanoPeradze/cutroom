@@ -1,7 +1,7 @@
 import { applyTranslations, dictionaries } from "./i18n.js?v=1.1-beta-1";
-import { TimelineView, formatTime, editableClips, timelineDuration, sequenceBlocks, sequenceGaps, rippleMoveStart } from "./timeline.js?v=1.1-beta-6";
+import { TimelineView, formatTime, editableClips, timelineDuration, sequenceBlocks, sequenceGaps, rippleMoveStart } from "./timeline.js?v=1.1-beta-7";
 import { MediaStudio } from "./media-studio.js?v=1.1-beta-3";
-import { SourceReview } from "./source-review.js?v=1.1-beta-6";
+import { SourceReview } from "./source-review.js?v=1.1-beta-7";
 import { initWorkspace } from "./workspace.js?v=1.1-beta-3";
 import { KEYBOARD_PROFILES, resolveEditorShortcut, isEditorTransportSpace, shortcutRows } from "./keyboard.js?v=1.1-beta-2";
 import { AudioThresholdView } from "./audio-meter.js?v=1.1-beta-1";
@@ -9,6 +9,7 @@ import { initWelcome, workflowSettings, cloudProviderName } from "./welcome.js?v
 import { initLocalModels } from "./local-models.js?v=1.1-beta-1";
 import { trackClips, trackAt, hasSourceTracks, SourceTimelineClock } from "./source-tracks.js?v=1.1-beta-1";
 import { initTrackProtection } from "./track-protection.js?v=1.1-beta-1";
+import { TextStudio } from "./text-studio.js?v=1.1-beta-2";
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -233,6 +234,7 @@ function initializeMediaStudio() {
 }
 
 function updateMediaPreview() {
+  updateTextPreview();
   if (!state.mediaStudio || !state.project?.draft) return;
   const project = playbackProject(), time = previewPlaybackTime(), sourceMode = previewUsesSourceTime();
   const mixer = sourceMixerSettings(), slot = mixer.audioSlot || "A", source = project.sources?.[slot];
@@ -241,6 +243,34 @@ function updateMediaPreview() {
   state.mediaStudio.sync(sourceMode ? time : sourceToOutputTime(time),state.preview.playing,
     {sourceMode,point,url:source ? sourceMediaUrl(source) : null,hasAudio:source?.has_audio});
   if (!sourceMode) { elements.previewA.muted = true; elements.previewB.muted = true; }
+}
+
+function initializeTextStudio() {
+  if (typeof TextStudio === "undefined") return;
+  const root = document.getElementById("textStudio");
+  if (!root) return;
+  state.textStudio = new TextStudio(root, elements.previewStage, {
+    project: () => state.project, edit: applyManualEdit, time: previewTimelineTime, duration: editorDuration,
+    busy: foregroundBusy, preview: updateTextPreview, dimensions: previewExportDimensions,
+    seek: time => { pauseAllMedia(); if (previewUsesSourceTime()) setPreviewMode("edit"); seekSourcePreview(time); },
+    selected: id => { if (state.timeline) { if (id) state.timeline.clearSelection(); state.timeline.mediaSelection = id; state.timeline.scheduleDraw(); if (id) state.timeline.revealMedia(id); } },
+    selectionRemoved: id => { if (state.timeline?.mediaSelection === id) { state.timeline.mediaSelection = null; state.timeline.clearSelection(); state.timeline.scheduleDraw(); } },
+  });
+}
+
+function updateTextPreview() {
+  if (!state.textStudio) return;
+  state.textStudio.sync(previewTimelineTime(), previewUsesSourceTime());
+  if (state.timeline && state.project) {
+    const project = editorProject();
+    state.timeline.project = { ...project, manual: { ...project.manual, text_clips: state.textStudio.clips() } };
+    state.timeline.scheduleDraw();
+  }
+}
+
+function editLayerAction(action, detail) {
+  if (String(detail.clip_id).startsWith("text_")) return state.textStudio?.action(action.replace("media_", "text_"), detail);
+  return runUiAction(() => applyManualEdit(action,detail), "Editing media");
 }
 
 function renderPictureSpeed() {
@@ -384,18 +414,19 @@ async function boot() {
   });
   initWorkspace({ document, window, onResize: () => state.timeline?.scheduleDraw(), openShortcuts: () => { renderKeyboardHelp(); elements.keyboardDialog.showModal(); } });
   initializeMediaStudio();
+  initializeTextStudio();
   state.trackProtection = initTrackProtection({ document, getProject: () => state.project,
     busy: () => state.manualEditBusy || foregroundBusy(),
     change: (slot, locked) => applyManualEdit("set_track_lock", { slot, locked }) });
   state.timeline = new TimelineView(elements.timelineCanvas, elements.timelineScroll,
     (time) => { pauseAllMedia(); seekSourcePreview(time); }, setManualSelection, handleTimelineEdit,
-    { onToolStateChange: renderTimelineToolStatus, canEdit: () => !foregroundBusy() && !state.transcriptSaving && !state.manualEditBusy,
+    { onToolStateChange: renderTimelineToolStatus, canEdit: () => !foregroundBusy() && !state.transcriptSaving && !state.manualEditBusy && !state.textStudio?.dirty(),
       onLayoutSelect: openTimelineLayout, getTrackClips: trackClips,
       onTargetChange: (target) => setEditTarget(target, true),
-      onMediaSelect: id => { pauseAllMedia(); state.mediaStudio?.select(id); selectAdvancedTab("media"); },
-      onMediaEdit: (id, patch) => { state.mediaStudio?.queueClip(id,patch); return state.mediaStudio?.flush(); },
-      onMediaPreview: (id, patch) => state.mediaStudio?.previewClip(id,patch),
-      onMediaAction: (action, detail) => runUiAction(() => applyManualEdit(action,detail), "Editing media") });
+      onMediaSelect: id => { pauseAllMedia(); state.timeline?.clearSelection(); if (id.startsWith("text_")) { void state.textStudio?.select(id); selectAdvancedTab("transcript"); } else { state.mediaStudio?.select(id); selectAdvancedTab("media"); } },
+      onMediaEdit: (id, patch) => { const studio = id.startsWith("text_") ? state.textStudio : state.mediaStudio; studio?.queueClip(id,patch); return studio?.flush(); },
+      onMediaPreview: (id, patch) => (id.startsWith("text_") ? state.textStudio : state.mediaStudio)?.previewClip(id,patch),
+      onMediaAction: editLayerAction });
   initializeKeyboardProfile();
   state.audioMeter = new AudioThresholdView(elements.audioMeterCanvas);
   elements.audioMeterCanvas.addEventListener("cutroom-audio-seek", (event) => {
@@ -685,7 +716,7 @@ function bindEvents() {
   });
   bindKeyboardControls();
   window.addEventListener("beforeunload", (event) => {
-    if (state.transcriptBuffers.size || liveEmbeddedCameraRequest() || state.mediaStudio?.pending.size) { event.preventDefault(); event.returnValue = ""; }
+    if (state.transcriptBuffers.size || liveEmbeddedCameraRequest() || state.mediaStudio?.pending.size || state.textStudio?.dirty()) { event.preventDefault(); event.returnValue = ""; }
   });
   elements.burnCaptionsToggle.addEventListener("change", () => {
     setCaptionBurnEnabled(elements.burnCaptionsToggle.checked, true);
@@ -870,7 +901,9 @@ function updatePaceNote(pace) {
 }
 
 async function loadProjects() {
+  const request = ++projectLibrary.listRequest;
   const payload = await api("/api/projects");
+  if (request !== projectLibrary.listRequest) return;
   state.projects = payload.projects || [];
   state.projectsLoaded = true;
   renderRecentProjects();
@@ -918,6 +951,7 @@ function showWelcome() {
   elements.projectHead.hidden = true;
   elements.renderButton.disabled = true;
   setAdvanced(false);
+  renderRecentProjects();
   window.scrollTo({ top: 0 });
 }
 
@@ -1954,6 +1988,7 @@ function isRevisionConflict(error) {
 }
 
 async function flushCurrentProjectSaves() {
+  if (state.textStudio && !(await state.textStudio.flush())) return false;
   if (state.mediaStudio && !(await state.mediaStudio.flush())) return false;
   const projectId = state.project?.id;
   if (!projectId) return true;
@@ -2103,6 +2138,7 @@ async function reconcileDirectorOutcome(projectId, message, { cancelled = false 
 }
 
 async function generateDraft() {
+  if (state.textStudio && !(await state.textStudio.flush())) return;
   if (state.mediaStudio && !(await state.mediaStudio.flush())) return;
   if (!requireSavedTranscript()) return;
   if (!state.project?.sources?.A) {
@@ -2173,6 +2209,7 @@ async function ensureStoryAIReady(requestedGoal = null) {
 }
 
 async function refineDraft(command) {
+  if (state.textStudio && !(await state.textStudio.flush())) return;
   if (state.mediaStudio && !(await state.mediaStudio.flush())) return;
   if (!requireSavedTranscript()) return;
   if (!state.project?.draft) return;
@@ -2681,6 +2718,7 @@ async function cancelActiveJob() {
 
 function renderDraft() {
   state.mediaStudio?.render();
+  state.textStudio?.render();
   const draft = editorProject().draft;
   elements.draftTitle.textContent = draft.title || state.project.name;
   elements.draftSummary.textContent = draft.summary || "";
@@ -5302,7 +5340,18 @@ function handleEditorShortcut(event) {
   }
   const action = resolveEditorShortcut(event, state.keyboardProfile);
   const selectedMedia = event.target === elements.timelineCanvas && state.timeline?.mediaSelection
-    ? (state.project.manual?.media_clips || []).find(item => item.id === state.timeline.mediaSelection) : null;
+    ? [...(state.project.manual?.media_clips || []), ...(state.project.manual?.text_clips || [])].find(item => item.id === state.timeline.mediaSelection) : null;
+  if (event.target === elements.timelineCanvas && state.timeline?.mediaSelection && !selectedMedia
+    && (["delete_selection", "split", "clear_selection"].includes(action)
+      || [event.key, event.code].some(key => ["Delete", "Del", "Backspace"].includes(key)))) {
+    // A removed or replaced layer must never redirect its next shortcut to
+    // an older footage selection underneath it.
+    event.preventDefault();
+    event.stopPropagation?.();
+    state.timeline.mediaSelection = null;
+    state.timeline.clearSelection();
+    return;
+  }
   if (selectedMedia && (["delete_selection", "split", "clear_selection"].includes(action)
     || [event.key, event.code].some(key => ["Delete", "Del", "Backspace"].includes(key)))) {
     // This capture listener runs before the canvas. Consume media commands here
@@ -5314,6 +5363,7 @@ function handleEditorShortcut(event) {
       state.timeline.cancelGesture?.();
       state.timeline.mediaSelection = null;
       state.mediaStudio?.select(null);
+      void state.textStudio?.select(null);
       state.timeline.scheduleDraw?.();
     } else if (action === "delete_selection") {
       state.timeline.onMediaAction?.("media_remove", { clip_id: selectedMedia.id });
@@ -5561,6 +5611,7 @@ function runManualRangeEdit(action, target = activeEditTarget()) {
 }
 
 async function applyManualEdit(action, detail = {}, { isCurrent = () => true } = {}) {
+  if (!action.startsWith("text_") && state.textStudio && !(await state.textStudio.flush())) return null;
   if (state.project?.editor_sequence) {
     action = ({ track_move: "sequence_move", track_split: "sequence_split", track_remove_range: "sequence_remove_range", track_trim: "sequence_trim", set_camera_layout: "sequence_layout", track_reset: "sequence_reset" })[action] || action;
     if (action === "sequence_reset") detail = {};
@@ -5577,7 +5628,7 @@ async function applyManualEdit(action, detail = {}, { isCurrent = () => true } =
   const preservedTime = previewTimelineTime();
   // Mixer and layer adjustments do not change the main playback clock. Keep
   // auditioning while their automatic saves run, without reloading the video.
-  const liveMediaAction = action === "media_update" || action === "set_audio_mixer" || action === "set_track_lock";
+  const liveMediaAction = action === "media_update" || action === "set_audio_mixer" || action === "set_track_lock" || action.startsWith("text_");
   let finishManualEdit;
   const manualEditPromise = new Promise((resolve) => { finishManualEdit = resolve; });
   state.manualEditPromise = manualEditPromise;
@@ -5604,7 +5655,7 @@ async function applyManualEdit(action, detail = {}, { isCurrent = () => true } =
       state.project = latest.project;
       rememberProjectRevision(state.project);
       if (!isCurrent()) return null;
-      if (action.startsWith("sequence_")) {
+      if (action.startsWith("sequence_") || action.startsWith("text_")) {
         renderDraft();
         state.timeline?.clearSelection();
         throw new Error("The edit changed elsewhere. The latest version is loaded; select the clip again and retry.");
@@ -5623,6 +5674,7 @@ async function applyManualEdit(action, detail = {}, { isCurrent = () => true } =
     }
     if (liveMediaAction) {
       state.mediaStudio?.render();
+      state.textStudio?.render();
       if (state.timeline) { state.timeline.project = editorProject(); state.timeline.scheduleDraw(); }
       updateMediaPreview();
       return state.project;
@@ -5656,6 +5708,7 @@ async function applyManualEdit(action, detail = {}, { isCurrent = () => true } =
     return null;
   } finally {
     state.manualEditBusy = false;
+    state.textStudio?.render();
     finishManualEdit();
     if (state.manualEditPromise === manualEditPromise) state.manualEditPromise = null;
     renderReadiness();
@@ -5952,90 +6005,271 @@ function rangeMostlyRemoved(start, end) {
   return duration > 0 && removed >= duration * .5;
 }
 
-function renderRecentProjects() {
-  elements.recentList.innerHTML = "";
-  const projects = state.projects.slice(0, 6);
-  elements.recentProjects.hidden = projects.length === 0;
-  elements.recentCount.textContent = String(projects.length);
-  for (const project of projects) {
-    const button = document.createElement("button");
-    button.className = "recent-project";
-    button.innerHTML = `<strong></strong><small></small>`;
-    $("strong", button).textContent = project.name;
-    $("small", button).textContent = `${project.has_draft ? "EDIT" : "RAW"} · ${formatDate(project.updated_at)}`;
-    button.addEventListener("click", () => runUiAction(() => openProject(project.id)));
-    elements.recentList.append(button);
+const projectLibrary = { initialized: false, listRequest: 0, rename: null, deletion: null };
+
+function initProjectLibrary() {
+  if (projectLibrary.initialized) return;
+  const ids = ["closeProjectsDialog", "projectSearch", "projectSort", "projectLibrarySummary",
+    "projectRenameDialog", "projectRenameForm", "projectRenameInput", "projectRenameError", "closeProjectRename", "cancelProjectRename", "saveProjectRename",
+    "projectDeleteDialog", "projectDeleteName", "projectDeleteError", "closeProjectDelete", "cancelProjectDelete", "confirmProjectDelete"];
+  for (const id of ids) elements[id] = document.getElementById(id);
+  if (!elements.projectRenameDialog || !elements.projectDeleteDialog) return;
+  projectLibrary.initialized = true;
+  elements.closeProjectsDialog.addEventListener("click", () => elements.projectsDialog.close());
+  elements.projectSearch.addEventListener("input", renderProjectDialog);
+  elements.projectSort.addEventListener("change", renderProjectDialog);
+  elements.projectRenameForm.addEventListener("submit", (event) => { event.preventDefault(); runUiAction(saveProjectName); });
+  elements.confirmProjectDelete.addEventListener("click", () => runUiAction(confirmProjectDeletion));
+  for (const [kind, dialog, closeIds] of [
+    ["rename", elements.projectRenameDialog, ["closeProjectRename", "cancelProjectRename"]],
+    ["deletion", elements.projectDeleteDialog, ["closeProjectDelete", "cancelProjectDelete"]],
+  ]) {
+    for (const id of closeIds) elements[id].addEventListener("click", () => { if (!projectLibrary[kind]?.pending) dialog.close(); });
+    dialog.addEventListener("cancel", (event) => { if (projectLibrary[kind]?.pending) event.preventDefault(); });
+    dialog.addEventListener("close", () => {
+      const action = projectLibrary[kind];
+      projectLibrary[kind] = null;
+      if (action) restoreProjectLibraryFocus(action.origin);
+    });
   }
 }
 
+function projectLibraryFocus() {
+  const focused = document.activeElement;
+  const row = focused?.closest?.("[data-project-id]");
+  if (!row) return null;
+  return { id: row.dataset.projectId, action: focused.dataset.projectAction || "open", inDialog: Boolean(row.closest("#dialogProjects")) };
+}
+
+function restoreProjectLibraryFocus(origin) {
+  if (!origin || elements.projectRenameDialog?.open || elements.projectDeleteDialog?.open) return;
+  const container = origin.inDialog ? elements.dialogProjects : elements.recentList;
+  if (origin.inDialog && !elements.projectsDialog.open) return;
+  if (!origin.inDialog && elements.welcomeView.hidden) return;
+  const row = [...container.children].find((item) => item.dataset.projectId === origin.id);
+  const control = row?.querySelector(`[data-project-action="${origin.action}"]`);
+  (control || container.querySelector('[data-project-action="open"]') || (origin.inDialog ? elements.projectSearch : elements.projectsButton))?.focus();
+}
+
+function projectLibraryBusy(projectId) {
+  return projectHasForegroundWork(projectId) || (state.project?.id === projectId && Boolean(state.mediaStudio?.uploading || state.manualEditBusy || state.transcriptSaving));
+}
+
+function projectLibraryRows(query = "", order = "recent") {
+  const needle = String(query).trim().toLocaleLowerCase("en");
+  const rows = state.projects.filter((project) => String(project.name || "").toLocaleLowerCase("en").includes(needle));
+  return rows.sort((a, b) => order === "name"
+    ? String(a.name || "").localeCompare(String(b.name || ""), "en", { numeric: true, sensitivity: "base" })
+    : String(order === "oldest" ? a.created_at || a.updated_at || "" : b.updated_at || "")
+      .localeCompare(String(order === "oldest" ? b.created_at || b.updated_at || "" : a.updated_at || "")));
+}
+
+function projectLibraryCard(project, inDialog = false) {
+  const row = document.createElement(inDialog ? "div" : "article");
+  row.className = inDialog ? "dialog-project-row" : "recent-project-card";
+  row.dataset.projectId = project.id;
+  row.classList.toggle("is-current", state.project?.id === project.id);
+  const button = document.createElement("button");
+  button.className = inDialog ? "dialog-project" : "recent-project";
+  button.type = "button";
+  button.dataset.projectAction = "open";
+  button.setAttribute("aria-label", `Open project: ${project.name}`);
+  button.innerHTML = `<span><strong dir="auto"></strong><small></small></span><b class="project-open-label">Open editor</b>`;
+  $("strong", button).textContent = project.name;
+  $("small", button).textContent = `${project.has_draft ? "Edit ready" : "In setup"} · ${formatDate(project.updated_at)}`;
+  if (state.project?.id === project.id) {
+    const current = document.createElement("small");
+    current.className = "project-current-label";
+    current.textContent = "Current project";
+    $("span", button).append(current);
+  }
+  if (inDialog) button.addEventListener("click", () => runUiAction(async () => {
+    // A save failure keeps the library available instead of dismissing it.
+    const opened = await openProject(project.id);
+    if (opened) elements.projectsDialog.close();
+  }));
+  else button.addEventListener("click", () => runUiAction(() => openProject(project.id)));
+  const actions = document.createElement("div");
+  actions.className = "project-card-actions";
+  const rename = document.createElement("button");
+  rename.className = "project-rename button ghost compact";
+  rename.type = "button";
+  rename.dataset.projectAction = "rename";
+  rename.textContent = "Rename";
+  rename.setAttribute("aria-label", `Rename project: ${project.name}`);
+  rename.addEventListener("click", () => openProjectRename(project));
+  const remove = document.createElement("button");
+  remove.className = "project-delete dialog-project-delete button ghost compact";
+  remove.type = "button";
+  remove.dataset.projectAction = "delete";
+  remove.textContent = "Delete";
+  remove.setAttribute("aria-label", `Delete project: ${project.name}`);
+  remove.addEventListener("click", () => runUiAction(() => deleteProject(project)));
+  actions.append(rename, remove);
+  row.append(button, actions);
+  return row;
+}
+
+function renderRecentProjects() {
+  initProjectLibrary();
+  const focus = projectLibraryFocus();
+  elements.recentList.innerHTML = "";
+  const projects = projectLibraryRows().slice(0, 6);
+  elements.recentProjects.hidden = projects.length === 0;
+  elements.recentCount.textContent = String(state.projects.length);
+  for (const project of projects) elements.recentList.append(projectLibraryCard(project));
+  if (focus && !focus.inDialog) restoreProjectLibraryFocus(focus);
+}
+
 function openProjectsDialog() {
+  initProjectLibrary();
   renderProjectDialog();
-  elements.projectsDialog.showModal();
+  if (!elements.projectsDialog.open) elements.projectsDialog.showModal();
+  loadProjects().catch((error) => toast(`Could not refresh projects: ${error.message}`));
 }
 
 function renderProjectDialog() {
   if (!elements.dialogProjects) return;
+  initProjectLibrary();
+  const focus = projectLibraryFocus();
   elements.dialogProjects.innerHTML = "";
-  if (!state.projects.length) {
-    const empty = document.createElement("p"); empty.textContent = t("noProjects"); elements.dialogProjects.append(empty); return;
+  const projects = projectLibraryRows(elements.projectSearch?.value, elements.projectSort?.value);
+  if (elements.projectLibrarySummary) elements.projectLibrarySummary.textContent = projects.length === state.projects.length
+    ? `${projects.length} project${projects.length === 1 ? "" : "s"}` : `${projects.length} of ${state.projects.length} projects`;
+  if (!projects.length) {
+    const empty = document.createElement("p");
+    empty.className = "project-library-empty";
+    empty.textContent = state.projects.length ? "No matching projects. Try another name or clear the search." : "Your projects will appear here. Create a project to get started.";
+    elements.dialogProjects.append(empty);
   }
-  for (const project of state.projects) {
-    const row = document.createElement("div");
-    row.className = "dialog-project-row";
-    const button = document.createElement("button");
-    button.className = "dialog-project";
-    button.type = "button";
-    button.innerHTML = `<span><strong></strong><small></small></span><b></b>`;
-    $("strong", button).textContent = project.name;
-    $("small", button).textContent = formatDate(project.updated_at);
-    $("b", button).textContent = project.has_draft ? "EDIT" : "RAW";
-    button.addEventListener("click", () => runUiAction(async () => { elements.projectsDialog.close(); await openProject(project.id); }));
-    const remove = document.createElement("button");
-    remove.className = "dialog-project-delete icon-button";
-    remove.type = "button";
-    remove.textContent = "×";
-    remove.setAttribute("aria-label", `${uiCopy("מחק פרויקט", "Delete project")}: ${project.name}`);
-    remove.addEventListener("click", () => runUiAction(() => deleteProject(project)));
-    row.append(button, remove);
-    elements.dialogProjects.append(row);
-  }
+  for (const project of projects) elements.dialogProjects.append(projectLibraryCard(project, true));
+  if (focus?.inDialog) restoreProjectLibraryFocus(focus);
+}
+
+function setProjectActionError(kind, message = "") {
+  const node = kind === "rename" ? elements.projectRenameError : elements.projectDeleteError;
+  node.textContent = message;
+  node.hidden = !message;
+}
+
+function setProjectActionPending(kind, pending) {
+  if (projectLibrary[kind]) projectLibrary[kind].pending = pending;
+  const controls = kind === "rename" ? ["projectRenameInput", "saveProjectRename", "cancelProjectRename", "closeProjectRename"]
+    : ["confirmProjectDelete", "cancelProjectDelete", "closeProjectDelete"];
+  for (const id of controls) elements[id].disabled = pending;
+  const button = kind === "rename" ? elements.saveProjectRename : elements.confirmProjectDelete;
+  button.textContent = kind === "rename" ? pending ? "Saving…" : "Save name" : pending ? "Deleting…" : "Delete project permanently";
+}
+
+function openProjectRename(project) {
+  if (!project?.id) return;
+  initProjectLibrary();
+  if (projectLibraryBusy(project.id)) { toast("Wait for this project's import or active job before renaming it."); return; }
+  projectLibrary.rename = { project, origin: projectLibraryFocus(), pending: false };
+  elements.projectRenameInput.value = state.project?.id === project.id ? state.project.name : project.name;
+  setProjectActionError("rename");
+  setProjectActionPending("rename", false);
+  elements.projectRenameDialog.showModal();
+  elements.projectRenameInput.focus();
+  elements.projectRenameInput.select();
+}
+
+async function saveProjectName() {
+  const action = projectLibrary.rename;
+  if (!action || action.pending) return;
+  const projectId = action.project.id;
+  const name = elements.projectRenameInput.value.trim();
+  if (!name || name.length > 120) { setProjectActionError("rename", "Enter a project name between 1 and 120 characters."); elements.projectRenameInput.focus(); return; }
+  setProjectActionError("rename");
+  setProjectActionPending("rename", true);
+  try {
+    if (projectLibraryBusy(projectId)) throw new Error("Wait for this project's import or active job, then try again.");
+    if (state.project?.id === projectId && !(await flushCurrentProjectSaves())) throw new Error("Your current edit could not be saved. Resolve the save error, then try again.");
+    await flushProjectSaves(projectId);
+    const [latest, work] = await Promise.all([
+      api(`/api/projects/${encodeURIComponent(projectId)}`),
+      api(`/api/projects/${encodeURIComponent(projectId)}/jobs/active`),
+    ]);
+    if (work.jobs?.length || projectLibraryBusy(projectId)) throw new Error("This project has active work. Wait for it to finish, then try again.");
+    const payload = await api(`/api/projects/${encodeURIComponent(projectId)}`, { method: "PATCH", body: JSON.stringify({ name, expected_revision: latest.project.revision }) });
+    const saved = payload.project;
+    rememberProjectRevision(saved);
+    if (state.project?.id === projectId) {
+      state.project = reconcileProjectSnapshot(saved);
+      elements.projectName.value = state.project.name;
+      setSaveState(projectId, t("saved"));
+    }
+    // Invalidate older list requests so a late response cannot undo this name.
+    projectLibrary.listRequest += 1;
+    state.projects = state.projects.map((project) => project.id === projectId ? { ...project, name: saved.name, updated_at: saved.updated_at } : project);
+    renderRecentProjects();
+    renderProjectDialog();
+    elements.projectRenameDialog.close();
+    toast("Project renamed", "success");
+  } catch (error) {
+    setProjectActionError("rename", isRevisionConflict(error)
+      ? "This project changed while you were renaming it. Your name is kept; select Save name to try again."
+      : error.message || "The project could not be renamed. Try again.");
+  } finally { setProjectActionPending("rename", false); }
 }
 
 async function deleteProject(project) {
   if (!project?.id) return;
-  if (projectHasForegroundWork(project.id)) {
-    toast(uiCopy("אי אפשר למחוק פרויקט בזמן שמתבצעת בו עבודה", "Wait for the active job before deleting this project"));
+  initProjectLibrary();
+  if (projectLibraryBusy(project.id)) {
+    toast("Wait for this project's import or active job before deleting it.");
     return;
   }
-  const confirmed = window.confirm(uiCopy(`למחוק את "${project.name}" ואת קובצי הפרויקט המקומיים?`, `Delete “${project.name}” and its local project files?`));
-  if (!confirmed) return;
-  const deletingCurrent = state.project?.id === project.id;
-  if (deletingCurrent && !(await flushCurrentProjectSaves())) return;
-  if (deletingCurrent) {
-    releaseMediaHandles();
-    await new Promise((resolve) => window.setTimeout(resolve, 150));
-  }
+  projectLibrary.deletion = { project, origin: projectLibraryFocus(), pending: false };
+  elements.projectDeleteName.textContent = state.project?.id === project.id ? state.project.name : project.name;
+  setProjectActionError("deletion");
+  setProjectActionPending("deletion", false);
+  elements.projectDeleteDialog.showModal();
+  elements.cancelProjectDelete.focus();
+}
+
+async function confirmProjectDeletion() {
+  const action = projectLibrary.deletion;
+  if (!action || action.pending) return;
+  const project = action.project;
+  let releasedMedia = false;
+  setProjectActionError("deletion");
+  setProjectActionPending("deletion", true);
   try {
+    if (projectLibraryBusy(project.id)) throw new Error("Wait for this project's import or active job, then try again.");
+    const deletingCurrent = state.project?.id === project.id;
+    if (deletingCurrent && !(await flushCurrentProjectSaves())) throw new Error("Your current edit could not be saved. Resolve the save error, then try again.");
+    await flushProjectSaves(project.id);
+    const work = await api(`/api/projects/${encodeURIComponent(project.id)}/jobs/active`);
+    if (work.jobs?.length || projectLibraryBusy(project.id)) throw new Error("This project still has active work. Wait for it to finish or stop it in the editor, then try again.");
+    if (deletingCurrent && state.project?.id === project.id) {
+      releaseMediaHandles();
+      releasedMedia = true;
+      await new Promise((resolve) => window.setTimeout(resolve, 150));
+    }
     await api(`/api/projects/${encodeURIComponent(project.id)}`, { method: "DELETE" });
+    const queue = state.saveQueues.get(project.id);
+    if (queue?.timer) clearTimeout(queue.timer);
+    state.saveQueues.delete(project.id);
+    localStorage.removeItem(`cutroom-draft-dirty:${project.id}`);
+    projectLibrary.listRequest += 1;
+    state.projects = state.projects.filter((item) => item.id !== project.id);
+    clearRememberedProject(project.id);
+    if (state.project?.id === project.id) {
+      state.project = null;
+      state.projectViewToken += 1;
+      action.origin = { id: project.id, action: "open", inDialog: false };
+      elements.projectsDialog.close();
+      showWelcome();
+    }
+    renderRecentProjects();
+    renderProjectDialog();
+    elements.projectDeleteDialog.close();
+    toast("Project deleted", "success");
   } catch (error) {
-    if (deletingCurrent && state.project?.id === project.id) renderDraft();
-    throw error;
-  }
-  const queue = state.saveQueues.get(project.id);
-  if (queue?.timer) clearTimeout(queue.timer);
-  state.saveQueues.delete(project.id);
-  localStorage.removeItem(`cutroom-draft-dirty:${project.id}`);
-  state.projects = state.projects.filter((item) => item.id !== project.id);
-  clearRememberedProject(project.id);
-  renderRecentProjects();
-  renderProjectDialog();
-  if (state.project?.id === project.id) {
-    state.project = null;
-    state.projectViewToken += 1;
-    elements.projectsDialog.close();
-    showWelcome();
-  }
-  toast(uiCopy("הפרויקט נמחק", "Project deleted"), "success");
+    if (releasedMedia && state.project?.id === project.id) renderDraft();
+    setProjectActionError("deletion", error.message || "The project could not be deleted. Try again.");
+  } finally { setProjectActionPending("deletion", false); }
 }
 
 function formatDate(value) {
@@ -6086,6 +6320,7 @@ function openExportDialog({ progress = false } = {}) {
 }
 
 async function startExport() {
+  if (state.textStudio && !(await state.textStudio.flush())) return;
   if (state.mediaStudio && !(await state.mediaStudio.flush())) return;
   if (!requireSavedTranscript()) return;
   if (!state.project?.draft) return;

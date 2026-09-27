@@ -23,6 +23,7 @@ from .media import probe_media
 from .media_render import append_media_graph, library_input_args, library_clips, library_has_audio, master_gain_db
 from .projects import ProjectStore
 from .source_tracks import has_sequence, has_source_tracks, source_track_clips, timeline_duration
+from .text_clips import validated_text_clips
 from .utils import new_id, now_iso, sanitize_filename
 
 ASPECT_DIMENSIONS = {
@@ -1152,13 +1153,16 @@ def _estimate_render_storage(
     transcript = _caption_transcript(project)
     segments = transcript.get("segments") if isinstance(transcript.get("segments"), list) else []
     transcript_bytes = _serialized_size(transcript, fallback=len(segments) * 256)
+    text_clips = validated_text_clips(project)
+    text_bytes = _serialized_size(text_clips, fallback=len(text_clips) * 4096)
+    manual_captions = [row for row in text_clips if row["kind"] == "caption"]
     project_settings = project.get("settings") or {}
     ass_bytes = 0
-    if project_settings.get("burn_captions") and segments:
-        ass_bytes = max(256 * 1024, transcript_bytes * 3 + len(segments) * 256)
+    if project_settings.get("burn_captions") and segments or text_clips:
+        ass_bytes = max(256 * 1024, transcript_bytes * 3 + len(segments) * 256 + text_bytes * 3 + len(text_clips) * 512)
     srt_bytes = 0
-    if project_settings.get("captions") and segments:
-        srt_bytes = max(128 * 1024, transcript_bytes * 2 + len(segments) * 128)
+    if project_settings.get("captions") and (segments or manual_captions):
+        srt_bytes = max(128 * 1024, transcript_bytes * 2 + len(segments) * 128 + text_bytes * 2)
 
     # Complex layouts generate several filter clauses per fragment. The real
     # files are normally much smaller; this upper allowance also covers filesystem
@@ -1303,6 +1307,7 @@ def _render_input_fingerprint(project: dict[str, Any]) -> str:
                 "sequence": manual.get("sequence"),
                 "camera_overrides": manual.get("camera_overrides"),
                 "media_clips": manual.get("media_clips"),
+                "text_clips": manual.get("text_clips"),
                 "audio_mixer": manual.get("audio_mixer"),
             },
             "transcript": analysis.get("transcript") if settings.get("captions") or settings.get("burn_captions") else None,
@@ -1456,11 +1461,13 @@ def render_project(context: JobContext, project_id: str, store: ProjectStore, se
     transcript = _caption_transcript(project)
     caption_ranges = _caption_ranges(project)
     caption_settings = normalize_caption_settings(project.get("settings"))
+    text_clips = validated_text_clips(project)
     try:
-        if project.get("settings", {}).get("burn_captions") and transcript and transcript.get("segments"):
+        burn_transcript = bool(project.get("settings", {}).get("burn_captions") and transcript and transcript.get("segments"))
+        if burn_transcript or text_clips:
             caption_ass = store.project_dir(project_id) / "cache" / f"captions-{export_id}.ass"
             build_ass(
-                transcript,
+                transcript if burn_transcript else {},
                 caption_ranges,
                 caption_ass,
                 width,
@@ -1470,6 +1477,7 @@ def render_project(context: JobContext, project_id: str, store: ProjectStore, se
                 caption_position=caption_settings["caption_position"],
                 caption_scale=caption_settings["caption_scale"],
                 words_per_caption=caption_settings["caption_words_per_line"],
+                text_clips=text_clips,
             )
         graph, maps, has_audio = build_filter_graph(project, width, height, caption_ass)
     except BaseException:
@@ -1579,19 +1587,21 @@ def render_project(context: JobContext, project_id: str, store: ProjectStore, se
             "encoder": encoder,
             "quality": quality,
             "captions_burned": bool(caption_ass),
+            "manual_text_count": len(text_clips),
             "editorial_effects": _render_effects_payload(project).get("effects", []),
             "input_fingerprint": render_input_fingerprint,
         }
         if caption_ass is not None or project.get("settings", {}).get("captions"):
             record["caption_settings"] = caption_settings
         caption_transcript = transcript or {}
-        if project.get("settings", {}).get("captions") and caption_transcript.get("segments"):
+        if project.get("settings", {}).get("captions") and (caption_transcript.get("segments") or any(row["kind"] == "caption" for row in text_clips)):
             caption_path = output.with_suffix(".srt")
             build_srt(
                 caption_transcript,
                 caption_ranges,
                 caption_path,
                 words_per_caption=caption_settings["caption_words_per_line"],
+                text_clips=text_clips,
             )
             record["captions_name"] = caption_path.name
             record["captions_url"] = f"/api/exports/{caption_path.name}"

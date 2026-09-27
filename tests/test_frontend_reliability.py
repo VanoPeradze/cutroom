@@ -205,7 +205,10 @@ def test_manual_corrections_are_discoverable_keyboard_safe_and_atomic():
 def test_project_delete_is_exposed_with_confirmation():
     assert "dialog-project-delete" in APP
     delete = function_block(APP, "deleteProject", "formatDate")
-    assert "window.confirm" in delete
+    assert "elements.projectDeleteDialog.showModal()" in delete
+    assert "async function confirmProjectDeletion()" in delete
+    assert "Delete project permanently" in HTML
+    assert "Your original files outside CUTROOM are not deleted" in HTML
     assert 'method: "DELETE"' in delete
     assert "flushCurrentProjectSaves" in delete
 

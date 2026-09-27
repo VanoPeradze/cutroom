@@ -2,6 +2,15 @@
 
 **An exploratory Windows beta for feedback from creators and editors. Not a production release, security certification or promise of professional-quality automatic edits.** Public access to a download does not change those quality boundaries.
 
+## Project management and custom text — 2026-09-28
+
+- All 1,539 Python regressions and 516 frontend checks passed. Python includes frontend wrappers, so these totals overlap. Coverage includes project focus and revision conflicts, confirmed deletion, original-file preservation, subtitle parsing, text autosave, timeline bounds and export behavior. Tests used synthetic projects; no paid AI calls or user recordings were used.
+- An isolated browser project verified rename/search/delete cancellation, bilingual SRT import and replacement, immediate text edits, independent text dragging, Undo, reload persistence, source/edit preview switching and Space playback. Welcome, project dialogs and captions were checked at 390 pixels without page-level horizontal overflow. Stale layer selection is cleared so a second Delete cannot target a previously selected footage range.
+- The lobby and Projects expose Open editor, Rename and confirmed permanent Delete; Projects also searches and sorts names. Deleting refuses active work without cancelling it. The confirmation explains which imported copies, project files and CUTROOM exports are removed, and that original files outside CUTROOM remain untouched.
+- Custom titles/captions preview immediately, save after typing pauses and have editable timeline layers. UTF-8 SRT/VTT import is limited to 1 MiB and 2,000 cues; project text is limited to 2,000 items, 1,000 characters each and 16 simultaneous items. Imports keep text/timing, using CUTROOM's style presets instead of file-specific formatting.
+- Custom text uses edited-video time and always burns into the MP4, independently of AI subtitle burning. Optional SRT combines AI and custom captions, excluding titles. Text does not automatically ripple with A/B; shortening that would leave a layer past the new end is rejected. Same-position text can overlap, and three positions/style presets do not provide a full motion-graphics or professional NLE toolset.
+- App and website surfaces and controls are softer, with decorative diagonal arrows removed. This source validation does not certify a clean-PC installation, long-project performance or AI quality. The website release manifest identifies the actual downloadable build; source changes alone do not establish that its archive or deployment has been updated.
+
 ## Editor precision and track protection — 2026-09-28
 
 - All 1,492 Python regressions and 481 frontend checks passed. Python coverage includes frontend wrappers, so these totals are not independent scenarios. This includes 43 new backend protection checks. Repository link and diff-whitespace checks passed.
@@ -61,7 +70,7 @@ The results below describe that packaging pass, not a continuously updated test 
 
 ## Boundaries
 
-Default YouTube cleanup is chronological, not a full narrative rewrite. Styles are pacing/selection presets, not creator replicas or reliable visual gameplay-event detectors. Camera proposals need confirmation. There are two main sources plus bounded library layers, not unlimited NLE tracks. Source-only edits may intentionally leave gaps or change synchronization. Lower-rate footage exported at 60 FPS repeats frames.
+Default YouTube cleanup is chronological, not a full narrative rewrite. Styles are pacing/selection presets, not creator replicas or reliable visual gameplay-event detectors. Camera proposals need confirmation. There are two main sources plus bounded media/text layers, not unlimited NLE tracks. Those added layers do not automatically ripple with source edits. Source-only edits may intentionally leave gaps or change synchronization. Lower-rate footage exported at 60 FPS repeats frames.
 
 Keep backups and use copies, not urgent client deliveries. Review the exported file. Do not expose the server publicly. This is not a frozen offline executable: allowed dependency versions can change between installations.
 

@@ -272,6 +272,31 @@ def test_compatible_focus_refinement_commits_staged_routing_with_media(semantic_
     assert after["manual"]["audio_mixer"] == before["manual"]["audio_mixer"]
 
 
+@pytest.mark.parametrize("command", [None, "shorter", "focus_speaker"])
+def test_rebuild_rejects_custom_text_overhang_atomically_without_media(semantic_project, monkeypatch, command):
+    from cutroom.editing import apply_manual_edit
+    from cutroom.text_clips import TextClipError
+
+    store, settings, project_id, _calls, context = semantic_project
+    def attach(current):
+        if command == "focus_speaker":
+            current["sources"]["B"] = {**current["sources"]["A"], "slot": "B"}
+            current["manual"]["source_mixer"]["default_layout"] = "stacked"
+        apply_manual_edit(current, {"action": "text_add", "kind": "caption", "start": 30, "end": 40, "text": "Keep this manual caption"})
+    store.update(project_id, attach)
+    monkeypatch.setattr(director, "synchronize_sources", lambda *_args, **_kwargs: {"offset": 0, "confidence": 1, "method": "fixture"})
+    monkeypatch.setattr(director, "_enforce_short_target", lambda *_args, **_kwargs: ([{"start": 20, "end": 300}], 0))
+    before = store.load(project_id)
+    job_context = context()
+    with pytest.raises(TextClipError, match="Trim, move, or remove"):
+        if command:
+            director.refine_project(job_context, project_id, store, settings, command)
+        else:
+            director.analyze_project(job_context, project_id, store, settings)
+    assert store.load(project_id) == before
+    assert not job_context.committed
+
+
 @pytest.mark.parametrize("candidate_source", ["manual", "prepared"])
 def test_prepared_embedded_layout_survives_generation_refinement_and_rebuild(semantic_project, candidate_source):
     from cutroom.editing import apply_manual_edit

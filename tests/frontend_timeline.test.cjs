@@ -7,6 +7,55 @@ const test = require("node:test");
 const source = fs.readFileSync(path.join(__dirname, "../web/timeline.js"), "utf8").replace(/^export /gm, "");
 const plain = (value) => JSON.parse(JSON.stringify(value));
 
+test('custom titles and captions occupy visible edit-clock lanes without media assets', () => {
+  const h=sequenceFixture();h.project.manual.text_clips=[
+    {id:'text_one',kind:'title',start:1,end:4,text:'Title'},
+    {id:'text_two',kind:'caption',start:2,end:5,text:'שלום'},
+  ];h.timeline.draw();
+  assert.equal(h.timeline.mediaRows().length,2);
+  assert.ok(h.draws.some(row=>row.text==='Text · Title'));
+  assert.ok(h.draws.some(row=>row.text==='Caption · שלום'));
+  h.timeline.sourceReview=true;assert.equal(h.timeline.mediaRows().length,0);
+});
+
+test('custom text trims do not introduce source offsets and are bounded by the edit', () => {
+  for(const edge of ['start','end']){
+    const h=sequenceFixture();h.project.manual.text_clips=[{id:'text_one',kind:'title',start:2,end:5,text:'Title'}];
+    let result;h.timeline.onMediaEdit=(id,patch)=>{result=patch;};
+    const top=h.timeline.mediaRows()[0].top+20;
+    h.timeline.pointerDown(h.point(edge==='start'?2.01:4.99,top));
+    h.timeline.pointerUp(h.point(edge==='start'?0:11,top));
+    assert.ok(result);assert.equal(Object.hasOwn(result,'source_start'),false);
+    assert.ok((result.start??2)>=0);assert.ok((result.end??5)<=12);
+  }
+});
+
+test('custom text gestures and delete address the layer even with locked A/B', () => {
+  const h=sequenceFixture();h.project.manual.track_locks={A:true,B:true};
+  h.project.manual.text_clips=[{id:'text_one',kind:'title',start:2,end:5,text:'Title'}];
+  const actions=[];h.timeline.onMediaAction=(action,detail)=>actions.push({action,detail});
+  let moved;h.timeline.onMediaEdit=(id,patch)=>{moved=patch;};const top=h.timeline.mediaRows()[0].top+20;
+  h.timeline.pointerDown(h.point(3,top));h.timeline.pointerUp(h.point(4,top));assert.ok(moved);
+  h.timeline.keyDown({key:'Delete',preventDefault(){},stopPropagation(){}});
+  assert.equal(actions[0].detail.clip_id,'text_one');assert.equal(h.edits.length,0);
+});
+
+test('custom caption edges are snap targets but the moving caption excludes itself', () => {
+  const h=sequenceFixture();h.project.manual.text_clips=[{id:'text_one',kind:'caption',start:1.7,end:2.7,text:'Hello'}];
+  assert.ok(h.timeline.snapPoints().some(p=>p.time===1.7&&p.label==='Caption edge'));
+  h.timeline.gesture={kind:'media',media:h.project.manual.text_clips[0],snapPlayhead:0};
+  assert.equal(h.timeline.snapPoints().some(p=>p.label==='Caption edge'),false);
+});
+
+test('selecting a text layer reveals its lane without shifting the time axis', () => {
+  const h=sequenceFixture();h.project.manual.text_clips=[{id:'text_one',kind:'caption',start:1,end:3,text:'Hello'}];
+  const scroll=h.timeline.scroll;scroll.clientHeight=180;scroll.scrollTop=0;scroll.scrollLeft=33;
+  const bottom=h.timeline.mediaRows()[0].bottom;h.timeline.revealMedia('text_one');
+  assert.equal(scroll.scrollTop,bottom-180+8);assert.equal(scroll.scrollLeft,33);
+  scroll.scrollTop=300;h.timeline.revealMedia('text_one');assert.equal(scroll.scrollTop,h.timeline.mediaRows()[0].top);
+  h.timeline.revealMedia('missing');assert.equal(scroll.scrollTop,h.timeline.mediaRows()[0].top);
+});
+
 function fixture({ compact = true, width = 600, duration = 12, tracks = false } = {}) {
   const listeners = {}, draws = [], notifications = [], seeks = [], edits = [], layouts = [], captures = new Set();
   const context = new Proxy({
