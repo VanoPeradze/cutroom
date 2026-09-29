@@ -147,6 +147,16 @@ thead th{color:#247480}
 .checksum{display:block;text-align:center;font-size:11px;text-decoration:underline;text-underline-offset:3px;color:var(--accent)}
 .source-link{width:100%;justify-content:space-between;margin-top:23px;background:transparent;border-color:var(--line);color:var(--ink);gap:14px;font-size:13px;min-height:48px}
 .source-link:hover{background:#e5e0eb;color:#171817}
+.github-link{display:inline-flex;align-items:center;justify-content:center;gap:10px;font-weight:700}
+.github-link img{width:24px;height:24px;flex:0 0 24px}
+.site-header nav .github-link{min-height:44px;padding:10px 15px;border:1px solid #171817;border-radius:12px;background:#171817;color:#fff;font-size:13px;white-space:nowrap}
+.site-header nav .github-link img{filter:invert(1);width:22px;height:22px;flex-basis:22px}
+.site-header nav .github-link:hover{background:#423451;border-color:#423451;color:#fff}
+.button.github-link{background:#e9e1f2;border-color:#7459a3;color:#352249;gap:10px}
+.button.github-link:hover{background:#d9c9e9;border-color:#563b78;color:#251632}
+.source-link.github-link{justify-content:center}
+.hero .actions{gap:12px}
+.hero .actions .text-link{flex-basis:100%;width:max-content;max-width:max-content;margin-top:2px}
 .beta-notice{border-top:1px solid var(--line);margin-top:25px;padding-top:18px}
 .beta-notice strong{font-size:12px;font-weight:400}
 .beta-notice p{font-size:12px;color:var(--muted);margin:8px 0 0;line-height:1.8}

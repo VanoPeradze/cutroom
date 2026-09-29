@@ -26,12 +26,30 @@ function assertLocalized(link) {
   assert.match(link[0], />[^<>]*[A-Za-z][^<>]*</, 'The default link text must be English');
 }
 
-test('repository links appear in navigation, download section, and footer', () => {
-  assert.equal(linksTo(html, repository).length, 3);
-  for (const markup of [region('nav'), region('section', 'download'), region('footer')]) {
+test('repository links appear in navigation, hero, download section, and footer', () => {
+  assert.equal(linksTo(html, repository).length, 4);
+  for (const markup of [region('nav'), region('section'), region('section', 'download'), region('footer')]) {
     assert.equal(linksTo(markup, repository).length, 1);
   }
+  assertLocalized(linksTo(region('section'), repository)[0]);
   assertLocalized(linksTo(region('section', 'download'), repository)[0]);
+});
+
+test('prominent GitHub links pair visible text with a local decorative logo', () => {
+  for (const markup of [region('nav'), region('section'), region('section', 'download')]) {
+    const link = linksTo(markup, repository)[0];
+    assert.ok(link, 'The repository link must remain in each prominent region');
+    const classes = link[1].match(/\bclass=["']([^"']*)["']/)?.[1].split(/\s+/) ?? [];
+    assert.ok(classes.includes('github-link'), 'The repository link must use the GitHub button styling');
+    assert.doesNotMatch(link[1], /\bdata-he=/, 'Translate the text span so the logo survives language switching');
+    assert.match(link[2], /<span\b[^>]*>[^<]*GitHub[^<]*<\/span>/, 'The button must identify GitHub with visible text');
+    const images = [...link[2].matchAll(/<img\b[^>]*>/gi)];
+    assert.equal(images.length, 1);
+    assert.match(images[0][0], /\bsrc=["']\/assets\/github-mark\.svg["']/);
+    assert.match(images[0][0], /\balt=(?:""|'')/, 'The logo is decorative because the button has visible text');
+  }
+  const logo = readFileSync(new URL('./public/assets/github-mark.svg', import.meta.url), 'utf8');
+  assert.match(logo, /<svg\b/);
 });
 
 test('the FAQ offers a localized GitHub issue link', () => {
@@ -40,10 +58,11 @@ test('the FAQ offers a localized GitHub issue link', () => {
   assertLocalized(links[0]);
 });
 
-test('language switching cannot replace links with plain text', () => {
+test('language switching cannot replace links or GitHub logos with plain text', () => {
   // site.js replaces each data-he element's contents with textContent in Hebrew.
   for (const element of html.matchAll(/<([a-z][\w-]*)\b([^>]*\bdata-he=["'][^"']*["'][^>]*)>([\s\S]*?)<\/\1>/gi)) {
     assert.doesNotMatch(element[3], /<a\b/i, 'Put data-he on the link or its text, not an ancestor');
+    assert.doesNotMatch(element[3], /<img\b[^>]*\/assets\/github-mark\.svg/i, 'Keep the GitHub logo outside translated text spans');
   }
 });
 
