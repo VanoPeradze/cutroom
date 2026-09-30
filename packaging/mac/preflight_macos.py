@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import importlib
+from importlib.metadata import PackageNotFoundError, version as package_version
 import os
 from pathlib import Path
 import platform
@@ -63,6 +64,14 @@ def check_system(*, only_overrides: bool = False) -> list[str]:
 
 def check_python(*, imports: bool = True) -> list[str]:
     failures: list[str] = []
+    try:
+        av_version = package_version("av")
+        parsed = re.match(r"^(\d+)\.(\d+)\.(\d+)(?:$|[.+-])", av_version)
+        release = tuple(map(int, parsed.groups())) if parsed else ()
+        if not (18, 1, 0) <= release < (19, 0, 0):
+            failures.append(f"PyAV {av_version} is incompatible with this beta's transcription; run Mac setup to install av>=18.1.0,<19.")
+    except PackageNotFoundError:
+        failures.append("PyAV is missing; run Mac setup to install av>=18.1.0,<19.")
     if not (3, 11) <= sys.version_info[:2] < (3, 13):
         failures.append("Use Python 3.11 or 3.12 for this Mac beta.")
     expected = os.environ.get("CUTROOM_MAC_ARCH")

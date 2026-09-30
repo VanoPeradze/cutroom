@@ -104,6 +104,24 @@ def test_python_import_failure_is_actionable(monkeypatch):
     assert any("faster_whisper: OSError: native library cannot load" in error for error in preflight.check_python())
 
 
+@pytest.mark.parametrize("version", ["19.0.0", "19.1.2", "18.0.0", "unrecognized"])
+def test_python_preflight_rejects_incompatible_pyav_even_without_imports(monkeypatch, version):
+    monkeypatch.setattr(preflight, "package_version", lambda name: version)
+    failures = preflight.check_python(imports=False)
+    assert any(f"PyAV {version} is incompatible" in failure for failure in failures)
+
+
+@pytest.mark.parametrize("version", ["18.1.0", "18.2.1"])
+def test_python_preflight_accepts_constrained_pyav(monkeypatch, version):
+    monkeypatch.setattr(preflight, "package_version", lambda name: version)
+    assert not any("PyAV" in failure for failure in preflight.check_python(imports=False))
+
+
+def test_macos_constraint_preserves_faster_whisper_audio_api():
+    constraints = (MAC / "constraints-macos.txt").read_text(encoding="utf-8").splitlines()
+    assert "av>=18.1.0,<19" in constraints
+
+
 @pytest.mark.parametrize("code", [0, 1, 9])
 def test_launch_preserves_server_exit_code_without_spawning(monkeypatch, code):
     def server(path, *, run_name):
@@ -121,7 +139,7 @@ def shell_app(tmp_path):
     # Quoting must hold for spaces, Unicode and shell metacharacters.
     app = tmp_path / "CUTROOM עברית $(touch INJECTED) ;" / "App"
     app.mkdir(parents=True)
-    for name in ("setup_macos.sh", "run_macos.sh", "preflight_macos.py"):
+    for name in ("setup_macos.sh", "run_macos.sh", "preflight_macos.py", "constraints-macos.txt"):
         shutil.copyfile(MAC / name, app / name)
     (app / "requirements.txt").write_text("flask\n", encoding="utf-8")
     (app / "server.py").write_text("# fake server\n", encoding="utf-8")
@@ -202,6 +220,7 @@ def test_explicit_install_and_offline_second_setup(shell_app):
     result = run_setup(app, env, "--yes")
     assert result.returncode == 0, result.stdout + result.stderr
     assert "pip install" in calls(env)
+    assert "-r requirements.txt -c constraints-macos.txt" in calls(env)
     assert (app / ".venv/bin/python").exists()
     assert not (app / ".setup-macos.lock").exists()
     assert not (app / "INJECTED").exists()
@@ -211,6 +230,19 @@ def test_explicit_install_and_offline_second_setup(shell_app):
     assert "No downloads" in result.stdout
     assert "pip" not in calls(env)[len(before):]
     assert "BREW" not in calls(env)[len(before):]
+
+
+@needs_bash
+def test_existing_incompatible_python_environment_repairs_with_constraints(shell_app):
+    app, env = shell_app
+    (app / ".venv/bin").mkdir(parents=True)
+    shutil.copyfile(env["CUTROOM_TEST_PYTHON"], app / ".venv/bin/python")
+    (app / ".venv/bin/python").chmod(0o755)
+    # Native Python works, but the mock's Python preflight rejects this runtime.
+    result = run_setup(app, env, "--yes")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "--force-reinstall -r requirements.txt -c constraints-macos.txt" in calls(env)
+    assert (app / ".mock-ready").exists()
 
 
 @needs_bash

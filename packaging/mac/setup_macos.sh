@@ -108,7 +108,7 @@ cutroom_setup_main() {
   if [[ "${1:-}" == --yes ]]; then consent=yes; fi
   cutroom_prepare_environment
   cd "$CUTROOM_APP_DIR"
-  if [[ ! -f requirements.txt || ! -f server.py || ! -f preflight_macos.py ]]; then
+  if [[ ! -f requirements.txt || ! -f constraints-macos.txt || ! -f server.py || ! -f preflight_macos.py ]]; then
     printf 'CUTROOM is incomplete. Extract the entire download again.\n' >&2
     return 1
   fi
@@ -192,9 +192,9 @@ cutroom_setup_main() {
   fi
   .venv/bin/python -m pip install --disable-pip-version-check --upgrade pip wheel setuptools
   if [[ "$repair_python" == yes ]]; then
-    .venv/bin/python -m pip install --disable-pip-version-check --force-reinstall -r requirements.txt
+    .venv/bin/python -m pip install --disable-pip-version-check --force-reinstall -r requirements.txt -c constraints-macos.txt
   else
-    .venv/bin/python -m pip install --disable-pip-version-check -r requirements.txt
+    .venv/bin/python -m pip install --disable-pip-version-check -r requirements.txt -c constraints-macos.txt
   fi
   .venv/bin/python preflight_macos.py
   printf '\nCUTROOM Mac setup completed. Starting the editor is now possible offline.\n'

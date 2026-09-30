@@ -27,6 +27,10 @@ installation, then installs the Python dependencies inside this copy's **App/.ve
 This maintained FFmpeg 7 build includes subtitle support and the command-line
 options used by CUTROOM. Newer major versions are not automatically compatible.
 It is installed side-by-side without replacing your system's FFmpeg.
+Mac-only Python constraints also keep PyAV below version 19, whose
+[audio API changes](https://github.com/PyAV-Org/PyAV/releases/tag/v19.0.0)
+are incompatible with the current transcription engine. These constraints do not
+change the Windows package or the shared application requirements.
 Nothing installs until you confirm the setup prompt.
 
 If Homebrew is missing, follow the official [Homebrew installation guide](https://docs.brew.sh/Installation),

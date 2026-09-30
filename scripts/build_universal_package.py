@@ -28,6 +28,7 @@ MAC_OVERLAY = {
     "packaging/mac/setup_macos.sh": "mac/App/setup_macos.sh",
     "packaging/mac/run_macos.sh": "mac/App/run_macos.sh",
     "packaging/mac/preflight_macos.py": "mac/App/preflight_macos.py",
+    "packaging/mac/constraints-macos.txt": "mac/App/constraints-macos.txt",
     "docs/MAC_BETA.md": "mac/App/docs/MAC_BETA.md",
 }
 MAX_EXPANDED = 64 * 1024 * 1024

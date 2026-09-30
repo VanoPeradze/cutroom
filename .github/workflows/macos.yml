@@ -90,7 +90,7 @@ jobs:
         shell: bash
         run: |
           python -m venv "$RUNNER_TEMP/cutroom-regression-venv"
-          "$RUNNER_TEMP/cutroom-regression-venv/bin/python" -m pip install -r tests/requirements.txt
+          "$RUNNER_TEMP/cutroom-regression-venv/bin/python" -m pip install -r tests/requirements.txt -c packaging/mac/constraints-macos.txt
       - name: Run the complete Python regression suite with real FFmpeg
         timeout-minutes: 15
         shell: bash
