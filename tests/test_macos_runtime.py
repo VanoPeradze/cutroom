@@ -221,7 +221,14 @@ def test_real_posix_socket_restarts_immediately_after_server_active_close(monkey
         accepted.close()
         listener.close()
         replacement = runtime.reserve_macos_server_sockets("127.0.0.1", port, StartupError)
-        assert replacement[0].getsockopt(socket.SOL_SOCKET, socket.SO_ACCEPTCONN) == 1
+        # macOS can reject SO_ACCEPTCONN introspection despite a working socket.
+        # A real round trip proves the replacement is listening and usable.
+        replacement[0].settimeout(3)
+        with socket.create_connection(("127.0.0.1", port), timeout=3) as second_peer:
+            second_connection, _ = replacement[0].accept()
+            with second_connection:
+                second_connection.sendall(b"restarted")
+                assert second_peer.recv(9) == b"restarted"
     finally:
         peer.close()
         if accepted is not None:
