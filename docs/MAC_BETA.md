@@ -43,6 +43,10 @@ the Mac launcher can now restore it automatically after you approve setup. If
 recovery fails, it stops with instructions for rebuilding only **App/.venv**;
 your projects are not removed. Do not rename or delete **App/data**.
 
+The Mac launcher also handles quick restarts on the same local port. Its Mac-only
+socket setup allows recently closed connections to finish without blocking a new
+launch; it still refuses a port owned by a different running application.
+
 ## AI choices and performance
 
 - **Manual editing:** no AI model or AI account is needed.

@@ -132,13 +132,11 @@ def test_macos_constraint_preserves_faster_whisper_audio_api():
 
 @pytest.mark.parametrize("code", [0, 1, 9])
 def test_launch_preserves_server_exit_code_without_spawning(monkeypatch, code):
-    def server(path, *, run_name):
-        assert Path(path).name == "server.py"
-        assert run_name == "__main__"
+    def server():
         raise SystemExit(code)
 
     monkeypatch.delenv("CUTROOM_FINDER_LAUNCH", raising=False)
-    monkeypatch.setattr(preflight.runpy, "run_path", server)
+    monkeypatch.setattr(preflight, "run_macos_server", server)
     assert preflight.main(["--launch"]) == code
 
 

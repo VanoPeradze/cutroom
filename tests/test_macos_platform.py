@@ -3,6 +3,9 @@ from __future__ import annotations
 
 import importlib.util
 import copy
+import errno
+import hashlib
+import json
 from pathlib import Path
 import stat
 import sys
@@ -196,12 +199,62 @@ def test_missing_pip_cli_option_reaches_archive_install_only(tmp_path, monkeypat
         return {"status": "test stub"}
     monkeypatch.setattr(smoke, "install_and_check", install)
     assert smoke.main() == 0
-    assert calls == [((tmp_path / "release.zip").resolve(), {"transcribe": True, "repair_missing_pip": repair})]
+    assert calls == [((tmp_path / "release.zip").resolve(), {"transcribe": True, "repair_missing_pip": repair,
+                                                           "allow_baseline_restart_failure": False})]
 
 
 def test_missing_pip_cli_rejects_worker_mode(tmp_path, monkeypatch):
     monkeypatch.setattr(smoke.sys, "argv", ["smoke_macos.py", "--worker-app", str(tmp_path), "--repair-missing-pip"])
     monkeypatch.setattr(smoke, "worker", lambda *args, **kwargs: pytest.fail("Never repair an already selected runtime"))
+    with pytest.raises(SystemExit) as error:
+        smoke.main()
+    assert error.value.code == 2
+
+
+def test_restart_exception_requires_the_exact_pinned_archive(tmp_path, monkeypatch):
+    pin = tmp_path / "baseline.json"
+    pin.write_text(json.dumps({"sha256": hashlib.sha256(b"previous release").hexdigest()}), encoding="utf-8")
+    monkeypatch.setattr(smoke, "BASELINE_METADATA", pin)
+    package = tmp_path / "previous.zip"
+    package.write_bytes(b"previous release")
+    smoke.verify_restart_baseline(package)
+    package.write_bytes(b"new candidate")
+    with pytest.raises(ValueError, match="checksum-pinned previous release"):
+        smoke.verify_restart_baseline(package)
+    # The worker repeats the guard before importing or launching any app code.
+    with pytest.raises(ValueError, match="checksum-pinned previous release"):
+        smoke.worker(tmp_path / "unopened-app", transcribe=False, baseline_archive=package)
+
+
+@pytest.mark.parametrize("returncode,message,network_error,accepted", [
+    (1, "exact", errno.ECONNREFUSED, True),
+    (0, "exact", errno.ECONNREFUSED, False),
+    (1, "wrong port", errno.ECONNREFUSED, False),
+    (1, "unrelated error", errno.ECONNREFUSED, False),
+    (1, "exact", errno.ETIMEDOUT, False),
+    (1, "exact", None, False),
+])
+def test_known_restart_failure_requires_exact_error_and_no_listener(monkeypatch, returncode, message, network_error, accepted):
+    port = 54321
+    if message == "exact":
+        message = (f"ERROR: CUTROOM cannot start because 127.0.0.1:{port} is already in use or unavailable. "
+                   "Close the other program or choose another CUTROOM_PORT.")
+    class Listener:
+        def __enter__(self): return self
+        def __exit__(self, *args): pass
+    def connect(address, timeout):
+        assert address == ("127.0.0.1", port) and timeout == 2
+        if network_error is not None:
+            raise OSError(network_error, "synthetic socket outcome")
+        return Listener()
+    monkeypatch.setattr(smoke.socket, "create_connection", connect)
+    assert smoke.is_known_baseline_restart_failure(smoke.LauncherStartupError(returncode), message, port) is accepted
+
+
+def test_baseline_restart_option_is_not_a_worker_bypass(tmp_path, monkeypatch):
+    monkeypatch.setattr(smoke.sys, "argv", ["smoke_macos.py", "--worker-app", str(tmp_path),
+                                          "--allow-baseline-restart-failure"])
+    monkeypatch.setattr(smoke, "worker", lambda *args, **kwargs: pytest.fail("Archive pin must be checked first"))
     with pytest.raises(SystemExit) as error:
         smoke.main()
     assert error.value.code == 2

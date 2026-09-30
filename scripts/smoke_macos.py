@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 from array import array
 from contextlib import contextmanager
+import errno
 import hashlib
 import json
 import os
@@ -27,6 +28,22 @@ import time
 import urllib.error
 import urllib.request
 import zipfile
+
+
+BASELINE_METADATA = Path(__file__).resolve().parents[1] / "packaging/mac/validation-baseline.json"
+
+
+class LauncherStartupError(RuntimeError):
+    def __init__(self, returncode: int):
+        self.returncode = returncode
+        super().__init__(f"Mac launcher exited before startup ({returncode})")
+
+
+def verify_restart_baseline(archive: Path) -> None:
+    """Never extend a known previous-release exception to an unpinned archive."""
+    baseline = json.loads(BASELINE_METADATA.read_text(encoding="utf-8"))
+    if hashlib.sha256(archive.read_bytes()).hexdigest() != baseline["sha256"]:
+        raise ValueError("Restart exception is restricted to the checksum-pinned previous release")
 
 
 def run(command: list[str], *, env: dict[str, str], cwd: Path, timeout: int = 120) -> str:
@@ -121,11 +138,14 @@ def prepare_missing_pip_runtime(app: Path, *, env: dict[str, str], cwd: Path) ->
     assert missing.returncode != 0 and "No module named pip" in output, output
 
 
-def install_and_check(archive: Path, *, transcribe: bool = False, repair_missing_pip: bool = False) -> dict:
+def install_and_check(archive: Path, *, transcribe: bool = False, repair_missing_pip: bool = False,
+                      allow_baseline_restart_failure: bool = False) -> dict:
     if sys.platform != "darwin":
         raise RuntimeError("This installation smoke must run on macOS; it is not a simulated Mac test")
     if not (3, 11) <= sys.version_info[:2] < (3, 13):
         raise RuntimeError("Run the installation smoke with native Python 3.11 or 3.12")
+    if allow_baseline_restart_failure:
+        verify_restart_baseline(archive)
     # Import only the stdlib-based verifier from the checkout, never archive code.
     from build_universal_package import verify_package
     verify_package(archive)
@@ -175,6 +195,8 @@ def install_and_check(archive: Path, *, transcribe: bool = False, repair_missing
                    "--report", str(report)]
         if transcribe:
             command.append("--transcribe")
+        if allow_baseline_restart_failure:
+            command.extend(["--baseline-archive", str(archive)])
         print(run(command, env=offline, cwd=scratch, timeout=600 if transcribe else 300), flush=True)
         assert installed_runtime_signature(app) == runtime_before, "Offline launches modified installed packages"
         result = json.loads(report.read_text(encoding="utf-8"))
@@ -201,7 +223,7 @@ def wait_for_own_server(process: subprocess.Popen, base: str, expected_instance:
     deadline = time.monotonic() + 60
     while time.monotonic() < deadline:
         if process.poll() is not None:
-            raise RuntimeError(f"Mac launcher exited before startup ({process.returncode})")
+            raise LauncherStartupError(process.returncode)
         try:
             identity = request_json(base, "/api/instance")
         except (OSError, urllib.error.URLError):
@@ -366,7 +388,22 @@ def persisted_project_state(base: str, project_id: str, exports_dir: Path) -> di
                               for record in project["exports"]}}
 
 
-def worker(app: Path, *, transcribe: bool) -> dict:
+def is_known_baseline_restart_failure(error: LauncherStartupError, log: str, port: int) -> bool:
+    expected = (f"ERROR: CUTROOM cannot start because 127.0.0.1:{port} is already in use or unavailable. "
+                "Close the other program or choose another CUTROOM_PORT.")
+    if error.returncode == 0 or expected not in log:
+        return False
+    # An existing listener, timeout or other network error must never qualify.
+    try:
+        with socket.create_connection(("127.0.0.1", port), timeout=2):
+            return False
+    except OSError as connection_error:
+        return connection_error.errno == errno.ECONNREFUSED
+
+
+def worker(app: Path, *, transcribe: bool, baseline_archive: Path | None = None) -> dict:
+    if baseline_archive is not None:
+        verify_restart_baseline(baseline_archive)
     sys.path.insert(0, str(app))
     from cutroom.config import load_settings
     from server import _cutroom_instance_id
@@ -400,14 +437,28 @@ def worker(app: Path, *, transcribe: bool) -> dict:
         saved = persisted_project_state(base, project_id, settings.exports_dir)
         check_repeat_and_conflicting_launch(app, settings, base, process, expected_instance)
         assert persisted_project_state(base, project_id, settings.exports_dir) == saved
-    with running_launcher(app, settings, base, expected_instance):
-        assert persisted_project_state(base, project_id, settings.exports_dir) == saved, "Restart changed saved project state or export bytes"
-        assert request_json(base, "/api/health")["ok"] is True
+    restart_status = "passed"
+    limitations = []
+    log_path = settings.data_dir / "launcher.log"
+    prior_log_size = log_path.stat().st_size
+    try:
+        with running_launcher(app, settings, base, expected_instance):
+            assert persisted_project_state(base, project_id, settings.exports_dir) == saved, "Restart changed saved project state or export bytes"
+            assert request_json(base, "/api/health")["ok"] is True
+    except LauncherStartupError as error:
+        restart_log = log_path.read_bytes()[prior_log_size:].decode("utf-8", errors="replace")
+        if baseline_archive is None or not is_known_baseline_restart_failure(error, restart_log, port):
+            raise
+        restart_status = "known_failure"
+        limitations.append("Checksum-pinned previous release: immediate same-port restart exited nonzero with the exact port-unavailable error and ECONNREFUSED (no listener). Saved state could not be verified after restart.")
+        print("KNOWN PREVIOUS-RELEASE LIMITATION: " + limitations[-1], flush=True)
     transcription = real_cpu_transcription(settings, app) if transcribe else {
         "status": "not_run", "reason": "Use --transcribe to download tiny.en and test real CPU transcription"}
-    return {"status": "passed", "platform": platform.platform(), "machine": platform.machine(),
+    return {"status": "passed_with_known_baseline_failure" if limitations else "passed",
+            "platform": platform.platform(), "machine": platform.machine(),
             "python": platform.python_version(), "launcher_health_and_api": "passed",
-            "restart_persistence": "passed", "repeat_launch": "passed", "different_data_port_collision": "passed",
+            "restart_persistence": restart_status, "known_limitations": limitations,
+            "repeat_launch": "passed", "different_data_port_collision": "passed",
             "portrait": portrait, "landscape": landscape, "source_audio_and_caption_checks": "passed",
             "extended_render_checks": extended,
             "transcription": transcription, "manual_finder_gatekeeper_test": "not_run",
@@ -423,12 +474,21 @@ def main() -> int:
     parser.add_argument("--transcribe", action="store_true", help="Also download tiny.en and transcribe synthetic English speech")
     parser.add_argument("--repair-missing-pip", action="store_true",
                         help="Start the extracted app with a private --without-pip venv and require setup recovery")
+    parser.add_argument("--allow-baseline-restart-failure", action="store_true",
+                        help="Report only the pinned previous release's confirmed no-listener restart failure as known")
+    parser.add_argument("--baseline-archive", type=Path, help=argparse.SUPPRESS)
     args = parser.parse_args()
     if args.worker_app and args.repair_missing_pip:
         parser.error("--repair-missing-pip requires --archive")
-    result = (worker(args.worker_app.resolve(), transcribe=args.transcribe) if args.worker_app
+    if args.worker_app and args.allow_baseline_restart_failure:
+        parser.error("--allow-baseline-restart-failure requires --archive")
+    if args.baseline_archive and not args.worker_app:
+        parser.error("--baseline-archive is an internal worker argument")
+    result = (worker(args.worker_app.resolve(), transcribe=args.transcribe,
+                     baseline_archive=args.baseline_archive.resolve() if args.baseline_archive else None) if args.worker_app
               else install_and_check(args.archive.resolve(), transcribe=args.transcribe,
-                                     repair_missing_pip=args.repair_missing_pip))
+                                     repair_missing_pip=args.repair_missing_pip,
+                                     allow_baseline_restart_failure=args.allow_baseline_restart_failure))
     text = json.dumps(result, indent=2, ensure_ascii=False)
     if args.report:
         with args.report.open("x", encoding="utf-8") as handle:

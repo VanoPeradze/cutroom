@@ -10,6 +10,7 @@ import platform
 import re
 import runpy
 import shutil
+import socket
 import subprocess
 import sys
 import traceback
@@ -88,13 +89,79 @@ def check_python(*, imports: bool = True) -> list[str]:
     return failures
 
 
+def reserve_macos_server_sockets(host: str, port: int, startup_error_type: type[Exception]) -> list[socket.socket]:
+    """Reserve listening sockets for this Mac launch without changing socket globally."""
+    if sys.platform != "darwin":
+        raise RuntimeError("The Mac socket adapter requires macOS.")
+    candidates: list[socket.socket] = []
+    seen = set()
+    try:
+        try:
+            addresses = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+        except OSError as exc:
+            raise startup_error_type(f"CUTROOM could not resolve its local host {host!r}: {exc}") from exc
+        for family, socktype, protocol, _canonical_name, address in addresses:
+            identity = (family, tuple(address))
+            if identity in seen:
+                continue
+            seen.add(identity)
+            try:
+                candidate = socket.socket(family, socktype, protocol)
+                candidates.append(candidate)
+                # POSIX reuse addresses permits restart after TIME_WAIT; reuse
+                # ports would allow competing listeners and is never enabled.
+                # https://docs.python.org/3/library/socket.html#socket.create_server
+                candidate.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                if family == socket.AF_INET6 and hasattr(socket, "IPV6_V6ONLY"):
+                    candidate.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 1)
+                candidate.bind(address)
+                # Claim the listener now. Waitress accepts supplied sockets and
+                # calls listen again with its configured backlog during startup.
+                candidate.listen(128)
+            except OSError as exc:
+                raise startup_error_type(
+                    f"CUTROOM cannot start because {host}:{port} is already in use or unavailable. "
+                    "Close the other program or choose another CUTROOM_PORT."
+                ) from exc
+        if not candidates:
+            raise startup_error_type(f"CUTROOM could not find a local address for {host!r}.")
+        return candidates
+    except BaseException:
+        for candidate in candidates:
+            try:
+                candidate.close()
+            except OSError:
+                pass
+        raise
+
+
+def run_macos_server() -> None:
+    """Keep the original server main/identity checks and adapt only reservation."""
+    if sys.platform != "darwin":
+        raise RuntimeError("The Mac launcher requires macOS.")
+    server = importlib.import_module("server")
+    original_reserve = server._reserve_server_sockets
+    try:
+        server._reserve_server_sockets = lambda host, port: reserve_macos_server_sockets(
+            host, port, server.ServerStartupError,
+        )
+        try:
+            server.main()
+        except server.ServerStartupError as error:
+            # Match server.py's original command-line startup error formatting.
+            print(f"ERROR: {error}", file=sys.stderr)
+            raise SystemExit(1) from None
+    finally:
+        server._reserve_server_sockets = original_reserve
+
+
 def launch_application() -> int:
     """Run the original server in this process, preserving Finder error output."""
     if str(ROOT) not in sys.path:
         sys.path.insert(0, str(ROOT))
     result = 0
     try:
-        runpy.run_path(str(ROOT / "server.py"), run_name="__main__")
+        run_macos_server()
     except KeyboardInterrupt:
         return 130
     except SystemExit as exc:
