@@ -17,6 +17,9 @@
 .media-placement summary,.audio-mixer summary { cursor:pointer; font-size:13px; margin-block:10px; }
 .media-actions { display:flex; flex-wrap:wrap; gap:6px; }
 .audio-mixer { margin-top:12px; border:1px solid var(--line-strong); border-radius:9px; padding:0 10px; background:var(--surface-chrome); }
+#studioPanelAudio .audio-mixer { margin-top:0; }
+.mixer-save-status { min-height:18px; margin:0 0 6px; }
+.source-stabilization-entry { margin-bottom:14px; }
 .audio-mixer summary { display:flex; align-items:center; gap:8px; min-height:38px; margin:0; font-weight:600; }
 .audio-mixer summary::before { content:'+'; color:var(--cyan-text); font:14px var(--mono); }
 .audio-mixer[open] summary::before { content:'−'; }
