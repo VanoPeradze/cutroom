@@ -57,13 +57,15 @@ jobs:
     timeout-minutes: 40
     env:
       CUTROOM_NO_BROWSER: '1'
-      CUTROOM_DATA_DIR: ${{ runner.temp }}/cutroom-regression-data
       HOMEBREW_NO_AUTO_UPDATE: '1'
       HOMEBREW_NO_INSTALL_CLEANUP: '1'
       HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: '1'
       PIP_DISABLE_PIP_VERSION_CHECK: '1'
       PYTHONDONTWRITEBYTECODE: '1'
     steps:
+      - name: Isolate regression data in runner temporary storage
+        shell: bash
+        run: echo "CUTROOM_DATA_DIR=$RUNNER_TEMP/cutroom-regression-data" >> "$GITHUB_ENV"
       - name: Check out source
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
