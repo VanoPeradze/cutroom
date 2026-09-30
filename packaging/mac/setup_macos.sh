@@ -190,6 +190,13 @@ cutroom_setup_main() {
   elif ! .venv/bin/python preflight_macos.py --python-only >/dev/null 2>&1; then
     repair_python=yes
   fi
+  if ! .venv/bin/python -m pip --version >/dev/null 2>&1; then
+    printf 'Restoring pip in the CUTROOM Python environment...\n'
+    if ! .venv/bin/python -m ensurepip --upgrade; then
+      printf 'CUTROOM could not restore pip. Close CUTROOM, rename App/.venv to an unused name such as .venv-old, then launch again to rebuild it. Your projects remain in App/data.\n' >&2
+      return 1
+    fi
+  fi
   .venv/bin/python -m pip install --disable-pip-version-check --upgrade pip wheel setuptools
   if [[ "$repair_python" == yes ]]; then
     .venv/bin/python -m pip install --disable-pip-version-check --force-reinstall -r requirements.txt -c constraints-macos.txt

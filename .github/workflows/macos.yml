@@ -106,8 +106,14 @@ jobs:
         run: |
           archive="$(python scripts/build_universal_package.py --download-baseline --output-dir "$RUNNER_TEMP/cutroom-universal")"
           python scripts/build_universal_package.py --verify "$archive"
+          echo "CUTROOM_CANDIDATE_ARCHIVE=$archive" >> "$GITHUB_ENV"
+      - name: Verify the pinned previous published release
+        timeout-minutes: 3
+        shell: bash
+        run: |
+          archive="$(python scripts/verify_published_package.py --release packaging/mac/validation-baseline.json --output "$RUNNER_TEMP/previous-published-CUTROOM.zip")"
           echo "CUTROOM_SMOKE_ARCHIVE=$archive" >> "$GITHUB_ENV"
-      - name: Install and boot the packaged Mac app, then render through its HTTP API
+      - name: Test installation, editing, restart and transcription from the previous published release
         timeout-minutes: 18
         shell: bash
         env:
@@ -117,3 +123,13 @@ jobs:
           if [[ "$RUN_TRANSCRIPTION" == '1' ]]; then extra+=(--transcribe); fi
           python scripts/smoke_macos.py --archive "$CUTROOM_SMOKE_ARCHIVE" --report "$RUNNER_TEMP/macos-smoke.json" "${extra[@]}"
           python -c 'import json, os, pathlib; result=json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"macos-smoke.json").read_text()); print(json.dumps(result, indent=2))' >> "$GITHUB_STEP_SUMMARY"
+      - name: Test missing-pip recovery and the full smoke on the newly built candidate
+        timeout-minutes: 18
+        shell: bash
+        env:
+          RUN_TRANSCRIPTION: ${{ (github.event_name != 'workflow_dispatch' || inputs.transcribe) && '1' || '0' }}
+        run: |
+          extra=()
+          if [[ "$RUN_TRANSCRIPTION" == '1' ]]; then extra+=(--transcribe); fi
+          python scripts/smoke_macos.py --archive "$CUTROOM_CANDIDATE_ARCHIVE" --repair-missing-pip --report "$RUNNER_TEMP/macos-candidate.json" "${extra[@]}"
+          python -c 'import json, os, pathlib; print(json.dumps(json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"macos-candidate.json").read_text()), indent=2))' >> "$GITHUB_STEP_SUMMARY"

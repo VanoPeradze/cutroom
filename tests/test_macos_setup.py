@@ -117,6 +117,14 @@ def test_python_preflight_accepts_constrained_pyav(monkeypatch, version):
     assert not any("PyAV" in failure for failure in preflight.check_python(imports=False))
 
 
+def test_python_preflight_rejects_rosetta_python_for_native_arm_runtime(monkeypatch):
+    monkeypatch.setenv("CUTROOM_MAC_ARCH", "arm64")
+    monkeypatch.setattr(preflight.platform, "machine", lambda: "x86_64")
+    monkeypatch.setattr(preflight, "package_version", lambda name: "18.1.0")
+    assert any("Python architecture x86_64 does not match this Mac (arm64)" in failure
+               for failure in preflight.check_python(imports=False))
+
+
 def test_macos_constraint_preserves_faster_whisper_audio_api():
     constraints = (MAC / "constraints-macos.txt").read_text(encoding="utf-8").splitlines()
     assert "av>=18.1.0,<19" in constraints
@@ -155,7 +163,15 @@ def shell_app(tmp_path):
         '  cp "$CUTROOM_TEST_PYTHON" "$3/bin/python"\n'
         '  chmod +x "$3/bin/python"\n'
         '  exit 0\nfi\n'
+        'if [[ "$1" == -m && "$2" == ensurepip ]]; then\n'
+        '  if [[ "${CUTROOM_TEST_ENSUREPIP_FAIL:-}" == yes ]]; then printf "ensurepip fixture failure\\n" >&2; exit 7; fi\n'
+        '  touch "$CUTROOM_TEST_APP/.mock-pip-restored"\n'
+        '  exit 0\nfi\n'
         'if [[ "$1" == -m && "$2" == pip ]]; then\n'
+        '  if [[ "${CUTROOM_TEST_NO_PIP:-}" == yes && ! -f "$CUTROOM_TEST_APP/.mock-pip-restored" ]]; then\n'
+        '    printf "No module named pip\\n" >&2\n'
+        '    exit 1\n'
+        '  fi\n'
         '  if [[ "${CUTROOM_TEST_PIP_FAIL:-}" == yes ]]; then exit 9; fi\n'
         '  if [[ "$*" == *requirements.txt* ]]; then touch "$CUTROOM_TEST_APP/.mock-ready"; fi\n'
         '  exit 0\nfi\n'
@@ -329,3 +345,173 @@ def test_check_never_triggers_setup(shell_app):
     assert result.returncode == 1
     assert "has not been set up" in result.stderr
     assert "pip" not in calls(env)
+
+
+@needs_bash
+def test_closed_stdin_cancels_without_downloads(shell_app):
+    app, env = shell_app
+    result = run_setup(app, env, answer="")
+    assert result.returncode == 1
+    assert "Setup cancelled" in result.stdout
+    assert "pip install" not in calls(env)
+    assert "BREW install" not in calls(env)
+    assert not (app / ".venv").exists()
+
+
+@needs_bash
+def test_no_python_or_homebrew_has_actionable_help_without_changes(shell_app):
+    app, env = shell_app
+    env.pop("CUTROOM_PYTHON")
+    result = run_setup(
+        app, env, "--yes",
+        extra='cutroom_resolve_python() { return 1; }; '
+              'command() { if [[ "$*" == "-v brew" || "$*" == "-v open" ]]; then return 1; else builtin command "$@"; fi; };',
+    )
+    assert result.returncode == 1
+    assert "Homebrew is not installed." in result.stderr
+    assert "  brew install python@3.12 ffmpeg@7" in result.stderr.splitlines()
+    assert not (app / ".venv").exists()
+    assert not (app / ".setup-macos.lock").exists()
+    assert calls(env) == ""
+
+
+@needs_bash
+def test_missing_python_installs_only_after_consent_then_checks_runtime(shell_app):
+    app, env = shell_app
+    env.pop("CUTROOM_PYTHON")
+    resolver = ('cutroom_resolve_python() { '
+                'if [[ -f "$CUTROOM_TEST_APP/.mock-system" ]]; then printf "%s\\n" "$CUTROOM_TEST_PYTHON"; else return 1; fi; };')
+    declined = run_setup(app, env, answer="no\n", extra=resolver)
+    assert declined.returncode == 1
+    assert "BREW install" not in calls(env)
+    result = run_setup(app, env, "--yes", extra=resolver)
+    assert result.returncode == 0, result.stdout + result.stderr
+    commands = calls(env)
+    assert commands.index("BREW install python@3.12") < commands.index("-m venv .venv")
+    assert "BREW install ffmpeg@7" in commands
+    assert "-r requirements.txt -c constraints-macos.txt" in commands
+
+
+@needs_bash
+def test_existing_setup_lock_is_preserved_without_installing(shell_app):
+    app, env = shell_app
+    lock = app / ".setup-macos.lock"
+    lock.mkdir()
+    marker = lock / "other-setup-owner"
+    marker.write_text("leave this setup alone", encoding="utf-8")
+    result = run_setup(app, env, "--yes")
+    assert result.returncode == 1
+    assert "Another setup may be running" in result.stderr
+    assert marker.read_text(encoding="utf-8") == "leave this setup alone"
+    assert "pip install" not in calls(env)
+    assert "BREW install" not in calls(env)
+
+
+@needs_bash
+def test_retry_after_partial_pip_install_reuses_venv_and_repairs(shell_app):
+    app, env = shell_app
+    env["CUTROOM_TEST_PIP_FAIL"] = "yes"
+    failed = run_setup(app, env, "--yes")
+    assert failed.returncode == 9
+    assert (app / ".venv/bin/python").exists()
+    assert not (app / ".setup-macos.lock").exists()
+    env.pop("CUTROOM_TEST_PIP_FAIL")
+    before = calls(env)
+    retry = run_setup(app, env, "--yes")
+    assert retry.returncode == 0, retry.stdout + retry.stderr
+    subsequent = calls(env)[len(before):]
+    assert "-m venv" not in subsequent
+    assert "--force-reinstall -r requirements.txt -c constraints-macos.txt" in subsequent
+    assert not (app / ".setup-macos.lock").exists()
+
+
+@needs_bash
+def test_recovers_valid_venv_without_pip(shell_app):
+    app, env = shell_app
+    (app / ".venv/bin").mkdir(parents=True)
+    shutil.copyfile(env["CUTROOM_TEST_PYTHON"], app / ".venv/bin/python")
+    (app / ".venv/bin/python").chmod(0o755)
+    env["CUTROOM_TEST_NO_PIP"] = "yes"
+    declined = run_setup(app, env, answer="no\n")
+    assert declined.returncode == 1
+    assert "-m ensurepip" not in calls(env)
+    assert not (app / ".mock-pip-restored").exists()
+    result = run_setup(app, env, "--yes")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (app / ".mock-pip-restored").exists()
+    commands = calls(env)
+    assert commands.index("-m ensurepip --upgrade") < commands.index("-m pip install")
+    assert "--force-reinstall -r requirements.txt -c constraints-macos.txt" in calls(env)
+    assert (app / ".mock-ready").exists()
+    assert not (app / ".setup-macos.lock").exists()
+
+
+@needs_bash
+def test_ensurepip_failure_stops_once_with_actionable_recovery(shell_app):
+    app, env = shell_app
+    (app / ".venv/bin").mkdir(parents=True)
+    shutil.copyfile(env["CUTROOM_TEST_PYTHON"], app / ".venv/bin/python")
+    (app / ".venv/bin/python").chmod(0o755)
+    env.update(CUTROOM_TEST_NO_PIP="yes", CUTROOM_TEST_ENSUREPIP_FAIL="yes")
+    result = run_setup(app, env, "--yes")
+    assert result.returncode == 1
+    assert "CUTROOM could not restore pip" in result.stderr
+    assert "rename App/.venv to an unused name" in result.stderr
+    assert calls(env).count("-m ensurepip --upgrade") == 1
+    assert "-m pip install" not in calls(env)
+    assert "setup completed" not in result.stdout
+    assert not (app / ".setup-macos.lock").exists()
+
+
+@needs_bash
+def test_broken_venv_is_preserved_when_recreated(shell_app):
+    app, env = shell_app
+    broken = app / ".venv"
+    broken.mkdir()
+    (broken / "saved-environment-file").write_text("preserve", encoding="utf-8")
+    result = run_setup(app, env, "--yes")
+    assert result.returncode == 0, result.stdout + result.stderr
+    backups = list(app.glob(".venv.previous-*"))
+    assert len(backups) == 1
+    assert (backups[0] / "saved-environment-file").read_text(encoding="utf-8") == "preserve"
+    assert (app / ".venv/bin/python").exists()
+
+
+@needs_bash
+def test_unusable_ffmpeg_after_brew_stops_before_python_install(shell_app):
+    app, env = shell_app
+    result = run_setup(app, env, "--yes", extra="cutroom_system_ready() { return 1; };")
+    assert result.returncode == 1
+    assert "BREW install ffmpeg@7" in calls(env)
+    assert "FFmpeg is still unavailable or lacks required codecs/options" in result.stderr
+    assert "pip install" not in calls(env)
+    assert not (app / ".venv").exists()
+    assert not (app / ".setup-macos.lock").exists()
+
+
+@needs_bash
+def test_macos_14_is_rejected_before_dependency_discovery(shell_app):
+    app, env = shell_app
+    result = subprocess.run(
+        [BASH, "-c", 'source "$1"; uname() { if [[ "$1" == -s ]]; then printf "Darwin\\n"; else printf "x86_64\\n"; fi; }; '
+         'sw_vers() { printf "14.7.0\\n"; }; cutroom_help() { :; }; cutroom_prepare_environment',
+         "test-old-mac", (app / "setup_macos.sh").as_posix()],
+        env=env, cwd=app, capture_output=True, text=True, encoding="utf-8", timeout=30,
+    )
+    assert result.returncode == 1
+    assert "requires macOS 15 or later (found 14.7.0)" in result.stderr
+    assert calls(env) == ""
+
+
+@needs_bash
+def test_top_level_launcher_reports_incomplete_extraction_without_hanging(tmp_path):
+    folder = tmp_path / "Unpacked חלקי download"
+    folder.mkdir()
+    launcher = folder / "START CUTROOM.command"
+    shutil.copyfile(MAC / launcher.name, launcher)
+    result = subprocess.run(
+        [BASH, launcher.as_posix()], input="", capture_output=True, text=True, encoding="utf-8", timeout=30,
+    )
+    assert result.returncode == 1
+    assert "The App folder is missing" in result.stderr
+    assert "START HERE.html" in result.stderr

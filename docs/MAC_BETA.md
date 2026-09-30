@@ -38,6 +38,11 @@ then run the CUTROOM launcher again. Homebrew may need Apple's Command Line Tool
 CUTROOM does not run a downloaded Homebrew installer or request administrator rights
 on your behalf. Already-working setups do not repeat network installation on launch.
 
+If setup was interrupted before its Python package installer (`pip`) was ready,
+the Mac launcher can now restore it automatically after you approve setup. If
+recovery fails, it stops with instructions for rebuilding only **App/.venv**;
+your projects are not removed. Do not rename or delete **App/data**.
+
 ## AI choices and performance
 
 - **Manual editing:** no AI model or AI account is needed.
@@ -58,11 +63,20 @@ still need review on your own footage.
 ## What testing does and does not prove
 
 The Mac workflow checks both architectures, dependency setup, the packaged launcher,
-local server responses and real synthetic media rendering. See the latest
+and real synthetic media rendering. It exercises source uploads, a camera-above-screen
+stack, 60 fps, 1440p/4K exports, imported images/music/B-roll, subtitles and titles,
+audio gain, project persistence after restart, and transcription in its separate
+worker. It also checks repeat launches with pip/model downloads disabled; this is
+not a firewall-based offline test. The previous published ZIP and new candidate
+are tested separately. See the latest
 [Mac validation runs](https://github.com/VanoPeradze/cutroom/actions/workflows/macos.yml)
 for actual results. Passing automation is not a claim of a manually verified clean
 Mac installation, Safari coverage, or perfect AI output. Those still need Mac beta
 testers. Use copies of footage and keep your originals.
+
+Known shared-editor edge case: a sub-frame difference between the end times of
+two source recordings can reject adding extra media to an existing cut. This is
+tracked separately from Mac setup; reinstalling the Mac runtime will not fix it.
 
 Existing Windows installations do not need replacing for this Mac-only update.
 Do not move Windows virtual environments, downloaded executables or model caches
