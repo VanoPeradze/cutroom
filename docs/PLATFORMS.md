@@ -35,7 +35,7 @@ Setup reuses a compatible **native Python 3.11/3.12** and FFmpeg/FFprobe when av
 
 The Mac FFmpeg checks require libass subtitles, libx264, AAC and the command options used by this beta. Mac Python dependencies use their own compatibility constraints. Local transcription currently runs on the **CPU**; Apple GPU transcription is not implemented. Local Story AI requires a separate [Ollama installation](https://ollama.com/download/mac) and your chosen model.
 
-This is an unsigned source launcher. If Finder/macOS blocks it, record the message and consult **START HERE.html**; do not disable Gatekeeper or remove quarantine globally. Direct Finder launch and security prompts still require manual Mac beta testing. See [Mac setup, recovery and validation details](MAC_BETA.md).
+This is an unsigned source launcher. If Finder/macOS blocks it, record the message and consult **START HERE.html**; do not disable Gatekeeper or remove quarantine globally. Direct Finder launch and security prompts still require manual Mac beta testing. See [Mac setup, recovery and validation details](https://github.com/VanoPeradze/cutroom/blob/master/docs/MAC_BETA.md).
 
 ## Linux source-based development path
 

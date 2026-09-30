@@ -75,7 +75,7 @@ Review AI selections, transcripts, camera roles and sync before exporting. Added
 
 Automated and synthetic tests do not establish real-footage quality or clean-machine installation success. Keep your originals and watch the exported file before sharing it.
 
-[Beta status](docs/BETA_STATUS.md) · [Quality limits](docs/QUALITY_AND_LIMITS.md) · [Mac validation](docs/MAC_BETA.md) · [Changelog](CHANGELOG.md)
+[Beta status](docs/BETA_STATUS.md) · [Quality limits](docs/QUALITY_AND_LIMITS.md) · [Mac validation](https://github.com/VanoPeradze/cutroom/blob/master/docs/MAC_BETA.md) · [Changelog](CHANGELOG.md)
 
 ## Help improve CUTROOM
 
