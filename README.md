@@ -1,10 +1,10 @@
 <p align="center">
-  <img src="docs/images/readme-hero.png" alt="CUTROOM Windows Beta — Free and open source" width="720">
+  <img src="docs/images/readme-banner.svg" alt="CUTROOM - Your footage. Your edit. Free and open source." width="960">
 </p>
 
 <p align="center">
-  <strong>A free, local-first video editor for creators.</strong><br>
-  Get a head start with AI. Keep control of the final cut.
+  <strong>A free, local-first video editor for YouTube, Shorts and Reels.</strong><br>
+  Start with your recording. Build an editable cut. Export your video.
 </p>
 
 <p align="center">
@@ -30,6 +30,26 @@ CUTROOM helps turn camera recordings, screen captures and gameplay into an **edi
 **No CUTROOM subscription. No CUTROOM watermark. MIT-licensed source.** Optional cloud AI uses your own provider account; its quotas and charges are separate.
 
 > **This is a beta, not a one-click promise.** AI selections and transcripts need review. Start with a short recording, keep your originals, and watch the exported file before sharing it.
+
+## From recording to export
+
+1. **Bring your footage.** Import a camera, screen or gameplay recording, or combine separate camera and screen sources.
+2. **Build an editable cut.** Start manually or ask optional AI for a YouTube cleanup or Short/Reel draft. Review the selected moments and transcript.
+3. **Make it yours and export.** Trim and move clips, refine framing, add media and captions, mix sound, then export an MP4 and watch the result.
+
+## Windows, macOS and Linux
+
+CUTROOM runs locally and opens its editor in your browser. Choose the installation path for your computer:
+
+| Platform | How to start | Current status |
+| --- | --- | --- |
+| **Windows** | [Download the combined ZIP](https://cutroom-studio.expo.app/#download), extract it, then open `windows/START CUTROOM.bat`. A GitHub source checkout uses `run_windows.bat`. | Windows beta launcher; first setup downloads its dependencies. Fresh-computer and broad hardware QA remain ongoing. |
+| **macOS** | Use the same ZIP, then open `mac/START CUTROOM.command`. | macOS 15+, Apple Silicon and Intel. Both architectures pass automated Mac validation; Finder/Gatekeeper and Safari still need manual beta testing. |
+| **Linux** | Use the [GitHub source](https://github.com/VanoPeradze/cutroom) and its `setup_linux.sh` / `run_linux.sh` scripts. | Source-based development path; no Linux folder in the download and no verified end-to-end Linux installation/edit/export QA yet. |
+
+The Windows and Mac download is a **source distribution with launchers**, not a bundled offline installer or signed Mac app. First setup needs internet. Manual editing needs no AI account or models; local AI downloads are optional.
+
+[Installation steps and prerequisites for every platform](docs/PLATFORMS.md) · [Mac beta details](docs/MAC_BETA.md)
 
 ## A look inside
 
@@ -77,23 +97,21 @@ Custom text uses the edited video's timing and always appears in the MP4, indepe
 
 ## Get started
 
+**Windows or Mac:**
+
 1. **[Download CUTROOM](https://cutroom-studio.expo.app/#download)** and extract the entire ZIP.
 2. Open **windows** or **mac**. On Windows, double-click **`START CUTROOM.bat`**. On Mac, double-click **`START CUTROOM.command`**. Follow the setup prompts; the editor opens in your browser when ready.
 3. **Choose a workflow.** Start with **Manual edit**, or prepare AI and choose **Short / Reel** or **YouTube video**.
 
-The ZIP contains source code, not an all-in-one offline installer. First setup needs internet and downloads dependencies; local AI models are additional, optional downloads. Keep the launch window open while editing and use the same launcher next time.
-
-The download opens to just two folders: **windows** and **mac**. Each contains its launcher, **START HERE.html** for an offline guide, and **App** for technical files and saved work. Keep those three items together. If Windows hides extensions, its launcher appears as **START CUTROOM**.
+Each platform folder contains its launcher, **START HERE.html** for an offline guide, and **App** for technical files and saved work. Keep those items together and the launch window open while editing. Use the same launcher next time. If Windows hides extensions, its launcher appears as **START CUTROOM**.
 
 **Mac beta:** targets macOS 15+ on Apple Silicon and Intel. First setup may need Homebrew and your approval to install dependencies. Local transcription currently runs on the CPU. This is a source launcher, not a signed Mac application; automated Mac checks do not replace real-user installation testing. [Mac setup and validation details](https://github.com/VanoPeradze/cutroom/blob/master/docs/MAC_BETA.md)
 
-**Windows is unchanged in this update.** The combined ZIP preserves every file from the previous Windows download. Existing Windows users do not need to reinstall for Mac support.
+**Linux:** install Python 3.11 or 3.12 with `venv` and `pip`, plus FFmpeg/FFprobe, then use the source scripts. [Follow the Linux setup steps](docs/PLATFORMS.md#linux-source-based-development-path), including executable permissions needed for runtime repair. Linux is not included in this ZIP.
 
-Using a GitHub source checkout or an older flat-folder download? Its developer launcher remains `run_windows.bat`. The new folder layout does not move or modify existing installations.
+Existing Windows users do not need to reinstall for Mac support: the combined ZIP preserves the previous Windows package. A GitHub source checkout or older flat-folder installation still uses `run_windows.bat`; keep an existing working installation in its current layout.
 
-**First edit:** add footage → review or build a draft → refine clips and captions → export and check the result.
-
-[Complete walkthrough](docs/USER_GUIDE_EN.md) · [Installation help](docs/TEST_ON_ANOTHER_PC.md) · [Keyboard shortcuts](docs/KEYBOARD_SHORTCUTS.md)
+[Complete walkthrough](docs/USER_GUIDE_EN.md) · [Platform installation help](docs/PLATFORMS.md) · [Keyboard shortcuts](docs/KEYBOARD_SHORTCUTS.md)
 
 ## Choose how AI works
 
@@ -124,6 +142,7 @@ The workflow is available to try; the quality still needs real-world feedback.
 - Editing styles are pacing and selection presets, not replicas of individual creators.
 - A/B remain the two main sources. Added media and text layers fit inside their existing edit; they do not extend its end or ripple with source edits automatically. Shortening that would leave a layer past the new end is refused until you trim, move or remove that layer.
 - Text uses three positions and three style presets; overlapping text can collide. This remains a bounded editor, not a full professional NLE.
+- A shared-editor edge case with sub-frame A/B duration differences can reject adding extra media. It is separate from Mac setup; see [current platform and QA limits](docs/PLATFORMS.md#validation-and-current-limits).
 - Fresh-computer installation and broad hardware coverage are still being validated, especially the new Mac beta. Check the [Mac validation runs](https://github.com/VanoPeradze/cutroom/actions/workflows/macos.yml) for the automated results.
 
 Use copies of your footage, not your only originals or an urgent client delivery. Automated tests and synthetic renders do not establish professional editorial quality.
