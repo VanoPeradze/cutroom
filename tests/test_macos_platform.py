@@ -2,6 +2,10 @@
 from __future__ import annotations
 
 import importlib.util
+import copy
+import errno
+import hashlib
+import json
 from pathlib import Path
 import stat
 import sys
@@ -68,11 +72,12 @@ def test_smoke_uses_temporary_data_and_drops_inherited_runtime_and_cloud_setting
     monkeypatch.setenv("CUTROOM_PORT", "8765")
     monkeypatch.setenv("CUTROOM_FAKE_TRANSCRIPT", "fake")
     monkeypatch.setenv("OPENAI_API_KEY", "not-a-real-key")
+    monkeypatch.setenv("HF_TOKEN", "not-a-real-model-hub-token")
     monkeypatch.setenv("PYTHONPATH", "/other/app")
     env = smoke.isolated_environment(tmp_path)
     assert Path(env["CUTROOM_DATA_DIR"]).is_relative_to(tmp_path)
     assert env["CUTROOM_NO_BROWSER"] == "1"
-    assert not {"CUTROOM_PORT", "CUTROOM_FAKE_TRANSCRIPT", "OPENAI_API_KEY", "PYTHONPATH"} & env.keys()
+    assert not {"CUTROOM_PORT", "CUTROOM_FAKE_TRANSCRIPT", "OPENAI_API_KEY", "HF_TOKEN", "PYTHONPATH"} & env.keys()
     assert Path(env["HF_HOME"]).is_relative_to(tmp_path)
 
 
@@ -97,3 +102,159 @@ def test_server_exit_is_reported_without_using_existing_server(monkeypatch):
     monkeypatch.setattr(smoke, "request_json", lambda *args: pytest.fail("Do not call an unrelated service"))
     with pytest.raises(RuntimeError, match="exited before startup"):
         smoke.wait_for_own_server(SimpleNamespace(poll=lambda: 1, returncode=1), "http://127.0.0.1:54321", "ours")
+
+
+def test_offline_checks_disable_package_and_model_downloads_without_mutating_online_environment():
+    online = {"PATH": "/test/runtime/bin", "PIP_NO_INDEX": "0", "HF_HUB_OFFLINE": "0"}
+    original = dict(online)
+    offline = smoke.offline_environment(online)
+    assert online == original
+    assert offline["PATH"] == online["PATH"]
+    assert all(offline[name] == "1" for name in ("PIP_NO_INDEX", "HF_HUB_OFFLINE", "TRANSFORMERS_OFFLINE"))
+
+
+def test_runtime_signature_detects_added_or_reinstalled_packages(tmp_path):
+    runtime = tmp_path / ".venv"
+    record = runtime / "lib/python3.12/site-packages/example-1.dist-info/RECORD"
+    record.parent.mkdir(parents=True)
+    record.write_text("example.py,sha256=old,1\n", encoding="utf-8")
+    (runtime / "pyvenv.cfg").write_text("version = 3.12\n", encoding="utf-8")
+    before = smoke.installed_runtime_signature(tmp_path)
+    assert smoke.installed_runtime_signature(tmp_path) == before
+    record.write_text("example.py,sha256=new,2\n", encoding="utf-8")
+    assert smoke.installed_runtime_signature(tmp_path) != before
+    newer = record.parent.parent / "extra-1.dist-info/RECORD"
+    newer.parent.mkdir()
+    newer.write_text("extra.py,sha256=more,3\n", encoding="utf-8")
+    assert len(smoke.installed_runtime_signature(tmp_path)) == len(before) + 1
+
+
+@pytest.mark.parametrize("change", ["name", "settings", "revision", "export_bytes"])
+def test_restart_snapshot_detects_lost_state_or_changed_exports(tmp_path, monkeypatch, change):
+    project = {"id": "project1", "name": "Saved name", "revision": 7, "settings": {"pace": "gentle"},
+               "manual": {}, "draft": {}, "sources": {}, "exports": [{"name": "test.mp4"}]}
+    output = tmp_path / "test.mp4"
+    output.write_bytes(b"the original export")
+    monkeypatch.setattr(smoke, "request_json", lambda *args: {"project": copy.deepcopy(project)})
+    before = smoke.persisted_project_state("http://127.0.0.1:1", "project1", tmp_path)
+    if change == "name":
+        project["name"] = "Lost name"
+    elif change == "settings":
+        project["settings"]["pace"] = "dynamic"
+    elif change == "revision":
+        project["revision"] = 6
+    else:
+        output.write_bytes(b"changed export")
+    assert smoke.persisted_project_state("http://127.0.0.1:1", "project1", tmp_path) != before
+
+
+def test_in_process_transcript_cannot_pass_as_an_isolated_worker(tmp_path, monkeypatch):
+    import cutroom.transcription
+    settings = SimpleNamespace(cache_dir=tmp_path, ai={"whisper_isolate_process": True})
+    monkeypatch.setenv("HF_HUB_OFFLINE", "1")
+    monkeypatch.delenv("CUTROOM_FAKE_TRANSCRIPT", raising=False)
+    monkeypatch.delenv("CUTROOM_TRANSCRIPTION_WORKER", raising=False)
+    monkeypatch.setattr(smoke, "run", lambda *args, **kwargs: "")
+    monkeypatch.setattr(smoke.sys, "addaudithook", lambda observer: None)
+    def in_process(*args, **kwargs):
+        assert callable(kwargs["cancel_check"])
+        return {"segments": [{"text": "The quick brown fox jumps over the lazy dog"}]}
+    monkeypatch.setattr(cutroom.transcription, "transcribe", in_process)
+    with pytest.raises(AssertionError, match="isolated worker"):
+        smoke.real_cpu_transcription(settings, tmp_path)
+
+
+@pytest.mark.parametrize("returncode,output,accepted", [
+    (1, "private/python: No module named pip", True),
+    (0, "pip 25.0 from private/site-packages/pip", False),
+    (1, "wrong architecture or broken Python", False),
+])
+def test_missing_pip_fixture_requires_an_actual_missing_module(tmp_path, monkeypatch, returncode, output, accepted):
+    calls = []
+    env = {"CUTROOM_DATA_DIR": str(tmp_path / "private data")}
+    monkeypatch.setattr(smoke, "run", lambda command, **kwargs: calls.append((command, kwargs)))
+    def pip_check(command, **kwargs):
+        calls.append((command, kwargs))
+        return SimpleNamespace(returncode=returncode, stdout="", stderr=output)
+    monkeypatch.setattr(smoke.subprocess, "run", pip_check)
+    if accepted:
+        smoke.prepare_missing_pip_runtime(tmp_path, env=env, cwd=tmp_path)
+    else:
+        with pytest.raises(AssertionError):
+            smoke.prepare_missing_pip_runtime(tmp_path, env=env, cwd=tmp_path)
+    assert calls[0][0] == [sys.executable, "-m", "venv", "--without-pip", str(tmp_path / ".venv")]
+    assert calls[1][0] == [str(tmp_path / ".venv/bin/python"), "-m", "pip", "--version"]
+    assert all(kwargs["env"] is env and kwargs["cwd"] == tmp_path for _, kwargs in calls)
+
+
+@pytest.mark.parametrize("repair", [False, True])
+def test_missing_pip_cli_option_reaches_archive_install_only(tmp_path, monkeypatch, repair):
+    arguments = ["smoke_macos.py", "--archive", str(tmp_path / "release.zip"), "--transcribe"]
+    if repair:
+        arguments.append("--repair-missing-pip")
+    monkeypatch.setattr(smoke.sys, "argv", arguments)
+    calls = []
+    def install(archive, **kwargs):
+        calls.append((archive, kwargs))
+        return {"status": "test stub"}
+    monkeypatch.setattr(smoke, "install_and_check", install)
+    assert smoke.main() == 0
+    assert calls == [((tmp_path / "release.zip").resolve(), {"transcribe": True, "repair_missing_pip": repair,
+                                                           "allow_baseline_restart_failure": False})]
+
+
+def test_missing_pip_cli_rejects_worker_mode(tmp_path, monkeypatch):
+    monkeypatch.setattr(smoke.sys, "argv", ["smoke_macos.py", "--worker-app", str(tmp_path), "--repair-missing-pip"])
+    monkeypatch.setattr(smoke, "worker", lambda *args, **kwargs: pytest.fail("Never repair an already selected runtime"))
+    with pytest.raises(SystemExit) as error:
+        smoke.main()
+    assert error.value.code == 2
+
+
+def test_restart_exception_requires_the_exact_pinned_archive(tmp_path, monkeypatch):
+    pin = tmp_path / "baseline.json"
+    pin.write_text(json.dumps({"sha256": hashlib.sha256(b"previous release").hexdigest()}), encoding="utf-8")
+    monkeypatch.setattr(smoke, "BASELINE_METADATA", pin)
+    package = tmp_path / "previous.zip"
+    package.write_bytes(b"previous release")
+    smoke.verify_restart_baseline(package)
+    package.write_bytes(b"new candidate")
+    with pytest.raises(ValueError, match="checksum-pinned previous release"):
+        smoke.verify_restart_baseline(package)
+    # The worker repeats the guard before importing or launching any app code.
+    with pytest.raises(ValueError, match="checksum-pinned previous release"):
+        smoke.worker(tmp_path / "unopened-app", transcribe=False, baseline_archive=package)
+
+
+@pytest.mark.parametrize("returncode,message,network_error,accepted", [
+    (1, "exact", errno.ECONNREFUSED, True),
+    (0, "exact", errno.ECONNREFUSED, False),
+    (1, "wrong port", errno.ECONNREFUSED, False),
+    (1, "unrelated error", errno.ECONNREFUSED, False),
+    (1, "exact", errno.ETIMEDOUT, False),
+    (1, "exact", None, False),
+])
+def test_known_restart_failure_requires_exact_error_and_no_listener(monkeypatch, returncode, message, network_error, accepted):
+    port = 54321
+    if message == "exact":
+        message = (f"ERROR: CUTROOM cannot start because 127.0.0.1:{port} is already in use or unavailable. "
+                   "Close the other program or choose another CUTROOM_PORT.")
+    class Listener:
+        def __enter__(self): return self
+        def __exit__(self, *args): pass
+    def connect(address, timeout):
+        assert address == ("127.0.0.1", port) and timeout == 2
+        if network_error is not None:
+            raise OSError(network_error, "synthetic socket outcome")
+        return Listener()
+    monkeypatch.setattr(smoke.socket, "create_connection", connect)
+    assert smoke.is_known_baseline_restart_failure(smoke.LauncherStartupError(returncode), message, port) is accepted
+
+
+def test_baseline_restart_option_is_not_a_worker_bypass(tmp_path, monkeypatch):
+    monkeypatch.setattr(smoke.sys, "argv", ["smoke_macos.py", "--worker-app", str(tmp_path),
+                                          "--allow-baseline-restart-failure"])
+    monkeypatch.setattr(smoke, "worker", lambda *args, **kwargs: pytest.fail("Archive pin must be checked first"))
+    with pytest.raises(SystemExit) as error:
+        smoke.main()
+    assert error.value.code == 2

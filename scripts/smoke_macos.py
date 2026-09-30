@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import argparse
 from array import array
+from contextlib import contextmanager
+import errno
 import hashlib
 import json
 import os
@@ -21,10 +23,27 @@ import stat
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import urllib.error
 import urllib.request
 import zipfile
+
+
+BASELINE_METADATA = Path(__file__).resolve().parents[1] / "packaging/mac/validation-baseline.json"
+
+
+class LauncherStartupError(RuntimeError):
+    def __init__(self, returncode: int):
+        self.returncode = returncode
+        super().__init__(f"Mac launcher exited before startup ({returncode})")
+
+
+def verify_restart_baseline(archive: Path) -> None:
+    """Never extend a known previous-release exception to an unpinned archive."""
+    baseline = json.loads(BASELINE_METADATA.read_text(encoding="utf-8"))
+    if hashlib.sha256(archive.read_bytes()).hexdigest() != baseline["sha256"]:
+        raise ValueError("Restart exception is restricted to the checksum-pinned previous release")
 
 
 def run(command: list[str], *, env: dict[str, str], cwd: Path, timeout: int = 120) -> str:
@@ -83,7 +102,8 @@ def extract_mac(archive: Path, destination: Path) -> Path:
 def isolated_environment(scratch: Path) -> dict[str, str]:
     env = {key: value for key, value in os.environ.items()
            if not key.startswith(("CUTROOM_", "OPENAI_", "ANTHROPIC_"))
-           and key not in {"PYTHONPATH", "PYTHONHOME", "VIRTUAL_ENV"}}
+           and key not in {"PYTHONPATH", "PYTHONHOME", "VIRTUAL_ENV", "HF_TOKEN", "HUGGING_FACE_HUB_TOKEN",
+                           "HF_HUB_OFFLINE", "TRANSFORMERS_OFFLINE", "HF_DATASETS_OFFLINE"}}
     env.update(CUTROOM_DATA_DIR=str(scratch / "test data שלום"), CUTROOM_NO_BROWSER="1",
                PYTHONUNBUFFERED="1", PYTHONDONTWRITEBYTECODE="1",
                HF_HOME=str(scratch / "model cache"), XDG_CACHE_HOME=str(scratch / "cache"),
@@ -92,11 +112,40 @@ def isolated_environment(scratch: Path) -> dict[str, str]:
     return env
 
 
-def install_and_check(archive: Path, *, transcribe: bool = False) -> dict:
+def offline_environment(env: dict[str, str]) -> dict[str, str]:
+    return {**env, "PIP_NO_INDEX": "1", "HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1",
+            "HF_DATASETS_OFFLINE": "1", "PIP_DISABLE_PIP_VERSION_CHECK": "1"}
+
+
+def installed_runtime_signature(app: Path) -> dict[str, tuple[str, int]]:
+    """Detect package reinstall/repair during supposedly ready offline launches."""
+    runtime = app / ".venv"
+    records = sorted(runtime.glob("lib/python*/site-packages/*.dist-info/RECORD"))
+    if not records:
+        raise RuntimeError("The fresh runtime has no installed package inventory")
+    return {path.relative_to(runtime).as_posix(): (hashlib.sha256(path.read_bytes()).hexdigest(), path.stat().st_mtime_ns)
+            for path in [runtime / "pyvenv.cfg", *records]}
+
+
+def prepare_missing_pip_runtime(app: Path, *, env: dict[str, str], cwd: Path) -> None:
+    """Reproduce an interrupted runtime without touching any installed package."""
+    run([sys.executable, "-m", "venv", "--without-pip", str(app / ".venv")],
+        env=env, cwd=cwd, timeout=120)
+    missing = subprocess.run([str(app / ".venv" / "bin" / "python"), "-m", "pip", "--version"],
+                             env=env, cwd=cwd, stdin=subprocess.DEVNULL,
+                             capture_output=True, text=True, timeout=30)
+    output = missing.stdout + missing.stderr
+    assert missing.returncode != 0 and "No module named pip" in output, output
+
+
+def install_and_check(archive: Path, *, transcribe: bool = False, repair_missing_pip: bool = False,
+                      allow_baseline_restart_failure: bool = False) -> dict:
     if sys.platform != "darwin":
         raise RuntimeError("This installation smoke must run on macOS; it is not a simulated Mac test")
     if not (3, 11) <= sys.version_info[:2] < (3, 13):
         raise RuntimeError("Run the installation smoke with native Python 3.11 or 3.12")
+    if allow_baseline_restart_failure:
+        verify_restart_baseline(archive)
     # Import only the stdlib-based verifier from the checkout, never archive code.
     from build_universal_package import verify_package
     verify_package(archive)
@@ -116,21 +165,48 @@ def install_and_check(archive: Path, *, transcribe: bool = False) -> dict:
         config["render"]["prefer_hardware"] = False
         # Only this new extraction is edited. Source and existing app config are never opened.
         (app / "config.json").write_text(json.dumps(config), encoding="utf-8")
-        print("Installing the extracted Mac app into a fresh private virtual environment", flush=True)
-        print(run(["/bin/bash", str(app / "setup_macos.sh"), "--yes"],
-                  env=env, cwd=scratch, timeout=900), flush=True)
+        if repair_missing_pip:
+            print("Creating a private runtime without pip to test ordinary setup recovery", flush=True)
+            prepare_missing_pip_runtime(app, env=env, cwd=scratch)
+        else:
+            print("Installing the extracted Mac app into a fresh private virtual environment", flush=True)
+        setup_output = run(["/bin/bash", str(app / "setup_macos.sh"), "--yes"],
+                           env=env, cwd=scratch, timeout=900)
+        if repair_missing_pip:
+            assert "Restoring pip" in setup_output, setup_output
+        print(setup_output, flush=True)
+        runtime_before = installed_runtime_signature(app)
+        offline = offline_environment(env)
+        offline.pop("CUTROOM_PYTHON", None)  # Subsequent runs use the normal installed-runtime discovery.
+        ready = run(["/bin/bash", str(app / "setup_macos.sh"), "--yes"],
+                    env=offline, cwd=scratch, timeout=120)
+        assert "No downloads are needed" in ready, ready
+        assert installed_runtime_signature(app) == runtime_before, "Ready setup modified installed packages"
+        print(ready, flush=True)
         print(run(["/bin/bash", str(app / "run_macos.sh"), "--check"],
-                  env=env, cwd=scratch, timeout=180), flush=True)
+                  env=offline, cwd=scratch, timeout=180), flush=True)
         python = app / ".venv" / "bin" / "python"
+        if transcribe:
+            print("Downloading tiny.en into this test's private cache before offline transcription", flush=True)
+            print(run([str(python), "-c", "from faster_whisper.utils import download_model; print(download_model('tiny.en'))"],
+                      env=env, cwd=app, timeout=240), flush=True)
         report = scratch / "worker-report.json"
         command = [str(python), str(Path(__file__).resolve()), "--worker-app", str(app),
                    "--report", str(report)]
         if transcribe:
             command.append("--transcribe")
-        print(run(command, env=env, cwd=scratch, timeout=600 if transcribe else 240), flush=True)
+        if allow_baseline_restart_failure:
+            command.extend(["--baseline-archive", str(archive)])
+        print(run(command, env=offline, cwd=scratch, timeout=600 if transcribe else 300), flush=True)
+        assert installed_runtime_signature(app) == runtime_before, "Offline launches modified installed packages"
         result = json.loads(report.read_text(encoding="utf-8"))
         result.update(package_sha256=hashlib.sha256(archive.read_bytes()).hexdigest(),
-                      fresh_install=True, unicode_and_spaces_path=True)
+                      fresh_install=not repair_missing_pip,
+                      installation_scenario="partial_runtime_without_pip_recovery" if repair_missing_pip else "empty_app_install",
+                      missing_pip_recovery="passed" if repair_missing_pip else "not_run",
+                      unicode_and_spaces_path=True, offline_ready_setup="passed",
+                      installed_packages_unchanged="passed",
+                      offline_test_scope="pip indexes and Hugging Face downloads disabled; not a network firewall")
         return result
 
 
@@ -147,7 +223,7 @@ def wait_for_own_server(process: subprocess.Popen, base: str, expected_instance:
     deadline = time.monotonic() + 60
     while time.monotonic() < deadline:
         if process.poll() is not None:
-            raise RuntimeError(f"Mac launcher exited before startup ({process.returncode})")
+            raise LauncherStartupError(process.returncode)
         try:
             identity = request_json(base, "/api/instance")
         except (OSError, urllib.error.URLError):
@@ -233,24 +309,105 @@ def render_via_http(base: str, project_id: str) -> dict:
 
 def real_cpu_transcription(settings, app: Path) -> dict:
     from cutroom.transcription import transcribe
+    from cutroom.jobs import Job, JobContext
     speech = settings.cache_dir / "synthetic English.aiff"
     run(["/usr/bin/say", "-v", "Samantha", "-r", "135", "-o", str(speech),
          "The quick brown fox jumps over the lazy dog. This is a local video editing test."],
         env=dict(os.environ), cwd=app, timeout=30)
     settings.ai.update(whisper_model="tiny.en", whisper_models={"lite": "tiny.en"},
-                       whisper_device="cpu", whisper_compute_type="int8", whisper_isolate_process=False)
-    transcript = transcribe(speech, settings, language="en", performance_mode="lite")
+                       whisper_device="cpu", whisper_compute_type="int8")
+    assert settings.ai.get("whisper_isolate_process", True) is True
+    assert not os.environ.get("CUTROOM_TRANSCRIPTION_WORKER") and not os.environ.get("CUTROOM_FAKE_TRANSCRIPT")
+    assert os.environ.get("HF_HUB_OFFLINE") == "1", "The transcription model must already be cached"
+    spawned_workers = []
+    def observe_worker(event, arguments):
+        if event == "subprocess.Popen" and "cutroom.transcription_worker" in arguments[1]:
+            spawned_workers.append(list(arguments[1]))
+    # Observe the actual subprocess; do not replace its implementation or result.
+    sys.addaudithook(observe_worker)
+    context = JobContext(Job("mac-cpu-transcription", "director", None), threading.Lock())
+    transcript = transcribe(speech, settings, language="en", performance_mode="lite",
+                            cancel_check=context.check_cancelled)
+    assert spawned_workers, "Transcription did not use the application's isolated worker"
     text = " ".join(row.get("text", "") for row in transcript.get("segments", [])).strip()
     words = {word.strip(".,!?").lower() for word in text.split()}
     assert len(words & {"quick", "brown", "fox", "lazy", "dog", "video", "editing", "test"}) >= 3, text
     return {"status": "passed", "device": "cpu", "model": "tiny.en", "text": text,
+            "isolated_worker": "passed", "cached_model_offline": "passed",
             "scope": "synthetic English speech sanity check, not an accuracy benchmark"}
 
 
-def worker(app: Path, *, transcribe: bool) -> dict:
+@contextmanager
+def running_launcher(app: Path, settings, base: str, expected_instance: str):
+    log = settings.data_dir / "launcher.log"
+    with log.open("a", encoding="utf-8") as handle:
+        process = subprocess.Popen(["/bin/bash", str(app.parent / "START CUTROOM.command")],
+                                   cwd=app.parent.parent, env=offline_environment(dict(os.environ)),
+                                   stdin=subprocess.DEVNULL, stdout=handle, stderr=subprocess.STDOUT)
+        try:
+            wait_for_own_server(process, base, expected_instance)
+            yield process
+        except BaseException:
+            handle.flush()
+            print(log.read_text(encoding="utf-8", errors="replace")[-10000:], file=sys.stderr)
+            raise
+        finally:
+            if process.poll() is None:
+                process.terminate()
+                try:
+                    process.wait(timeout=15)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait(timeout=5)
+
+
+def check_repeat_and_conflicting_launch(app: Path, settings, base: str, process, expected_instance: str) -> None:
+    command = ["/bin/bash", str(app.parent / "START CUTROOM.command")]
+    env = offline_environment(dict(os.environ))
+    output = run(command, env=env, cwd=app.parent.parent, timeout=45)
+    assert "already running" in output, output
+    assert process.poll() is None, "Repeating the launcher stopped the original server"
+    assert request_json(base, "/api/instance")["instance_id"] == expected_instance
+    # This second data folder is inside the disposable smoke directory. It must
+    # not take over the already-running server's port or projects.
+    conflicting = {**env, "CUTROOM_DATA_DIR": str(settings.data_dir.parent / "different test data")}
+    completed = subprocess.run(command, cwd=app.parent.parent, env=conflicting,
+                               stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=45)
+    assert completed.returncode != 0, "A different data folder silently reused the running instance"
+    output = completed.stdout + completed.stderr
+    assert "another CUTROOM data folder" in output, output
+    assert process.poll() is None, "The conflicting launcher stopped the original server"
+    assert request_json(base, "/api/instance")["instance_id"] == expected_instance
+
+
+def persisted_project_state(base: str, project_id: str, exports_dir: Path) -> dict:
+    project = request_json(base, f"/api/projects/{project_id}")["project"]
+    fields = ("id", "name", "revision", "settings", "manual", "draft", "sources", "exports")
+    return {"project": {key: project[key] for key in fields},
+            "export_hashes": {record["name"]: hashlib.sha256((exports_dir / record["name"]).read_bytes()).hexdigest()
+                              for record in project["exports"]}}
+
+
+def is_known_baseline_restart_failure(error: LauncherStartupError, log: str, port: int) -> bool:
+    expected = (f"ERROR: CUTROOM cannot start because 127.0.0.1:{port} is already in use or unavailable. "
+                "Close the other program or choose another CUTROOM_PORT.")
+    if error.returncode == 0 or expected not in log:
+        return False
+    # An existing listener, timeout or other network error must never qualify.
+    try:
+        with socket.create_connection(("127.0.0.1", port), timeout=2):
+            return False
+    except OSError as connection_error:
+        return connection_error.errno == errno.ECONNREFUSED
+
+
+def worker(app: Path, *, transcribe: bool, baseline_archive: Path | None = None) -> dict:
+    if baseline_archive is not None:
+        verify_restart_baseline(baseline_archive)
     sys.path.insert(0, str(app))
     from cutroom.config import load_settings
     from server import _cutroom_instance_id
+    from smoke_macos_media import extended_render_checks
     # Ask the OS for an unused port; never use or stop an existing CUTROOM instance.
     with socket.socket() as reservation:
         reservation.bind(("127.0.0.1", 0))
@@ -259,39 +416,51 @@ def worker(app: Path, *, transcribe: bool) -> dict:
     settings = load_settings(app / "config.json")
     assert settings.data_dir.resolve() != (app / "data").resolve()
     base = f"http://127.0.0.1:{port}"
+    expected_instance = _cutroom_instance_id(settings)
     project_id, store = synthetic_project(settings, app)
-    log = settings.data_dir / "launcher.log"
-    with log.open("w", encoding="utf-8") as handle:
-        process = subprocess.Popen(["/bin/bash", str(app.parent / "START CUTROOM.command")],
-                                   cwd=app.parent.parent, env=dict(os.environ), stdin=subprocess.DEVNULL,
-                                   stdout=handle, stderr=subprocess.STDOUT)
-        try:
-            wait_for_own_server(process, base, _cutroom_instance_id(settings))
-            health = request_json(base, "/api/health")
-            assert health["ok"] and health["ffmpeg"] and health["ffprobe"], health
-            created = request_json(base, "/api/projects", {"name": "HTTP lifecycle test"})["project"]
-            request_json(base, f"/api/projects/{created['id']}", method="DELETE")
-            assert request_json(base, f"/api/projects/{project_id}")["project"]["id"] == project_id
-            portrait = check_export(settings, render_via_http(base, project_id), (720, 1280))
-            request_json(base, f"/api/projects/{project_id}", {"settings": {"aspect": "16:9"}}, method="PATCH")
-            landscape = check_export(settings, render_via_http(base, project_id), (1280, 720))
-            assert len(store.load(project_id)["exports"]) == 2
-        except Exception:
-            handle.flush()
-            print(log.read_text(encoding="utf-8", errors="replace")[-10000:], file=sys.stderr)
+    with running_launcher(app, settings, base, expected_instance) as process:
+        health = request_json(base, "/api/health")
+        assert health["ok"] and health["ffmpeg"] and health["ffprobe"], health
+        created = request_json(base, "/api/projects", {"name": "HTTP lifecycle test"})["project"]
+        request_json(base, f"/api/projects/{created['id']}", method="DELETE")
+        assert request_json(base, f"/api/projects/{project_id}")["project"]["id"] == project_id
+        portrait = check_export(settings, render_via_http(base, project_id), (720, 1280))
+        request_json(base, f"/api/projects/{project_id}", {"settings": {"aspect": "16:9"}}, method="PATCH")
+        landscape = check_export(settings, render_via_http(base, project_id), (1280, 720))
+        assert len(store.load(project_id)["exports"]) == 2
+        extended = extended_render_checks(settings, base, project_id, store)
+        current = request_json(base, f"/api/projects/{project_id}")["project"]
+        renamed = request_json(base, f"/api/projects/{project_id}",
+                               {"name": "Saved Mac edit שלום", "settings": {"pace": "gentle", "caption_scale": 115},
+                                "expected_revision": current["revision"]}, method="PATCH")["project"]
+        assert renamed["name"] == "Saved Mac edit שלום" and renamed["settings"]["caption_scale"] == 115
+        saved = persisted_project_state(base, project_id, settings.exports_dir)
+        check_repeat_and_conflicting_launch(app, settings, base, process, expected_instance)
+        assert persisted_project_state(base, project_id, settings.exports_dir) == saved
+    restart_status = "passed"
+    limitations = []
+    log_path = settings.data_dir / "launcher.log"
+    prior_log_size = log_path.stat().st_size
+    try:
+        with running_launcher(app, settings, base, expected_instance):
+            assert persisted_project_state(base, project_id, settings.exports_dir) == saved, "Restart changed saved project state or export bytes"
+            assert request_json(base, "/api/health")["ok"] is True
+    except LauncherStartupError as error:
+        restart_log = log_path.read_bytes()[prior_log_size:].decode("utf-8", errors="replace")
+        if baseline_archive is None or not is_known_baseline_restart_failure(error, restart_log, port):
             raise
-        finally:
-            process.terminate()
-            try:
-                process.wait(timeout=15)
-            except subprocess.TimeoutExpired:
-                process.kill()
-                process.wait(timeout=5)
+        restart_status = "known_failure"
+        limitations.append("Checksum-pinned previous release: immediate same-port restart exited nonzero with the exact port-unavailable error and ECONNREFUSED (no listener). Saved state could not be verified after restart.")
+        print("KNOWN PREVIOUS-RELEASE LIMITATION: " + limitations[-1], flush=True)
     transcription = real_cpu_transcription(settings, app) if transcribe else {
         "status": "not_run", "reason": "Use --transcribe to download tiny.en and test real CPU transcription"}
-    return {"status": "passed", "platform": platform.platform(), "machine": platform.machine(),
+    return {"status": "passed_with_known_baseline_failure" if limitations else "passed",
+            "platform": platform.platform(), "machine": platform.machine(),
             "python": platform.python_version(), "launcher_health_and_api": "passed",
+            "restart_persistence": restart_status, "known_limitations": limitations,
+            "repeat_launch": "passed", "different_data_port_collision": "passed",
             "portrait": portrait, "landscape": landscape, "source_audio_and_caption_checks": "passed",
+            "extended_render_checks": extended,
             "transcription": transcription, "manual_finder_gatekeeper_test": "not_run",
             "ollama_and_cloud_ai": "not_run"}
 
@@ -303,9 +472,23 @@ def main() -> int:
     source.add_argument("--worker-app", type=Path, help=argparse.SUPPRESS)
     parser.add_argument("--report", type=Path, help="Optional JSON report, created without overwriting")
     parser.add_argument("--transcribe", action="store_true", help="Also download tiny.en and transcribe synthetic English speech")
+    parser.add_argument("--repair-missing-pip", action="store_true",
+                        help="Start the extracted app with a private --without-pip venv and require setup recovery")
+    parser.add_argument("--allow-baseline-restart-failure", action="store_true",
+                        help="Report only the pinned previous release's confirmed no-listener restart failure as known")
+    parser.add_argument("--baseline-archive", type=Path, help=argparse.SUPPRESS)
     args = parser.parse_args()
-    result = (worker(args.worker_app.resolve(), transcribe=args.transcribe) if args.worker_app
-              else install_and_check(args.archive.resolve(), transcribe=args.transcribe))
+    if args.worker_app and args.repair_missing_pip:
+        parser.error("--repair-missing-pip requires --archive")
+    if args.worker_app and args.allow_baseline_restart_failure:
+        parser.error("--allow-baseline-restart-failure requires --archive")
+    if args.baseline_archive and not args.worker_app:
+        parser.error("--baseline-archive is an internal worker argument")
+    result = (worker(args.worker_app.resolve(), transcribe=args.transcribe,
+                     baseline_archive=args.baseline_archive.resolve() if args.baseline_archive else None) if args.worker_app
+              else install_and_check(args.archive.resolve(), transcribe=args.transcribe,
+                                     repair_missing_pip=args.repair_missing_pip,
+                                     allow_baseline_restart_failure=args.allow_baseline_restart_failure))
     text = json.dumps(result, indent=2, ensure_ascii=False)
     if args.report:
         with args.report.open("x", encoding="utf-8") as handle:
