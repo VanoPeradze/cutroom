@@ -1,4 +1,5 @@
 """The combined download must preserve every byte of the approved Windows package."""
+import io
 import json
 import stat
 import zipfile
@@ -36,6 +37,28 @@ def package_source(tmp_path, monkeypatch):
 
 def build(fixture, **kwargs):
     return combined.build_package(*fixture, build_id="test", **kwargs)
+
+
+@pytest.mark.parametrize("response_kind", ["approved", "corrupt", "oversized", "insecure_redirect"])
+def test_baseline_download_identifies_builder_without_relaxing_verification(package_source, tmp_path, monkeypatch, response_kind):
+    approved = package_source[1].read_bytes()
+    data = {"corrupt": b"x" + approved[1:], "oversized": approved + b"x"}.get(response_kind, approved)
+    response = io.BytesIO(data)
+    response.url = "http://example.invalid/frozen.zip" if response_kind == "insecure_redirect" else combined._baseline()["url"]
+    def fetch(request, timeout):
+        assert request.full_url == combined._baseline()["url"]
+        assert request.get_header("User-agent").startswith("CUTROOM-release-builder/")
+        assert timeout == 60
+        return response
+    monkeypatch.setattr(combined.urllib.request, "urlopen", fetch)
+    destination = tmp_path / "download.zip"
+    if response_kind == "approved":
+        combined.download_baseline(destination)
+        assert destination.read_bytes() == approved
+    else:
+        with pytest.raises(ValueError, match="checksum|HTTPS"):
+            combined.download_baseline(destination)
+        assert not destination.exists()
 
 
 def rewrite(archive, target, change):

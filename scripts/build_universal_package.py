@@ -180,7 +180,10 @@ def download_baseline(destination: Path) -> None:
     baseline = _baseline()
     if not baseline["url"].startswith("https://"):
         raise ValueError("Baseline download requires HTTPS")
-    with urllib.request.urlopen(baseline["url"], timeout=60) as response:
+    request = urllib.request.Request(baseline["url"], headers={
+        "User-Agent": "CUTROOM-release-builder/1.1 (+https://github.com/VanoPeradze/cutroom)",
+    })
+    with urllib.request.urlopen(request, timeout=60) as response:
         if not response.url.startswith("https://"):
             raise ValueError("Baseline redirected away from HTTPS")
         data = response.read(baseline["bytes"] + 1)
