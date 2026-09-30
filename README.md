@@ -45,18 +45,19 @@ The editor runs locally and opens in your browser. Choose your platform:
 | Platform | Start here | Beta status |
 | --- | --- | --- |
 | **Windows** | [Download and extract the ZIP](https://cutroom-studio.expo.app/#download), then open `windows/START CUTROOM.bat`. A source checkout uses `run_windows.bat`. | Windows beta launcher; fresh-computer and broad hardware QA remain ongoing. |
-| **macOS** | Use the same ZIP, then open `mac/START CUTROOM.command`. | macOS 15+, Apple Silicon and Intel. Automated validation passes on both; Finder/Gatekeeper and Safari still need manual QA. |
+| **macOS** | Use the same ZIP, then open `mac/START CUTROOM.command`. | macOS 15+, Apple Silicon and Intel. Publication requires current-source automated checks on both; Finder/Gatekeeper and Safari still need manual QA. |
 | **Linux** | Use the [repository source](https://github.com/VanoPeradze/cutroom) and follow the [Linux setup steps](docs/PLATFORMS.md#linux-source-based-development-path). | Source-based development path; no Linux folder in the ZIP or verified end-to-end Linux QA yet. |
 
 The Windows/Mac ZIP contains source and launchers. **First setup needs internet** for dependencies; local AI models are separate, optional downloads. Keep **App**, **START HERE.html** and your launcher together, and keep the launch window open while editing. The Mac launcher is unsigned, and local Mac transcription currently uses the CPU.
 
-Linux needs Python 3.11/3.12 with `venv` and `pip`, FFmpeg/FFprobe and the setup/run scripts. The [platform guide](docs/PLATFORMS.md) covers exact commands, prerequisites and troubleshooting for every platform. Existing Windows users do not need to reinstall for Mac support.
+Linux needs Python 3.11/3.12 with `venv` and `pip`, FFmpeg/FFprobe and the setup/run scripts. The [platform guide](docs/PLATFORMS.md) covers exact commands, prerequisites and troubleshooting for every platform. To get this editor update, download a fresh copy, extract it separately and back up saved projects before migrating them.
 
 ## Your edit stays editable
 
 - **Independent A/B timelines:** split, trim, move and restore clips together or separately, with Undo/Redo and track protection.
 - **Camera and screen layouts:** adjust source roles, framing and synchronization.
-- **Media, sound and captions:** add B-roll, images, music, voiceover, titles and SRT/VTT captions; correct the AI transcript when using it.
+- **Media, sound and captions:** add B-roll, images, music, voiceover, titles and SRT/VTT captions. Source waveforms work without AI; the compact mixer shows live audio levels.
+- **Optional footage stabilization:** create a separate local copy when your FFmpeg supports it. It may crop/zoom edges; your original stays untouched. [Stabilization guide](docs/STABILIZATION.md)
 - **Local MP4 export:** choose landscape or vertical output, 720p through 4K, and frame-rate options up to 60 FPS. Higher settings do not create missing source detail.
 
 [Editing walkthrough](docs/USER_GUIDE_EN.md) · [Timeline controls](docs/INDEPENDENT_TRACKS.md) · [Keyboard shortcuts](docs/KEYBOARD_SHORTCUTS.md)
@@ -71,7 +72,7 @@ Editing and rendering stay local in every mode. After cloud consent, selected au
 
 ## Try the beta with a short recording
 
-Review AI selections, transcripts, camera roles and sync before exporting. Added media and text fit within the existing edit; they do not extend it or automatically follow source reordering. A known sub-frame A/B duration edge case can reject adding extra media.
+Review AI selections, transcripts, camera roles and sync before exporting. Added media and text fit within the existing edit; they do not extend it or automatically follow source reordering. This revision fixes the sub-frame A/B duration rejection, source waveforms and Unicode media-name handling; see the [changelog](CHANGELOG.md).
 
 Automated and synthetic tests do not establish real-footage quality or clean-machine installation success. Keep your originals and watch the exported file before sharing it.
 

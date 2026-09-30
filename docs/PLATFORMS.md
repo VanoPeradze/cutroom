@@ -7,7 +7,7 @@ CUTROOM is a free, MIT-licensed, local-first video editor for editable YouTube, 
 | Platform | Available path | Validation and limits |
 | --- | --- | --- |
 | Windows | [Combined beta ZIP](https://cutroom-studio.expo.app/#download): `windows/START CUTROOM.bat`. A source checkout uses `run_windows.bat`. | Existing Windows beta setup; fresh-computer and broad hardware QA remain ongoing. |
-| macOS | The same ZIP: `mac/START CUTROOM.command`. | Targets macOS 15+ on Apple Silicon and Intel; macOS 15 automated validation passes on both architectures. Manual installation and Safari QA remain needed. |
+| macOS | The same ZIP: `mac/START CUTROOM.command`. | Targets macOS 15+ on Apple Silicon and Intel. Publication requires current-source automated checks on both; manual installation and Safari QA remain needed. |
 | Linux | [Repository source](https://github.com/VanoPeradze/cutroom): `setup_linux.sh` and `run_linux.sh`. | Development path only; no Linux folder, native Linux installer or verified end-to-end Linux QA in this beta. |
 
 The download contains only **windows** and **mac**. It ships source code and launchers, not bundled Python/FFmpeg runtimes or model weights. First setup needs internet to download dependencies. The Mac launcher is not a signed/notarized `.app`. A Linux source checkout is a separate installation path.
@@ -21,7 +21,7 @@ The download contains only **windows** and **mac**. It ships source code and lau
 
 Setup accepts an existing Python 3.11/3.12 or downloads a private Python runtime, then installs the Python dependencies. FFmpeg and FFprobe are required; setup can attempt installation through Windows Package Manager. It may also attempt to install/start Ollama, but manual editing does not require it. Dependencies and local AI models are not bundled. See [Windows setup and troubleshooting](TEST_ON_ANOTHER_PC.md) for download behavior and diagnostics.
 
-For a GitHub source checkout, run **`run_windows.bat` from the repository root**. Do not rearrange an existing working installation to match the ZIP: its runtime paths and Python environment can depend on its current folder. The combined download preserves the approved Windows application and launchers; refreshed package guidance does not require existing Windows users to reinstall.
+For a GitHub source checkout, run **`run_windows.bat` from the repository root**. Do not rearrange an existing working installation to match the ZIP: its runtime paths and Python environment can depend on its current folder. To receive this editor revision, download a fresh copy and extract it separately. Back up projects before migration; the public 1.1 Beta filename stays the same, while the manifest records a new build ID/checksums.
 
 ## macOS beta
 
@@ -69,7 +69,7 @@ Start with a short recording and **Manual edit**. Imported SRT/VTT captions and 
 
 ## Validation and current limits
 
-The [successful master Mac validation on September 30, 2026](https://github.com/VanoPeradze/cutroom/actions/runs/36674994899) ran at **`cb052b5764b89205e2537292a7beb0fba5b38b3d`**, on macOS 15 Apple Silicon and Intel. Its workflow covers regression tests, a verified candidate package and synthetic editing/export/transcription smoke tests. This is automated evidence, not a manual clean-Mac installation report or proof that every public ZIP byte was tested.
+The [successful earlier master Mac validation on September 30, 2026](https://github.com/VanoPeradze/cutroom/actions/runs/36674994899) ran at **`cb052b5764b89205e2537292a7beb0fba5b38b3d`**, on macOS 15 Apple Silicon and Intel. Its regression, package and synthetic editing/export/transcription checks apply to that earlier payload. **Publication of this editor revision requires current-source Apple Silicon/Intel macOS 15 checks**; [GitHub Actions](https://github.com/VanoPeradze/cutroom/actions/workflows/macos.yml) records tested commits. Local Windows tests and synthetic renders passed; they do not replace native Mac checks or verify every public ZIP byte.
 
 Still needing manual beta QA:
 
@@ -78,6 +78,6 @@ Still needing manual beta QA:
 - Transcription accuracy, sync, memory use and processing speed on representative real footage and recording lengths.
 - Linux installation, preview, editing, captions and export on actual distributions/hardware.
 
-A known shared-editor edge case with **sub-frame differences between A/B source end times** can reject adding extra media to an existing cut. It is separate from Mac setup; reinstalling the runtime will not fix it. Review edits and exported duration carefully, especially with two recordings.
+This revision fixes the earlier **sub-frame A/B duration rejection**, manual source waveforms and Unicode media-name handling, and adds live mixer meters. Actual FFmpeg synthetic renders cover the A/B boundary at 30/60 FPS. Optional [stabilization](STABILIZATION.md) makes a separate local copy only when the installed FFmpeg has vidstab filters; it may crop/zoom edges, preserves originals and still needs native Mac/Linux and real-footage testing. Review edits, audio and exported duration carefully.
 
 Automated and synthetic checks do not prove AI editorial quality or production readiness. See [beta status](BETA_STATUS.md), [quality limits](QUALITY_AND_LIMITS.md) and the [user guide](USER_GUIDE_EN.md). To report a problem, include your OS/architecture, build, browser, exact steps and a short redacted error excerpt in a [reproducible issue](https://github.com/VanoPeradze/cutroom/issues/new/choose).

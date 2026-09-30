@@ -107,11 +107,17 @@ jobs:
           archive="$(python scripts/build_universal_package.py --download-baseline --output-dir "$RUNNER_TEMP/cutroom-universal")"
           python scripts/build_universal_package.py --verify "$archive"
           echo "CUTROOM_CANDIDATE_ARCHIVE=$archive" >> "$GITHUB_ENV"
+      - name: Verify audio, mixer and stabilization from the extracted candidate
+        timeout-minutes: 6
+        shell: bash
+        run: |
+          "$RUNNER_TEMP/cutroom-regression-venv/bin/python" scripts/check_editor_release.py --archive "$CUTROOM_CANDIDATE_ARCHIVE" --report "$RUNNER_TEMP/editor-features.json"
+          python -c 'import json, os, pathlib; print(json.dumps(json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"editor-features.json").read_text()), indent=2))' >> "$GITHUB_STEP_SUMMARY"
       - name: Verify the pinned previous published release
         timeout-minutes: 3
         shell: bash
         run: |
-          archive="$(python scripts/verify_published_package.py --release packaging/mac/validation-baseline.json --output "$RUNNER_TEMP/previous-published-CUTROOM.zip")"
+          archive="$(python scripts/verify_published_package.py --release packaging/mac/validation-baseline.json --windows-baseline packaging/windows/validation-baseline.json --output "$RUNNER_TEMP/previous-published-CUTROOM.zip")"
           echo "CUTROOM_SMOKE_ARCHIVE=$archive" >> "$GITHUB_ENV"
       - name: Test installation, editing, restart and transcription from the previous published release
         timeout-minutes: 18
@@ -121,7 +127,7 @@ jobs:
         run: |
           extra=()
           if [[ "$RUN_TRANSCRIPTION" == '1' ]]; then extra+=(--transcribe); fi
-          python scripts/smoke_macos.py --archive "$CUTROOM_SMOKE_ARCHIVE" --allow-baseline-restart-failure --report "$RUNNER_TEMP/macos-smoke.json" "${extra[@]}"
+          python scripts/smoke_macos.py --archive "$CUTROOM_SMOKE_ARCHIVE" --windows-baseline packaging/windows/validation-baseline.json --allow-baseline-restart-failure --report "$RUNNER_TEMP/macos-smoke.json" "${extra[@]}"
           python -c 'import json, os, pathlib; result=json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"macos-smoke.json").read_text()); print(json.dumps(result, indent=2))' >> "$GITHUB_STEP_SUMMARY"
       - name: Test missing-pip recovery and the full smoke on the newly built candidate
         timeout-minutes: 18
@@ -133,3 +139,16 @@ jobs:
           if [[ "$RUN_TRANSCRIPTION" == '1' ]]; then extra+=(--transcribe); fi
           python scripts/smoke_macos.py --archive "$CUTROOM_CANDIDATE_ARCHIVE" --repair-missing-pip --report "$RUNNER_TEMP/macos-candidate.json" "${extra[@]}"
           python -c 'import json, os, pathlib; print(json.dumps(json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"macos-candidate.json").read_text()), indent=2))' >> "$GITHUB_STEP_SUMMARY"
+      - name: Retain the tested release archive and native evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: CUTROOM-tested-macos-${{ matrix.architecture }}
+          path: |
+            ${{ env.CUTROOM_CANDIDATE_ARCHIVE }}
+            ${{ env.CUTROOM_CANDIDATE_ARCHIVE }}.sha256
+            ${{ runner.temp }}/editor-features.json
+            ${{ runner.temp }}/macos-smoke.json
+            ${{ runner.temp }}/macos-candidate.json
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7

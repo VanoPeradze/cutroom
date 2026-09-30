@@ -173,7 +173,11 @@ Open **More editing tools → Keys / Shortcuts** and choose a preset. The list s
 
 In **Media & audio**, choose **Add media** to import video, an image or audio into this project's library. Wait for preparation, place the yellow playhead and select **+ Add**. Drag the new clip or its edges in the waveform/timeline lanes; use its inspector for exact start/end, source in, volume and fades. Images can stay still, slowly zoom or pan. **Use clip audio** enables sound from an added video; check its **Audio group**.
 
-**Audio mixer** balances Original, Voiceover, Music, Effects and Master. Mute affects preview and export; Solo auditions a channel in the preview only. Watch the output meter while listening and leave some headroom. Media layers currently fit inside the existing edit duration; adding a file does not extend the whole edit or create more main A/B sources.
+The timeline waveform shows measured audio from the selected original A/B source, including manual edits without AI. Imported audio has its own waveform. A silent section, missing audio and a pending/unavailable measurement are different states.
+
+Open **Audio mixer** to balance Original, Voiceover, Music, Effects and Master. Original is the selected A/B audio source; the other channels group media by audio role. Mute and volume affect preview and export; Solo auditions a channel in preview only. Live meters show browser sample peaks and reset on pause/seek. Leave headroom; export normalization can change final loudness. Media layers fit inside the existing edit duration; adding a file does not extend the whole edit or create more main A/B sources.
+
+**Stabilize footage** makes an optional local copy without replacing your original or edit. Support depends on your FFmpeg build, and smoothing may crop edges. [Steps and limits](STABILIZATION.md).
 
 For a selected main A/B clip, **Picture speed** changes only the picture, from 0.25× to 4×. Clip length and speech timing stay in place. It can lose lip sync, and reaching the end of the source can hold the last frame. Check the result before export; this control does not speed up the entire picture-and-sound edit.
 

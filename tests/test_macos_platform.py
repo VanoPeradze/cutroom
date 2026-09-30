@@ -87,6 +87,22 @@ def test_smoke_never_installs_on_a_simulated_mac(tmp_path, monkeypatch):
         smoke.install_and_check(tmp_path / "missing.zip")
 
 
+@pytest.mark.parametrize("historical", [False, True])
+def test_smoke_verifies_selected_pin_before_extraction_or_installation(tmp_path, monkeypatch, historical):
+    # This is a verifier contract test. Aborting at verification prevents any
+    # installation or claim of actual Mac runtime validation on another OS.
+    monkeypatch.setattr(smoke.sys, "platform", "darwin")
+    metadata = tmp_path / "historical-windows.json" if historical else None
+    archive_path = tmp_path / "release.zip"
+    def verify(path, *, windows_baseline=None):
+        assert path == archive_path and windows_baseline == metadata
+        raise ValueError("stop before extraction")
+    monkeypatch.setitem(sys.modules, "build_universal_package", SimpleNamespace(verify_package=verify))
+    with pytest.raises(ValueError, match="stop before extraction"):
+        smoke.install_and_check(archive_path, windows_baseline=metadata)
+    assert not any(tmp_path.iterdir())
+
+
 def test_server_identity_is_verified_before_any_project_requests(monkeypatch):
     seen = []
     def response(base, path):
@@ -188,10 +204,14 @@ def test_missing_pip_fixture_requires_an_actual_missing_module(tmp_path, monkeyp
 
 
 @pytest.mark.parametrize("repair", [False, True])
-def test_missing_pip_cli_option_reaches_archive_install_only(tmp_path, monkeypatch, repair):
+@pytest.mark.parametrize("historical", [False, True])
+def test_missing_pip_cli_option_reaches_archive_install_only(tmp_path, monkeypatch, repair, historical):
     arguments = ["smoke_macos.py", "--archive", str(tmp_path / "release.zip"), "--transcribe"]
     if repair:
         arguments.append("--repair-missing-pip")
+    metadata = tmp_path / "historical-windows.json" if historical else None
+    if metadata:
+        arguments.extend(["--windows-baseline", str(metadata)])
     monkeypatch.setattr(smoke.sys, "argv", arguments)
     calls = []
     def install(archive, **kwargs):
@@ -200,7 +220,8 @@ def test_missing_pip_cli_option_reaches_archive_install_only(tmp_path, monkeypat
     monkeypatch.setattr(smoke, "install_and_check", install)
     assert smoke.main() == 0
     assert calls == [((tmp_path / "release.zip").resolve(), {"transcribe": True, "repair_missing_pip": repair,
-                                                           "allow_baseline_restart_failure": False})]
+                                                           "allow_baseline_restart_failure": False,
+                                                           "windows_baseline": metadata})]
 
 
 def test_missing_pip_cli_rejects_worker_mode(tmp_path, monkeypatch):

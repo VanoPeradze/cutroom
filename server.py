@@ -33,6 +33,8 @@ from cutroom.edit_styles import UnknownEditStyle, get_edit_style, public_edit_st
 from cutroom.editing import ManualEditError, apply_manual_edit, strip_private_edit_history
 from cutroom.sequence import SEQUENCE_ACTION_FIELDS, editor_sequence_snapshot
 from cutroom.source_tracks import SourceTrackError
+from cutroom.stabilization import StabilizationError, stabilization_capability
+from cutroom.stabilization_assets import pinned_stabilization_source, prepare_stabilized_asset
 from cutroom.track_locks import TrackLockedError, require_tracks_unlocked
 from cutroom.intelligence import story_ai_status
 from cutroom.cloud_ai import ConnectionStore, CloudAIError, enabled as cloud_enabled, require_connection
@@ -84,6 +86,7 @@ JSON_BODY_ENDPOINTS = {
     "cancel_job",
     "install_model",
     "prepare_ai_runtime",
+    "stabilize_source",
 }
 UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 FOREGROUND_JOB_KINDS = {"director", "refine", "render"}
@@ -893,6 +896,10 @@ def create_app(settings: Settings | None = None) -> Flask:
             "ollama": _ollama_status(settings),
         })
 
+    @app.get("/api/stabilization/capability")
+    def stabilization_info():
+        return jsonify(stabilization_capability(settings))
+
     @app.get("/api/instance")
     def instance_info():
         response = jsonify({
@@ -1132,9 +1139,104 @@ def create_app(settings: Settings | None = None) -> Flask:
                 else:
                     active_uploads.pop(project_id, None)
 
+    def require_stabilization_storage(source: dict[str, Any], source_path: Path) -> None:
+        # Reserve room for the full-size copy, its intermediate output and editor
+        # preview. CRF output varies, so this remains a conservative estimate.
+        duration = float(source.get("duration") or 0)
+        pixels = max(1, int(source.get("width") or 0) * int(source.get("height") or 0))
+        fps = max(30, float(source.get("fps") or 30))
+        estimate = int(duration * pixels * fps * .15 / 8 * 2)
+        required = max(512 * 1024**2, source_path.stat().st_size * 3, estimate) + 1024**3
+        if shutil.disk_usage(settings.data_dir).free < required:
+            raise APIInputError("insufficient_storage", "There is not enough free space to make a stabilized copy.", 507)
+
+    @app.post("/api/projects/<project_id>/stabilize")
+    def stabilize_source(project_id: str):
+        payload = _json_object()
+        _reject_unknown_fields(payload, {"slot", "expected_revision"})
+        slot, revision = payload.get("slot"), payload.get("expected_revision")
+        if not isinstance(slot, str) or slot not in {"A", "B"}:
+            raise APIInputError("invalid_slot", "Choose source A or B.")
+        if isinstance(revision, bool) or not isinstance(revision, int) or revision < 1:
+            raise APIInputError("invalid_field", "Stabilization requires the displayed project's expected_revision.")
+        capability = stabilization_capability(settings)
+        if not capability.get("available"):
+            raise APIInputError("stabilization_unavailable", capability["message"], 422)
+        folder = None
+        durable = False
+        try:
+            with project_job_gate:
+                current = store.load(project_id)
+                if current["revision"] != revision:
+                    raise RuntimeError("revision_conflict")
+                if active_uploads.get(project_id, 0) or jobs.active(project_id=project_id):
+                    raise APIInputError("project_busy", "Wait for active processing or import to finish before stabilizing a source.", 409)
+                if len(current.get("assets") or {}) >= MAX_ASSETS:
+                    raise APIInputError("asset_limit", f"A project can contain at most {MAX_ASSETS} media assets.")
+                source = (current.get("sources") or {}).get(slot)
+                if not source or source.get("preparation") != "ready" or not source.get("generation"):
+                    raise APIInputError("source_not_ready", "Wait for this source to finish preparing before stabilizing it.", 409)
+                duration = float(source.get("duration") or 0)
+                if (not math.isfinite(duration) or not 0 < duration <= 4 * 3600
+                        or int(source.get("width") or 0) < 2 or int(source.get("height") or 0) < 2):
+                    raise APIInputError("source_video_required", "Choose a video source no longer than four hours.")
+                project_root = store.project_dir(project_id)
+                source_path = _safe_project_child(project_root, source.get("relative_path"))
+                if source_path is None or not source_path.is_file():
+                    raise APIInputError("source_unavailable", "The original source is unavailable. Import it again.", 409)
+                stat = source_path.stat()
+                require_stabilization_storage(source, source_path)
+                asset_id = "asset_" + uuid.uuid4().hex
+                path = safe_asset_path(project_root, f"media/assets/{asset_id}/stabilized.mp4")
+                folder = path.parent
+                folder.mkdir(parents=True)
+                name = sanitize_filename(Path(source.get("name") or f"Source {slot}").stem)[:110] + " stabilized.mp4"
+                asset = {
+                    "id": asset_id, "name": name, "kind": "video", "duration": duration,
+                    "width": source["width"], "height": source["height"], "has_audio": bool(source.get("has_audio")),
+                    "path": path.relative_to(project_root).as_posix(), "status": "preparing", "waveform": [],
+                    "stabilized": True, "_stabilization": {
+                        "slot": slot, "generation": source["generation"], "relative_path": source["relative_path"],
+                        "fingerprint": {"size": stat.st_size, "mtime_ns": stat.st_mtime_ns},
+                    },
+                }
+                current = store.update(project_id, lambda value: value.setdefault("assets", {}).update({asset_id: asset}),
+                                       expected_revision=revision)
+                durable = True
+                try:
+                    job = jobs.submit("prepare_asset", project_id, prepare_stabilized_asset,
+                                      project_id, asset_id, store, settings, dedupe_key=asset_id)
+                except JobAdmissionError:
+                    def discard_stabilized_asset(value):
+                        value["assets"].pop(asset_id, None)
+                    store.update(project_id, discard_stabilized_asset)
+                    durable = False
+                    raise
+            public = _public_project(current)
+            return jsonify({"project": public, "asset": public["assets"][asset_id],
+                            "asset_id": asset_id, "job": job.public()}), 202
+        finally:
+            if folder is not None and not durable:
+                try:
+                    folder.rmdir()
+                except OSError:
+                    pass
+
     @app.get("/api/projects/<project_id>/assets/<asset_id>/media")
     def asset_media(project_id: str, asset_id: str):
         return serve_asset(project_id, asset_id, thumbnail=False)
+
+    @app.get("/api/projects/<project_id>/assets/<asset_id>/download")
+    def download_asset(project_id: str, asset_id: str):
+        if not ASSET_ID_RE.fullmatch(asset_id):
+            raise FileNotFoundError(asset_id)
+        asset = (store.load(project_id).get("assets") or {}).get(asset_id)
+        if not asset or asset.get("status") != "ready":
+            raise FileNotFoundError(asset_id)
+        path = safe_asset_path(store.project_dir(project_id), asset.get("path"))
+        if not path.is_file():
+            raise FileNotFoundError(asset_id)
+        return send_file(path, conditional=True, as_attachment=True, download_name=sanitize_filename(asset.get("name")))
 
     @app.post("/api/projects/<project_id>/assets/<asset_id>/prepare")
     def retry_asset_preparation(project_id: str, asset_id: str):
@@ -1147,9 +1249,20 @@ def create_app(settings: Settings | None = None) -> Flask:
                 raise APIInputError("project_busy", "Wait for active processing or import to finish before retrying.", 409)
             if asset.get("status") == "ready":
                 return jsonify({"project": _public_project(current)})
+            preparation = prepare_asset
+            if asset.get("_stabilization"):
+                capability = stabilization_capability(settings)
+                if not capability.get("available"):
+                    raise APIInputError("stabilization_unavailable", capability["message"], 422)
+                try:
+                    source_path = pinned_stabilization_source(store.project_dir(project_id), current, asset["_stabilization"])
+                except StabilizationError as exc:
+                    raise APIInputError("stabilization_source_changed", str(exc), 409) from exc
+                require_stabilization_storage(current["sources"][asset["_stabilization"]["slot"]], source_path)
+                preparation = prepare_stabilized_asset
             current = store.update(project_id, lambda value: value["assets"][asset_id].update(status="preparing"))
             try:
-                job = jobs.submit("prepare_asset", project_id, prepare_asset, project_id, asset_id, store, settings, dedupe_key=asset_id)
+                job = jobs.submit("prepare_asset", project_id, preparation, project_id, asset_id, store, settings, dedupe_key=asset_id)
             except JobAdmissionError:
                 store.update(project_id, lambda value: value["assets"][asset_id].update(status="failed"))
                 raise
@@ -2485,12 +2598,14 @@ def _public_project(project: dict[str, Any]) -> dict[str, Any]:
         # without silently replacing its footage with a different sequence.
         public["editor_sequence"] = {"error": "The saved timeline is invalid. Review your clips or restore an earlier edit."}
     project_id = public["id"]
-    asset_fields = {"id", "name", "kind", "duration", "width", "height", "has_audio", "status", "waveform"}
+    asset_fields = {"id", "name", "kind", "duration", "width", "height", "has_audio", "status", "waveform", "stabilized"}
     for asset_id, asset in public.setdefault("assets", {}).items():
         thumbnail = bool(asset.get("thumbnail_path"))
         asset = {key: value for key, value in asset.items() if key in asset_fields}
         public["assets"][asset_id] = asset
         asset["url"] = f"/api/projects/{project_id}/assets/{asset_id}/media"
+        if asset.get("status") == "ready":
+            asset["download_url"] = f"/api/projects/{project_id}/assets/{asset_id}/download"
         if thumbnail:
             asset["thumbnail_url"] = f"/api/projects/{project_id}/assets/{asset_id}/thumbnail"
     for slot, source in public.get("sources", {}).items():

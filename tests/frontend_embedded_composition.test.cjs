@@ -45,6 +45,17 @@ function app() {
 
 const plain = value => JSON.parse(JSON.stringify(value));
 
+test('audio source resolution is safe before a project loads and respects pending choices', () => {
+  const {run} = app();
+  run('state.project = null; state.sourceMixerDesired = null;');
+  assert.equal(run('sourceMixerSettings().audioSlot'),'A','initial timeline and mixer can render without a project');
+  run(`state.project={id:'audio-test',sources:{A:{has_audio:true},B:{has_audio:true}},manual:{source_mixer:{audio_slot:'A'}}};
+    state.sourceMixerDesired={projectId:'audio-test',payload:{audio_slot:'B'}};`);
+  assert.equal(run('sourceMixerSettings().audioSlot'),'B','waveform and original mixer must use the pending selected source');
+  run(`state.sourceMixerDesired.projectId='another-project';`);
+  assert.equal(run('sourceMixerSettings().audioSlot'),'A','pending changes from another project must not leak');
+});
+
 function embeddedEditingApp() {
   const harness = app();
   harness.run(`

@@ -139,7 +139,8 @@ def prepare_missing_pip_runtime(app: Path, *, env: dict[str, str], cwd: Path) ->
 
 
 def install_and_check(archive: Path, *, transcribe: bool = False, repair_missing_pip: bool = False,
-                      allow_baseline_restart_failure: bool = False) -> dict:
+                      allow_baseline_restart_failure: bool = False,
+                      windows_baseline: Path | None = None) -> dict:
     if sys.platform != "darwin":
         raise RuntimeError("This installation smoke must run on macOS; it is not a simulated Mac test")
     if not (3, 11) <= sys.version_info[:2] < (3, 13):
@@ -148,7 +149,7 @@ def install_and_check(archive: Path, *, transcribe: bool = False, repair_missing
         verify_restart_baseline(archive)
     # Import only the stdlib-based verifier from the checkout, never archive code.
     from build_universal_package import verify_package
-    verify_package(archive)
+    verify_package(archive, windows_baseline=windows_baseline)
     with tempfile.TemporaryDirectory(prefix="CUTROOM Mac smoke שלום ") as directory:
         scratch = Path(directory)
         app = extract_mac(archive, scratch)
@@ -477,6 +478,8 @@ def main() -> int:
     parser.add_argument("--allow-baseline-restart-failure", action="store_true",
                         help="Report only the pinned previous release's confirmed no-listener restart failure as known")
     parser.add_argument("--baseline-archive", type=Path, help=argparse.SUPPRESS)
+    parser.add_argument("--windows-baseline", type=Path,
+                        help="Explicit pinned Windows metadata for a historical archive")
     args = parser.parse_args()
     if args.worker_app and args.repair_missing_pip:
         parser.error("--repair-missing-pip requires --archive")
@@ -484,11 +487,14 @@ def main() -> int:
         parser.error("--allow-baseline-restart-failure requires --archive")
     if args.baseline_archive and not args.worker_app:
         parser.error("--baseline-archive is an internal worker argument")
+    if args.windows_baseline and args.worker_app:
+        parser.error("--windows-baseline requires --archive")
     result = (worker(args.worker_app.resolve(), transcribe=args.transcribe,
                      baseline_archive=args.baseline_archive.resolve() if args.baseline_archive else None) if args.worker_app
               else install_and_check(args.archive.resolve(), transcribe=args.transcribe,
                                      repair_missing_pip=args.repair_missing_pip,
-                                     allow_baseline_restart_failure=args.allow_baseline_restart_failure))
+                                     allow_baseline_restart_failure=args.allow_baseline_restart_failure,
+                                     windows_baseline=args.windows_baseline))
     text = json.dumps(result, indent=2, ensure_ascii=False)
     if args.report:
         with args.report.open("x", encoding="utf-8") as handle:

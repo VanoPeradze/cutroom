@@ -51,6 +51,13 @@ def _baseline() -> dict:
     return json.loads(BASELINE.read_text(encoding="utf-8"))
 
 
+def _selected_baseline(windows_baseline: Path | None) -> dict:
+    # Historical archives require an explicit independently pinned metadata file.
+    # New builds and ordinary verification always retain the current release pin.
+    return (_baseline() if windows_baseline is None
+            else json.loads(windows_baseline.read_text(encoding="utf-8")))
+
+
 def _read_archive(path: Path) -> dict[str, bytes]:
     with zipfile.ZipFile(path) as bundle:
         infos = bundle.infolist()
@@ -142,7 +149,7 @@ def _verify_documentation_revision(files: dict[str, bytes], manifest: dict, wind
         raise ValueError("Documentation revision build metadata mismatch")
 
 
-def verify_package(archive: Path) -> dict:
+def verify_package(archive: Path, *, windows_baseline: Path | None = None) -> dict:
     files = _read_archive(archive)
     if {name.split("/")[0] for name in files} != {"windows", "mac"}:
         raise ValueError("Combined ZIP must contain exactly windows/ and mac/")
@@ -156,7 +163,7 @@ def verify_package(archive: Path) -> dict:
     for name, digest in manifest["files"].items():
         if not isinstance(digest, str) or not re.fullmatch(r"[a-f0-9]{64}", digest) or sha(files[name]) != digest:
             raise ValueError(f"Combined checksum mismatch: {name}")
-    baseline = _baseline()
+    baseline = _selected_baseline(windows_baseline)
     if manifest.get("windows_baseline_sha256") != baseline["sha256"]:
         raise ValueError("Unexpected Windows baseline")
     windows = {name.removeprefix("windows/"): data for name, data in files.items() if name.startswith("windows/")}
@@ -181,7 +188,8 @@ def verify_package(archive: Path) -> dict:
     return manifest
 
 
-def refresh_documentation(root: Path, archive: Path, output_dir: Path, *, build_id: str | None = None) -> Path:
+def refresh_documentation(root: Path, archive: Path, output_dir: Path, *, build_id: str | None = None,
+                          windows_baseline: Path | None = None) -> Path:
     """Refresh only reviewed documentation in the exact currently approved ZIP."""
     root = root.resolve()
     release = json.loads(_read_source(root, "website/release.json"))
@@ -189,7 +197,7 @@ def refresh_documentation(root: Path, archive: Path, output_dir: Path, *, build_
     if (release.get("layout") != LAYOUT or release.get("filename") != "CUTROOM-1.1-Beta.zip"
             or len(data) != release.get("bytes") or sha(data) != release.get("sha256")):
         raise ValueError("Documentation input is not the exact approved combined release")
-    previous = verify_package(archive)
+    previous = verify_package(archive, windows_baseline=windows_baseline)
     if previous["build_id"] != release.get("build_id"):
         raise ValueError("Documentation input build ID does not match the approved release")
     original = previous.get("documentation_baseline_manifest", previous)
@@ -210,7 +218,7 @@ def refresh_documentation(root: Path, archive: Path, output_dir: Path, *, build_
     windows = dict(baseline_manifest)
     windows.update(build_id=identifier, created_utc=created,
                    documentation_revision=DOCUMENTATION_REVISION,
-                   windows_baseline_sha256=_baseline()["sha256"], baseline_manifest=baseline_manifest,
+                   windows_baseline_sha256=_selected_baseline(windows_baseline)["sha256"], baseline_manifest=baseline_manifest,
                    files={**baseline_manifest["files"], "App/README.md": sha(readme)})
     files["windows/App/README.md"] = files["mac/App/README.md"] = readme
     files["mac/App/docs/MAC_BETA.md"] = mac_guide
@@ -234,7 +242,7 @@ def refresh_documentation(root: Path, archive: Path, output_dir: Path, *, build_
             output.comment = source.comment
             for info in source.infolist():
                 output.writestr(info, files[info.filename])
-        verify_package(staged)
+        verify_package(staged, windows_baseline=windows_baseline)
         refreshed = staged.read_bytes()
         with target.open("xb") as handle:
             handle.write(refreshed)
@@ -329,13 +337,18 @@ def main() -> None:
     parser.add_argument("--output-dir", type=Path, default=ROOT / "dist")
     parser.add_argument("--verify", type=Path)
     parser.add_argument("--refresh-docs", type=Path, metavar="APPROVED_COMBINED_ZIP")
+    parser.add_argument("--windows-baseline", type=Path,
+                        help="Explicit historical Windows checksum metadata; verification/docs refresh only")
     args = parser.parse_args()
+    if args.windows_baseline and not (args.verify or args.refresh_docs):
+        parser.error("--windows-baseline requires --verify or --refresh-docs")
     if args.refresh_docs:
         if args.verify or args.windows_zip or args.download_baseline:
             parser.error("--refresh-docs cannot be combined with other actions")
-        print(refresh_documentation(ROOT, args.refresh_docs, args.output_dir))
+        print(refresh_documentation(ROOT, args.refresh_docs, args.output_dir,
+                                    windows_baseline=args.windows_baseline))
     elif args.verify:
-        manifest = verify_package(args.verify)
+        manifest = verify_package(args.verify, windows_baseline=args.windows_baseline)
         preservation = "product unchanged; reviewed documentation refreshed" if "documentation_revision" in manifest else "Windows unchanged"
         print(f"Verified {manifest['build_id']}: {preservation}, identical shared app, two OS folders")
     elif args.windows_zip and not args.download_baseline:

@@ -22,7 +22,7 @@ Git. The helper checks all source and destination paths before writing, rejects 
 links, preserves the exact bytes, and leaves already-matching copies untouched.
 The favicon and approved ZIP checksum sidecar remain maintained website files.
 
-The combined ZIP has exactly two top-level folders: `windows/` and `mac/`. Each has its platform launcher, `START HERE.html`, and `App/`. The Windows application and launchers retain the approved release payload; the published documentation revision updates the internal README files, Mac beta guide and checksum manifests. The Mac subtree includes its setup/help files with the same shared app. Never remove or rename `App` independently of its launcher. The original build command, `python scripts/build_universal_package.py --download-baseline`, still preserves the complete pinned Windows ZIP; use the explicit documentation refresh below for guide updates. The legacy Windows-only builder is unchanged. See [Mac validation](../docs/MAC_BETA.md).
+The combined ZIP has exactly two top-level folders: `windows/` and `mac/`. Each has its platform launcher, `START HERE.html`, and `App/`. Both contain the same approved application source; Mac adds its own setup/help files. Never remove or rename `App` independently of its launcher. The combined builder preserves the complete Windows ZIP selected by `packaging/windows/release-baseline.json`. A product update therefore needs a newly built and reviewed Windows baseline; a documentation refresh changes no application or launcher payload. See the distinct release paths below and [Mac validation](../docs/MAC_BETA.md).
 
 The screenshot in the editor tour uses synthetic test footage.
 Only `public/` is deployed. Never put recordings, project files, keys or model weights there.
@@ -90,13 +90,64 @@ ignored by Git. Canonical source assets and release checksums are tracked; gener
 
 ## Change the beta download deliberately
 
+### Approved product release
+
+An editor change must reach **both** application folders. Build a fresh Windows
+source package from the reviewed release source with
+`python scripts/build_test_package.py --output-dir dist`; do not rebuild a feature
+release from the previous Windows ZIP or use `--refresh-docs` for application changes.
+Verify the new archive, its `App/TEST_BUILD.json` inventory, and the tested source
+commit. The public app label may remain `1.1 Beta`, but its build ID, bytes and
+SHA-256 must identify the new payload.
+
+The Mac CI job downloads the exact Windows baseline. Before running that CI for
+an approved product update, prepare a separate, non-production deployment in this
+**same Expo project**. Retain the current landing page and combined download; add
+the reviewed Windows-only archive under a distinct staging filename, such as
+`downloads/CUTROOM-1.1-Beta-windows-editor-20260930.zip`. After preparing and checking
+the public files, deploy without changing the production alias:
+
+```sh
+npx --yes eas-cli@24.7.0 deploy --export-dir public --non-interactive
+```
+
+Record the returned immutable deployment URL, download those served bytes and
+verify their size, SHA-256 and Windows manifest hash. Pin that URL and those hashes
+in `packaging/windows/release-baseline.json`. Keep historical package-validation
+pins intact; changing the current baseline does not authorize rewriting the older
+release's expected bytes. This staging operation is a public upload and requires
+the same release authorization as the eventual production update.
+
+Build the combined candidate offline with
+`python scripts/build_universal_package.py --windows-zip PATH_TO_NEW_WINDOWS_ZIP --output-dir dist`.
+Verify both OS folders against the reviewed source and run the required Intel and
+Apple Silicon Mac checks before merging the release PR. CI's
+`--download-baseline` path must reproduce the same current application payload.
+
+For the final approved release, update `release.json` and its checksum sidecar
+with the exact combined archive. Include the new build ID, date and a truthful
+product revision note, refresh the generated guides, and supply the matching new
+ZIP locally to `prepare-download.mjs`. Run the website checks, then use
+`npm run deploy` to publish `public/` to the existing production alias. Download
+the production ZIP again and check its bytes, checksum, build ID and representative
+new application files in **both** folders. A successful deployment alone does not
+prove that the served download contains the new editor.
+
+### Documentation-only revision
+
 For a documentation-only update, run the repository-root command
 `python scripts/build_universal_package.py --refresh-docs PATH/TO/APPROVED-CUTROOM-1.1-Beta.zip --output-dir dist`.
 It requires the input size, SHA-256 and build ID to match the current `release.json`.
-It refreshes only the two internal README files, the Mac beta guide and the two
+For the supported pinned documentation baseline, it refreshes only the two internal README files, the Mac beta guide and the two
 manifests; all executable/product payloads and ZIP entry metadata are preserved.
 The old Windows and combined baseline manifests remain pinned and old archives
 remain verifiable. See [the packaging workflow](../docs/PUBLISHING.md).
+
+After a product rebaseline, verifying a pre-editor-release archive requires its
+explicit historical Windows pin:
+`python scripts/build_universal_package.py --verify PATH_TO_PREVIOUS_ZIP --windows-baseline packaging/windows/validation-baseline.json`.
+Use that historical pin only for the previous archive (or its supported
+documentation refresh); new candidate builds retain the current baseline default.
 
 Build and test a clean source-only package with CUTROOM's allowlist packager. Update
 `release.json`, the checksum sidecar, visible version/size/download links and `verify.mjs`
@@ -104,7 +155,8 @@ together as appropriate for the release. Extract the ZIP and check that
 the `windows/` and `mac/` folders each retain their launcher, `START HERE.html`, and `App/`, and that each launcher
 starts the expected build. Supply the newly approved ZIP locally for its first
 website deployment; the live site cannot supply a file that has not been published yet.
-Do not silently replace a beta under an existing filename.
+Do not silently substitute another payload under an existing beta filename: an
+approved update needs reviewed release metadata, a new build ID and exact checksums.
 
 Website checks do not prove AI editing quality or a successful installation on another PC.
 Expo hosting remains subject to its plan limits and terms; video editing stays local.

@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.1 Beta - 2026-09-30 - Editor reliability and optional stabilization
+
+- Fixed sub-frame A/B availability boundaries rejecting valid sequence/media edits. Only redundant implicit availability pieces join; explicit cuts, source endpoints, gaps, timing and framing remain intact. Actual FFmpeg synthetic renders verified boundaries at 30/60 FPS.
+- Fixed source waveforms in manual projects and Original footage for the correct A/B source without AI analysis. Bounded decoded audio padding to source duration and decoded FFmpeg/FFprobe text as UTF-8 for Unicode media names.
+- Added a compact mixer with measured channel peaks/dBFS, pause/seek reset, the selected A/B Original source and saved volume/mute. Solo remains preview-only; export normalization can change final loudness.
+- Added opt-in **Media > Stabilize footage**: a separate local MP4 copy using available FFmpeg vidstab filters, with progress, cancellation, retry, download and reuse as extra footage. Originals and the edit stay untouched. It may zoom/crop edges and cannot repair every kind of shake, blur or rolling shutter; no AI or upload is used.
+- Local validation passed 1,816 Python regressions (3 Windows skips), 538 frontend checks, Chrome/Windows workflows and synthetic stabilization/boundary renders. Totals overlap because Python includes frontend wrappers. Publication requires current-source macOS 15 Apple Silicon/Intel checks; Finder/Gatekeeper, Safari, native Linux and real-footage/performance checks remain needed.
+- The version and filename stay **1.1 Beta** with a new manifest build ID/checksums. Existing users need the new download, extracted separately, with projects backed up before migration. Application behavior changes in both platform folders; earlier documentation-only refresh claims apply to their earlier payloads.
+
 ## 1.1 Beta — 2026-09-30 — Mac packaging beta
 
 - Added a combined ZIP with exactly `windows` and `mac` folders. Every Windows file is preserved byte-for-byte from the previous approved download; existing Windows installations need no update.

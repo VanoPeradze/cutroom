@@ -2,6 +2,7 @@
 import io
 import json
 import stat
+import sys
 import zipfile
 from pathlib import Path
 
@@ -99,6 +100,31 @@ def test_changed_shared_source_requires_an_intentional_baseline_update(package_s
     (package_source[0] / "server.py").write_text("new application source")
     with pytest.raises(ValueError, match="Application source changed"):
         build(package_source)
+
+
+def test_historical_archive_requires_its_explicit_exact_windows_pin(package_source, tmp_path, monkeypatch):
+    archive = build(package_source)
+    historical = dict(combined._baseline())
+    metadata = tmp_path / "historical-windows.json"
+    metadata.write_bytes(legacy._bytes_json(historical))
+    monkeypatch.setattr(combined, "_baseline", lambda: {**historical, "sha256": "0" * 64})
+    with pytest.raises(ValueError, match="Windows baseline"):
+        combined.verify_package(archive)
+    assert combined.verify_package(archive, windows_baseline=metadata)["windows_files_unchanged"] is True
+    for key in ("sha256", "manifest_sha256"):
+        metadata.write_bytes(legacy._bytes_json({**historical, key: "0" * 64}))
+        with pytest.raises(ValueError, match="baseline"):
+            combined.verify_package(archive, windows_baseline=metadata)
+
+
+@pytest.mark.parametrize("build_arguments", [["--download-baseline"], ["--windows-zip", "old.zip"]])
+def test_historical_pin_cannot_override_new_candidate_construction(monkeypatch, build_arguments):
+    monkeypatch.setattr(sys, "argv", ["build_universal_package.py", "--windows-baseline", "old.json", *build_arguments])
+    monkeypatch.setattr(combined, "download_baseline", lambda *args: pytest.fail("Do not download a historical candidate"))
+    monkeypatch.setattr(combined, "build_package", lambda *args: pytest.fail("Do not build from a historical override"))
+    with pytest.raises(SystemExit) as error:
+        combined.main()
+    assert error.value.code == 2
 
 
 def test_missing_mac_input_or_existing_output_fail_closed(package_source):
@@ -202,6 +228,20 @@ def documentation_source(package_source, monkeypatch):
 
 def refresh(fixture, build_id="updated"):
     return combined.refresh_documentation(*fixture, build_id=build_id)
+
+
+def test_historical_documentation_refresh_keeps_old_pins_after_product_rebaseline(documentation_source, tmp_path, monkeypatch):
+    root, original, out = documentation_source
+    historical = dict(combined._baseline())
+    metadata = tmp_path / "historical-windows.json"
+    metadata.write_bytes(legacy._bytes_json(historical))
+    monkeypatch.setattr(combined, "_baseline", lambda: {**historical, "sha256": "0" * 64})
+    with pytest.raises(ValueError, match="Windows baseline"):
+        combined.refresh_documentation(root, original, out, build_id="historical")
+    refreshed = combined.refresh_documentation(root, original, out, build_id="historical", windows_baseline=metadata)
+    assert combined.verify_package(refreshed, windows_baseline=metadata)["documentation_revision"] == combined.DOCUMENTATION_REVISION
+    with pytest.raises(ValueError, match="Windows baseline"):
+        combined.verify_package(refreshed)
 
 
 def rehash_current_manifests(files):

@@ -1,7 +1,8 @@
 import { applyTranslations, dictionaries } from "./i18n.js?v=1.1-beta-1";
-import { TimelineView, formatTime, editableClips, timelineDuration, sequenceBlocks, sequenceGaps, rippleMoveStart } from "./timeline.js?v=1.1-beta-7";
-import { MediaStudio } from "./media-studio.js?v=1.1-beta-3";
-import { SourceReview } from "./source-review.js?v=1.1-beta-7";
+import { TimelineView, formatTime, editableClips, timelineDuration, sequenceBlocks, sequenceGaps, rippleMoveStart } from "./timeline.js?v=1.1-beta-8";
+import { MediaStudio } from "./media-studio.js?v=1.1-beta-4";
+import { StabilizationStudio } from "./stabilization-studio.js?v=1.1-beta-1";
+import { SourceReview } from "./source-review.js?v=1.1-beta-8";
 import { initWorkspace } from "./workspace.js?v=1.1-beta-3";
 import { KEYBOARD_PROFILES, resolveEditorShortcut, isEditorTransportSpace, shortcutRows } from "./keyboard.js?v=1.1-beta-2";
 import { AudioThresholdView } from "./audio-meter.js?v=1.1-beta-1";
@@ -206,9 +207,9 @@ function initializeMediaStudio() {
   tab.addEventListener("click", () => selectAdvancedTab("media"));
   tab.addEventListener("keydown", handleStudioTabKeydown);
   state.mediaStudio = new MediaStudio(panel, elements.previewStage, {
-    project: () => state.project, api, edit: applyManualEdit, pause: pauseAllMedia,
+    project: () => state.project, audioSlot: () => sourceMixerSettings().audioSlot, api, edit: applyManualEdit, pause: pauseAllMedia,
     time: previewTimelineTime, duration: editorDuration, flushSettings: flushProjectSaves,
-    busy: () => Boolean(state.activeJob || state.activeUploads.size || state.jobStartLocks.size
+    busy: () => Boolean(state.activeJob || state.activeUploads.size || state.jobStartLocks.size || state.stabilizationStudio?.uploading
       || state.sourceSyncPending || (state.manualEditBusy && !state.mediaStudio?.saving)),
     preview: () => { updateMediaPreview(); state.timeline?.scheduleDraw(); },
     busyChanged: () => { renderReadiness(); renderManualControls(); },
@@ -223,6 +224,7 @@ function initializeMediaStudio() {
       }
     },
   });
+  state.stabilizationStudio = new StabilizationStudio(panel, {...state.mediaStudio.options, flush: () => state.mediaStudio.flush()});
   const speed = document.createElement("div"); speed.className = "picture-speed"; speed.dataset.editorShortcuts = "off";
   speed.innerHTML = '<label>Picture speed <select aria-label="Picture speed"><option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="1">1×</option><option value="1.5">1.5×</option><option value="2">2×</option><option value="4">4×</option></select><span></span></label><p>Picture only: keeps clip length and speech timing. May lose lip sync or hold the last source frame. Select A or B to choose which picture changes.</p>';
   elements.clipTrimForm.after(speed); state.pictureSpeed = speed;
@@ -421,7 +423,7 @@ async function boot() {
   state.timeline = new TimelineView(elements.timelineCanvas, elements.timelineScroll,
     (time) => { pauseAllMedia(); seekSourcePreview(time); }, setManualSelection, handleTimelineEdit,
     { onToolStateChange: renderTimelineToolStatus, canEdit: () => !foregroundBusy() && !state.transcriptSaving && !state.manualEditBusy && !state.textStudio?.dirty(),
-      onLayoutSelect: openTimelineLayout, getTrackClips: trackClips,
+      onLayoutSelect: openTimelineLayout, getTrackClips: trackClips, getAudioSlot: () => sourceMixerSettings().audioSlot,
       onTargetChange: (target) => setEditTarget(target, true),
       onMediaSelect: id => { pauseAllMedia(); state.timeline?.clearSelection(); if (id.startsWith("text_")) { void state.textStudio?.select(id); selectAdvancedTab("transcript"); } else { state.mediaStudio?.select(id); selectAdvancedTab("media"); } },
       onMediaEdit: (id, patch) => { const studio = id.startsWith("text_") ? state.textStudio : state.mediaStudio; studio?.queueClip(id,patch); return studio?.flush(); },
@@ -2007,7 +2009,7 @@ async function flushCurrentProjectSaves() {
 }
 
 function foregroundBusy() {
-  return Boolean(state.activeJob || state.activeUploads.size || state.mediaStudio?.uploading || state.manualEditBusy || state.sourceSyncPending || state.sourceMixerSavePending) || state.jobStartLocks.size > 0;
+  return Boolean(state.activeJob || state.activeUploads.size || state.mediaStudio?.uploading || state.stabilizationStudio?.uploading || state.manualEditBusy || state.sourceSyncPending || state.sourceMixerSavePending) || state.jobStartLocks.size > 0;
 }
 
 function projectHasForegroundWork(projectId) {
@@ -2718,6 +2720,7 @@ async function cancelActiveJob() {
 
 function renderDraft() {
   state.mediaStudio?.render();
+  state.stabilizationStudio?.render();
   state.textStudio?.render();
   const draft = editorProject().draft;
   elements.draftTitle.textContent = draft.title || state.project.name;
@@ -2864,7 +2867,7 @@ function renderDecisions() {
 
 function sourceMixerSettings() {
   const stored = state.project?.manual?.source_mixer || {};
-  const desired = state.sourceMixerDesired?.projectId === state.project?.id ? state.sourceMixerDesired.payload : null;
+  const desired = state.project && state.sourceMixerDesired?.projectId === state.project.id ? state.sourceMixerDesired.payload : null;
   const raw = desired ? { ...stored, ...desired } : stored;
   if (desired?.default_layout == null && Object.hasOwn(desired || {}, "default_layout")) delete raw.default_layout;
   if (desired?.sync_offset == null && Object.hasOwn(desired || {}, "sync_offset")) delete raw.sync_offset;
@@ -6052,7 +6055,7 @@ function restoreProjectLibraryFocus(origin) {
 }
 
 function projectLibraryBusy(projectId) {
-  return projectHasForegroundWork(projectId) || (state.project?.id === projectId && Boolean(state.mediaStudio?.uploading || state.manualEditBusy || state.transcriptSaving));
+  return projectHasForegroundWork(projectId) || (state.project?.id === projectId && Boolean(state.mediaStudio?.uploading || state.stabilizationStudio?.uploading || state.manualEditBusy || state.transcriptSaving));
 }
 
 function projectLibraryRows(query = "", order = "recent") {

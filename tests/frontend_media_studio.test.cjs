@@ -42,6 +42,76 @@ test('media envelopes honor clip edges, fades, mute and bus gain', () => {
   assert.equal(mediaGain(clip,{music_db:-6},3), .5);
 });
 
+test('pausing clears a measured live output instead of leaving a stale active meter', () => {
+  const {studio} = studioHarness(async()=>({id:'one'}));
+  const controls = new Map();
+  studio.root = {querySelector(selector) { if (!controls.has(selector)) controls.set(selector,{}); return controls.get(selector); },querySelectorAll(){return [];}};
+  studio.analyser = {fftSize:4,getFloatTimeDomainData(samples){samples.fill(.8);}};
+  studio.sync(0,true);
+  assert.ok(controls.get('.mixer-meter').value > .7);
+  studio.pause();
+  assert.equal(controls.get('.mixer-meter').value,0,'paused playback must never report a live signal');
+  assert.match(controls.get('.mixer-level-text').textContent,/paused|play to monitor/i);
+});
+
+test('solo isolates only browser preview while saved mute remains authoritative', () => {
+  const {studio,activate} = studioHarness(async()=>({id:'one'}));
+  const clips = ['music','voice','effects'].map(role=>({id:role,asset_id:role,start:0,end:8,role,volume_db:0}));
+  activate({id:'one',assets:Object.fromEntries(clips.map(clip=>[clip.asset_id,{kind:'audio',duration:8,status:'ready',url:`/${clip.id}`} ])),
+    manual:{media_clips:clips,audio_mixer:{source_db:-6,music_db:-12,voice_db:-3,master_db:-4}}});
+  const gains = new Map(); studio.master = {gain:{value:1}};
+  studio.player = function(key) {const item={key,element:{},token:0};this.players.set(key,item);return item;};
+  studio.syncPlayer = (item,time,rate,playing,gain)=>gains.set(item.key,gain);
+  const source={url:'/source',point:{sourceTime:3},hasAudio:true};
+  studio.sync(3,true,source);
+  assert.ok(Math.abs(gains.get('source')-10**(-6/20))<1e-9);
+  assert.ok(Math.abs(gains.get('a:music')-10**(-12/20))<1e-9);
+  assert.ok(Math.abs(studio.master.gain.value-10**(-4/20))<1e-9);
+  studio.toggleSolo('music'); studio.sync(3,true,source);
+  assert.ok(gains.get('a:music')>0);
+  for(const key of ['source','a:voice','a:effects'])assert.equal(gains.get(key),0);
+  assert.equal(studio.pending.size,0,'Solo never enters the persisted export edit queue');
+  studio.mixerOverride={music_muted:true}; studio.sync(3,true,source);
+  assert.equal(gains.get('a:music'),0,'Solo must not unmute a saved channel');
+  studio.toggleSolo('music'); studio.sync(3,true,source);
+  assert.ok(gains.get('source')>0); assert.equal(gains.get('a:music'),0);
+});
+
+test('channel meters use real grouped samples and distinguish silence, clipping and pause', () => {
+  const {studio}=studioHarness(async()=>({id:'one'}));
+  const makeMeter=()=>({row:{states:new Map(),classList:{toggle(name,value){this.states?.set(name,value);}}},meter:{setAttribute(){}},level:{}});
+  studio.channelMeters = new Map(['source','music','voice','effects','master'].map(role=>{
+    const item=makeMeter(); item.row.classList.toggle=(name,value)=>item.row.states.set(name,value); return [role,item];
+  }));
+  const analyser=peak=>({fftSize:4,getFloatTimeDomainData(samples){samples.fill(peak);}});
+  studio.analyser=analyser(.5);
+  studio.audioBuses=new Map([['source',{analyser:analyser(.25)}],['music',{analyser:analyser(1.1)}],['voice',{analyser:analyser(0)}]]);
+  for(const role of ['source','music','voice'])studio.players.set(role,{role,wanted:true,element:{paused:false},gain:{gain:{value:1}}});
+  studio.updateMeters(true);
+  assert.equal(studio.channelMeters.get('source').level.textContent,'-12.0 dBFS');
+  assert.equal(studio.channelMeters.get('master').level.textContent,'-6.0 dBFS');
+  assert.equal(studio.channelMeters.get('music').row.states.get('is-clipping'),true);
+  for(const role of ['voice','effects'])assert.equal(studio.channelMeters.get(role).meter.value,0);
+  studio.updateMeters(false);
+  for(const {row,meter,level} of studio.channelMeters.values()){
+    assert.equal(meter.value,0); assert.equal(level.textContent,'-inf dBFS'); assert.equal(row.states.get('is-clipping'),false);
+  }
+});
+
+test('mixer gain and mute save together and are restored from a reopened project', async () => {
+  let saved={id:'one',manual:{media_clips:[],audio_mixer:{source_db:-6}}};
+  const calls=[];
+  const {studio,activate}=studioHarness(async(action,patch)=>{
+    calls.push({action,patch}); saved={...saved,manual:{...saved.manual,audio_mixer:{...saved.manual.audio_mixer,...patch}}}; activate(saved);return saved;
+  });
+  activate(saved); studio.queueMixer({music_db:-14});studio.queueMixer({music_muted:true});
+  assert.equal(await studio.flush(),true);
+  assert.equal(calls.length,1);assert.equal(calls[0].action,'set_audio_mixer');
+  const reopened=studioHarness(async()=>saved);reopened.activate(saved);
+  assert.equal(reopened.studio.mixer().music_db,-14);assert.equal(reopened.studio.mixer().music_muted,true);assert.equal(reopened.studio.mixer().source_db,-6);
+  assert.equal(reopened.studio.solo,undefined,'preview Solo is not stored in the project');
+});
+
 test('slider updates coalesce and a change arriving during save is persisted next', async () => {
   const first = deferred(), calls = [];
   const {studio} = studioHarness(async (action, payload) => {
@@ -160,7 +230,7 @@ test('a successful old-project save cannot clear same-id edits in a new project'
 function audioGraphHarness({alwaysReject = false, failConnect = false} = {}) {
   const associated = new WeakSet(), attempts = [], nodes = [], controls = new Map();
   const node = () => {
-    const result = {gain:{value:1},connect() {if(failConnect)throw new Error('Graph failed');},disconnect(){this.disconnected=true;},getFloatTimeDomainData() {}};
+    const result = {gain:{value:1},connections:[],connect(target) {if(failConnect)throw new Error('Graph failed');this.connections.push(target);return target;},disconnect(){this.disconnected=true;this.connections=[];},getFloatTimeDomainData() {}};
     nodes.push(result); return result;
   };
   const document = {createElement(kind) {return {
@@ -241,4 +311,16 @@ test('upgrading basic audio after first gesture removes duplicate attenuation', 
   studio.syncPlayer(item,0,1,false,.25);
   assert.equal(item.element.volume,1); assert.equal(item.gain.gain.value,.25);
   assert.equal(attempts.length,1);
+});
+
+test('moving a clip between audio groups reroutes its signal without reconnecting its media element', () => {
+  const {studio,attempts}=audioGraphHarness();
+  const item=studio.player('a:clip','audio','/music','music');
+  const second=studio.player('a:other','audio','/other','music');
+  assert.equal(item.analyser.connections[0],studio.audioBuses.get('music').gain);
+  assert.equal(second.analyser.connections[0],studio.audioBuses.get('music').gain,'multiple clips are measured as one actual music bus');
+  assert.equal(studio.player('a:clip','audio','/music','voice'),item);
+  assert.equal(item.analyser.connections[0],studio.audioBuses.get('voice').gain);
+  assert.equal(second.analyser.connections[0],studio.audioBuses.get('music').gain);
+  assert.equal(attempts.length,2,'one media source connection for each of the two players');
 });
