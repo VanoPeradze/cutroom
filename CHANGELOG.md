@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1 Beta — 2026-09-30 — Mac packaging beta
+
+- Added a combined ZIP with exactly `windows` and `mac` folders. Every Windows file is preserved byte-for-byte from the previous approved download; existing Windows installations need no update.
+- Added a separate Mac launcher, explicit-consent dependency setup, native Python discovery, full FFmpeg/subtitle checks, local AI runtime discovery and an offline first-start guide. Shared application and Windows installer code are unchanged.
+- Added macOS 15 Apple Silicon and Intel CI for regression tests, fresh ZIP installation in a Unicode/space path, launcher/API checks, real portrait/landscape renders with audio and captions, and a small CPU transcription test.
+- Mac local transcription uses the CPU. This source beta is not a signed/notarized Mac app; Finder/Gatekeeper, Safari and real-user performance still need manual testing. No perfect cross-platform behavior or equivalent speed is claimed.
+- Updated the website and English/Hebrew guides to explain which folder to use. The legacy Windows-only packager remains available; maintainers use the new combined builder for this download.
+
 ## 1.1 Beta — 2026-09-28
 
 - Added Open editor, Rename and confirmed permanent Delete to the lobby and Projects, plus project search and sorting. Renaming keeps the active edit in place; deletion refuses active work without cancelling it and explains that imported copies and CUTROOM exports are removed while original files stay untouched.

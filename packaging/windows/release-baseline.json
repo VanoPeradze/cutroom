@@ -1,0 +1,9 @@
+{
+  "version": "1.1-beta",
+  "filename": "CUTROOM-1.1-Beta.zip",
+  "bytes": 3039834,
+  "sha256": "26d7282e940f6d56d33fe4de2c431ab47662383d5fe0cba1fb219b2dd9a4b6fd",
+  "manifest_sha256": "ab19567953679afc020d00f949d082f60455580133ec96092b0e525a9f6b5f0f",
+  "url": "https://cutroom-studio--b1mnhj0dxa.expo.app/downloads/CUTROOM-1.1-Beta.zip",
+  "note": "Immutable deployment of the approved Windows package. Its complete contents are preserved under windows/ in the combined beta."
+}

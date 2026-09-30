@@ -20,6 +20,16 @@ Run maintainer commands from the repository root in a Git checkout. In the downl
 
 ### 1. Make a tester ZIP
 
+**Combined Windows/Mac download:** use `python scripts/build_universal_package.py --download-baseline`.
+This separate builder preserves the pinned Windows release byte-for-byte under `windows/`
+and adds the Mac launcher and identical shared application under `mac/`. Run the
+[Mac validation workflow](https://github.com/VanoPeradze/cutroom/actions/workflows/macos.yml)
+before publishing. Use `--windows-zip PATH` for an offline build and `--verify PATH`
+for archive verification. [Mac setup and test limits](https://github.com/VanoPeradze/cutroom/blob/master/docs/MAC_BETA.md).
+
+The commands below remain the **legacy Windows-only** packaging workflow and are
+not the builder for the new combined download.
+
 ```bat
 PUBLISH.bat package
 ```

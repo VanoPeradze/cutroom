@@ -8,7 +8,7 @@ Use **Day / Night** in the top bar to change the app's appearance; your choice i
 
 ## The quick path
 
-1. Use **Extract All** on the ZIP and double-click **`START CUTROOM.bat`** in the extracted folder. Let first-time setup finish and keep the launch window open. The other two items are **START HERE.html** (offline help) and **App** (technical files and saved work); leave them beside the launcher. Older flat packages and GitHub source checkouts still use `run_windows.bat`.
+1. Extract the entire ZIP, then open **windows** or **mac**. On Windows, double-click **`START CUTROOM.bat`**. On Mac, double-click **`START CUTROOM.command`**. Read and approve the setup prompts, and keep the launch window open. Leave **START HERE.html** (offline help) and **App** (technical files and saved work) beside the launcher. Older Windows packages and GitHub source checkouts still use `run_windows.bat`. Mac users: read the [Mac setup guide](https://github.com/VanoPeradze/cutroom/blob/master/docs/MAC_BETA.md) first; macOS 15+ is required, and first-time dependencies may require Homebrew.
 2. Choose **Manual edit** and add a short, non-sensitive recording as source A. This lets you learn the editor without waiting for AI models or inference.
 3. Choose **Open manual editor**. Click the timeline ruler to seek. **Space** plays or pauses.
 4. Choose **Range**, drag over an unwanted passage and select **Remove from video**. Try **Undo**. Then select **Cut** and click once to split a clip.

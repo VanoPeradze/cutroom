@@ -122,10 +122,15 @@ test('AI choices explain compatibility, Groq Free limits and independent credit'
   assert.doesNotMatch(html, /Currently supports Groq only|This integration currently supports Groq only/);
 });
 
-test('download instructions identify the single launcher and simple folder layout', () => {
+test('download explains both OS folders and preserves the Windows launcher', () => {
   assert.match(html, /Double-click START CUTROOM\.bat/);
-  assert.match(html, /Just three items: START CUTROOM\.bat/);
+  assert.match(html, /exactly two folders: windows and mac/);
+  assert.match(html, /START CUTROOM\.command/);
   assert.match(html, /START HERE\.html for help, and App for technical files/);
+  assert.match(html, /existing Windows users do not need to reinstall/);
+  assert.match(html, /macOS 15\+/);
+  assert.match(html, /Local transcription uses the CPU/);
+  assert.match(html, /not a signed Mac app/);
   assert.doesNotMatch(html, /Double-click run_windows\.bat/);
 });
 
