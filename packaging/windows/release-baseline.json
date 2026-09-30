@@ -1,10 +1,10 @@
 {
   "version": "1.1-beta",
-  "filename": "CUTROOM-1.1-Beta-windows-editor-20260930.zip",
-  "build_id": "CUTROOM-1.1-beta-editor-20260930-135357",
-  "bytes": 3140336,
-  "sha256": "82ac2df699191d3a57dc57f58839f5e9c1e3d673e84273ced81806bbea00c245",
-  "manifest_sha256": "8816283c3023f4ddb4269f5da982d77bc7c37e16a6e5d173a6cca1d93acf0880",
-  "url": "https://cutroom-studio--zdie650k5p.expo.app/downloads/CUTROOM-1.1-Beta-windows-editor-20260930.zip",
-  "note": "Immutable deployment of the approved new Windows editor source baseline. Includes waveform, live mixer, stabilization and A/B boundary repairs; the combined candidate preserves its complete contents under windows/. No bundled runtime; clean-machine installation remains unverified."
+  "filename": "CUTROOM-1.1-Beta-windows-ui-20260930.zip",
+  "build_id": "CUTROOM-1.1-beta-20260930-160349",
+  "bytes": 3146818,
+  "sha256": "37d0936261d2779fb513a4dd30e8b7b3ccdf78ad21f4358329554c41ba3b6e47",
+  "manifest_sha256": "f04fe0ff5f00a138683d3b7a7f5ee068e608469a7d3dd82972a460ac92ffe906",
+  "url": "https://cutroom-studio--zrbg9yp4zz.expo.app/downloads/CUTROOM-1.1-Beta-windows-ui-20260930.zip",
+  "note": "Immutable deployment of the approved Windows UI discovery baseline. Includes primary Audio/Mixer navigation and direct source Stabilize entry, preserving the approved waveform, mixer, stabilization and A/B repairs. The combined candidate preserves its complete contents under windows/. No bundled runtime; clean-machine installation remains unverified."
 }
