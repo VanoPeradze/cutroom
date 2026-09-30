@@ -1,0 +1,117 @@
+name: macOS validation
+
+on:
+  workflow_dispatch:
+    inputs:
+      transcribe:
+        description: Download tiny.en and test real CPU transcription of synthetic English speech
+        required: false
+        default: true
+        type: boolean
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/macos.yml'
+      - 'packaging/mac/**'
+      - 'packaging/windows/release-baseline.json'
+      - 'scripts/**'
+      - 'cutroom/**'
+      - 'tests/**'
+      - 'web/**'
+      - 'server.py'
+      - 'requirements.txt'
+      - 'pytest.ini'
+  pull_request:
+    paths:
+      - '.github/workflows/macos.yml'
+      - 'packaging/mac/**'
+      - 'packaging/windows/release-baseline.json'
+      - 'scripts/**'
+      - 'cutroom/**'
+      - 'tests/**'
+      - 'web/**'
+      - 'server.py'
+      - 'requirements.txt'
+      - 'pytest.ini'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: macOS 15 / ${{ matrix.architecture }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            architecture: arm64
+          - runner: macos-15-intel
+            architecture: x64
+    # These are standard hosted runners, not the paid -large / -xlarge labels.
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 40
+    env:
+      CUTROOM_NO_BROWSER: '1'
+      CUTROOM_DATA_DIR: ${{ runner.temp }}/cutroom-regression-data
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+      HOMEBREW_NO_INSTALL_CLEANUP: '1'
+      HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: '1'
+      PIP_DISABLE_PIP_VERSION_CHECK: '1'
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+          architecture: ${{ matrix.architecture }}
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22'
+      - name: Install FFmpeg with subtitle support from official Homebrew
+        timeout-minutes: 10
+        shell: bash
+        run: |
+          brew install ffmpeg-full
+          echo "$(brew --prefix ffmpeg-full)/bin" >> "$GITHUB_PATH"
+      - name: Install isolated regression dependencies
+        timeout-minutes: 8
+        shell: bash
+        run: |
+          python -m venv "$RUNNER_TEMP/cutroom-regression-venv"
+          "$RUNNER_TEMP/cutroom-regression-venv/bin/python" -m pip install -r tests/requirements.txt
+      - name: Run the complete Python regression suite with real FFmpeg
+        timeout-minutes: 15
+        shell: bash
+        run: |
+          ffmpeg -version
+          "$RUNNER_TEMP/cutroom-regression-venv/bin/python" -m pytest
+      - name: Run frontend regressions
+        timeout-minutes: 3
+        run: node --test tests/frontend*.test.cjs
+      - name: Build and verify combined ZIP against the approved Windows baseline
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          archive="$(python scripts/build_universal_package.py --download-baseline --output-dir "$RUNNER_TEMP/cutroom-universal")"
+          python scripts/build_universal_package.py --verify "$archive"
+          echo "CUTROOM_SMOKE_ARCHIVE=$archive" >> "$GITHUB_ENV"
+      - name: Install and boot the packaged Mac app, then render through its HTTP API
+        timeout-minutes: 18
+        shell: bash
+        env:
+          RUN_TRANSCRIPTION: ${{ (github.event_name != 'workflow_dispatch' || inputs.transcribe) && '1' || '0' }}
+        run: |
+          extra=()
+          if [[ "$RUN_TRANSCRIPTION" == '1' ]]; then extra+=(--transcribe); fi
+          python scripts/smoke_macos.py --archive "$CUTROOM_SMOKE_ARCHIVE" --report "$RUNNER_TEMP/macos-smoke.json" "${extra[@]}"
+          python -c 'import json, os, pathlib; result=json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"macos-smoke.json").read_text()); print(json.dumps(result, indent=2))' >> "$GITHUB_STEP_SUMMARY"

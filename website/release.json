@@ -1,11 +1,11 @@
 {
   "version": "1.1-beta",
   "label": "1.1 Beta",
-  "layout": "windows-app-folder-v1",
+  "layout": "windows-mac-folders-v1",
   "filename": "CUTROOM-1.1-Beta.zip",
-  "bytes": 3039834,
-  "sha256": "26d7282e940f6d56d33fe4de2c431ab47662383d5fe0cba1fb219b2dd9a4b6fd",
-  "build_id": "CUTROOM-1.1-beta-20260927-220456",
-  "update_date": "2026-09-28",
+  "bytes": 6094484,
+  "sha256": "8f024903cd28b9da97b60b8f7b5375c949614a5de63f2616a5f7450f77e37c70",
+  "build_id": "CUTROOM-1.1-beta-mac-20260930-040133",
+  "update_date": "2026-09-30",
   "url": "https://cutroom-studio.expo.app/downloads/CUTROOM-1.1-Beta.zip"
 }

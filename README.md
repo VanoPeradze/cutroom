@@ -11,7 +11,7 @@
   <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.1%20Beta-7459a3?style=flat-square" alt="Application version 1.1 Beta"></a>
   <a href="docs/BETA_STATUS.md"><img src="https://img.shields.io/badge/status-beta-c9b62c?style=flat-square" alt="Status: beta"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-44b9c6?style=flat-square" alt="MIT license"></a>
-  <a href="https://cutroom-studio.expo.app/#download"><img src="https://img.shields.io/badge/download-Windows%20beta-7459a3?style=flat-square" alt="Download the Windows beta"></a>
+  <a href="https://cutroom-studio.expo.app/#download"><img src="https://img.shields.io/badge/download-Windows%20%2B%20Mac-7459a3?style=flat-square" alt="Download the Windows and Mac beta"></a>
   <a href="#choose-how-ai-works"><img src="https://img.shields.io/badge/AI-optional-44b9c6?style=flat-square" alt="AI is optional"></a>
 </p>
 
@@ -77,13 +77,17 @@ Custom text uses the edited video's timing and always appears in the MP4, indepe
 
 ## Get started
 
-1. **[Download the Windows beta](https://cutroom-studio.expo.app/#download)** and extract the entire ZIP.
-2. **Double-click `START CUTROOM.bat`** in the extracted folder and follow the setup prompts. The editor opens in your browser when ready.
+1. **[Download CUTROOM](https://cutroom-studio.expo.app/#download)** and extract the entire ZIP.
+2. Open **windows** or **mac**. On Windows, double-click **`START CUTROOM.bat`**. On Mac, double-click **`START CUTROOM.command`**. Follow the setup prompts; the editor opens in your browser when ready.
 3. **Choose a workflow.** Start with **Manual edit**, or prepare AI and choose **Short / Reel** or **YouTube video**.
 
 The ZIP contains source code, not an all-in-one offline installer. First setup needs internet and downloads dependencies; local AI models are additional, optional downloads. Keep the launch window open while editing and use the same launcher next time.
 
-The download opens to just three items: **START CUTROOM.bat** to launch, **START HERE.html** for a readable offline guide, and **App** for the technical files and saved work. Keep them together; no need to open App for everyday use. If Windows hides extensions, the launcher appears as **START CUTROOM**.
+The download opens to just two folders: **windows** and **mac**. Each contains its launcher, **START HERE.html** for an offline guide, and **App** for technical files and saved work. Keep those three items together. If Windows hides extensions, its launcher appears as **START CUTROOM**.
+
+**Mac beta:** targets macOS 15+ on Apple Silicon and Intel. First setup may need Homebrew and your approval to install dependencies. Local transcription currently runs on the CPU. This is a source launcher, not a signed Mac application; automated Mac checks do not replace real-user installation testing. [Mac setup and validation details](https://github.com/VanoPeradze/cutroom/blob/master/docs/MAC_BETA.md)
+
+**Windows is unchanged in this update.** The combined ZIP preserves every file from the previous Windows download. Existing Windows users do not need to reinstall for Mac support.
 
 Using a GitHub source checkout or an older flat-folder download? Its developer launcher remains `run_windows.bat`. The new folder layout does not move or modify existing installations.
 
@@ -120,7 +124,7 @@ The workflow is available to try; the quality still needs real-world feedback.
 - Editing styles are pacing and selection presets, not replicas of individual creators.
 - A/B remain the two main sources. Added media and text layers fit inside their existing edit; they do not extend its end or ripple with source edits automatically. Shortening that would leave a layer past the new end is refused until you trim, move or remove that layer.
 - Text uses three positions and three style presets; overlapping text can collide. This remains a bounded editor, not a full professional NLE.
-- Fresh-computer installation and broad hardware coverage are still being validated.
+- Fresh-computer installation and broad hardware coverage are still being validated, especially the new Mac beta. Check the [Mac validation runs](https://github.com/VanoPeradze/cutroom/actions/workflows/macos.yml) for the automated results.
 
 Use copies of your footage, not your only originals or an urgent client delivery. Automated tests and synthetic renders do not establish professional editorial quality.
 
