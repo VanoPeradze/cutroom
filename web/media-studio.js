@@ -60,7 +60,10 @@ export class MediaStudio {
         <p class="mixer-level-text">Play to monitor the mix.</p>
         <p class="mixer-help mixer-export-note">Live sample peaks, before the preview limiter. Export normalization can change final loudness.</p>
       </details>`;
-    this.status = root.querySelector('.media-status');
+    const mediaStatus = root.querySelector('.media-status');
+    const mixerStatus = options.audioPanel?.querySelector('.mixer-save-status');
+    // Both tool panels show the same save/error state; controls remain single.
+    this.status = mixerStatus ? {get textContent(){return mediaStatus.textContent;},set textContent(value){mediaStatus.textContent=value;mixerStatus.textContent=value;}} : mediaStatus;
     this.channelMeters = new Map();
     for (const [role, name] of [['source','Original'],['music','Music'],['voice','Voiceover'],['effects','Effects'],['master','Master']]) {
       const row = document.createElement('div'); row.className = 'mixer-channel'; row.dataset.channel = role;
@@ -85,9 +88,11 @@ export class MediaStudio {
       root.querySelector('.mixer-channels').append(row);
     }
     root.querySelector('input[type=file]').addEventListener('change', event => { const file = event.target.files[0]; event.target.value = ''; if (file) this.upload(file); });
-    root.addEventListener('input', event => { if (event.target.matches('input[type=range]')) this.change(event.target); });
-    root.addEventListener('change', event => { if (!event.target.matches('input[type=range],input[type=file]')) this.change(event.target); });
-    root.addEventListener('click', event => {
+    this.audioRoot = root.querySelector('.audio-mixer');
+    if (options.audioPanel) options.audioPanel.append(this.audioRoot);
+    const onInput = event => { if (event.target.matches('input[type=range]')) this.change(event.target); };
+    const onChange = event => { if (!event.target.matches('input[type=range],input[type=file]')) this.change(event.target); };
+    const onClick = event => {
       const button = event.target.closest('button'); if (!button) return;
       if (button.hasAttribute('data-import')) root.querySelector('input[type=file]').click();
       if (button.dataset.retry) this.retry(button.dataset.retry);
@@ -96,8 +101,14 @@ export class MediaStudio {
       if (button.dataset.mute) { const key = `${button.dataset.mute}_muted`; this.queueMixer({[key]: !this.mixer()[key]}); }
       if (button.dataset.solo) this.toggleSolo(button.dataset.solo);
       if (button.dataset.action) this.action(button.dataset.action);
-    });
+    };
+    for (const eventRoot of options.audioPanel ? [root,this.audioRoot] : [root]) {
+      eventRoot.addEventListener('input',onInput);
+      eventRoot.addEventListener('change',onChange);
+      eventRoot.addEventListener('click',onClick);
+    }
   }
+  openMixer() { if (this.audioRoot) this.audioRoot.open = true; }
   project() { return this.options.project(); }
   clips() { return (this.project()?.manual?.media_clips || []).map(clip => ({...clip,...this.overrides.get(clip.id)})); }
   mixer() { return {...this.project()?.manual?.audio_mixer,...this.mixerOverride}; }
@@ -163,13 +174,14 @@ export class MediaStudio {
   }
   renderMixer() {
     const mixer = this.mixer();
-    const sourceName = this.root.querySelector('[data-channel-name=source]');
+    const root = this.audioRoot || this.root;
+    const sourceName = root.querySelector('[data-channel-name=source]');
     if (sourceName) sourceName.textContent = `Original · ${this.options.audioSlot?.() || this.project()?.manual?.source_mixer?.audio_slot || this.project()?.settings?.audio_source || 'A'}`;
-    this.root.querySelector('[data-ducking]').checked=Boolean(mixer.ducking);
-    for (const input of this.root.querySelectorAll('[data-mix]')) { if (document.activeElement !== input) input.value = mixer[input.dataset.mix] || 0; }
-    for (const out of this.root.querySelectorAll('[data-mix-value]')) out.textContent = `${mixer[out.dataset.mixValue] || 0} dB`;
-    for (const button of this.root.querySelectorAll('[data-mute]')) button.setAttribute('aria-pressed', String(Boolean(mixer[`${button.dataset.mute}_muted`])));
-    for (const button of this.root.querySelectorAll('[data-solo]')) button.setAttribute('aria-pressed', String(this.solo === button.dataset.solo));
+    root.querySelector('[data-ducking]').checked=Boolean(mixer.ducking);
+    for (const input of root.querySelectorAll('[data-mix]')) { if (document.activeElement !== input) input.value = mixer[input.dataset.mix] || 0; }
+    for (const out of root.querySelectorAll('[data-mix-value]')) out.textContent = `${mixer[out.dataset.mixValue] || 0} dB`;
+    for (const button of root.querySelectorAll('[data-mute]')) button.setAttribute('aria-pressed', String(Boolean(mixer[`${button.dataset.mute}_muted`])));
+    for (const button of root.querySelectorAll('[data-solo]')) button.setAttribute('aria-pressed', String(this.solo === button.dataset.solo));
     for (const [role,{row}] of this.channelMeters || []) {
       row.classList.toggle('is-muted',Boolean(mixer[`${role}_muted`]) || Boolean(this.solo && role !== 'master' && this.solo !== role));
     }
@@ -372,10 +384,11 @@ export class MediaStudio {
       row.classList.toggle('is-clipping',peak >= 1);
       meter.setAttribute('aria-valuetext',text(peak));
     }
-    const meter = this.root?.querySelector('.mixer-meter'); if (meter) meter.value = value(masterPeak);
+    const root = this.audioRoot || this.root;
+    const meter = root?.querySelector('.mixer-meter'); if (meter) meter.value = value(masterPeak);
     const state = !playing ? 'Paused · play to monitor' : this.audioFallback ? 'Basic preview · live meters unavailable' : !ready ? 'Seeking · waiting for live audio' : masterPeak >= 1 ? 'Clipping · lower a fader' : this.solo ? `Solo: ${this.solo === 'source' ? 'Original' : this.solo} · preview only` : 'Live browser mix';
-    const status = this.root?.querySelector('.mixer-level-text'); if (status) status.textContent = state;
-    const summary = this.root?.querySelector('.mixer-summary-level'); if (summary) summary.textContent = playing && ready ? text(masterPeak) : playing ? 'Preview' : 'Paused';
+    const status = root?.querySelector('.mixer-level-text'); if (status) status.textContent = state;
+    const summary = root?.querySelector('.mixer-summary-level'); if (summary) summary.textContent = playing && ready ? text(masterPeak) : playing ? 'Preview' : 'Paused';
   }
   pause() {
     for(const item of this.players.values()){ item.wanted=false; item.token++; item.element.pause?.(); if(item.frame)item.frame.hidden=true; }

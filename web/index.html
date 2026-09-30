@@ -10,7 +10,7 @@
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/assets/styles.css?v=1.1-beta-4">
   <link rel="stylesheet" href="/assets/workspace.css?v=1.1-beta-3">
-  <link rel="stylesheet" href="/assets/media-studio.css?v=1.1-beta-3">
+  <link rel="stylesheet" href="/assets/media-studio.css?v=1.1-beta-4">
   <link rel="stylesheet" href="/assets/stabilization-studio.css?v=1.1-beta-1">
   <link rel="stylesheet" href="/assets/text-studio.css?v=1.1-beta-2">
   <link rel="stylesheet" href="/assets/welcome.css?v=1.1-beta-2">
@@ -365,10 +365,12 @@
           <button id="studioTabTimeline" class="active" role="tab" aria-selected="true" aria-controls="studioPanelTimeline" tabindex="0" data-tab="timeline"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="m8 8 13 13M8 16 21 3"/></svg><span>Edit</span><small>Director</small></button>
           <button id="studioTabFraming" role="tab" aria-selected="false" aria-controls="studioPanelFraming" tabindex="-1" data-tab="framing"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M3 9h18"/></svg><span>Layout</span><small>Sources</small></button>
           <button id="studioTabTranscript" role="tab" aria-selected="false" aria-controls="studioPanelTranscript" tabindex="-1" data-tab="transcript"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M6 14h5m3 0h4M6 10h12"/></svg><span>Captions</span><small>Language &amp; text</small></button>
-          <button id="studioTabSettings" role="tab" aria-selected="false" aria-controls="studioPanelSettings" tabindex="-1" data-tab="settings"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="2" fill="var(--surface-chrome)"/><circle cx="15" cy="17" r="2" fill="var(--surface-chrome)"/></svg><span>Output</span><small>Audio &amp; export</small></button>
+          <button id="studioTabAudio" role="tab" aria-selected="false" aria-controls="studioPanelAudio" tabindex="-1" data-tab="audio"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m11 4-5 4H3v8h3l5 4V4Z"/><path d="M15 8a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14"/></svg><span data-i18n="audioTab">Audio</span><small data-i18n="audioMixer">Mixer</small></button>
+          <button id="studioTabSettings" role="tab" aria-selected="false" aria-controls="studioPanelSettings" tabindex="-1" data-tab="settings"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="2" fill="var(--surface-chrome)"/><circle cx="15" cy="17" r="2" fill="var(--surface-chrome)"/></svg><span>Output</span><small>Format &amp; export</small></button>
         </div>
         <div class="advanced-content">
           <div class="tab-panel" id="studioPanelMedia" role="tabpanel" aria-labelledby="studioTabMedia" tabindex="0" data-panel="media" hidden></div>
+          <div class="tab-panel" id="studioPanelAudio" role="tabpanel" aria-labelledby="studioTabAudio" tabindex="0" data-panel="audio" hidden><p class="media-status mixer-save-status" role="status" aria-live="polite" data-i18n="mixerSaveHint">Changes save automatically.</p></div>
           
           <div class="tab-panel active" id="studioPanelTimeline" role="tabpanel" aria-labelledby="studioTabTimeline" tabindex="0" data-panel="timeline">
             <section id="emptyTimeline" class="empty-timeline" hidden><h3>Your timeline is empty</h3><p>Your original recordings are safe. Add footage or Undo to bring your edit back.</p><button id="emptyTimelineAdd" class="button primary" type="button">Add source footage</button></section>
@@ -398,6 +400,7 @@
           </div>
           <div class="tab-panel" id="studioPanelFraming" role="tabpanel" aria-labelledby="studioTabFraming" tabindex="0" data-panel="framing">
             <header class="studio-tool-intro"><div><p>02 · LAYOUT</p><h3>Frame your video</h3></div><span>Choose a layout, then adjust the selected clip. Changes save automatically.</span></header>
+            <button id="openStabilizationStudio" type="button" class="button ghost compact source-stabilization-entry" aria-controls="stabilizationTool" data-i18n="stabilizeFootage">Stabilize footage</button>
             <section class="source-mixer" id="sourceMixer" aria-labelledby="sourceMixerTitle">
               <div class="source-mixer-head">
                 <div><p class="eyebrow">SOURCE MIXER</p><h3 id="sourceMixerTitle">Source control</h3><p id="sourceMixerHelp">AI suggests a layout; your choice always wins.</p></div>
@@ -792,6 +795,6 @@
       <footer class="connection-actions"><button class="button ghost" id="forgetCloudKey" type="button">Forget session key</button><button class="button primary" id="saveAIConnection" type="submit">Use this connection</button></footer>
     </form>
   </dialog>
-  <script type="module" src="/assets/app.js?v=1.1-beta-18"></script>
+  <script type="module" src="/assets/app.js?v=1.1-beta-19"></script>
 </body>
 </html>

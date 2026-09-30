@@ -1,6 +1,6 @@
-import { applyTranslations, dictionaries } from "./i18n.js?v=1.1-beta-1";
+import { applyTranslations, dictionaries } from "./i18n.js?v=1.1-beta-2";
 import { TimelineView, formatTime, editableClips, timelineDuration, sequenceBlocks, sequenceGaps, rippleMoveStart } from "./timeline.js?v=1.1-beta-8";
-import { MediaStudio } from "./media-studio.js?v=1.1-beta-4";
+import { MediaStudio } from "./media-studio.js?v=1.1-beta-5";
 import { StabilizationStudio } from "./stabilization-studio.js?v=1.1-beta-1";
 import { SourceReview } from "./source-review.js?v=1.1-beta-8";
 import { initWorkspace } from "./workspace.js?v=1.1-beta-3";
@@ -201,13 +201,13 @@ function initializeMediaStudio() {
   const tab = document.createElement("button");
   tab.id = "studioTabMedia"; tab.type = "button"; tab.dataset.tab = "media";
   tab.setAttribute("role", "tab"); tab.setAttribute("aria-selected", "false"); tab.setAttribute("aria-controls", "studioPanelMedia"); tab.tabIndex = -1;
-  tab.innerHTML = '<span aria-hidden="true">♫</span><span>Media</span><small>Clips & audio</small>';
+  tab.innerHTML = '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 4v16M17 4v16M3 9h4m10 0h4M3 15h4m10 0h4"/></svg><span>Media</span><small>Clips & images</small>';
   elements.advancedPanel.querySelector(".advanced-tabs").append(tab);
   // bindEvents already ran before this dynamically created tab.
   tab.addEventListener("click", () => selectAdvancedTab("media"));
   tab.addEventListener("keydown", handleStudioTabKeydown);
   state.mediaStudio = new MediaStudio(panel, elements.previewStage, {
-    project: () => state.project, audioSlot: () => sourceMixerSettings().audioSlot, api, edit: applyManualEdit, pause: pauseAllMedia,
+    project: () => state.project, audioPanel: document.getElementById("studioPanelAudio"), audioSlot: () => sourceMixerSettings().audioSlot, api, edit: applyManualEdit, pause: pauseAllMedia,
     time: previewTimelineTime, duration: editorDuration, flushSettings: flushProjectSaves,
     busy: () => Boolean(state.activeJob || state.activeUploads.size || state.jobStartLocks.size || state.stabilizationStudio?.uploading
       || state.sourceSyncPending || (state.manualEditBusy && !state.mediaStudio?.saving)),
@@ -225,6 +225,8 @@ function initializeMediaStudio() {
     },
   });
   state.stabilizationStudio = new StabilizationStudio(panel, {...state.mediaStudio.options, flush: () => state.mediaStudio.flush()});
+  state.stabilizationStudio.node.id = "stabilizationTool";
+  document.getElementById("openStabilizationStudio")?.addEventListener("click", openStabilizationTools);
   const speed = document.createElement("div"); speed.className = "picture-speed"; speed.dataset.editorShortcuts = "off";
   speed.innerHTML = '<label>Picture speed <select aria-label="Picture speed"><option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="1">1×</option><option value="1.5">1.5×</option><option value="2">2×</option><option value="4">4×</option></select><span></span></label><p>Picture only: keeps clip length and speech timing. May lose lip sync or hold the last source frame. Select A or B to choose which picture changes.</p>';
   elements.clipTrimForm.after(speed); state.pictureSpeed = speed;
@@ -4621,13 +4623,25 @@ function toggleAdvanced() {
 }
 
 function openStudioTab(tab) {
-  if (!["timeline", "framing", "transcript", "settings"].includes(tab)) return false;
+  if (!["timeline", "framing", "transcript", "audio", "media", "settings"].includes(tab)) return false;
   if (!state.project?.draft) { toast(t("studioNeedsDraft")); return false; }
   if (foregroundBusy()) { toast(t("directorBusy")); return false; }
   pauseAllMedia();
   setAdvanced(true);
   selectAdvancedTab(tab);
   $(`.advanced-tabs button[data-tab="${tab}"]`)?.focus();
+  return true;
+}
+
+function openStabilizationTools() {
+  const tool = state.stabilizationStudio;
+  if (!tool || !openStudioTab("media")) return false;
+  const slot = elements.cropSourceSelect?.value;
+  if (state.project?.sources?.[slot]) tool.source.value = slot;
+  tool.node.open = true;
+  tool.render();
+  tool.node.scrollIntoView({block:"nearest",inline:"nearest"});
+  tool.source.focus({preventScroll:true});
   return true;
 }
 
@@ -4772,6 +4786,7 @@ function updateStudioStatus() {
 }
 
 function selectAdvancedTab(tab) {
+  if (tab === "audio") state.mediaStudio?.openMixer();
   if (tab === "framing") loadCropControls(elements.cropSourceSelect?.value || "A", false);
   elements.advancedPanel.classList.toggle("studio-transcript", tab === "transcript");
   let activePanel = null;
