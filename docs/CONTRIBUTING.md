@@ -35,14 +35,19 @@ Keep the launcher console open while using the editor. Local AI models are separ
 
 ### Linux development path
 
-The repository includes Linux scripts. Install Python 3.11 or 3.12 and FFmpeg/FFprobe with your distribution's tools, then run from the repository root:
+The repository includes Linux scripts. Install Python 3.11 or 3.12 with `venv` and `pip`, and compatible FFmpeg/FFprobe with your distribution's tools. FFmpeg needs the `subtitles` filter (libass) for burned captions. Run from the repository root:
 
 ```sh
+chmod +x setup_linux.sh run_linux.sh
 bash setup_linux.sh
 bash run_linux.sh
 ```
 
-The setup script creates `.venv` and downloads Python dependencies. These scripts are available for development; the shipped download and current beta validation focus on Windows. Report the exact distribution and environment with Linux findings.
+The setup script creates `.venv` and downloads Python dependencies. Executable permission matters because the run script calls `./setup_linux.sh` when setup or repair is needed. Linux is a source-based development path, not a folder in the combined Windows/Mac download; end-to-end Linux QA has not been verified. The Ubuntu repository-checks job covers documentation, frontend tests and website helpers, not a Linux editor installation. Report the exact distribution and environment with Linux findings.
+
+### macOS
+
+Use the combined beta download's `mac/START CUTROOM.command` on macOS 15+ with native Apple Silicon or Intel Python 3.11/3.12. The Mac overlay uses separate compatibility constraints and FFmpeg checks; `packaging/mac` is packaging input, not a ready-to-run checkout folder. See [platform setup](PLATFORMS.md) and [Mac beta development/validation notes](MAC_BETA.md) before testing Mac packaging changes. The [successful master validation](https://github.com/VanoPeradze/cutroom/actions/runs/36674994899) covers both architectures at `cb052b5764b89205e2537292a7beb0fba5b38b3d`; it does not replace manual Finder/Gatekeeper or Safari QA.
 
 The editor normally opens at `http://127.0.0.1:8765`. Keep it on the local computer; do not expose the development server publicly.
 
@@ -56,7 +61,7 @@ After initial setup, install test dependencies in the same virtual environment. 
 node --test tests/frontend*.test.cjs
 ```
 
-On Linux, use `.venv/bin/python` in place of `.\.venv\Scripts\python.exe`. Node.js is needed for frontend tests, not for running the editor. Node.js 22 or newer also covers the website's documented runtime requirement. Rendering checks need a working FFmpeg/FFprobe installation.
+On Linux, use `.venv/bin/python` in place of `.\.venv\Scripts\python.exe`. Mac regression dependency installation also uses `-c packaging/mac/constraints-macos.txt`; see the [macOS workflow](../.github/workflows/macos.yml) for its isolated environment and exact commands. Node.js is needed for frontend tests, not for running the editor. Node.js 22 or newer also covers the website's documented runtime requirement. Rendering checks need a working FFmpeg/FFprobe installation.
 
 Run focused checks while developing, then the relevant broader suite before submitting code changes. For example:
 

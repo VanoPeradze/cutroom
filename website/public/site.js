@@ -40,8 +40,8 @@
     languageSwitch.href = language === 'he' ? '?lang=en' + location.hash : '?lang=he' + location.hash;
     document.title = language === 'he' ? 'CUTROOM 1.1 Beta — החומר שלכם. העריכה שלכם.' : 'CUTROOM 1.1 Beta — Your footage. Your edit.';
     document.querySelector('meta[name="description"]').content = language === 'he'
-      ? 'עריכת וידאו חינמית בקוד פתוח ליוצרי תוכן. התחילו מטיוטה בעזרת AI או ערכו ידנית. הורידו את הבטא ל־Windows ולמדו איך מתחילים.'
-      : 'Free, open-source video editing for creators. Start with an AI-assisted draft or edit manually. Download the Windows beta and learn how to get started.';
+      ? 'עריכת וידאו חינמית בקוד פתוח ל־Windows, ל־macOS ול־Linux. ZIP בטא ל־Windows ול־Mac; הפעלה מקוד מקור ב־Linux. דרישות, התקנה ומגבלות הבטא.'
+      : 'Free, open-source video editing for Windows, macOS and Linux. Windows/Mac beta ZIP; Linux from source. Compare requirements, setup paths and beta limitations.';
     document.querySelector('nav').setAttribute('aria-label', language === 'he' ? 'ניווט ראשי' : 'Main navigation');
     document.querySelector('.tour-controls').setAttribute('aria-label', language === 'he' ? 'סיור במוצר' : 'Product tour');
     document.querySelector('.format-strip').setAttribute('aria-label', language === 'he' ? 'סוגי סרטונים' : 'Video formats');
