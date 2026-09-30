@@ -408,7 +408,10 @@ def test_v52_outcome_first_ui_and_timeline_contract():
     assert 'elements.durationGroup.hidden = ["youtube", "clean"].includes(normalized)' in app
     assert 'youtube: { aspect: "16:9", layout: "A"' in app
     assert 'short: { aspect: "9:16", layout: "auto"' in app
-    assert 'analysis?.audio?.waveform' in timeline
+    # Manual edits use upload-time source measurements; Director analysis remains
+    # a fallback. Behavioral tests verify the selected source and clock mapping.
+    assert 'project?.pre_analysis?.audio?.[slot]' in timeline
+    assert 'project?.analysis?.audio' in timeline
     assert 'handleWheel(event)' in timeline and 'followPlayhead()' in timeline
     assert 'this.scrubbing = true' in timeline
 

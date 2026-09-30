@@ -1,4 +1,4 @@
-import { TimelineView, formatTime } from "./timeline.js?v=1.1-beta-7";
+import { TimelineView, formatTime } from "./timeline.js?v=1.1-beta-8";
 
 // Project current edit clips onto the original recording, including copies.
 // The original draft's keep mask is intentionally not authoritative anymore.
@@ -30,10 +30,15 @@ export function reviewSelectionStats(ranges, selection) {
 }
 
 export function sourceReviewAudio(project, slot) {
+  if (project?.sources?.[slot]?.has_audio === false) return null;
+  // Preparation is measured on the original A/B clocks before AI analysis.
+  // Prefer it so manual projects and the non-analyzed source have real audio.
+  const prepared=project?.pre_analysis?.audio?.[slot];
+  if (prepared) return prepared;
   const analysis=project?.analysis || {};
   const audioSlot=String(analysis.audio_source || project?.draft?.audio_source || "A").toUpperCase();
   if (audioSlot!==slot || !analysis.audio) return null;
-  const offset=slot==="B" ? Number(analysis.audio_timeline_offset) : 0;
+  const offset=slot==="B" ? Number(analysis.audio_timeline_offset || 0) : 0;
   if (!Number.isFinite(offset)) return null;
   const duration=Number(project.sources[slot].duration);
   const remap=rows=>(rows || []).map(row=>({...row,start:Math.max(0,row.start-offset),end:Math.min(duration,row.end-offset)})).filter(row=>row.end>row.start);

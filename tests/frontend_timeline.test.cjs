@@ -1011,6 +1011,112 @@ test("waveform follows analyzed source clips and never substitutes a different s
   assert.deepEqual(plain(h.timeline.audioTimelineRanges(bins)), []);
 });
 
+function waveformStrokes(h) {
+  const segments = [];
+  let previous;
+  const ctx = h.canvas.getContext("2d");
+  ctx.moveTo = (x, y) => { previous = { x, y }; };
+  ctx.lineTo = (x, y) => { segments.push({ from: previous, to: { x, y } }); };
+  h.timeline.drawWaveform(ctx, 50, 600);
+  return segments.filter(line => line.from.x === line.to.x && line.from.y !== line.to.y);
+}
+
+test("manual source audio draws measured upload bins before any AI analysis", () => {
+  const h = fixture({ tracks: true });
+  h.project.pre_analysis = { audio: { A: { waveform: [{ start: 1, end: 2, rms_dbfs: -20, peak_dbfs: -12 }] } } };
+  assert.ok(waveformStrokes(h).some(line => line.from.x === 75), "audible upload must draw a real waveform");
+});
+
+test("switching to B draws its native bins through trimmed clips without applying analysis offset twice", () => {
+  const h = fixture({ tracks: true });
+  h.project.analysis = { audio_source: "A", audio_timeline_offset: 2, audio: { waveform: [{ start: 1, end: 2, rms_dbfs: -12 }] } };
+  h.project.pre_analysis = { audio: { B: { waveform: [{ start: 4, end: 5, rms_dbfs: -20, peak_dbfs: -12 }] } } };
+  h.project.manual.source_mixer = { audio_slot: "B" };
+  const lines = waveformStrokes(h);
+  assert.ok(lines.some(line => line.from.x === 25), "B source 4–5 belongs at edit 0–1");
+  assert.ok(!lines.some(line => line.from.x === 75), "A waveform must not leak into B");
+});
+
+test("source waveform follows moved copies and refreshes after an in-place trim", () => {
+  const h = fixture({ tracks: true });
+  h.project.pre_analysis = { audio: { A: { waveform: [{ start: 4, end: 5, rms_dbfs: -20 }] } } };
+  h.project.manual.source_tracks.A = [
+    { id: "first", start: 2, end: 4, source_start: 4 },
+    { id: "copy", start: 8, end: 10, source_start: 4 },
+  ];
+  let lines = waveformStrokes(h);
+  assert.ok(lines.some(line => line.from.x === 125));
+  assert.ok(lines.some(line => line.from.x === 425));
+  assert.ok(!lines.some(line => line.from.x === 225), "removed original time must stay empty");
+  h.project.manual.source_tracks.A[0].start = 3;
+  h.project.manual.source_tracks.A[0].source_start = 5;
+  lines = waveformStrokes(h);
+  assert.ok(!lines.some(line => line.from.x === 125), "trim cannot reuse stale cached bins");
+  assert.ok(lines.some(line => line.from.x === 425), "the untouched copy still has measured audio");
+});
+
+test("legacy B analysis remains a waveform fallback with its analysis-clock offset", () => {
+  const h = fixture({ tracks: true });
+  h.project.analysis = { audio_source: "B", audio_timeline_offset: 2, audio: { waveform: [{ start: 6, end: 7, rms_dbfs: -20 }] } };
+  h.project.manual.source_mixer = { audio_slot: "B" };
+  assert.ok(waveformStrokes(h).some(line => line.from.x === 25));
+  h.project.manual.source_mixer.audio_slot = "A";
+  assert.equal(waveformStrokes(h).length, 0, "analyzed B audio never decorates selected A");
+});
+
+test("measured digital silence and a source without audio never create peaks", () => {
+  const h = fixture({ tracks: true });
+  h.project.sources.A.has_audio = true;
+  h.project.pre_analysis = { audio: { A: { available: true, waveform: [{ start: 0, end: 1, rms_dbfs: -100, peak_dbfs: -100 }] } } };
+  assert.equal(waveformStrokes(h).length, 0, "silence is measured zero, not minimum decorative bars");
+  h.project.sources.A.has_audio = false;
+  h.project.sources.B.has_audio = false;
+  h.project.pre_analysis.audio.A.waveform[0].rms_dbfs = -6;
+  assert.equal(waveformStrokes(h).length, 0, "no-audio metadata takes precedence over stale data");
+});
+
+test("waveform uses the host's pending audio selection without changing stored settings", () => {
+  const h = fixture({ tracks: true });
+  h.project.pre_analysis = { audio: {
+    A: { waveform: [{ start: 1, end: 2, rms_dbfs: -20 }] },
+    B: { waveform: [{ start: 4, end: 5, rms_dbfs: -20 }] },
+  } };
+  h.timeline.getAudioSlot = () => "B";
+  assert.ok(waveformStrokes(h).some(line => line.from.x === 25));
+  assert.equal(h.project.manual.source_mixer, undefined);
+});
+
+test("zoomed and scrolled source waveforms occupy measured spans within the visible viewport", () => {
+  const h = fixture({ tracks: true, width: 100 });
+  h.project.pre_analysis = { audio: { A: { waveform: [{ start: 1, end: 2, rms_dbfs: -20 }] } } };
+  h.scroll.scrollLeft = 150;
+  const segments = [], ctx = h.canvas.getContext("2d"); let previous;
+  ctx.moveTo = (x, y) => { previous = { x, y }; };
+  ctx.lineTo = (x, y) => { segments.push({ from: previous, to: { x, y } }); };
+  h.timeline.drawWaveform(ctx, 200, 2400);
+  const vertical = segments.filter(line => line.from.x === line.to.x && line.from.y !== line.to.y);
+  assert.ok(vertical.length > 10, "zoomed measured bins cover their real duration");
+  assert.ok(vertical.every(line => line.from.x >= 200 && line.from.x <= 250));
+  h.scroll.clientWidth = 50;segments.length = 0;h.timeline.drawWaveform(ctx, 200, 2400);
+  assert.equal(segments.filter(line => line.from.x === line.to.x && line.from.y !== line.to.y).length, 0);
+});
+
+test("imported-audio waveform preserves brief measured peaks at low zoom", () => {
+  const h = mediaFixture();
+  h.project.assets.sound = { kind: "audio", name: "Impulse", duration: 1, waveform: Array(100).fill(0) };
+  h.project.assets.sound.waveform[1] = 1;
+  h.project.manual.media_clips = [{ id: "music", asset_id: "sound", role: "music", start: 0, end: 1, source_start: 0 }];
+  const segments = [], ctx = h.canvas.getContext("2d");let previous;
+  ctx.moveTo = (x, y) => { previous = { x, y }; };
+  ctx.lineTo = (x, y) => { if (ctx.strokeStyle === "#86dcc0") segments.push({ from: previous, to: { x, y } }); };
+  h.timeline.drawMedia(ctx, 20, 600);
+  assert.ok(segments.some(line => line.to.y - line.from.y === 30), "pixel buckets retain the actual peak instead of skipping it");
+  h.project.assets.sound.waveform[99] = .5;
+  h.project.manual.media_clips[0].source_start = 1;
+  segments.length = 0;h.timeline.drawMedia(ctx, 20, 600);
+  assert.ok(!segments.some(line => line.to.y !== line.from.y), "audio beyond the source cannot repeat its last sample");
+});
+
 test("time labels truncate tenths without floating-point underflow or second overflow", () => {
   const { scope } = fixture();
   for (const [seconds, expected] of [

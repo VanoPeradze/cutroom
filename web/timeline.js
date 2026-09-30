@@ -107,6 +107,7 @@ export class TimelineView {
     this.onMediaPreview = options.onMediaPreview;
     this.onMediaAction = options.onMediaAction;
     this.getTrackClips = options.getTrackClips;
+    this.getAudioSlot = options.getAudioSlot;
     this.sourceReview = Boolean(options.sourceReview);
     this.editTarget = "edit";
     this.canEdit = options.canEdit || (() => true);
@@ -426,8 +427,14 @@ export class TimelineView {
           ctx.strokeStyle='#86dcc0'; ctx.beginPath();
           for(let ix=Math.max(x,left);ix<Math.min(x+w,right);ix+=3) {
             const source=Number(clip.source_start||0)+(ix/px-clip.start);
-            const value=Number(waveform[Math.min(waveform.length-1,Math.floor(source/Math.max(.001,asset.duration)*waveform.length))])||0;
-            const amp=Math.min(15,Math.abs(value)*15); ctx.moveTo(ix,row.top+25-amp); ctx.lineTo(ix,row.top+25+amp);
+            const sourceEnd=Number(clip.source_start||0)+(Math.min(ix+3,x+w,right)/px-clip.start);
+            const binDuration=Math.max(.001,Number(asset.duration)||0)/waveform.length;
+            const first=Math.max(0,Math.floor(source/binDuration)),last=Math.min(waveform.length-1,Math.ceil(sourceEnd/binDuration)-1);
+            // Keep the strongest real sample covered by this pixel bucket;
+            // point sampling can hide short transients at Fit/low zoom.
+            let value=0;
+            for(let bin=first;bin<=last;bin++) value=Math.max(value,Math.abs(Number(waveform[bin])||0));
+            const amp=Math.min(15,value*15); ctx.moveTo(ix,row.top+25-amp); ctx.lineTo(ix,row.top+25+amp);
           } ctx.stroke();
         }
         ctx.fillStyle='rgba(0,0,0,.75)'; ctx.fillRect(Math.max(x,left),row.top+2,Math.min(w,300),14);
@@ -754,25 +761,66 @@ export class TimelineView {
     }
   }
 
+  waveformProfile() {
+    const project = this.project;
+    const requested = String(this.getAudioSlot?.(project) || project?.manual?.source_mixer?.audio_slot || project?.settings?.audio_source || "A").toUpperCase();
+    let slot = ["A", "B"].includes(requested) ? requested : "A";
+    if (!project?.sources?.[slot] || project.sources[slot].has_audio === false) {
+      slot = ["A", "B"].find(key => project?.sources?.[key] && project.sources[key].has_audio !== false) || slot;
+    }
+    const source = project?.sources?.[slot];
+    if (!source || source.has_audio === false) return { slot, profile: null, state: "no-audio", native: true };
+    // Upload preparation measures each original source, even in a manual edit
+    // that has never run Director. Its timestamps are already source-native.
+    const prepared = project?.pre_analysis?.audio?.[slot];
+    if (prepared) return { slot, profile: prepared, state: prepared.available === false ? "unavailable" : prepared.waveform?.length ? "ready" : "empty", native: true };
+    const analyzed = String(project?.analysis?.audio_source || project?.draft?.audio_source || "A").toUpperCase();
+    const legacy = slot === analyzed ? project?.analysis?.audio : null;
+    if (legacy) return { slot, profile: legacy, state: legacy.available === false ? "unavailable" : legacy.waveform?.length ? "ready" : "empty", native: false };
+    return { slot, profile: null, state: source.preparation_error ? "unavailable" : source.audio_profile_ready === false ? "pending" : "empty", native: true };
+  }
+
+  waveformRanges(profile = this.waveformProfile()) {
+    const bins = profile.profile?.waveform;
+    if (profile.state !== "ready" || !Array.isArray(bins)) return [];
+    return this.sourceTimelineRanges(bins, profile.slot, profile.native ? 0 : profile.slot === "B" ? Number(this.project?.analysis?.audio_timeline_offset) || 0 : 0);
+  }
+
   drawWaveform(ctx, px, width) {
-    const bins = this.audioTimelineRanges(this.project?.analysis?.audio?.waveform || []);
+    const profile = this.waveformProfile(), bins = this.waveformRanges(profile);
     const y = this.project?.manual?.sequence ? (this.project.sources?.B ? 186 : 130) : this.compact ? 140 : 230, height = this.compact || this.project?.manual?.sequence ? 26 : 54, mid = y + height / 2;
-    ctx.strokeStyle = "rgba(226,235,238,.64)";
+    const left = Math.max(0, this.scroll.scrollLeft || 0), right = Math.min(width, left + (this.scroll.clientWidth || width));
+    ctx.strokeStyle = "rgba(235,243,245,.22)";
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(left, mid); ctx.lineTo(right, mid); ctx.stroke();
+    ctx.strokeStyle = "#91d7c2";
     ctx.lineWidth = 1;
     ctx.beginPath();
     if (bins.length) {
       for (const bin of bins) {
-        const start = Number(bin.start || 0), end = Number(bin.end || start);
+        const start = Number(bin.start), end = Number(bin.end);
+        if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start || end * px < left || start * px > right) continue;
         const x = ((start + end) / 2) * px;
-        const rms = Math.max(-72, Math.min(0, Number(bin.rms_dbfs ?? -72)));
-        const peak = Math.max(-72, Math.min(0, Number(bin.peak_dbfs ?? rms)));
-        const amp = Math.max(2, ((rms + 72) / 72) * height * .42);
+        const rmsValue = Number(bin.rms_dbfs), peakValue = Number(bin.peak_dbfs ?? bin.rms_dbfs);
+        if (!Number.isFinite(rmsValue) || !Number.isFinite(peakValue)) continue;
+        const rms = Math.max(-72, Math.min(0, rmsValue)), peak = Math.max(-72, Math.min(0, peakValue));
+        const amp = ((rms + 72) / 72) * height * .42;
         const peakAmp = Math.max(amp, ((peak + 72) / 72) * height * .48);
-        ctx.moveTo(x, mid - amp); ctx.lineTo(x, mid + amp);
-        if (peakAmp > amp + 3) { ctx.moveTo(x, mid - peakAmp); ctx.lineTo(x, mid - amp - 1); }
+        const drawBin = position => {
+          if (amp > 0) { ctx.moveTo(position, mid - amp); ctx.lineTo(position, mid + amp); }
+          if (peakAmp > amp + 1) { ctx.moveTo(position, mid - peakAmp); ctx.lineTo(position, mid - amp); }
+        };
+        if (x >= left && x <= right) drawBin(x);
+        // A zoomed-in measurement occupies its true time span. Do not invent
+        // extra samples or leave wide gaps between the existing measured bins.
+        if ((end - start) * px > 3) {
+          for (let position = Math.ceil(Math.max(start * px, left) / 2) * 2; position < Math.min(end * px, right); position += 2) drawBin(position);
+        }
       }
     } else {
-      ctx.moveTo(0, mid); ctx.lineTo(width, mid);
+      const message = profile.state === "no-audio" ? "Source has no audio" : profile.state === "pending" ? "Measuring source audio\u2026" : profile.state === "unavailable" ? "Source waveform unavailable" : profile.state === "ready" ? "No source audio in this edit" : "No waveform data";
+      ctx.fillStyle = "#aebbc0"; ctx.font = "10px ui-monospace, monospace";
+      ctx.fillText(message, left + 74, mid + 3);
     }
     ctx.stroke();
   }
@@ -784,11 +832,19 @@ export class TimelineView {
     const selected = String(project.manual?.source_mixer?.audio_slot || project.settings?.audio_source || "A");
     if (selected !== analyzed) return [];
     const offset = selected === "B" ? Number(project.analysis?.audio_timeline_offset) || 0 : 0;
+    return this.sourceTimelineRanges(ranges, selected, offset);
+  }
+
+  sourceTimelineRanges(ranges, slot, offset = 0) {
+    if (!ranges.length || !this.getTrackClips || !this.project?.manual?.source_tracks) return ranges;
+    const project = this.project, clips = this.getTrackClips(project, slot);
     if (this.audioCacheProject !== project) { this.audioRangeCache = new Map(); this.audioCacheProject = project; }
-    const signature = `${selected}:${offset}`;
+    // Drag/trim previews can mutate the same project object. Include clip
+    // geometry so a repaint cannot reuse data from before the gesture.
+    const signature = `${slot}:${offset}:${clips.map(clip => `${clip.start},${clip.end},${clip.source_start}`).join(";")}`;
     const cached = this.audioRangeCache.get(ranges);
     if (cached?.signature === signature) return cached.mapped;
-    const mapped = this.getTrackClips(project, selected).flatMap((clip) => ranges.map((item) => {
+    const mapped = clips.flatMap((clip) => ranges.map((item) => {
       const start = Math.max(Number(item.start) - offset, clip.source_start);
       const end = Math.min(Number(item.end) - offset, clip.source_start + clip.end - clip.start);
       return { ...item, start: clip.start + start - clip.source_start, end: clip.start + end - clip.source_start };
