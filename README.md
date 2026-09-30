@@ -141,7 +141,7 @@ Use copies of your footage, not your only originals or an urgent client delivery
 <details>
 <summary><strong>For developers</strong></summary>
 
-The editor uses a Python backend, a plain JavaScript frontend and FFmpeg rendering. AI integrations are optional. See the [developer setup and checks](docs/CONTRIBUTING.md) before making changes. Just want to edit a video? Use the Windows beta download above; the folders below are for contributors.
+The editor uses a Python backend, a plain JavaScript frontend and FFmpeg rendering. AI integrations are optional. See the [developer setup and checks](docs/CONTRIBUTING.md) before making changes. Just want to edit a video? Use the beta download above and choose your operating system's folder; the folders below are for contributors.
 
 ```text
 cutroom/       Editing, transcription, jobs and rendering
@@ -149,7 +149,7 @@ web/           Local editor interface and timeline
 tests/         Backend, frontend and synthetic-render regression tests
 scripts/       Validation and privacy-conscious packaging tools
 docs/          User guides, limitations and contributor documentation
-packaging/     Windows download launcher and offline help
+packaging/     Separate Windows and Mac launchers and offline help
 website/       Separate Expo-hosted presentation and download site
 .github/       Community guidelines and automated repository checks
 ```

@@ -7,7 +7,7 @@ CUTROOM_APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 cutroom_help() {
   printf '\nMac setup help: open START HERE.html in the mac folder.\n' >&2
   printf 'Homebrew: https://brew.sh/\nPython: https://www.python.org/downloads/macos/\n' >&2
-  printf 'Full FFmpeg: https://formulae.brew.sh/formula/ffmpeg-full\n' >&2
+  printf 'Compatible FFmpeg 7: https://formulae.brew.sh/formula/ffmpeg@7\n' >&2
   if [[ -f "$CUTROOM_APP_DIR/../START HERE.html" ]] && command -v open >/dev/null 2>&1; then
     open "$CUTROOM_APP_DIR/../START HERE.html" >/dev/null 2>&1 || true
   fi
@@ -36,13 +36,13 @@ cutroom_prepare_environment() {
     *) printf 'Unsupported Mac architecture: %s\n' "$machine" >&2; return 1 ;;
   esac
   export CUTROOM_MAC_ARCH="$machine"
-  export PATH="$native_prefix/opt/ffmpeg-full/bin:$native_prefix/bin:$native_prefix/sbin:$other_prefix/opt/ffmpeg-full/bin:$other_prefix/bin:$other_prefix/sbin:${PATH:-/usr/bin:/bin}:/usr/bin:/bin:/usr/sbin:/sbin"
+  export PATH="$native_prefix/opt/ffmpeg@7/bin:$native_prefix/bin:$native_prefix/sbin:$other_prefix/opt/ffmpeg@7/bin:$other_prefix/bin:$other_prefix/sbin:${PATH:-/usr/bin:/bin}:/usr/bin:/bin:/usr/sbin:/sbin"
   if [[ -n "${HOME:-}" ]]; then
     export PATH="$PATH:$HOME/.local/bin"
   fi
   # Custom Homebrew prefixes are supported without forcing a global link.
   if command -v brew >/dev/null 2>&1; then
-    brew_prefix="$(HOMEBREW_NO_AUTO_UPDATE=1 brew --prefix ffmpeg-full 2>/dev/null || true)"
+    brew_prefix="$(HOMEBREW_NO_AUTO_UPDATE=1 brew --prefix ffmpeg@7 2>/dev/null || true)"
     if [[ -n "$brew_prefix" && -d "$brew_prefix/bin" ]]; then
       export PATH="$brew_prefix/bin:$PATH"
     fi
@@ -85,6 +85,14 @@ cutroom_system_ready() {
   "$python_bin" "$CUTROOM_APP_DIR/preflight_macos.py" --system-only
 }
 
+cutroom_overrides_ready() {
+  if [[ -z "${CUTROOM_FFMPEG:-}" && -z "${CUTROOM_FFPROBE:-}" ]]; then return 0; fi
+  if ! "$1" "$CUTROOM_APP_DIR/preflight_macos.py" --overrides-only; then
+    printf 'A custom CUTROOM_FFMPEG/CUTROOM_FFPROBE path is incompatible. Correct it or unset it to use ffmpeg@7, then launch again.\n' >&2
+    return 1
+  fi
+}
+
 cutroom_runtime_ready() {
   [[ -x "$CUTROOM_APP_DIR/.venv/bin/python" ]] || return 1
   cutroom_python_supported "$CUTROOM_APP_DIR/.venv/bin/python" || return 1
@@ -116,21 +124,22 @@ cutroom_setup_main() {
   if [[ -n "${CUTROOM_PYTHON:-}" && "$need_python" == yes ]]; then return 1; fi
   if [[ "$need_python" == yes ]]; then
     need_ffmpeg=yes
-  elif ! cutroom_system_ready "$python_bin"; then
-    need_ffmpeg=yes
+  else
+    cutroom_overrides_ready "$python_bin"
+    if ! cutroom_system_ready "$python_bin"; then need_ffmpeg=yes; fi
   fi
   brew_bin="$(command -v brew || true)"
   if [[ ( "$need_python" == yes || "$need_ffmpeg" == yes ) && -z "$brew_bin" ]]; then
-    printf '\nPython 3.11/3.12 and full FFmpeg with libass, libx264 and AAC are required.\n' >&2
+    printf '\nPython 3.11/3.12 and compatible FFmpeg with libass, libx264 and AAC are required.\n' >&2
     printf 'Homebrew is not installed. Install it using the official website, then run:\n' >&2
-    printf '  brew install python@3.12 ffmpeg-full\n' >&2
+    printf '  brew install python@3.12 ffmpeg@7\n' >&2
     printf 'Then double-click START CUTROOM.command again. Setup will ask before installing Python packages.\n' >&2
     cutroom_help
     return 1
   fi
   printf '\nCUTROOM needs to install or repair its Mac runtime.\n'
   if [[ "$need_python" == yes ]]; then printf '  • Install native Python 3.12 using your existing Homebrew.\n'; fi
-  if [[ "$need_ffmpeg" == yes ]]; then printf '  • Install ffmpeg-full using your existing Homebrew (includes subtitle support).\n'; fi
+  if [[ "$need_ffmpeg" == yes ]]; then printf '  • Install ffmpeg@7 using your existing Homebrew (compatible rendering and subtitle support).\n'; fi
   printf '  • Install Python packages listed in App/requirements.txt into App/.venv.\n'
   printf 'This requires internet access and free disk space. AI models are not downloaded.\n'
   if [[ "$consent" != yes ]]; then
@@ -153,14 +162,17 @@ cutroom_setup_main() {
   trap 'rmdir "$CUTROOM_SETUP_LOCK" 2>/dev/null || true' EXIT
   if [[ "$need_python" == yes ]]; then
     HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 "$brew_bin" install python@3.12
+    cutroom_prepare_environment
+    python_bin="$(cutroom_resolve_python)" || { printf 'A native Python 3.11/3.12 still could not be found.\n' >&2; cutroom_help; return 1; }
+    cutroom_overrides_ready "$python_bin"
   fi
   if [[ "$need_ffmpeg" == yes ]]; then
-    HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 "$brew_bin" install ffmpeg-full
+    HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 "$brew_bin" install ffmpeg@7
   fi
   cutroom_prepare_environment
   python_bin="$(cutroom_resolve_python)" || { printf 'A native Python 3.11/3.12 still could not be found.\n' >&2; cutroom_help; return 1; }
   if ! cutroom_system_ready "$python_bin"; then
-    printf 'FFmpeg is still unavailable or lacks required codecs. Check CUTROOM_FFMPEG/CUTROOM_FFPROBE if you set custom paths.\n' >&2
+    printf 'FFmpeg is still unavailable or lacks required codecs/options. Check CUTROOM_FFMPEG/CUTROOM_FFPROBE if you set custom paths.\n' >&2
     cutroom_help
     return 1
   fi

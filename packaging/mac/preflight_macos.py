@@ -6,6 +6,7 @@ import importlib
 import os
 from pathlib import Path
 import platform
+import re
 import runpy
 import shutil
 import subprocess
@@ -31,21 +32,30 @@ def _capabilities(output: str) -> set[str]:
     return {fields[1] for line in output.splitlines() if len(fields := line.split()) >= 2}
 
 
-def check_system() -> list[str]:
+def check_system(*, only_overrides: bool = False) -> list[str]:
     failures: list[str] = []
     ffmpeg = os.environ.get("CUTROOM_FFMPEG") or shutil.which("ffmpeg") or "ffmpeg"
     ffprobe = os.environ.get("CUTROOM_FFPROBE") or shutil.which("ffprobe") or "ffprobe"
-    for label, command in (("FFmpeg", ffmpeg), ("FFprobe", ffprobe)):
+    for label, variable, command in (("FFmpeg", "CUTROOM_FFMPEG", ffmpeg), ("FFprobe", "CUTROOM_FFPROBE", ffprobe)):
+        if only_overrides and not os.environ.get(variable):
+            continue
         try:
             _capture(command, "-version")
             if label == "FFmpeg":
                 filters = _capabilities(_capture(command, "-hide_banner", "-filters"))
                 encoders = _capabilities(_capture(command, "-hide_banner", "-encoders"))
                 if "subtitles" not in filters:
-                    failures.append(f"FFmpeg at {command} lacks libass subtitles; install ffmpeg-full.")
+                    failures.append(f"FFmpeg at {command} lacks libass subtitles; install ffmpeg@7.")
                 for encoder in ("libx264", "aac"):
                     if encoder not in encoders:
                         failures.append(f"FFmpeg at {command} lacks the {encoder} encoder.")
+                # The frozen application uses these options. FFmpeg 9 removed
+                # them, so codec support alone cannot establish compatibility.
+                help_text = _capture(command, "-hide_banner", "-h", "full")
+                options = set(re.findall(r"(?m)^\s*(-[A-Za-z0-9_]+)(?=\s|$)", help_text))
+                for option in ("-filter_complex_script", "-vsync"):
+                    if option not in options:
+                        failures.append(f"FFmpeg at {command} lacks {option}, required by this beta; use ffmpeg@7.")
         except (OSError, subprocess.SubprocessError, RuntimeError) as exc:
             failures.append(f"{label} at {command}: {exc}")
     return failures
@@ -100,14 +110,16 @@ def main(argv: list[str] | None = None) -> int:
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--system-only", action="store_true")
     group.add_argument("--python-only", action="store_true")
+    group.add_argument("--overrides-only", action="store_true", help="Validate only explicitly configured FFmpeg/FFprobe paths.")
     group.add_argument("--launch", action="store_true", help="Run the original server in this process.")
     args = parser.parse_args(argv)
     if args.launch:
         return launch_application()
-    failures = [] if args.system_only else check_python(imports=args.python_only)
+    system_only = args.system_only or args.overrides_only
+    failures = [] if system_only else check_python(imports=args.python_only)
     if not args.python_only:
-        failures.extend(check_system())
-    if not args.system_only and not args.python_only:
+        failures.extend(check_system(only_overrides=args.overrides_only))
+    if not system_only and not args.python_only:
         try:
             shared = runpy.run_path(str(ROOT / "scripts" / "preflight.py"))
             if shared["main"]():

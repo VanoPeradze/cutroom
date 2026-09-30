@@ -119,6 +119,28 @@ def test_missing_executable_permissions_rejected(package_source, tmp_path):
         combined.verify_package(rewrite(archive, tmp_path / "bad.zip", change))
 
 
+@pytest.mark.parametrize("target", ["mac/START CUTROOM.command", "windows/App/server.py"])
+@pytest.mark.parametrize("special_mode", [0o4000, 0o2000, 0o1000])
+def test_special_permission_bits_rejected(package_source, tmp_path, target, special_mode):
+    archive = build(package_source)
+    def change(files):
+        info = files[target][0]
+        info.external_attr |= special_mode << 16
+    with pytest.raises(ValueError, match="special permission"):
+        combined.verify_package(rewrite(archive, tmp_path / "bad-mode.zip", change))
+
+
+@pytest.mark.parametrize("raw_name", ["mac/App/preflight_macos.py\x00ignored", "mac/App\\preflight_macos.py"])
+def test_raw_archive_names_cannot_hide_behind_zipfile_normalization(package_source, tmp_path, raw_name):
+    archive = build(package_source)
+    def change(files):
+        # Assign after constructing ZipInfo so the writer preserves malformed
+        # names that ZipInfo normalizes/truncates when the archive is read.
+        files["mac/App/preflight_macos.py"][0].filename = raw_name
+    with pytest.raises(ValueError, match="normalized|truncated|Unsafe archive path"):
+        combined.verify_package(rewrite(archive, tmp_path / "bad-raw-name.zip", change))
+
+
 @pytest.mark.parametrize("name", ["windows/../escape", "MAC/App/evil.py", "other/file", "/escape", "mac/App/server.py/child"])
 def test_invalid_paths_and_extra_roots_rejected(package_source, tmp_path, name):
     archive = build(package_source)

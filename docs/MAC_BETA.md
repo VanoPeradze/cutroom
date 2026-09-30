@@ -22,9 +22,11 @@ cannot be opened, use **START HERE.html** and report the exact message.
 ## First-time requirements
 
 Setup reuses a compatible Python 3.11/3.12 and FFmpeg when present. Otherwise it
-offers to install Python 3.12 and **ffmpeg-full** through an existing Homebrew
+offers to install Python 3.12 and **ffmpeg@7** through an existing Homebrew
 installation, then installs the Python dependencies inside this copy's **App/.venv**.
-The full FFmpeg build is important: captions require subtitle rendering support.
+This maintained FFmpeg 7 build includes subtitle support and the command-line
+options used by CUTROOM. Newer major versions are not automatically compatible.
+It is installed side-by-side without replacing your system's FFmpeg.
 Nothing installs until you confirm the setup prompt.
 
 If Homebrew is missing, follow the official [Homebrew installation guide](https://docs.brew.sh/Installation),

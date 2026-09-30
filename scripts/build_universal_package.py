@@ -50,9 +50,14 @@ def _read_archive(path: Path) -> dict[str, bytes]:
         if sum(info.file_size for info in infos) > MAX_EXPANDED:
             raise ValueError("Unexpectedly large source archive")
         for info in infos:
+            if info.orig_filename != info.filename:
+                raise ValueError("Archive filename was normalized or truncated")
             _check_archive_path(info.filename)
-            if stat.S_IFMT(info.external_attr >> 16) not in (0, stat.S_IFREG):
+            mode = info.external_attr >> 16
+            if stat.S_IFMT(mode) not in (0, stat.S_IFREG):
                 raise ValueError("Archive must contain only regular files")
+            if stat.S_IMODE(mode) & 0o7000:
+                raise ValueError("Archive entries must not have special permission bits")
         folded = {name.casefold() for name in names}
         if any("/".join(name.split("/")[:i]).casefold() in folded
                for name in names for i in range(1, len(name.split("/")))):
@@ -104,7 +109,7 @@ def verify_package(archive: Path) -> dict:
             if name.endswith((".sh", ".command")):
                 if not files[name].startswith(b"#!/bin/bash\n") or b"\r" in files[name]:
                     raise ValueError("Mac launchers must have LF shebangs")
-                if bundle.getinfo(name).external_attr >> 16 & 0o777 != 0o755:
+                if stat.S_IMODE(bundle.getinfo(name).external_attr >> 16) != 0o755:
                     raise ValueError("Mac launcher executable permissions are missing")
     return manifest
 

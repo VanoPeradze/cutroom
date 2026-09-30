@@ -79,12 +79,12 @@ jobs:
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: '22'
-      - name: Install FFmpeg with subtitle support from official Homebrew
+      - name: Install compatible FFmpeg 7 with subtitle support from official Homebrew
         timeout-minutes: 10
         shell: bash
         run: |
-          brew install ffmpeg-full
-          echo "$(brew --prefix ffmpeg-full)/bin" >> "$GITHUB_PATH"
+          brew install ffmpeg@7
+          echo "$(brew --prefix ffmpeg@7)/bin" >> "$GITHUB_PATH"
       - name: Install isolated regression dependencies
         timeout-minutes: 8
         shell: bash

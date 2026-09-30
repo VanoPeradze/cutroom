@@ -50,18 +50,47 @@ def test_preflight_requires_subtitles_h264_and_aac(monkeypatch):
     assert calls[-1][0] == "/some path/ffprobe"
 
 
-def test_preflight_accepts_full_ffmpeg_and_reports_missing_commands(monkeypatch):
+def test_preflight_accepts_compatible_ffmpeg_and_reports_missing_commands(monkeypatch):
     def capture(command, *args):
         if "-filters" in args:
             return " ... subtitles V->V Render subtitles using libass\n"
         if "-encoders" in args:
             return " V....D libx264 H.264\n A..... aac AAC\n"
+        if "-h" in args:
+            return "-filter_complex_script filename  read a filtergraph\n-vsync  video sync\n"
         return "version"
 
     monkeypatch.setattr(preflight, "_capture", capture)
     assert preflight.check_system() == []
     monkeypatch.setattr(preflight, "_capture", lambda *args: (_ for _ in ()).throw(FileNotFoundError("missing")))
     assert len(preflight.check_system()) == 2
+
+
+@pytest.mark.parametrize("missing", ["-filter_complex_script", "-vsync"])
+def test_preflight_rejects_removed_render_options_even_with_all_codecs(monkeypatch, missing):
+    def capture(command, *args):
+        if "-filters" in args:
+            return " ... subtitles V->V Render subtitles using libass\n"
+        if "-encoders" in args:
+            return " V....D libx264 H.264\n A..... aac AAC\n"
+        if "-h" in args:
+            return "\n".join(f"{option} value  description" for option in ("-filter_complex_script", "-vsync") if option != missing)
+        return "ffmpeg version 9.0.1"
+
+    monkeypatch.setattr(preflight, "_capture", capture)
+    failures = preflight.check_system()
+    assert len(failures) == 1
+    assert missing in failures[0]
+    assert "use ffmpeg@7" in failures[0]
+
+
+def test_override_validation_does_not_require_unconfigured_binary(monkeypatch):
+    monkeypatch.delenv("CUTROOM_FFMPEG", raising=False)
+    monkeypatch.setenv("CUTROOM_FFPROBE", "/chosen path/ffprobe")
+    called = []
+    monkeypatch.setattr(preflight, "_capture", lambda command, *args: called.append(command) or "version")
+    assert preflight.check_system(only_overrides=True) == []
+    assert called == ["/chosen path/ffprobe"]
 
 
 def test_python_import_failure_is_actionable(monkeypatch):
@@ -112,6 +141,9 @@ def shell_app(tmp_path):
         '  if [[ "${CUTROOM_TEST_PIP_FAIL:-}" == yes ]]; then exit 9; fi\n'
         '  if [[ "$*" == *requirements.txt* ]]; then touch "$CUTROOM_TEST_APP/.mock-ready"; fi\n'
         '  exit 0\nfi\n'
+        'if [[ "${2:-}" == --overrides-only ]]; then\n'
+        '  [[ "${CUTROOM_TEST_BAD_OVERRIDE:-}" != yes ]]\n'
+        '  exit $?\nfi\n'
         'if [[ "${2:-}" == --system-only ]]; then\n'
         '  [[ "${CUTROOM_TEST_SYSTEM_MISSING:-}" != yes || -f "$CUTROOM_TEST_APP/.mock-system" ]]\n'
         '  exit $?\nfi\n'
@@ -182,7 +214,7 @@ def test_explicit_install_and_offline_second_setup(shell_app):
 
 
 @needs_bash
-def test_brew_install_requires_consent_and_uses_full_formula(shell_app):
+def test_brew_install_requires_consent_and_uses_compatible_formula(shell_app):
     app, env = shell_app
     env["CUTROOM_TEST_SYSTEM_MISSING"] = "yes"
     cancelled = run_setup(app, env, answer="\n")
@@ -190,7 +222,7 @@ def test_brew_install_requires_consent_and_uses_full_formula(shell_app):
     assert "BREW install" not in calls(env)
     installed = run_setup(app, env, answer="yes\n")
     assert installed.returncode == 0, installed.stdout + installed.stderr
-    assert "BREW install ffmpeg-full" in calls(env)
+    assert "BREW install ffmpeg@7" in calls(env)
 
 
 @needs_bash
@@ -202,9 +234,22 @@ def test_missing_homebrew_prints_official_help_without_install(shell_app):
         extra='command() { if [[ "$*" == "-v brew" || "$*" == "-v open" ]]; then return 1; else builtin command "$@"; fi; };',
     )
     assert result.returncode == 1
-    assert "https://brew.sh/" in result.stderr
-    assert "brew install python@3.12 ffmpeg-full" in result.stderr
+    assert "Homebrew: https://brew.sh/" in result.stderr.splitlines()
+    assert "brew install python@3.12 ffmpeg@7" in result.stderr
     assert "pip install" not in calls(env)
+
+
+@needs_bash
+def test_incompatible_explicit_ffmpeg_override_stops_before_downloads(shell_app):
+    app, env = shell_app
+    env["CUTROOM_FFMPEG"] = "/chosen incompatible/ffmpeg"
+    env["CUTROOM_TEST_BAD_OVERRIDE"] = "yes"
+    result = run_setup(app, env, "--yes")
+    assert result.returncode == 1
+    assert "custom CUTROOM_FFMPEG/CUTROOM_FFPROBE path is incompatible" in result.stderr
+    assert "pip install" not in calls(env)
+    assert "BREW install" not in calls(env)
+    assert not (app / ".venv").exists()
 
 
 @needs_bash
