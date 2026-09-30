@@ -11,7 +11,8 @@ import verify_published_package as published
 
 
 @pytest.mark.parametrize("case", ["valid", "changed", "oversized", "http", "wrong_build", "existing"])
-def test_exact_public_download_verification(tmp_path, monkeypatch, case):
+@pytest.mark.parametrize("historical", [False, True])
+def test_exact_public_download_verification(tmp_path, monkeypatch, case, historical):
     content = b"approved zip bytes"
     release = {"layout": "windows-mac-folders-v1", "bytes": len(content),
                "sha256": hashlib.sha256(content).hexdigest(), "url": "https://example.invalid/package.zip",
@@ -26,7 +27,9 @@ def test_exact_public_download_verification(tmp_path, monkeypatch, case):
         return response
     monkeypatch.setattr(published.urllib.request, "urlopen", fetch)
     verified = []
-    def verify(path):
+    historical_pin = tmp_path / "historical-windows.json" if historical else None
+    def verify(path, *, windows_baseline=None):
+        assert windows_baseline == historical_pin
         verified.append(path.read_bytes())
         return {"build_id": "wrong" if case == "wrong_build" else "expected"}
     monkeypatch.setattr(published, "verify_package", verify)
@@ -34,11 +37,11 @@ def test_exact_public_download_verification(tmp_path, monkeypatch, case):
     if case == "existing":
         target.write_bytes(b"keep this file")
     if case == "valid":
-        assert published.download(metadata, target) == target
+        assert published.download(metadata, target, windows_baseline=historical_pin) == target
         assert target.read_bytes() == content and verified == [content]
     else:
         with pytest.raises((ValueError, FileExistsError)):
-            published.download(metadata, target)
+            published.download(metadata, target, windows_baseline=historical_pin)
         if case == "existing":
             assert target.read_bytes() == b"keep this file"
         else:

@@ -1,6 +1,17 @@
 # Beta status and limitations
 
-**An exploratory Windows beta for feedback from creators and editors. Not a production release, security certification or promise of professional-quality automatic edits.** Public access to a download does not change those quality boundaries.
+**An exploratory Windows/macOS beta, with a Linux source development path, for feedback from creators and editors. Not a production release, security certification or promise of professional-quality automatic edits.** Public access to a download does not change those quality boundaries.
+
+## Editor reliability, mixer and stabilization - 2026-09-30
+
+- The candidate passed **1,816 Python regressions** (3 skipped on Windows) and **538 frontend checks**. Python includes frontend wrappers, so these totals overlap. These local results used baseline `8a8c7e6957f02536e44701b27aee78a798c0fab5` plus the editor changes; the earlier commit does not already contain them.
+- Fixed sub-frame A/B availability boundaries rejecting edits during sequence materialization. Actual FFmpeg renders at 30/60 FPS verified the boundary behavior; explicit cuts, source endpoints, gaps and timing remain deliberate.
+- Manual projects and Original footage now use prepared waveforms for the correct A/B source without Director/AI analysis. Decoded audio padding no longer creates bins beyond source duration. FFmpeg/FFprobe text output is decoded as UTF-8 for Unicode media names.
+- The compact mixer shows measured browser sample peaks/dBFS. Pause/seek clear stale levels, Original follows the selected A/B audio, volume/mute persist, and Solo stays preview-only. These are preview meters, not calibrated loudness certification; export normalization can change final loudness.
+- **Media > Stabilize footage** creates a separate local MP4 asset with optional FFmpeg vidstab filters. It offers progress, cancellation, retry, download and reuse as added footage while preserving originals and the edit. It may zoom/crop edges and cannot repair every kind of shake, blur or rolling shutter. No AI, model download or upload is involved. See [stabilization details](STABILIZATION.md).
+- Local Chrome/Windows checks exercised waveforms, A/B review, zoom/scroll, live mixer levels and stabilization controls. Synthetic footage verified stabilization output/timing and unchanged originals. These are not clean-machine setup, representative real-footage quality or long-session benchmarks.
+- Earlier Mac automation passed for earlier release payloads. This editor revision requires current-source macOS 15 Apple Silicon/Intel checks before publication; [GitHub Actions](https://github.com/VanoPeradze/cutroom/actions/workflows/macos.yml) records the tested commit. Finder/Gatekeeper, Safari, real Ollama/cloud integrations and native Linux end-to-end testing remain unverified here.
+- The label stays **1.1 Beta** with a new manifest build ID/checksums. Download the new revision, extract it separately and back up projects before migration. Source/test success alone does not establish publication of the ZIP or website.
 
 ## Project management and custom text — 2026-09-28
 
@@ -63,6 +74,9 @@ The results below describe that packaging pass, not a continuously updated test 
 ## Still unverified
 
 - Clean Windows first installation without the developer's environment, including external installers/download services.
+- Real Finder/Gatekeeper launch, Safari behavior and real Mac Ollama/cloud integrations. Current-source Apple Silicon/Intel automation is a separate publication gate; prior passing runs cover their recorded earlier payloads.
+- Native Linux installation/edit/export and stabilization on actual distributions; Linux remains a source development path.
+- Stabilization on representative footage, Mac/Linux FFmpeg builds and nonlocal filesystem configurations. Runtime filter detection establishes availability, not output quality.
 - Transcription and editorial quality across languages, accents, noise and overlapping speech. No multilingual WER/CER acceptance benchmark is complete.
 - Quality on representative editor-owned gameplay, explanations and long-form footage; no blind professional-editor comparison.
 - Long/reordered 4K sessions, low-memory machines, non-NVIDIA performance and broad codec/hardware coverage.

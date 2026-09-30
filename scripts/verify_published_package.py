@@ -12,7 +12,7 @@ import urllib.request
 from build_universal_package import verify_package
 
 
-def download(release_path: Path, destination: Path) -> Path:
+def download(release_path: Path, destination: Path, *, windows_baseline: Path | None = None) -> Path:
     release = json.loads(release_path.read_text(encoding="utf-8"))
     if (release.get("layout") != "windows-mac-folders-v1"
             or not isinstance(release.get("bytes"), int)
@@ -32,7 +32,8 @@ def download(release_path: Path, destination: Path) -> Path:
     with tempfile.TemporaryDirectory(prefix="cutroom-published-verify-") as directory:
         staged = Path(directory) / "release.zip"
         staged.write_bytes(data)
-        manifest = verify_package(staged)
+        manifest = (verify_package(staged) if windows_baseline is None
+                    else verify_package(staged, windows_baseline=windows_baseline))
         if manifest["build_id"] != release["build_id"]:
             raise ValueError("Published release build ID mismatch")
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -45,5 +46,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--release", type=Path, default=Path(__file__).resolve().parents[1] / "website/release.json")
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--windows-baseline", type=Path,
+                        help="Explicit pinned Windows metadata for a historical release")
     options = parser.parse_args()
-    print(download(options.release, options.output))
+    print(download(options.release, options.output, windows_baseline=options.windows_baseline))

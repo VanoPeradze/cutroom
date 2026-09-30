@@ -4,6 +4,16 @@ For CUTROOM 1.1 Beta's readiness and editing controls, see [Beta status](BETA_ST
 
 This development pass fixes specific correctness and evidence-handling failures. It is not a claim of equal transcription accuracy across languages, professional editorial judgment, or release readiness. No new model was downloaded or benchmarked during implementation.
 
+## Editor reliability and optional stabilization - 2026-09-30
+
+The sub-frame A/B duration rejection is fixed at sequence materialization: redundant pieces created only by implicit source-availability edges can join while explicit cuts, real source ends and gaps stay intact. Actual FFmpeg synthetic-media checks cover 30/60 FPS and timing boundaries. This does not guarantee frame-exact browser decoding or eliminate review of source synchronization.
+
+Prepared A/B waveforms now work in manual projects and Original footage without prior AI analysis. Decoder padding is bounded by source duration, and media-command output is read as UTF-8. The compact mixer displays live browser sample peaks before the preview limiter; levels reset on pause/seek and are unavailable in basic-audio fallback. Original follows the chosen A/B audio, Solo is preview-only, and export normalization/limiting can change final loudness. Meters are not calibrated LUFS or true-peak analysis.
+
+Optional [local stabilization](STABILIZATION.md) creates a **separate MP4 copy**, preserving originals and the edit. It uses two local FFmpeg passes only when the configured executable has `vidstabdetect` and `vidstabtransform`; missing filters leave the action unavailable rather than installing software. It can zoom/crop edges and cannot reliably repair blur, rolling shutter or every movement. Review the full copy before use. Compatible audio is copied; other supported audio is converted to AAC.
+
+Local Windows regression/browser checks and synthetic stabilization/boundary renders passed. Publication requires current-source macOS 15 Apple Silicon/Intel checks; [GitHub Actions](https://github.com/VanoPeradze/cutroom/actions/workflows/macos.yml) identifies tested commits. Finder/Gatekeeper, Safari, native Linux, representative real footage and long-session performance remain separate acceptance checks; no paid AI calls or accuracy benchmark were added in this revision.
+
 ## Hebrew/English transcription and local recovery
 
 The speech decoder explicitly transcribes rather than translates. Selected Hebrew uses short Hebrew/English context; automatic language selection adds this context only to a retry after Hebrew script appears in the actual transcript. It does not force every automatic recording into Hebrew. Yiddish detection is protected, and low confidence remains a review signal rather than proof of an error.

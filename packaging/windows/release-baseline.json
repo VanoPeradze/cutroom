@@ -1,9 +1,10 @@
 {
   "version": "1.1-beta",
-  "filename": "CUTROOM-1.1-Beta.zip",
-  "bytes": 3039834,
-  "sha256": "26d7282e940f6d56d33fe4de2c431ab47662383d5fe0cba1fb219b2dd9a4b6fd",
-  "manifest_sha256": "ab19567953679afc020d00f949d082f60455580133ec96092b0e525a9f6b5f0f",
-  "url": "https://cutroom-studio--b1mnhj0dxa.expo.app/downloads/CUTROOM-1.1-Beta.zip",
-  "note": "Immutable deployment of the approved Windows package. Its complete contents are preserved under windows/ in the combined beta."
+  "filename": "CUTROOM-1.1-Beta-windows-editor-20260930.zip",
+  "build_id": "CUTROOM-1.1-beta-editor-20260930-135357",
+  "bytes": 3140336,
+  "sha256": "82ac2df699191d3a57dc57f58839f5e9c1e3d673e84273ced81806bbea00c245",
+  "manifest_sha256": "8816283c3023f4ddb4269f5da982d77bc7c37e16a6e5d173a6cca1d93acf0880",
+  "url": "https://cutroom-studio--zdie650k5p.expo.app/downloads/CUTROOM-1.1-Beta-windows-editor-20260930.zip",
+  "note": "Immutable deployment of the approved new Windows editor source baseline. Includes waveform, live mixer, stabilization and A/B boundary repairs; the combined candidate preserves its complete contents under windows/. No bundled runtime; clean-machine installation remains unverified."
 }
