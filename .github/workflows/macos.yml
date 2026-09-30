@@ -139,3 +139,16 @@ jobs:
           if [[ "$RUN_TRANSCRIPTION" == '1' ]]; then extra+=(--transcribe); fi
           python scripts/smoke_macos.py --archive "$CUTROOM_CANDIDATE_ARCHIVE" --repair-missing-pip --report "$RUNNER_TEMP/macos-candidate.json" "${extra[@]}"
           python -c 'import json, os, pathlib; print(json.dumps(json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"macos-candidate.json").read_text()), indent=2))' >> "$GITHUB_STEP_SUMMARY"
+      - name: Retain the tested release archive and native evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: CUTROOM-tested-macos-${{ matrix.architecture }}
+          path: |
+            ${{ env.CUTROOM_CANDIDATE_ARCHIVE }}
+            ${{ env.CUTROOM_CANDIDATE_ARCHIVE }}.sha256
+            ${{ runner.temp }}/editor-features.json
+            ${{ runner.temp }}/macos-smoke.json
+            ${{ runner.temp }}/macos-candidate.json
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
