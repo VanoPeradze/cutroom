@@ -2,7 +2,7 @@
 
 The same free, MIT-licensed editor, with a separate Mac setup and launcher.
 The combined download contains exactly two folders: **windows** and **mac**.
-The Windows folder preserves the previous Windows package without changing its files.
+The Windows application and launchers retain the approved release payload. A documentation-only refresh updates the package README and checksum manifests; it does not change editor or export behavior.
 
 ## Start on a Mac
 

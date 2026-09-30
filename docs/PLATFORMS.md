@@ -21,7 +21,7 @@ The download contains only **windows** and **mac**. It ships source code and lau
 
 Setup accepts an existing Python 3.11/3.12 or downloads a private Python runtime, then installs the Python dependencies. FFmpeg and FFprobe are required; setup can attempt installation through Windows Package Manager. It may also attempt to install/start Ollama, but manual editing does not require it. Dependencies and local AI models are not bundled. See [Windows setup and troubleshooting](TEST_ON_ANOTHER_PC.md) for download behavior and diagnostics.
 
-For a GitHub source checkout, run **`run_windows.bat` from the repository root**. Do not rearrange an existing working installation to match the ZIP: its runtime paths and Python environment can depend on its current folder. The combined download preserves the previous Windows package; adding Mac support does not require existing Windows users to reinstall.
+For a GitHub source checkout, run **`run_windows.bat` from the repository root**. Do not rearrange an existing working installation to match the ZIP: its runtime paths and Python environment can depend on its current folder. The combined download preserves the approved Windows application and launchers; refreshed package guidance does not require existing Windows users to reinstall.
 
 ## macOS beta
 
@@ -35,7 +35,7 @@ Setup reuses a compatible **native Python 3.11/3.12** and FFmpeg/FFprobe when av
 
 The Mac FFmpeg checks require libass subtitles, libx264, AAC and the command options used by this beta. Mac Python dependencies use their own compatibility constraints. Local transcription currently runs on the **CPU**; Apple GPU transcription is not implemented. Local Story AI requires a separate [Ollama installation](https://ollama.com/download/mac) and your chosen model.
 
-This is an unsigned source launcher. If Finder/macOS blocks it, record the message and consult **START HERE.html**; do not disable Gatekeeper or remove quarantine globally. Direct Finder launch and security prompts still require manual Mac beta testing. See [Mac setup, recovery and validation details](MAC_BETA.md).
+This is an unsigned source launcher. If Finder/macOS blocks it, record the message and consult **START HERE.html**; do not disable Gatekeeper or remove quarantine globally. Direct Finder launch and security prompts still require manual Mac beta testing. See [Mac setup, recovery and validation details](https://github.com/VanoPeradze/cutroom/blob/master/docs/MAC_BETA.md).
 
 ## Linux source-based development path
 

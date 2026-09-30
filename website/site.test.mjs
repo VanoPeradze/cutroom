@@ -26,114 +26,100 @@ function assertLocalized(link) {
   assert.match(link[0], />[^<>]*[A-Za-z][^<>]*</, 'The default link text must be English');
 }
 
-test('repository links appear in navigation, hero, download section, and footer', () => {
-  assert.equal(linksTo(html, repository).length, 4);
-  for (const markup of [region('nav'), region('section'), region('section', 'download'), region('footer')]) {
-    assert.equal(linksTo(markup, repository).length, 1);
+test('one primary download action points to the maintained beta archive', () => {
+  const release = JSON.parse(readFileSync(new URL('./release.json', import.meta.url), 'utf8'));
+  const buttons = [...html.matchAll(/<a\b[^>]*class="[^"]*\bbutton\b[^"]*"[^>]*>/g)];
+  assert.equal(buttons.length, 1, 'The landing page must have one primary action');
+  assert.match(buttons[0][0], new RegExp(`href="/downloads/${release.filename.replaceAll('.', '\\.')}"`));
+  assert.match(buttons[0][0], /\bdownload\b/);
+  assertLocalized(linksTo(html, `/downloads/${release.filename}`)[0]);
+  assert.equal(linksTo(html, `/downloads/${release.filename}.sha256`).length, 1);
+});
+
+test('source and issue links remain visible without competing with download', () => {
+  const source = linksTo(region('nav'), repository)[0];
+  assert.ok(source);
+  assert.match(source[2], /GitHub/);
+  assert.match(source[2], /<img\b[^>]*src="\/assets\/github-mark\.svg"[^>]*alt=""/);
+  assert.equal(linksTo(region('footer'), repository).length, 1);
+  const issue = linksTo(region('footer'), `${repository}/issues/new/choose`);
+  assert.equal(issue.length, 1);
+  assertLocalized(issue[0]);
+  assert.equal(linksTo(html, '/downloads/LICENSE').length, 1);
+  for (const guide of ['USER_GUIDE_EN.md', 'USER_GUIDE_HE.md']) {
+    assert.equal(linksTo(html, `/downloads/${guide}`).length, 1);
   }
-  assertLocalized(linksTo(region('section'), repository)[0]);
-  assertLocalized(linksTo(region('section', 'download'), repository)[0]);
 });
 
-test('prominent GitHub links pair visible text with a local decorative logo', () => {
-  for (const markup of [region('nav'), region('section'), region('section', 'download')]) {
-    const link = linksTo(markup, repository)[0];
-    assert.ok(link, 'The repository link must remain in each prominent region');
-    const classes = link[1].match(/\bclass=["']([^"']*)["']/)?.[1].split(/\s+/) ?? [];
-    assert.ok(classes.includes('github-link'), 'The repository link must use the GitHub button styling');
-    assert.doesNotMatch(link[1], /\bdata-he=/, 'Translate the text span so the logo survives language switching');
-    assert.match(link[2], /<span\b[^>]*>[^<]*GitHub[^<]*<\/span>/, 'The button must identify GitHub with visible text');
-    const images = [...link[2].matchAll(/<img\b[^>]*>/gi)];
-    assert.equal(images.length, 1);
-    assert.match(images[0][0], /\bsrc=["']\/assets\/github-mark\.svg["']/);
-    assert.match(images[0][0], /\balt=(?:""|'')/, 'The logo is decorative because the button has visible text');
-  }
-  const logo = readFileSync(new URL('./public/assets/github-mark.svg', import.meta.url), 'utf8');
-  assert.match(logo, /<svg\b/);
-});
-
-test('the FAQ offers a localized GitHub issue link', () => {
-  const links = linksTo(region('section', 'help'), `${repository}/issues/new/choose`);
-  assert.equal(links.length, 1);
-  assertLocalized(links[0]);
-});
-
-test('language switching cannot replace links or GitHub logos with plain text', () => {
-  // site.js replaces each data-he element's contents with textContent in Hebrew.
+test('language switching preserves links, images and actionable controls', () => {
   for (const element of html.matchAll(/<([a-z][\w-]*)\b([^>]*\bdata-he=["'][^"']*["'][^>]*)>([\s\S]*?)<\/\1>/gi)) {
-    assert.doesNotMatch(element[3], /<a\b/i, 'Put data-he on the link or its text, not an ancestor');
-    assert.doesNotMatch(element[3], /<img\b[^>]*\/assets\/github-mark\.svg/i, 'Keep the GitHub logo outside translated text spans');
+    assert.doesNotMatch(element[3], /<a\b|<img\b|<svg\b/i, 'Translate text, not ancestors of interactive content');
   }
+  assert.match(html, /<html\b[^>]*lang="en"[^>]*dir="ltr"/);
+  const languageLink = linksTo(html, '?lang=he');
+  assert.equal(languageLink.length, 1);
+  assert.match(languageLink[0][1], /lang="he"/);
+  assert.match(languageLink[0][1], /aria-label="Read this website in Hebrew"/);
 });
 
-test('the editorial introduction keeps a bilingual heading and an identifiable real product image', () => {
-  const hero = region('section');
+test('the concise introduction shows an authentic bilingual dark editor preview', () => {
+  const hero = region('section', 'download');
   assert.equal([...html.matchAll(/<h1\b/g)].length, 1);
   const heading = hero.match(/<h1>([\s\S]*?)<\/h1>/)?.[1];
   assert.ok(heading);
-  for (const line of heading.matchAll(/<(?:span|em)\b([^>]*)>([^<]+)<\/(?:span|em)>/g)) {
-    assert.match(line[1], /data-he="[^"]*[\u0590-\u05ff]/);
-    assert.match(line[2], /[A-Za-z]/);
-  }
-  assert.match(hero, /class="hero-aside"/);
-  assert.match(hero, /class="hero-stage"/);
-  const image = hero.match(/<img\b[^>]*src="\/assets\/editor\.png\?v=[a-zA-Z0-9-]+"[^>]*>/)?.[0];
-  assert.ok(image, 'The introductory image must show the actual editor');
-  assert.match(image, /\balt="[^"]+"/);
-  assert.match(image, /\bdata-he-alt="[^"]*[\u0590-\u05ff]/);
+  const lines = [...heading.matchAll(/<(?:span|em)\b([^>]*)>([^<]+)<\/(?:span|em)>/g)];
+  assert.equal(lines.length, 2);
+  lines.forEach(line => { assert.match(line[1], /data-he="[^"]*[\u0590-\u05ff]/); assert.match(line[2], /[A-Za-z]/); });
+  const image = hero.match(/<img\b[^>]*id="editorImage"[^>]*>/)?.[0];
+  assert.ok(image, 'The first section must show the editor');
+  assert.match(image, /src="\/assets\/editor\.png\?v=[a-zA-Z0-9-]+"/);
+  assert.match(image, /width="1440" height="900"/);
+  assert.match(image, /alt="[^"]+"/);
+  assert.match(image, /data-he-alt="[^"]*[\u0590-\u05ff]/);
   assert.match(image, /fetchpriority="high"/);
   assert.match(hero, /Actual editor · Synthetic demo footage/);
+  assert.doesNotMatch(html, /(?:welcome|ai-options)\.png|\bdata-shot=|<table\b/);
 });
 
-test('product-tour controls retain accessible targets and bilingual group labels', () => {
-  const tour = region('section', 'inside');
-  assert.match(tour, /class="tour-controls" role="group" aria-label="Product tour"/);
-  const controls = [...tour.matchAll(/<button\b[^>]*\bdata-shot="([^"]+)"[^>]*>/g)];
-  assert.deepEqual(controls.map(control => control[1]), ['editor', 'welcome', 'ai-options']);
-  assert.equal(controls.filter(control => /aria-pressed="true"/.test(control[0])).length, 1);
-  for (const control of controls) {
-    assert.match(control[0], /aria-controls="tourImage tourCaption"/);
-    assert.match(control[0], /aria-pressed="(?:true|false)"/);
+test('three platform links lead to readable localized installation guidance', () => {
+  const setup = region('details', 'install-help');
+  for (const platform of ['windows', 'mac', 'linux']) {
+    assert.equal(linksTo(html, `#${platform}-install`).length, 1);
+    assert.match(setup, new RegExp(`id="${platform}-install"[^>]*data-he="[^"]*[\\u0590-\\u05ff]`));
   }
-  assert.match(tour, /id="tourCaption" aria-live="polite"/);
-  assert.match(script, /querySelector\('\.tour-controls'\)\.setAttribute\('aria-label', language === 'he' \? '[^']*[\u0590-\u05ff][^']*' : 'Product tour'\)/);
-  assert.match(script, /querySelector\('\.format-strip'\)\.setAttribute\('aria-label', language === 'he' \? '[^']*[\u0590-\u05ff][^']*' : 'Video formats'\)/);
+  assert.match(setup, /Double-click START CUTROOM\.bat/);
+  assert.match(setup, /START CUTROOM\.command/);
+  assert.match(setup, /exactly two folders: windows and mac/);
+  assert.match(setup, /macOS 15\+/);
+  assert.match(setup, /Local transcription uses the CPU/);
+  assert.match(setup, /not a signed Mac app/);
+  assert.match(setup, /Linux: source only, with no packaged download or verified native Linux QA/);
+  assert.ok(linksTo(setup, `${repository}/blob/master/docs/PLATFORMS.md`).length);
+  assert.ok(linksTo(setup, `${repository}/blob/master/docs/MAC_BETA.md`).length);
 });
 
-test('the editorial stylesheet provides visible focus and a reduced-motion path', () => {
+test('optional AI and privacy information stay accessible with full guides', () => {
+  const ai = region('details', 'ai-help');
+  assert.match(ai, /Manual editing and export need no AI models or account/);
+  assert.match(ai, /choice and consent/);
+  assert.match(ai, /provider quotas and charges apply/);
+  assert.ok(linksTo(ai, `${repository}/blob/master/docs/AI_CONNECTIONS.md`).length);
+  assert.ok(linksTo(region('details', 'privacy-help'), '/privacy.html').length);
+  for (const id of ['install-help', 'ai-help', 'privacy-help']) {
+    assert.match(region('details', id), /<summary\b[^>]*data-he="[^"]*[\u0590-\u05ff]/);
+  }
+});
+
+test('keyboard focus, reduced motion and screenshot enlargement remain available', () => {
   assert.match(css, /:focus-visible\s*\{[^}]*outline:\s*3px solid/);
   const reducedMotion = css.slice(css.indexOf('@media(prefers-reduced-motion:reduce)'));
   assert.match(reducedMotion, /html\s*\{scroll-behavior:auto\}/);
   assert.match(reducedMotion, /transition:none!important/);
   assert.match(reducedMotion, /animation:none!important/);
+  assert.match(html, /<button\b[^>]*id="expandShot"[^>]*aria-label="[^"]+"/);
+  assert.match(html, /<dialog\b[^>]*id="imageDialog"[^>]*aria-label="[^"]+"/);
+  assert.match(html, /<button\b[^>]*id="closeImage"/);
 });
-
-test('public website copy does not describe the repository as private', () => {
-  assert.doesNotMatch(html, /private (?:GitHub )?(?:repository|repo)\b|\b(?:repository|repo) (?:is|remains) private|מאגר פרטי|המאגר (?:פרטי|נשאר פרטי)/i);
-});
-
-test('AI choices explain compatibility, Groq Free limits and independent credit', () => {
-  assert.match(html, /OpenAI-compatible API/);
-  assert.match(html, /word timestamps/);
-  assert.match(html, /JSON-object/);
-  assert.match(html, /free API tier with usage limits/);
-  assert.match(html, /not sponsored or endorsed by Groq/);
-  assert.ok(linksTo(html, 'https://console.groq.com/docs/rate-limits').length);
-  assert.doesNotMatch(html, /Currently supports Groq only|This integration currently supports Groq only/);
-});
-
-test('download explains both OS folders and preserves the Windows launcher', () => {
-  assert.match(html, /Double-click START CUTROOM\.bat/);
-  assert.match(html, /exactly two folders: windows and mac/);
-  assert.match(html, /START CUTROOM\.command/);
-  assert.match(html, /START HERE\.html for help, and App for technical files/);
-  assert.match(html, /existing Windows users do not need to reinstall/);
-  assert.match(html, /macOS 15\+/);
-  assert.match(html, /Local transcription uses the CPU/);
-  assert.match(html, /not a signed Mac app/);
-  assert.doesNotMatch(html, /Double-click run_windows\.bat/);
-});
-
 test('the footer links to a privacy notice with readable English and Hebrew sections', () => {
   const links = linksTo(region('footer'), '/privacy.html');
   assert.equal(links.length, 1);
