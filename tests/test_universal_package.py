@@ -179,3 +179,132 @@ def test_linked_mac_input_rejected(package_source, monkeypatch):
     monkeypatch.setattr(build_test_package, "_is_link", lambda path: path.name == "run_macos.sh" or original(path))
     with pytest.raises(ValueError, match="linked"):
         build(package_source)
+
+
+@pytest.fixture
+def documentation_source(package_source, monkeypatch):
+    root, _, out = package_source
+    archive = build(package_source)
+    previous = combined.verify_package(archive)
+    monkeypatch.setattr(combined, "DOCUMENTATION_BASELINE_MANIFEST_SHA256", combined.sha(legacy._bytes_json(previous)))
+    release = root / "website/release.json"
+    release.parent.mkdir()
+    release.write_bytes(legacy._bytes_json({
+        "layout": combined.LAYOUT, "filename": archive.name, "bytes": archive.stat().st_size,
+        "sha256": combined.sha(archive.read_bytes()), "build_id": previous["build_id"],
+    }))
+    readme = root / combined.DOCUMENTATION_SOURCE
+    readme.parent.mkdir(parents=True)
+    readme.write_text("# Platform README\nWindows, macOS and Linux source; local guide ../START%20HERE.html\n")
+    (root / "docs/MAC_BETA.md").write_text("# Mac beta\nProduct files preserved; README and build metadata refreshed.\n")
+    return root, archive, out
+
+
+def refresh(fixture, build_id="updated"):
+    return combined.refresh_documentation(*fixture, build_id=build_id)
+
+
+def rehash_current_manifests(files):
+    """Model an attacker who also updates every current checksum honestly."""
+    name = "windows/App/TEST_BUILD.json"
+    info, data = files[name]
+    manifest = json.loads(data)
+    manifest["files"] = {key.removeprefix("windows/"): combined.sha(value)
+                         for key, (_, value) in files.items() if key.startswith("windows/") and key != name}
+    files[name] = (info, legacy._bytes_json(manifest))
+    info, data = files[combined.MANIFEST]
+    manifest = json.loads(data)
+    manifest["files"] = {key: combined.sha(value) for key, (_, value) in files.items() if key != combined.MANIFEST}
+    files[combined.MANIFEST] = (info, legacy._bytes_json(manifest))
+
+
+def test_documentation_refresh_preserves_exact_inventory_payloads_and_zip_metadata(documentation_source):
+    root, original, _ = documentation_source
+    archive = refresh(documentation_source)
+    manifest = combined.verify_package(archive)
+    assert manifest["windows_files_unchanged"] is False
+    assert manifest["windows_product_files_unchanged"] is True
+    assert manifest["app_version"] == "1.1-beta"
+    assert combined.verify_package(original)["windows_files_unchanged"] is True
+    metadata = ("date_time", "compress_type", "comment", "extra", "create_system", "create_version",
+                "extract_version", "internal_attr", "external_attr", "flag_bits")
+    with zipfile.ZipFile(original) as before, zipfile.ZipFile(archive) as after:
+        assert before.namelist() == after.namelist()
+        changed = {name for name in before.namelist() if before.read(name) != after.read(name)}
+        assert changed == set(combined.DOCUMENTATION_PATHS)
+        for name in before.namelist():
+            assert tuple(getattr(before.getinfo(name), key) for key in metadata) == tuple(getattr(after.getinfo(name), key) for key in metadata)
+        assert after.read("windows/App/README.md") == after.read("mac/App/README.md") == (root / combined.DOCUMENTATION_SOURCE).read_bytes()
+        assert after.read("mac/App/docs/MAC_BETA.md") == (root / "docs/MAC_BETA.md").read_bytes()
+        windows = json.loads(after.read("windows/App/TEST_BUILD.json"))
+        assert combined.sha(legacy._bytes_json(windows["baseline_manifest"])) == combined._baseline()["manifest_sha256"]
+    assert archive.with_suffix(".zip.sha256").read_text().split()[0] == combined.sha(archive.read_bytes())
+
+
+@pytest.mark.parametrize("target", [
+    "windows/App/server.py", "mac/App/server.py", "windows/START CUTROOM.bat",
+    "mac/START CUTROOM.command", "mac/App/preflight_macos.py", "windows/App/config.json",
+    "mac/App/config.json", "windows/App/requirements.txt", "windows/App/docs/MODELS.md",
+])
+def test_refreshed_self_consistent_tampering_outside_allowlist_is_rejected(documentation_source, tmp_path, target):
+    archive = refresh(documentation_source)
+    def change(files):
+        files[target] = (files[target][0], b"changed despite rewritten current manifests")
+        rehash_current_manifests(files)
+    with pytest.raises(ValueError, match="outside documentation allowlist"):
+        combined.verify_package(rewrite(archive, tmp_path / "tampered.zip", change))
+
+
+@pytest.mark.parametrize("kind", ["windows_baseline", "combined_baseline", "flag", "revision", "allowlist", "version", "inventory"])
+def test_documentation_refresh_provenance_flags_version_and_inventory_fail_closed(documentation_source, tmp_path, kind):
+    archive = refresh(documentation_source)
+    def change(files):
+        name = "windows/App/TEST_BUILD.json" if kind == "windows_baseline" else combined.MANIFEST
+        info, data = files[name]
+        manifest = json.loads(data)
+        if kind == "windows_baseline":
+            manifest["baseline_manifest"]["files"]["App/server.py"] = combined.sha(b"changed")
+        elif kind == "combined_baseline":
+            manifest["documentation_baseline_manifest"]["files"]["mac/START CUTROOM.command"] = combined.sha(b"changed")
+        elif kind == "flag":
+            manifest["windows_files_unchanged"] = True
+        elif kind == "revision":
+            manifest["documentation_revision"] = "allow-all-files"
+        elif kind == "allowlist":
+            manifest["documentation_changed_paths"].append("windows/App/server.py")
+        elif kind == "version":
+            manifest["app_version"] = "9.0"
+        else:
+            files["windows/App/new.py"] = (zipfile.ZipInfo("windows/App/new.py"), b"new executable")
+        files[name] = (info, legacy._bytes_json(manifest))
+        rehash_current_manifests(files)
+    with pytest.raises(ValueError, match="baseline|flags|metadata|inventory"):
+        combined.verify_package(rewrite(archive, tmp_path / "bad-provenance.zip", change))
+
+
+@pytest.mark.parametrize("kind", ["bytes", "sha256", "build_id"])
+def test_documentation_refresh_requires_exact_current_release(documentation_source, kind):
+    root, _, out = documentation_source
+    path = root / "website/release.json"
+    release = json.loads(path.read_bytes())
+    release[kind] = {"bytes": 1, "sha256": "0" * 64, "build_id": "CUTROOM-unapproved"}[kind]
+    path.write_bytes(legacy._bytes_json(release))
+    with pytest.raises(ValueError, match="approved"):
+        refresh(documentation_source)
+    assert not (out / "CUTROOM-1.1-beta-docs-updated").exists()
+
+
+def test_documentation_refresh_missing_linked_source_or_existing_output_fail_closed(documentation_source, monkeypatch):
+    root, _, _ = documentation_source
+    original = legacy._is_link
+    monkeypatch.setattr(legacy, "_is_link", lambda path: path == root / combined.DOCUMENTATION_SOURCE or original(path))
+    with pytest.raises(ValueError, match="linked"):
+        refresh(documentation_source)
+    monkeypatch.setattr(legacy, "_is_link", original)
+    archive = refresh(documentation_source)
+    with pytest.raises(FileExistsError):
+        refresh(documentation_source)
+    (root / combined.DOCUMENTATION_SOURCE).unlink()
+    with pytest.raises((ValueError, FileNotFoundError)):
+        refresh(documentation_source, build_id="missing")
+    combined.verify_package(archive)

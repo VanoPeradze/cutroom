@@ -27,6 +27,30 @@ and adds the Mac launcher and identical shared application under `mac/`. Run the
 before publishing. Use `--windows-zip PATH` for an offline build and `--verify PATH`
 for archive verification. [Mac setup and test limits](https://github.com/VanoPeradze/cutroom/blob/master/docs/MAC_BETA.md).
 
+**Documentation-only revision:** to refresh the internal platform README and Mac
+guide without rebuilding application or launcher files, provide the exact combined
+ZIP approved by the current `website/release.json`:
+
+```sh
+python scripts/build_universal_package.py --refresh-docs PATH/TO/CUTROOM-1.1-Beta.zip --output-dir dist
+python scripts/build_universal_package.py --verify PATH/TO/NEW/CUTROOM-1.1-Beta.zip
+```
+
+This explicit action reads `packaging/common/README.md` into both `App/README.md`
+files and `docs/MAC_BETA.md` into the existing Mac guide. Only those three documents
+and the two build manifests may change. It preserves every other payload byte and
+ZIP entry metadata from the approved input, including all Windows/Mac executable
+and setup files. The pinned original Windows and combined manifests independently
+reject changes outside that allowlist. Windows metadata reports documentation
+changes rather than claiming every Windows file is unchanged. The legacy builder
+and older ZIP verification remain unchanged; this is not a new product version or
+new platform-validation result.
+
+The new ZIP has a new build ID, size and checksum. Review its exact entry diff and
+README links, then update the website release metadata and checksum together before
+publishing. Keep `packaging/windows/release-baseline.json` and the historical Mac
+validation baseline pinned; do not replace them for a documentation refresh.
+
 The commands below remain the **legacy Windows-only** packaging workflow and are
 not the builder for the new combined download.
 

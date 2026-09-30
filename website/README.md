@@ -22,7 +22,7 @@ Git. The helper checks all source and destination paths before writing, rejects 
 links, preserves the exact bytes, and leaves already-matching copies untouched.
 The favicon and approved ZIP checksum sidecar remain maintained website files.
 
-The combined ZIP has exactly two top-level folders: `windows/` and `mac/`. Each has its platform launcher, `START HERE.html`, and `App/`. The Windows subtree is byte-identical to the previously approved Windows ZIP. The Mac subtree adds only Mac-specific setup/help files to the same shared app. Never remove or rename `App` independently of its launcher. Build with `python scripts/build_universal_package.py --download-baseline`; the legacy Windows-only builder is unchanged. See [Mac validation](../docs/MAC_BETA.md).
+The combined ZIP has exactly two top-level folders: `windows/` and `mac/`. Each has its platform launcher, `START HERE.html`, and `App/`. The Windows application and launchers retain the approved release payload; the published documentation revision updates the internal README files, Mac beta guide and checksum manifests. The Mac subtree includes its setup/help files with the same shared app. Never remove or rename `App` independently of its launcher. The original build command, `python scripts/build_universal_package.py --download-baseline`, still preserves the complete pinned Windows ZIP; use the explicit documentation refresh below for guide updates. The legacy Windows-only builder is unchanged. See [Mac validation](../docs/MAC_BETA.md).
 
 The screenshot in the editor tour uses synthetic test footage.
 Only `public/` is deployed. Never put recordings, project files, keys or model weights there.
@@ -89,6 +89,14 @@ out of the download folder yourself before retrying. All ZIP files in that folde
 ignored by Git. Canonical source assets and release checksums are tracked; generated copies are not.
 
 ## Change the beta download deliberately
+
+For a documentation-only update, run the repository-root command
+`python scripts/build_universal_package.py --refresh-docs PATH/TO/APPROVED-CUTROOM-1.1-Beta.zip --output-dir dist`.
+It requires the input size, SHA-256 and build ID to match the current `release.json`.
+It refreshes only the two internal README files, the Mac beta guide and the two
+manifests; all executable/product payloads and ZIP entry metadata are preserved.
+The old Windows and combined baseline manifests remain pinned and old archives
+remain verifiable. See [the packaging workflow](../docs/PUBLISHING.md).
 
 Build and test a clean source-only package with CUTROOM's allowlist packager. Update
 `release.json`, the checksum sidecar, visible version/size/download links and `verify.mjs`
