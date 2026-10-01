@@ -111,7 +111,11 @@ def test_visual_refresh_has_no_third_party_resource_dependencies():
 def test_visual_layer_is_shipped_after_existing_geometry_styles():
     page = Page()
     page.feed((ROOT / "web/index.html").read_text(encoding="utf-8"))
-    assert page.styles[-1].startswith("/assets/creator-ui.css?")
+    # The shared visual skin follows geometry; the scoped editor panel layer
+    # follows that skin so inspector sizing and the separate Master win the cascade.
+    style_paths = [urlsplit(href).path for href in page.styles]
+    assert style_paths[-2:] == ["/assets/creator-ui.css", "/assets/editor-panels.css"]
+    assert len(style_paths) == len(set(style_paths))
     for href in page.styles:
         assert href.startswith("/assets/")
         assert (ROOT / "web" / href.split("/")[-1].split("?")[0]).is_file()
