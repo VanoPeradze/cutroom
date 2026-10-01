@@ -1,7 +1,9 @@
 // Display-only controls. No project edits, media restarts, or playback changes.
 const TIMELINE_HEIGHT_KEY = "cutroom-timeline-height-v3";
+const INSPECTOR_WIDTH_KEY = "cutroom-inspector-width-v1";
+const INSPECTOR_COLLAPSED_KEY = "cutroom-inspector-collapsed-v1";
 
-export function initWorkspace({ document: doc = document, window: win = window, onResize = () => {}, openShortcuts = () => {} } = {}) {
+export function initWorkspace({ document: doc = document, window: win = window, onResize = () => {}, openShortcuts = () => {}, translate = (key, fallback) => fallback } = {}) {
   const panel = doc.getElementById("advancedPanel");
   const actions = panel?.querySelector(".studio-header-actions");
   const preview = doc.getElementById("previewColumn");
@@ -15,6 +17,9 @@ export function initWorkspace({ document: doc = document, window: win = window, 
   let fallbackOrigin = null;
   let preferredHeight = null;
   let resizeGesture = null;
+  let preferredWidth = null;
+  let inspectorCollapsed = false;
+  let inspectorGesture = null;
   const listeners = [];
   const listen = (target, event, callback, options) => {
     target.addEventListener(event, callback, options);
@@ -55,6 +60,102 @@ export function initWorkspace({ document: doc = document, window: win = window, 
   divider.setAttribute("aria-controls", "studioPreviewDock studioTimelineDock");
   divider.title = "Drag up for more timeline or down for more video. Arrow keys resize; double-click resets.";
   panel.appendChild(divider);
+  const inspector = doc.getElementById("studioInspector");
+  const inspectorToggle = inspector ? button("workspaceToolsToggle", "Hide tools") : null;
+  const inspectorDivider = inspector ? create("div", "inspector-divider") : null;
+  const inspectorText = (key, fallback) => translate(key, fallback) || fallback;
+  if (inspector) {
+    inspectorToggle.setAttribute("aria-controls", "studioInspector");
+    actions.appendChild(inspectorToggle);
+    inspectorDivider.id = "workspaceInspectorDivider";
+    inspectorDivider.tabIndex = 0;
+    inspectorDivider.setAttribute("role", "separator");
+    inspectorDivider.setAttribute("aria-orientation", "vertical");
+    inspectorDivider.setAttribute("aria-controls", "studioInspector studioPreviewDock");
+    inspectorDivider.setAttribute("data-editor-shortcuts", "off");
+    panel.appendChild(inspectorDivider);
+  }
+  const widthBounds = () => {
+    const available = panel.getBoundingClientRect().width || win.innerWidth || 1280;
+    const rail = panel.querySelector(".advanced-tabs")?.getBoundingClientRect().width || 84;
+    return {minimum:320, maximum:Math.max(320, Math.min(520, Math.floor(available - rail - 12 - 360)))};
+  };
+  const applyInspector = () => {
+    if (!inspector) return null;
+    const bounds = widthBounds();
+    const width = Math.round(Math.min(bounds.maximum, Math.max(bounds.minimum, preferredWidth ?? 360)));
+    panel.style.setProperty("--workspace-inspector-width", `${width}px`);
+    panel.classList.toggle("inspector-collapsed", inspectorCollapsed);
+    inspector.inert = inspectorCollapsed;
+    inspector.setAttribute("aria-hidden", String(inspectorCollapsed));
+    inspectorToggle.textContent = inspectorCollapsed ? inspectorText("inspectorShow", "Show tools") : inspectorText("inspectorHide", "Hide tools");
+    inspectorToggle.dataset.i18n = inspectorCollapsed ? "inspectorShow" : "inspectorHide";
+    inspectorToggle.setAttribute("aria-expanded", String(!inspectorCollapsed));
+    inspectorDivider.setAttribute("aria-valuemin", String(bounds.minimum));
+    inspectorDivider.setAttribute("aria-valuemax", String(bounds.maximum));
+    inspectorDivider.setAttribute("aria-valuenow", String(width));
+    inspectorDivider.setAttribute("aria-valuetext", inspectorText("inspectorWidth", "Tool panel {width} pixels wide").replace("{width}", String(width)));
+    inspectorDivider.setAttribute("aria-label", inspectorText("inspectorResize", "Resize tool panel"));
+    inspectorDivider.title = inspectorText("inspectorResizeHint", "Drag to resize tools. Left/Right arrows resize; double-click resets.");
+    return width;
+  };
+  const saveInspector = () => {
+    try {
+      if (preferredWidth === null) win.localStorage.removeItem(INSPECTOR_WIDTH_KEY);
+      else win.localStorage.setItem(INSPECTOR_WIDTH_KEY, String(preferredWidth));
+      win.localStorage.setItem(INSPECTOR_COLLAPSED_KEY, String(inspectorCollapsed));
+    } catch { /* Display controls also work without preference storage. */ }
+  };
+  const setInspectorWidth = (width, persist = true) => {
+    preferredWidth = Number.isFinite(width) ? width : null;
+    const applied = applyInspector();
+    if (preferredWidth !== null && applied !== null) preferredWidth = applied;
+    if (persist) saveInspector();
+    scheduleResize();
+    return applied;
+  };
+  const setInspectorCollapsed = (collapsed) => {
+    inspectorCollapsed = Boolean(collapsed);
+    if (inspectorCollapsed && inspector?.contains?.(doc.activeElement)) inspectorToggle.focus();
+    applyInspector(); saveInspector(); scheduleResize();
+  };
+  const endInspectorResize = (event, cancelled = false) => {
+    if (!inspectorGesture || (event?.pointerId !== undefined && event.pointerId !== inspectorGesture.pointerId)) return;
+    const gesture = inspectorGesture; inspectorGesture = null;
+    if (cancelled) preferredWidth = gesture.originalPreference;
+    if (inspectorDivider.hasPointerCapture?.(gesture.pointerId)) inspectorDivider.releasePointerCapture(gesture.pointerId);
+    panel.classList.remove("inspector-resizing");
+    applyInspector(); if (!cancelled) saveInspector(); scheduleResize();
+  };
+  if (inspector) {
+    listen(inspectorToggle, "click", () => setInspectorCollapsed(!inspectorCollapsed));
+    listen(inspectorDivider, "pointerdown", event => {
+      if (event.button !== 0 || inspectorGesture || inspectorCollapsed) return;
+      event.preventDefault();
+      inspectorGesture = {pointerId:event.pointerId,x:event.clientX,width:applyInspector(),originalPreference:preferredWidth};
+      inspectorDivider.setPointerCapture?.(event.pointerId);
+      panel.classList.add("inspector-resizing");
+    });
+    listen(inspectorDivider, "pointermove", event => {
+      if (!inspectorGesture || event.pointerId !== inspectorGesture.pointerId) return;
+      event.preventDefault();
+      const direction = doc.documentElement.dir === "rtl" ? -1 : 1;
+      setInspectorWidth(inspectorGesture.width + direction * (event.clientX - inspectorGesture.x), false);
+    });
+    listen(inspectorDivider, "pointerup", event => endInspectorResize(event));
+    listen(inspectorDivider, "pointercancel", event => endInspectorResize(event, true));
+    listen(inspectorDivider, "lostpointercapture", event => endInspectorResize(event, true));
+    listen(inspectorDivider, "dblclick", () => setInspectorWidth(null));
+    listen(inspectorDivider, "keydown", event => {
+      if (event.key === "Escape" && inspectorGesture) { event.preventDefault(); event.stopPropagation(); endInspectorResize(null, true); return; }
+      const bounds = widthBounds(), step = event.shiftKey ? 64 : 16;
+      const direction = doc.documentElement.dir === "rtl" ? -1 : 1;
+      const next = event.key === "ArrowRight" ? applyInspector() + step * direction : event.key === "ArrowLeft" ? applyInspector() - step * direction
+        : event.key === "Home" ? bounds.minimum : event.key === "End" ? bounds.maximum : null;
+      if (next === null) return;
+      event.preventDefault(); event.stopPropagation(); setInspectorWidth(next);
+    });
+  }
   // A modal fallback escapes container-query containing blocks without
   // stretching only one source video or losing captions and playback controls.
   const videoDialog = create("dialog", "video-fullscreen-dialog");
@@ -84,7 +185,7 @@ export function initWorkspace({ document: doc = document, window: win = window, 
     if (disposed || resizeFrame !== null) return;
     resizeFrame = win.requestAnimationFrame(() => {
       resizeFrame = null;
-      if (!disposed) { applyTimelineHeight(); onResize(); }
+      if (!disposed) { applyTimelineHeight(); applyInspector(); onResize(); }
     });
   };
   const saveHeight = () => {
@@ -276,22 +377,30 @@ export function initWorkspace({ document: doc = document, window: win = window, 
     if (panel.hidden) {
       if (guide.open) guide.close();
       endResize(null, true);
+      endInspectorResize(null, true);
       if (startedInStudio && (isVideoFullscreen() || fullscreenPending)) void leaveFullscreen();
     }
     scheduleResize();
   }) : null;
   observer?.observe(panel, { attributes: true, attributeFilter: ["hidden"] });
+  observer?.observe(doc.documentElement, { attributes: true, attributeFilter: ["lang", "dir"] });
   try {
     const saved = win.localStorage.getItem(TIMELINE_HEIGHT_KEY);
     if (saved !== null && Number.isFinite(Number(saved)) && Number(saved) >= 326) preferredHeight = Number(saved);
+    const savedWidth = win.localStorage.getItem(INSPECTOR_WIDTH_KEY);
+    if (savedWidth !== null && Number.isFinite(Number(savedWidth)) && Number(savedWidth) >= 320) preferredWidth = Number(savedWidth);
+    inspectorCollapsed = win.localStorage.getItem(INSPECTOR_COLLAPSED_KEY) === "true";
   } catch { /* Default proportions work without storage. */ }
   applyTimelineHeight();
+  applyInspector();
   renderFullscreen();
   const controller = {
-    toggleFullscreen, openGuide, setTimelineHeight,
+    toggleFullscreen, openGuide, setTimelineHeight, setInspectorWidth, setInspectorCollapsed,
+    showInspector: () => setInspectorCollapsed(false),
     destroy() {
       disposed = true;
       endResize(null, true);
+      endInspectorResize(null, true);
       void leaveFullscreen();
       listeners.forEach((remove) => remove());
       observer?.disconnect();
@@ -300,10 +409,15 @@ export function initWorkspace({ document: doc = document, window: win = window, 
       fullscreenButton.remove();
       status.remove();
       divider.remove();
+      inspectorToggle?.remove();
+      inspectorDivider?.remove();
+      if (inspector) { inspector.inert = false; inspector.removeAttribute("aria-hidden"); }
       guide.remove();
       videoDialog.remove();
       preview.classList.remove("video-expanded");
       panel.style.removeProperty("--workspace-timeline-height");
+      panel.style.removeProperty("--workspace-inspector-width");
+      panel.classList.remove("inspector-collapsed");
       delete panel.workspaceController;
     },
   };

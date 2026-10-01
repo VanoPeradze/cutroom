@@ -1,9 +1,9 @@
-import { applyTranslations, dictionaries } from "./i18n.js?v=1.1-beta-2";
-import { TimelineView, formatTime, editableClips, timelineDuration, sequenceBlocks, sequenceGaps, rippleMoveStart } from "./timeline.js?v=1.1-beta-8";
+import { applyTranslations, dictionaries } from "./i18n.js?v=1.1-beta-3";
+import { TimelineView, formatTime, editableClips, timelineDuration, sequenceBlocks, sequenceGaps, rippleMoveStart } from "./timeline.js?v=1.1-beta-9";
 import { MediaStudio } from "./media-studio.js?v=1.1-beta-5";
 import { StabilizationStudio } from "./stabilization-studio.js?v=1.1-beta-1";
 import { SourceReview } from "./source-review.js?v=1.1-beta-8";
-import { initWorkspace } from "./workspace.js?v=1.1-beta-3";
+import { initWorkspace } from "./workspace.js?v=1.1-beta-4";
 import { KEYBOARD_PROFILES, resolveEditorShortcut, isEditorTransportSpace, shortcutRows } from "./keyboard.js?v=1.1-beta-2";
 import { AudioThresholdView } from "./audio-meter.js?v=1.1-beta-1";
 import { initWelcome, workflowSettings, cloudProviderName } from "./welcome.js?v=1.1-beta-1";
@@ -416,7 +416,7 @@ async function boot() {
       await loadSystem();
     },
   });
-  initWorkspace({ document, window, onResize: () => state.timeline?.scheduleDraw(), openShortcuts: () => { renderKeyboardHelp(); elements.keyboardDialog.showModal(); } });
+  initWorkspace({ document, window, translate: (key, fallback) => state.dictionary?.[key] ?? fallback, onResize: () => state.timeline?.scheduleDraw(), openShortcuts: () => { renderKeyboardHelp(); elements.keyboardDialog.showModal(); } });
   initializeMediaStudio();
   initializeTextStudio();
   state.trackProtection = initTrackProtection({ document, getProject: () => state.project,
@@ -4786,6 +4786,7 @@ function updateStudioStatus() {
 }
 
 function selectAdvancedTab(tab) {
+  elements.advancedPanel?.workspaceController?.showInspector();
   if (tab === "audio") state.mediaStudio?.openMixer();
   if (tab === "framing") loadCropControls(elements.cropSourceSelect?.value || "A", false);
   elements.advancedPanel.classList.toggle("studio-transcript", tab === "transcript");

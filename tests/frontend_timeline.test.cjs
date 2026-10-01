@@ -139,9 +139,107 @@ function mediaFixture(options = {}) {
   h.timeline.onMediaPreview = (id, patch) => h.mediaPreviews.push({ id, patch: plain(patch) });
   h.timeline.onMediaSelect = id => h.mediaSelections.push(id);
   h.timeline.onMediaAction = (action, payload) => h.mediaActions.push({ action, ...plain(payload) });
-  h.mediaPoint = (time, row = 0, extra = {}) => h.point(time, h.timeline.baseHeight() + row * 46 + 20, extra);
+  h.mediaPoint = (time, row = 0, extra = {}) => h.point(time, h.timeline.mediaRows()[row].top + 20, extra);
   return h;
 }
+
+function mixedMediaFixture() {
+  const h = mediaFixture();
+  h.project.manual.media_clips.push(
+    {id:'image',asset_id:'image',start:6,end:8},
+    ...['music','voice','effects'].map(role => ({id:role,asset_id:'sound',role,start:1,end:10,source_start:0})),
+  );
+  h.project.manual.text_clips = [
+    {id:'text_title',kind:'title',start:2,end:9,text:'Title'},
+    {id:'text_caption',kind:'caption',start:2,end:9,text:'Caption'},
+  ];
+  h.project.analysis = {audio_source:'A',transcript:{segments:[{start:10.5,end:11,text:'Speech'}]}};
+  return h;
+}
+
+test('mixed media rows share display, hit, reveal and caption geometry after zoom and vertical scrolling', () => {
+  const h = mixedMediaFixture(), before = JSON.stringify(h.project);
+  h.timeline.zoom = 4; h.scroll.scrollLeft = 150; h.scroll.scrollTop = 200; h.scroll.clientHeight = 180;
+  const geometry = plain(h.timeline.geometry());
+  h.canvas.getBoundingClientRect = () => ({left:10-h.scroll.scrollLeft,top:20-h.scroll.scrollTop,width:h.timeline.geometry().width});
+  const rows = h.timeline.mediaRows();
+  assert.deepEqual(plain(rows.map(row => [row.label,row.height])), [
+    ['VIDEO / IMAGE',60],['MUSIC',56],['VOICEOVER',56],['EFFECTS',56],['TEXT',44],['CAPTIONS',44],
+  ]);
+  assert.equal(rows[0].top,230);
+  for (let index=1;index<rows.length;index++) assert.equal(rows[index].top,rows[index-1].bottom);
+  const point = y => ({clientX:h.canvas.getBoundingClientRect().left+4*geometry.px,clientY:h.canvas.getBoundingClientRect().top+y});
+  for (const row of rows) assert.equal(h.timeline.mediaAtEvent(point((row.top+row.bottom)/2)).row.group,row.group);
+  assert.equal(h.timeline.mediaAtEvent(point(rows[0].bottom)).clip.id,'music','shared vertical endpoint belongs to the following row');
+  assert.equal(h.timeline.mediaAtEvent(point(rows.at(-1).bottom)),null,'automatic captions remain outside selectable media rows');
+  h.timeline.draw();
+  assert.equal(h.canvas.style.height,'576px');
+  assert.equal(h.timeline.mediaLayout().caption.top,546);
+  const caption = h.draws.find(draw => draw.fill === '#1c2630');
+  assert.equal(caption.y,546); assert.equal(caption.height,28);
+  h.timeline.revealMedia('text_caption'); assert.equal(h.scroll.scrollTop,546-180+8);
+  assert.equal(h.scroll.scrollLeft,150); assert.deepEqual(plain(h.timeline.geometry()),geometry);
+  assert.equal(JSON.stringify(h.project),before,'display operations leave A/B provenance and edit state unchanged');
+  h.project.manual.media_clips=[];h.project.manual.text_clips=[];
+  assert.equal(h.timeline.mediaLayout().caption.top,230,'caption-only projects use the base source-row boundary');
+});
+
+test('larger visual rows preserve thumbnail aspect ratio and keep clip outlines and handles inside the row', () => {
+  const h = mediaFixture(), ctx = h.canvas.getContext('2d'), images = [];
+  h.project.assets.video.thumbnail_url='/thumbnail';
+  h.timeline.mediaImages=new Map([['/thumbnail',{width:160,height:90}]]);
+  h.timeline.mediaSelection='visual';
+  ctx.drawImage=(image,x,y,width,height)=>images.push({x,y,width,height});
+  h.timeline.draw();
+  const row=h.timeline.mediaRows()[0];
+  assert.ok(images.length); assert.ok(images.every(image => Math.abs(image.width/image.height-16/9)<1e-8));
+  assert.ok(images.every(image => image.y>=row.top && image.y+image.height<=row.bottom));
+  const outline=h.draws.find(draw=>draw.outline && draw.y===row.top+1.5);
+  assert.ok(outline && outline.y+outline.height<row.bottom);
+  const handles=h.draws.filter(draw=>draw.fill==='#fff' && draw.width===3);
+  assert.equal(handles.length,2);assert.ok(handles.every(handle=>handle.y>=row.top+18 && handle.y+handle.height<row.bottom));
+});
+
+test('all row labels stay pinned over selection and offscreen clips while hover and playhead remain above them', () => {
+  const h=mixedMediaFixture(), before=JSON.stringify(h.project), ctx=h.canvas.getContext('2d');
+  h.timeline.zoom=4;h.scroll.scrollLeft=1500;h.project.manual.track_locks={A:true};
+  h.timeline.selection={start:0,end:12};h.timeline.hoverTime=1501/h.timeline.geometry().px;
+  h.timeline.playhead=h.timeline.hoverTime;
+  const original=h.timeline.drawPlayhead;
+  h.timeline.drawPlayhead=function(...args){h.draws.push({event:'playhead'});return original.apply(this,args);};
+  h.timeline.draw();
+  const selectionIndex=h.draws.findIndex(draw=>draw.fill==='rgba(68,185,198,.14)');
+  const hoverIndex=h.draws.findIndex(draw=>draw.fill==='#f4f7f7');
+  const playheadIndex=h.draws.findIndex(draw=>draw.event==='playhead');
+  const expected=['VIDEO A · LOCKED','VIDEO B','LAYOUT','AUDIO','VIDEO / IMAGE','MUSIC','VOICEOVER','EFFECTS','TEXT','CAPTIONS'];
+  for(const text of expected) {
+    const labels=h.draws.map((draw,index)=>({...draw,index})).filter(draw=>draw.text===text);
+    assert.ok(labels.length,`${text} remains identifiable even without a visible clip`);
+    assert.ok(labels.every(label=>label.index>selectionIndex && label.index<hoverIndex && label.index<playheadIndex));
+    assert.ok(labels.every(label=>label.x>=1509 && label.x<=1510));
+  }
+  assert.equal(ctx.strokeStyle,'#c9b62c','playhead has the final functional marker paint');
+  delete h.project.manual.track_locks;
+  assert.equal(JSON.stringify(h.project),before);
+});
+
+test('hover operation labels stay inside both scrolled edges and clip long text in a narrow viewport', () => {
+  const h=sequenceFixture(),ctx=h.canvas.getContext('2d');h.timeline.zoom=4;h.scroll.scrollLeft=900;
+  const clips=[];ctx.rect=(x,y,width,height)=>clips.push({x,y,width,height});
+  for(const width of [600,45]) {
+    h.scroll.clientWidth=width;
+    const {px}=h.timeline.geometry();
+    for(const x of [901,900+width-1]) {
+      h.draws.length=0;clips.length=0;
+      h.timeline.gesture={kind:'move',target:'edit',moveStart:x/px};
+      h.timeline.drawHover(ctx,x/px,px,230);
+      const box=h.draws.find(draw=>draw.fill==='#f4f7f7');
+      assert.ok(box.x>=902 && box.x+box.width<=900+width-2);
+      assert.ok(clips.some(clip=>clip.x===box.x && clip.width===box.width),'operation text is clipped to its visible box');
+      if(width===45) assert.equal(box.width,41);
+    }
+  }
+});
 
 test('snap includes other source and added-media edges without changing the edit target', () => {
   const h = mediaFixture(); h.timeline.setEditTarget('A'); h.timeline.setSnapping(true);
@@ -328,7 +426,7 @@ test('media rows pack nonoverlapping visuals and keep overlapping clips and audi
   assert.deepEqual(rows.map(row => [row.group, row.clips.map(clip => clip.id)]), [
     ['visual', ['v1', 'image']], ['visual', ['v2']], ['music', ['music']], ['voice', ['voice']],
   ]);
-  assert.deepEqual(rows.map(row => [row.top, row.bottom]), [[230,276],[276,322],[322,368],[368,414]]);
+  assert.deepEqual(rows.map(row => [row.top, row.bottom]), [[230,290],[290,350],[350,406],[406,462]]);
   assert.equal(h.timeline.mediaAtEvent(h.mediaPoint(4, 0)).clip.id, 'image', 'shared endpoint belongs to following clip');
   assert.equal(h.timeline.mediaAtEvent(h.mediaPoint(3.5, 1)).clip.id, 'v2');
   assert.equal(h.timeline.mediaAtEvent(h.mediaPoint(6, 0)), null);
@@ -345,19 +443,21 @@ for (const twoSources of [false, true]) {
     h.project.analysis = { audio_source: 'A', transcript: { segments: [{ start: 10.5, end: 11, text: 'Speech' }] } };
     h.timeline.draw();
     const base = twoSources ? 230 : 174;
-    assert.equal(h.canvas.style.height, `${base + 46 + 30}px`);
-    assert.equal(h.canvas.height, base + 46 + 30);
+    assert.equal(h.canvas.style.height, `${base + 60 + 30}px`);
+    assert.equal(h.canvas.height, base + 60 + 30);
     const caption = h.draws.find(draw => draw.text === 'Cc Speech');
     assert.ok(caption);
-    assert.equal(caption.y, base + 46 + 17);
-    assert.ok(Math.abs(caption.x - (.5 * h.timeline.geometry().px + 4)) < 1e-8, 'captions follow original speech mapping');
-    assert.equal(h.timeline.mediaAtEvent(h.point(.75, base + 46 + 12)), null, 'caption lane is not a media clip');
+    assert.equal(caption.y, base + 60 + 17);
+    const captionBlock = h.draws.find(draw => draw.fill === '#384962');
+    assert.ok(Math.abs(captionBlock.x - (.5 * h.timeline.geometry().px + 1)) < 1e-8, 'captions follow original speech mapping');
+    assert.ok(caption.x >= 70, 'caption text leaves room for its pinned row label');
+    assert.equal(h.timeline.mediaAtEvent(h.point(.75, base + 60 + 12)), null, 'caption lane is not a media clip');
     h.project.settings.captions = false;
     h.timeline.draw();
-    assert.equal(h.canvas.height, base + 46 + 30, 'burned captions remain visible without SRT export');
+    assert.equal(h.canvas.height, base + 60 + 30, 'burned captions remain visible without SRT export');
     h.project.settings.burn_captions = false;
     h.timeline.draw();
-    assert.equal(h.canvas.height, base + 46);
+    assert.equal(h.canvas.height, base + 60);
   });
 }
 
@@ -1110,7 +1210,9 @@ test("imported-audio waveform preserves brief measured peaks at low zoom", () =>
   ctx.moveTo = (x, y) => { previous = { x, y }; };
   ctx.lineTo = (x, y) => { if (ctx.strokeStyle === "#86dcc0") segments.push({ from: previous, to: { x, y } }); };
   h.timeline.drawMedia(ctx, 20, 600);
-  assert.ok(segments.some(line => line.to.y - line.from.y === 30), "pixel buckets retain the actual peak instead of skipping it");
+  const row = h.timeline.mediaRows()[0];
+  assert.ok(segments.some(line => line.to.y - line.from.y === 31), "pixel buckets retain the actual peak instead of skipping it");
+  assert.ok(segments.every(line => line.from.y >= row.top + 18 && line.to.y <= row.bottom - 7), "measured waves stay below the name and inside the audio row");
   h.project.assets.sound.waveform[99] = .5;
   h.project.manual.media_clips[0].source_start = 1;
   segments.length = 0;h.timeline.drawMedia(ctx, 20, 600);

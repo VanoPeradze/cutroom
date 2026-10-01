@@ -28,7 +28,6 @@
 .mixer-channels { display:grid; gap:6px; }
 .mixer-channel { display:grid; grid-template-columns:minmax(0,1fr) 58px; gap:2px 8px; padding:8px; border:1px solid var(--line); border-radius:6px; background:var(--surface-inset); }
 .mixer-channel[data-channel=master] { border-color:var(--line-strong); margin-top:3px; }
-.mixer-channel[data-channel=master] { grid-template-columns:minmax(0,1fr); }
 .mixer-channel[data-channel=master] .mixer-channel-actions { display:none; }
 .mixer-channel .mixer-fader { grid-column:1; gap:4px; }
 .mixer-channel-heading { display:flex; justify-content:space-between; align-items:center; gap:6px; font-size:11px; font-weight:600; }
@@ -44,7 +43,7 @@
 .mixer-channel-meter::-webkit-meter-optimum-value { background:var(--cyan); }
 .mixer-channel-meter::-webkit-meter-suboptimum-value { background:var(--warning); }
 .mixer-channel-meter::-webkit-meter-even-less-good-value { background:#e45a5a; }
-.mixer-signal-value { flex:0 0 62px; text-align:end; color:var(--muted); font-size:9px !important; }
+.mixer-signal-value { flex:0 0 76px; text-align:end; color:var(--muted); font-size:12px; }
 .mixer-channel.is-muted .mixer-signal { opacity:.45; }
 .mixer-channel.is-clipping { border-color:#e45a5a; }
 .mixer-channel.is-clipping .mixer-signal-value { color:#e45a5a; }

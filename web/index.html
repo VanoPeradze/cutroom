@@ -10,11 +10,12 @@
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/assets/styles.css?v=1.1-beta-5">
   <link rel="stylesheet" href="/assets/workspace.css?v=1.1-beta-3">
-  <link rel="stylesheet" href="/assets/media-studio.css?v=1.1-beta-4">
+  <link rel="stylesheet" href="/assets/media-studio.css?v=1.1-beta-5">
   <link rel="stylesheet" href="/assets/stabilization-studio.css?v=1.1-beta-1">
   <link rel="stylesheet" href="/assets/text-studio.css?v=1.1-beta-2">
   <link rel="stylesheet" href="/assets/welcome.css?v=1.1-beta-2">
   <link rel="stylesheet" href="/assets/creator-ui.css?v=1.1-beta-12">
+  <link rel="stylesheet" href="/assets/editor-panels.css?v=1.1-beta-1">
 </head>
 <body class="welcome-mode">
   <a class="skip-link" href="#main" data-i18n="skip">Skip to content</a>
@@ -368,7 +369,7 @@
           <button id="studioTabAudio" role="tab" aria-selected="false" aria-controls="studioPanelAudio" tabindex="-1" data-tab="audio"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m11 4-5 4H3v8h3l5 4V4Z"/><path d="M15 8a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14"/></svg><span data-i18n="audioTab">Audio</span><small data-i18n="audioMixer">Mixer</small></button>
           <button id="studioTabSettings" role="tab" aria-selected="false" aria-controls="studioPanelSettings" tabindex="-1" data-tab="settings"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="2" fill="var(--surface-chrome)"/><circle cx="15" cy="17" r="2" fill="var(--surface-chrome)"/></svg><span>Output</span><small>Format &amp; export</small></button>
         </div>
-        <div class="advanced-content">
+        <div class="advanced-content" id="studioInspector">
           <div class="tab-panel" id="studioPanelMedia" role="tabpanel" aria-labelledby="studioTabMedia" tabindex="0" data-panel="media" hidden></div>
           <div class="tab-panel" id="studioPanelAudio" role="tabpanel" aria-labelledby="studioTabAudio" tabindex="0" data-panel="audio" hidden><p class="media-status mixer-save-status" role="status" aria-live="polite" data-i18n="mixerSaveHint">Changes save automatically.</p></div>
           
@@ -795,6 +796,6 @@
       <footer class="connection-actions"><button class="button ghost" id="forgetCloudKey" type="button">Forget session key</button><button class="button primary" id="saveAIConnection" type="submit">Use this connection</button></footer>
     </form>
   </dialog>
-  <script type="module" src="/assets/app.js?v=1.1-beta-19"></script>
+  <script type="module" src="/assets/app.js?v=1.1-beta-20"></script>
 </body>
 </html>

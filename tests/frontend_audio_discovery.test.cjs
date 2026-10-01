@@ -165,6 +165,15 @@ test('Audio is an accessible primary tab opening the actual existing mixer witho
   assert.deepEqual(plain(run('requests')), []); assert.deepEqual(plain(run('mutations')), []); assert.deepEqual(plain(run('previewCalls')), []);
 });
 
+test('choosing a primary tool restores the display inspector without changing the project', () => {
+  const {run,nodes}=fixture(); let opened=0;
+  nodes.get('advancedPanel').workspaceController={showInspector(){opened++;}};
+  const before=run('JSON.stringify(state.project)');
+  run("selectAdvancedTab('audio');selectAdvancedTab('timeline');");
+  assert.equal(opened,2); assert.equal(run('JSON.stringify(state.project)'),before);
+  assert.deepEqual(plain(run('requests')),[]); assert.deepEqual(plain(run('mutations')),[]);
+});
+
 test('keyboard tab navigation includes Audio, exposes only its panel and preserves preview and selection', () => {
   const {run, tabs, panels, document} = fixture();
   const audioIndex = tabs.findIndex(tab => tab.dataset.tab === 'audio'); assert.ok(audioIndex > 0);
