@@ -2075,7 +2075,7 @@ button, summary { touch-action: manipulation; }
 }
 .studio-timeline-dock .timeline-range-form { margin-block: 4px 8px; padding: 10px; border: 1px solid var(--line-strong); border-radius: 8px; }
 @media (min-width: 961px) {
-  .timeline-range-form { grid-template-columns: minmax(100px,160px) minmax(100px,160px) auto minmax(0,1fr); }
-  .timeline-range-form > button { grid-column: 3; }
-  .timeline-range-form > .source-range-status { grid-column: 4; align-self: center; }
+  .studio-timeline-dock .timeline-range-form { grid-template-columns: minmax(100px,160px) minmax(100px,160px) auto minmax(0,1fr); }
+  .studio-timeline-dock .timeline-range-form > button { grid-column: 3; }
+  .studio-timeline-dock .timeline-range-form > .source-range-status { grid-column: 4; align-self: center; }
 }
