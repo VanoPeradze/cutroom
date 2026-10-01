@@ -2,6 +2,10 @@
 
 **An exploratory Windows/macOS beta, with a Linux source development path, for feedback from creators and editors. Not a production release, security certification or promise of professional-quality automatic edits.** Public access to a download does not change those quality boundaries.
 
+## Continuity review quality pass - 2026-10-01
+
+Missing or contradictory AI continuity responses require review. Requested repairs are distinguished from changes that survive the final story selection; ignored or restored actions remain visible as unresolved. An explicit AI rebuild refreshes older reviews without repeating cached transcription or forcing model setup when opening a project. These are verified pipeline safeguards, not a claim that every preset produces a coherent finished story.
+
 ## Chroma Key and AI draft controls - 2026-10-01
 
 - [Chroma Key](CHROMA_KEY.md) applies separately to source A/B, using local FFmpeg to replace a chosen color with a solid color or ready Media-library image. The image covers the source frame and can crop at the edges. The explicit current-frame PNG and export use saved settings; ordinary playback remains unkeyed. Background video, B-underlay and transparent output are not supported. Apply/Reset support Undo/Redo; missing filters block enabling/processed-frame preview, while disabling or resetting a saved key remains available.

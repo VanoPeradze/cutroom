@@ -26,7 +26,7 @@ TEST_FILES = (
     "test_stabilization_api.py", "test_media_command_encoding.py",
     "test_chroma_settings.py", "test_chroma_editing.py", "test_chroma_render.py", "test_chroma_image_background.py", "test_chroma_api.py",
     "test_director_rebuild_cache.py", "test_style_story_selection.py",
-    "test_editor_model_selection.py",
+    "test_editor_model_selection.py", "test_critic_revisions.py",
     "test_media_render.py",
 )
 SELECTORS = tuple(f"tests/{name}" for name in TEST_FILES[:-1]) + (
@@ -65,6 +65,13 @@ REQUIRED_CASES = {
     "test_no_available_configured_model_never_sends_request_to_missing_model",
     "test_installed_fallback_is_usable_but_identified_as_different_model",
     "test_missing_or_unusable_model_edit_is_labelled_basic_cleanup",
+    "test_malformed_or_contradictory_critic_cannot_become_a_pass",
+    "test_removing_an_unselected_candidate_is_a_noop_not_an_applied_repair",
+    "test_required_story_slot_retained_without_claiming_critic_removal",
+    "test_later_budget_slot_restoration_reconciles_actual_removal",
+    "test_empty_critic_response_keeps_edit_with_review_warning_through_real_pipeline",
+    "test_legacy_critic_pass_cannot_bypass_review_on_explicit_rebuild",
+    "test_legacy_basic_cleanup_cache_does_not_require_a_story_model",
 }
 FEATURE_FILES = {
     "cutroom/audio.py", "cutroom/media.py", "cutroom/sequence.py",
