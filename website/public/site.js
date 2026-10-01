@@ -16,10 +16,10 @@
     languageSwitch.lang = language === 'he' ? 'en' : 'he';
     languageSwitch.setAttribute('aria-label', language === 'he' ? 'Read this website in English' : 'קריאת האתר בעברית');
     languageSwitch.href = (language === 'he' ? '?lang=en' : '?lang=he') + location.hash;
-    document.title = language === 'he' ? 'CUTROOM 1.1 Beta — העריכה בידיים שלכם.' : 'CUTROOM 1.1 Beta — Your footage. Your edit.';
+    document.title = language === 'he' ? 'CUTROOM — כל פריים. בידיים שלכם.' : 'CUTROOM — Make the cut. Make it yours.';
     document.querySelector('meta[name="description"]').content = language === 'he'
-      ? 'עורך וידאו חינמי בקוד פתוח שפועל על המחשב שלכם. חותכים קטעים, מוסיפים כתוביות ומייצאים MP4. ZIP בטא ל־Windows ול־Mac; Linux מקוד מקור.'
-      : 'A free, open-source video editor that runs on your computer. Cut clips, add captions and export MP4. Windows/Mac beta ZIP; Linux from source.';
+      ? 'עורך וידאו חינמי ומקומי. חיתוכים, סאונד וכתוביות. בטא ל־Windows ול־Mac; Linux מהמקור. AI הוא אפשרות.'
+      : 'A free local video editor. Cut footage, mix sound and add captions. Windows/Mac beta; Linux from source. Optional AI drafts, editable by you.';
     document.querySelector('nav').setAttribute('aria-label', language === 'he' ? 'ניווט באתר' : 'Site navigation');
     document.querySelector('.capabilities').setAttribute('aria-label', language === 'he' ? 'מהקלטה ל־MP4' : 'From recording to MP4');
     document.getElementById('expandShot').setAttribute('aria-label', language === 'he' ? 'הגדלת צילום העורך' : 'Enlarge editor screenshot');
