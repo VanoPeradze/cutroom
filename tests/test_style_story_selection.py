@@ -99,6 +99,98 @@ def test_short_complete_semantic_story_is_kept_without_unrelated_padding():
         assert selected == [{"start": 100.0, "end": 116.0}]
 
 
+@pytest.mark.parametrize("style_id", ["competitive_clutch", "reaction_burst", "stream_commentary"])
+def test_single_moment_style_does_not_join_distant_semantic_stories(style_id):
+    segments = [
+        {"id": "other", "start": 30.0, "end": 40.0, "editorial_score": 0.3},
+        {"id": "setup", "start": 220.0, "end": 225.0, "editorial_score": 0.8},
+        {"id": "payoff", "start": 225.0, "end": 235.0, "editorial_score": 0.9},
+    ]
+    decision = {
+        "story_ranges": [{"start": 30.0, "end": 40.0}, {"start": 220.0, "end": 235.0}],
+        "highlight_ids": ["payoff"], "opening_id": "setup", "closing_id": "payoff",
+    }
+    selected = director._select_short_story_ranges(
+        segments, decision, 300.0, 60.0, selection_policy=policy(style_id),
+    )
+    assert selected == [{"start": 220.0, "end": 235.0}]
+
+
+def test_highlight_moment_limit_applies_to_semantic_selection():
+    segments = [{"id": f"s{i}", "start": float(i * 60), "end": float(i * 60 + 8),
+                 "editorial_score": float(i) / 10} for i in range(5)]
+    selected = director._select_short_story_ranges(
+        segments, {"story_ranges": segments}, 300.0, 60.0,
+        selection_policy=policy("stream_highlights"),
+    )
+    assert selected == [{"start": 120.0, "end": 128.0}, {"start": 180.0, "end": 188.0},
+                        {"start": 240.0, "end": 248.0}]
+
+
+def captured_anchor_structure():
+    """Only anonymous IDs/times from a completed local planning result."""
+    segments = [
+        {"id": "s0001", "start": 1.73, "end": 8.63},
+        {"id": "s0002", "start": 9.76, "end": 12.39},
+        {"id": "s0003", "start": 12.93, "end": 14.03},
+        {"id": "s0004", "start": 14.57, "end": 16.03},
+        {"id": "s0005", "start": 20.19, "end": 21.47},
+        {"id": "s0006", "start": 40.08, "end": 43.26},
+    ]
+    decision = {
+        "keep_ids": ["s0001", "s0002", "s0003", "s0004", "s0006"],
+        "remove_ids": ["s0005"], "highlight_ids": ["s0001"],
+        "opening_id": "s0001", "closing_id": "s0006",
+        "story_beat_ids": ["b0001", "b0003"],
+        "story_ranges": [
+            {"start": 1.73, "end": 16.03, "beat_id": "b0001"},
+            {"start": 40.08, "end": 43.26, "beat_id": "b0003"},
+        ],
+    }
+    return segments, decision
+
+
+def test_commentary_preserves_planned_ending_when_separate_story_parts_fit_budget():
+    segments, decision = captured_anchor_structure()
+    selected = director._select_short_story_ranges(
+        segments, decision, 45.067, 30.0, selection_policy=policy("stream_commentary"),
+    )
+    assert selected == [{"start": 1.73, "end": 16.03}, {"start": 40.08, "end": 43.26}]
+    assert range_duration(selected) == pytest.approx(17.48)
+    review = director._edit_quality_review(
+        {}, {"critic": {"verdict": "pass"}}, segments, selected, 45.067,
+        decision=decision, selection_policy=policy("stream_commentary"),
+    )
+    assert review["needs_review"] is True
+    assert [row["type"] for row in review["warnings"]] == ["style_moment_constraint"]
+
+
+def test_final_review_exposes_planned_ending_lost_to_unavoidable_budget():
+    segments, decision = captured_anchor_structure()
+    selected = director._select_short_story_ranges(
+        segments, decision, 45.067, 15.0, selection_policy=policy("stream_commentary"),
+    )
+    assert selected == [{"start": 1.73, "end": 16.03}]
+    review = director._edit_quality_review(
+        {}, {"critic": {"verdict": "pass"}}, segments, selected, 45.067,
+        decision=decision, selection_policy=policy("stream_commentary"),
+    )
+    assert review["needs_review"] is True
+    assert [row["type"] for row in review["warnings"]] == ["story_anchor_missing"]
+
+
+def test_final_review_accepts_an_intact_connected_planned_story():
+    segments, decision = captured_anchor_structure()
+    decision["closing_id"] = "s0004"
+    selected = [{"start": 1.73, "end": 16.03}]
+    review = director._edit_quality_review(
+        {}, {"critic": {"verdict": "pass"}}, segments, selected, 45.067,
+        decision=decision, selection_policy=policy("stream_commentary"),
+    )
+    assert review["needs_review"] is False
+    assert review["warnings"] == []
+
+
 @pytest.mark.parametrize("style_id", ["competitive_clutch", "stream_commentary", "funny_moments"])
 def test_ai_story_producer_uses_the_selected_style_structure(monkeypatch, style_id):
     class Settings:

@@ -3,7 +3,7 @@ from __future__ import annotations
 import copy
 from typing import Any
 
-from .composition import build_manual_embedded_candidate
+from .composition import CHROMA_KEY_ACTION_FIELDS, build_manual_embedded_candidate, prepare_chroma_key_edit
 from .source_tracks import TRACK_ACTIONS, SourceTrackError, prepare_source_track_edit, validate_source_track_sync
 from .sequence import SEQUENCE_ACTIONS, prepare_sequence_edit
 from .media_library import MEDIA_ACTION_FIELDS, MediaLibraryError, prepare_media_edit, validate_media_bounds
@@ -296,6 +296,8 @@ def _timeline_snapshot(project: dict[str, Any]) -> dict[str, Any]:
         "manual_text_clips": copy.deepcopy(manual.get("text_clips")),
         "manual_audio_mixer_present": "audio_mixer" in manual,
         "manual_audio_mixer": copy.deepcopy(manual.get("audio_mixer")),
+        "manual_chroma_key_present": "chroma_key" in manual,
+        "manual_chroma_key": copy.deepcopy(manual.get("chroma_key")),
         # Embedded composition changes both project-level intent and the live
         # Draft. Presence flags let Undo restore old projects that legitimately
         # omitted these fields instead of turning absence into an explicit null.
@@ -318,7 +320,7 @@ def _restore_timeline(project: dict[str, Any], snapshot: dict[str, Any]) -> None
     manual["cuts"] = copy.deepcopy(snapshot.get("manual_cuts") or [])
     manual["keeps"] = copy.deepcopy(snapshot.get("manual_keeps") or [])
     manual["camera_overrides"] = copy.deepcopy(snapshot.get("manual_camera_overrides") or [])
-    for key in ("media_clips", "text_clips", "audio_mixer"):
+    for key in ("media_clips", "text_clips", "audio_mixer", "chroma_key"):
         if f"manual_{key}_present" in snapshot:
             if snapshot[f"manual_{key}_present"]:
                 manual[key] = copy.deepcopy(snapshot[f"manual_{key}"])
@@ -892,6 +894,16 @@ def _set_embedded_camera(project: dict[str, Any], payload: dict[str, Any]) -> No
 
 
 def _apply_history_entry(project: dict[str, Any], entry: dict[str, Any], side: str) -> None:
+    if entry.get("kind") == "chroma":
+        snapshot = entry[side]
+        manual = project.setdefault("manual", {})
+        if snapshot["present"]:
+            manual["chroma_key"] = copy.deepcopy(snapshot["value"])
+        else:
+            manual.pop("chroma_key", None)
+        if isinstance(project.get("draft"), dict):
+            project["draft"]["edited_at"] = now_iso()
+        return
     if entry.get("kind") == "timeline":
         _restore_timeline(project, entry[side])
         return
@@ -964,6 +976,15 @@ def _apply_manual_edit(project: dict[str, Any], payload: dict[str, Any]) -> dict
         return project
     if action in SEQUENCE_ACTIONS and sequence_edit is None:
         return project
+    chroma_edit = None
+    if action in CHROMA_KEY_ACTION_FIELDS:
+        try:
+            chroma_edit = prepare_chroma_key_edit(project, payload)
+            if chroma_edit is None:
+                return project
+            require_tracks_unlocked(project, (payload["slot"],))
+        except (ValueError, SourceTrackError) as exc:
+            raise ManualEditError(str(exc)) from exc
     trimmed = _prepare_clip_trim(project, payload) if action == "trim_clip" else None
     if action == "trim_clip" and trimmed is None:
         return project
@@ -990,7 +1011,15 @@ def _apply_manual_edit(project: dict[str, Any], payload: dict[str, Any]) -> dict
         _set_history_counts(project, history)
         return project
 
-    if action == "transcript_text":
+    if action in CHROMA_KEY_ACTION_FIELDS:
+        manual = project.setdefault("manual", {})
+        before = {"present": "chroma_key" in manual, "value": copy.deepcopy(manual.get("chroma_key"))}
+        manual["chroma_key"] = chroma_edit
+        if isinstance(project.get("draft"), dict):
+            project["draft"]["edited_at"] = now_iso()
+        entry = {"kind": "chroma", "before": before,
+                 "after": {"present": True, "value": copy.deepcopy(chroma_edit)}}
+    elif action == "transcript_text":
         segment_id = payload.get("segment_id")
         segment, _ = _find_transcript_segment(project, segment_id)
         old_text = str(segment.get("text") or "")

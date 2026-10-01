@@ -12,6 +12,7 @@
   <link rel="stylesheet" href="/assets/workspace.css?v=1.1-beta-3">
   <link rel="stylesheet" href="/assets/media-studio.css?v=1.1-beta-5">
   <link rel="stylesheet" href="/assets/stabilization-studio.css?v=1.1-beta-1">
+  <link rel="stylesheet" href="/assets/chroma-studio.css?v=1.1-beta-2">
   <link rel="stylesheet" href="/assets/text-studio.css?v=1.1-beta-2">
   <link rel="stylesheet" href="/assets/welcome.css?v=1.1-beta-2">
   <link rel="stylesheet" href="/assets/creator-ui.css?v=1.1-beta-12">
@@ -284,6 +285,7 @@
       </section>
 
       <section class="result-panel" id="resultPanel" hidden>
+        <div id="aiDraftNotice" class="ai-draft-notice" role="status" hidden><p data-i18n="aiDraftKept">New draft ready; your manual timeline was kept.</p><button id="applyAiDraftButton" type="button" class="button ghost compact" data-i18n="aiDraftApply">Apply new AI draft</button></div>
         <div class="result-header">
           <div><p class="eyebrow" data-i18n="firstDraft">First edit</p><span id="draftEngineBadge" class="engine-badge"></span><h2 id="draftTitle">CUTROOM Draft</h2><p id="draftSummary"></p></div>
           <div class="duration-verdict"><span id="beforeDuration">00:00</span><i>→</i><strong id="afterDuration">00:00</strong><small data-i18n="beforeAfter">Before / after</small></div>
@@ -402,6 +404,7 @@
           <div class="tab-panel" id="studioPanelFraming" role="tabpanel" aria-labelledby="studioTabFraming" tabindex="0" data-panel="framing">
             <header class="studio-tool-intro"><div><p>02 · LAYOUT</p><h3>Frame your video</h3></div><span>Choose a layout, then adjust the selected clip. Changes save automatically.</span></header>
             <button id="openStabilizationStudio" type="button" class="button ghost compact source-stabilization-entry" aria-controls="stabilizationTool" data-i18n="stabilizeFootage">Stabilize footage</button>
+            <div id="chromaStudio"></div>
             <section class="source-mixer" id="sourceMixer" aria-labelledby="sourceMixerTitle">
               <div class="source-mixer-head">
                 <div><p class="eyebrow">SOURCE MIXER</p><h3 id="sourceMixerTitle">Source control</h3><p id="sourceMixerHelp">AI suggests a layout; your choice always wins.</p></div>
@@ -720,6 +723,13 @@
     </form>
   </dialog>
 
+  <dialog id="aiDraftApplyDialog" class="sheet-dialog project-confirm-dialog" aria-labelledby="aiDraftApplyTitle" aria-describedby="aiDraftApplyCopy">
+    <div class="dialog-shell"><header><h2 id="aiDraftApplyTitle" data-i18n="aiDraftApplyTitle">Apply the new AI draft?</h2><button type="button" class="icon-button" id="closeApplyAiDraft" aria-label="Close draft confirmation">x</button></header>
+      <p id="aiDraftApplyCopy" data-i18n="aiDraftApplyCopy">This replaces your manual timeline with the latest AI draft. You can Undo to restore your manual edit.</p>
+      <div class="project-rename-actions"><button type="button" class="button ghost" id="cancelApplyAiDraft" autofocus data-i18n="aiDraftKeep">Keep manual timeline</button><button type="button" class="button primary" id="confirmApplyAiDraft" data-i18n="aiDraftApply">Apply new AI draft</button></div>
+    </div>
+  </dialog>
+
   <dialog id="projectDeleteDialog" class="sheet-dialog project-confirm-dialog" aria-labelledby="projectDeleteTitle" aria-describedby="projectDeleteCopy">
     <div class="dialog-shell">
       <header><div><p class="eyebrow">REMOVE PROJECT</p><h2 id="projectDeleteTitle">Delete this project?</h2></div><button type="button" class="icon-button" id="closeProjectDelete" aria-label="Close delete confirmation">×</button></header>
@@ -796,6 +806,6 @@
       <footer class="connection-actions"><button class="button ghost" id="forgetCloudKey" type="button">Forget session key</button><button class="button primary" id="saveAIConnection" type="submit">Use this connection</button></footer>
     </form>
   </dialog>
-  <script type="module" src="/assets/app.js?v=1.1-beta-21"></script>
+  <script type="module" src="/assets/app.js?v=1.1-beta-23"></script>
 </body>
 </html>

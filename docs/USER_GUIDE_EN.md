@@ -65,7 +65,7 @@ Models are not bundled in the ZIP. Downloads require internet; installed files a
 | Quality | Whisper Turbo | 1.63 GB | Qwen3.5 9B | 6.6 GB |
 | Quality, Hebrew selected | ivrit.ai Whisper Large V3 Turbo | 1.63 GB | Qwen3.5 9B | 6.6 GB |
 
-These are estimates for model downloads, **not total installation size or memory requirements**. Dependencies, cache overhead, footage, previews and exports take additional space. Story selection can reuse another compatible installed model; a quality label is not proof that a particular model was used. Check the displayed readiness/model information. [Full model details](MODELS.md)
+These are estimates for model downloads, **not total installation size or memory requirements**. Dependencies, cache overhead, footage, previews and exports take additional space. Check the requested and selected Story model: if preferred 9B/2B is missing, a configured installed fallback (4B by default) can be reported and used. Models are not downloaded automatically; choose an installed model or explicitly download the preferred one. A profile label does not guarantee semantic editing quality. [Full model details](MODELS.md)
 
 The Story runtime is **Ollama**, separate from the model weights. CUTROOM's model-download action does not silently install this application or approve Windows permission prompts. Cancelling can leave reusable partial download files. Do not delete shared model caches as a routine fix. **Downloaded** checks files, not whether your computer has enough memory or whether the model has completed a successful inference.
 
@@ -99,12 +99,14 @@ In **Advanced**, **Source B offset** adjusts sync for the whole edit. Positive v
 
 - **Speech language:** choose the actual spoken language when known. Auto-detect can be wrong with short speech, music or mixed languages. This workflow transcribes speech; it is not a complete translation service.
 - **Edit style:** guides rhythm and moment selection. It does not clone a creator, add licensed assets or guarantee visual gameplay-event detection.
-- **Target length:** suggests the desired duration. Sentence boundaries and source coverage can affect the result; check actual duration.
+- **Target length:** sets the duration budget for a single-moment Short/Reel style. Sentence boundaries and source coverage can shorten the result; check actual duration.
 - **Director instruction:** an optional brief, for example “Keep the explanation and its example; remove repeated setup.” It guides editing, not unrestricted video generation.
 - **Burn captions into video:** captions become part of the MP4 picture. You can adjust them later.
 - **Audio cut line:** audio below the threshold is a possible silence cut, not a command to remove all quiet sound. **Use recommended** starts from measured audio. **Handle silence longer than** sets the minimum quiet duration; **Silence to keep** leaves a breathing pause. Audition quiet speech before making cuts more aggressive.
 
 Choose **Build my first cut** when the readiness message is satisfied. Transcription, story work and preview preparation take different amounts of time. **Stop process** requests cancellation; wait for completion before retrying.
+
+**Clean VOD** keeps natural, chronological cleanup rather than forcing fast highlight cuts. Presets guide the result; review the selected content yourself.
 
 If a job fails, read the explanation and fix that cause. Original recordings are not overwritten. A larger model cannot fix wrong source routing or recover inaudible speech.
 
@@ -113,6 +115,8 @@ If a job fails, read the explanation and fix that cause. Original recordings are
 The overview shows the draft, before/after duration and **What changed**. If **Reel options** appear, compare them; they are candidates, not proof of better storytelling.
 
 **Shorter**, **Keep more**, **More energy**, **Fewer switches**, **Focus speaker** and **Try another cut** ask for draft changes. These are editorial actions, not playback controls. Review the result before fine manual work: AI actions can change the draft. Use **Studio** for precise editing.
+
+If an AI rebuild reports **New draft ready; your manual timeline was kept**, playback/export still use your manual edit. Choose **Apply new AI draft** and confirm to replace it, or **Keep manual timeline** to leave it in place. Undo can restore the previous manual timeline after applying.
 
 ## 6. Find your way around Studio
 
@@ -190,6 +194,8 @@ New two-source Reels default to **Stacked**: camera top 30%, screen bottom 70%, 
 **Fill frame** crops edges to fill the panel. **Fit entire source** keeps the full picture with bars when needed; it does not squeeze the image. In **Clip framing**, choose A/B and adjust horizontal focus, vertical focus and zoom. Check the scope label: changes affect the selected clip/range, or the clip at the playhead—not automatically every cut. Crops follow clips when moved/copied. Full source browsing does not enable per-cut framing edits.
 
 For an embedded camera, open **Camera area in this recording** and drag its rectangle; the picker starts folded once configured. Open **Precise camera position** only when you need numeric controls. **Main screen focus** sets the default screen position; a clip's own framing takes priority. **More layouts** contains side-by-side, picture-in-picture and the style default. A fixed rectangle does not track a moving camera. **Original source preview** and **Source order preview** are optional reference monitors; **Layout by section** lists composition blocks. If saving fails, the camera picker opens and offers **Retry save**; do not close the editor until it shows **Saved**.
+
+Open **Studio > Layout > Chroma Key**, below **Stabilize footage**, to key source A or B. Choose the removed color and a solid-color or image background, then **Apply changes**. For an image, import it through **Media & audio > Add media**, wait until ready and choose it in the background selector; it covers the source frame and can crop at the edges. **Refresh current frame** shows a saved-settings PNG at the selected source's current time; the main player remains Original playback. Export uses the saved key, with Undo/Redo and per-source Reset available. [Steps and limits](CHROMA_KEY.md)
 
 ## 8. Add text and control captions
 

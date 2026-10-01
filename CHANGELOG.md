@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1 Beta - 2026-10-01 - Chroma Key and AI draft controls
+
+- Added per-source A/B **Chroma Key** in Studio's Layout panel. Local FFmpeg replaces the selected color with a solid color or ready image from the Media library before layout/export; images cover the source frame and can crop at the edges. Explicit current-frame PNG inspection uses saved settings; the main player remains Original playback. Background video, B-underlay and transparent MP4 output are not supported. [Guide](docs/CHROMA_KEY.md)
+- New AI results keep an existing manual timeline. **Apply new AI draft** asks for confirmation before replacing it; Undo restores the manual edit.
+- Single-moment Short/Reel styles respect the moment's duration budget. **Clean VOD** keeps natural, chronological cleanup rather than forcing energetic cuts; selections still need human review.
+- Local Story readiness reports requested and selected models, including an installed configured fallback (4B by default) when preferred 9B/2B is missing. This does not download models automatically or establish semantic editing quality.
+- Publication requires current-source automated/native macOS checks and exact-package validation. The release manifest identifies the downloadable revision; this entry does not claim those gates have passed or that the new ZIP is public.
+
 ## 1.1 Beta - 2026-09-30 - Editor reliability and optional stabilization
 
 - Fixed sub-frame A/B availability boundaries rejecting valid sequence/media edits. Only redundant implicit availability pieces join; explicit cuts, source endpoints, gaps, timing and framing remain intact. Actual FFmpeg synthetic renders verified boundaries at 30/60 FPS.

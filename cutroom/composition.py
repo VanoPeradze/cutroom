@@ -10,7 +10,10 @@ still requires a separate confirmation from the user.
 from __future__ import annotations
 
 import math
+import copy
+import re
 from numbers import Real
+from pathlib import PurePosixPath
 from typing import Any, Mapping
 
 
@@ -25,6 +28,120 @@ MIN_FACE_CAM_DIMENSION = 0.06
 MIN_FACE_CAM_AREA = 0.006
 MAX_FACE_CAM_AREA = 0.60
 _BOUNDARY_EPSILON = 1e-6
+
+CHROMA_KEY_DEFAULTS = {
+    "enabled": False,
+    "color": "#00FF00",
+    "tolerance": 0.12,
+    "edge_softness": 0.08,
+    "background_color": "#000000",
+    "background_asset_id": None,
+}
+CHROMA_KEY_OPTIONAL_FIELDS = frozenset({"background_asset_id"})
+CHROMA_KEY_ACTION_FIELDS = {
+    "set_chroma_key": frozenset({"slot", *CHROMA_KEY_DEFAULTS}),
+    "reset_chroma_key": frozenset({"slot"}),
+}
+
+
+def normalize_chroma_key(value: Any = None, *, strict: bool = False) -> dict[str, Any]:
+    """Validate solid/image keying controls; old/corrupt data stays off."""
+    defaults = dict(CHROMA_KEY_DEFAULTS)
+    if value is None:
+        return defaults
+    try:
+        if not isinstance(value, Mapping):
+            raise ValueError("Chroma Key settings must be an object.")
+        if strict and set(value) - defaults.keys():
+            raise ValueError("Unknown Chroma Key setting.")
+        result = {**defaults, **{key: value[key] for key in defaults if key in value}}
+        if not isinstance(result["enabled"], bool):
+            raise ValueError("enabled must be a boolean.")
+        image_id = result["background_asset_id"]
+        if image_id is not None and (not isinstance(image_id, str) or not re.fullmatch(r"asset_[0-9a-f]{32}", image_id)):
+            raise ValueError("background_asset_id must identify a project image or be null.")
+        for key in ("color", "background_color"):
+            color = result[key]
+            if not isinstance(color, str) or not re.fullmatch(r"#[0-9a-fA-F]{6}", color):
+                raise ValueError(f"{key} must be a six-digit #RRGGBB color.")
+            result[key] = color.upper()
+        for key, minimum in (("tolerance", 0.01), ("edge_softness", 0.0)):
+            number = _finite_number(result[key])
+            if number is None or not minimum <= number <= 1.0:
+                raise ValueError(f"{key} must be a number between {minimum:g} and 1.")
+            result[key] = round(number, 6)
+        return result
+    except ValueError:
+        if strict:
+            raise
+        return defaults
+
+
+def chroma_video_source(project: Mapping[str, Any], slot: str) -> bool:
+    """Require real video metadata rather than enabling a missing/audio-only lane."""
+    source = (project.get("sources") or {}).get(slot) if slot in {"A", "B"} else None
+    return isinstance(source, Mapping) and all(
+        (_finite_number(source.get(key)) or 0) > 0 for key in ("duration", "width", "height")
+    )
+
+
+def source_chroma_key(project: Mapping[str, Any], slot: str) -> dict[str, Any]:
+    if not chroma_video_source(project, slot):
+        return dict(CHROMA_KEY_DEFAULTS)
+    manual = project.get("manual") or {}
+    values = manual.get("chroma_key") if isinstance(manual, Mapping) else None
+    return normalize_chroma_key(values.get(slot) if isinstance(values, Mapping) else None)
+
+
+def chroma_background_asset(project: Mapping[str, Any], slot: str) -> dict[str, Any] | None:
+    """Resolve a ready project image; never silently replace a missing choice."""
+    config = source_chroma_key(project, slot)
+    asset_id = config["background_asset_id"]
+    if not config["enabled"] or asset_id is None:
+        return None
+    assets = project.get("assets") or {}
+    asset = assets.get(asset_id) if isinstance(assets, Mapping) else None
+    message = "The chosen Chroma Key background image is unavailable. Choose another ready project image or reset Chroma Key."
+    if (not isinstance(asset, Mapping) or asset.get("id") != asset_id
+            or asset.get("kind") != "image" or asset.get("status") != "ready"):
+        raise ValueError(message)
+    width, height = (_finite_number(asset.get(key)) for key in ("width", "height"))
+    if (width is None or height is None or min(width, height) <= 0
+            or max(width, height) > 16384 or width * height > 64_000_000):
+        raise ValueError(message)
+    relative = asset.get("path")
+    if not isinstance(relative, str) or not relative:
+        raise ValueError(message)
+    path = PurePosixPath(relative.replace("\\", "/"))
+    if (path.is_absolute() or ".." in path.parts or len(path.parts) < 4
+            or path.parts[:3] != ("media", "assets", asset_id)):
+        raise ValueError(message)
+    return copy.deepcopy(dict(asset))
+
+
+def prepare_chroma_key_edit(project: Mapping[str, Any], payload: Mapping[str, Any]) -> dict[str, Any] | None:
+    """Stage one independent source's settings before consuming edit history."""
+    action = payload.get("action")
+    fields = CHROMA_KEY_ACTION_FIELDS.get(action)
+    if fields is None:
+        raise ValueError("Unknown Chroma Key action.")
+    optional = CHROMA_KEY_OPTIONAL_FIELDS if action == "set_chroma_key" else frozenset()
+    if set(payload) - fields - {"action"} or fields - optional - payload.keys():
+        raise ValueError("Supply only the required Chroma Key fields.")
+    slot = payload.get("slot")
+    if not isinstance(slot, str) or slot not in {"A", "B"} or not chroma_video_source(project, slot):
+        raise ValueError("Choose an existing video source A or B for Chroma Key.")
+    config = normalize_chroma_key({key: payload[key] for key in CHROMA_KEY_DEFAULTS if key in payload}, strict=True) if action == "set_chroma_key" else dict(CHROMA_KEY_DEFAULTS)
+    manual = project.get("manual") or {}
+    values = manual.get("chroma_key") if isinstance(manual, Mapping) else None
+    existing = values.get(slot) if isinstance(values, Mapping) else None
+    staged = copy.deepcopy(dict(values)) if isinstance(values, Mapping) else {}
+    staged[slot] = config
+    chroma_background_asset({**project, "manual": {**manual, "chroma_key": staged}}, slot)
+    previous = {**existing, "background_asset_id": existing.get("background_asset_id")} if isinstance(existing, Mapping) else existing
+    if previous == config or existing is None and config == CHROMA_KEY_DEFAULTS:
+        return None
+    return staged
 
 
 def default_reels_stack(project: Mapping[str, Any]) -> bool:
@@ -246,6 +363,14 @@ def select_embedded_candidate(
 
 
 __all__ = [
+    "CHROMA_KEY_DEFAULTS",
+    "CHROMA_KEY_ACTION_FIELDS",
+    "CHROMA_KEY_OPTIONAL_FIELDS",
+    "normalize_chroma_key",
+    "chroma_video_source",
+    "source_chroma_key",
+    "chroma_background_asset",
+    "prepare_chroma_key_edit",
     "FACE_LAYOUT_VERSION",
     "MANUAL_CANDIDATE_VERSION",
     "MIN_FACE_CAM_DIMENSION",
