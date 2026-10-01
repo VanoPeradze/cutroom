@@ -4,13 +4,13 @@
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
   <meta name="referrer" content="no-referrer">
-  <title>CUTROOM 1.1 Beta — Your footage. Your edit.</title>
-  <meta name="description" content="A free, open-source video editor that runs on your computer. Cut clips, add captions and export MP4. Windows/Mac beta ZIP; Linux from source.">
-  <meta name="theme-color" content="#f2f0e9">
+  <title>CUTROOM — Make the cut. Make it yours.</title>
+  <meta name="description" content="A free local video editor. Cut footage, mix sound and add captions. Windows/Mac beta; Linux from source. Optional AI drafts, editable by you.">
+  <meta name="theme-color" content="#090a0c">
   <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
   <link rel="canonical" href="https://cutroom-studio.expo.app/">
-  <link rel="stylesheet" href="/styles.css?v=20260930-distill">
-  <script src="/site.js?v=20260930-distill" defer></script>
+  <link rel="stylesheet" href="/styles.css?v=20261001-studio">
+  <script src="/site.js?v=20261001-studio" defer></script>
 </head>
 <body class="marketing-page">
 <a class="skip" href="#main" data-he="דילוג לתוכן">Skip to content</a>
@@ -20,48 +20,54 @@
 </header>
 <main id="main">
   <section class="hero shell" id="download">
-    <h1><span data-he="הווידאו שלכם.">Your footage.</span><em data-he="העריכה בידיים שלכם.">Your edit.</em></h1>
-    <p class="intro" data-he="חותכים קטעים, מוסיפים כתוביות ומייצאים סרטונים במחשב. מתחילים ידנית או מטיוטה בעזרת AI.">Cut clips, add captions and export videos on your computer. Start by hand or with an AI-assisted draft.</p>
-    <a id="downloadButton" class="button download-link" href="/downloads/CUTROOM-1.1-Beta.zip" download><span data-he="הורדת CUTROOM בחינם">Download CUTROOM — free</span><svg width="18" height="18" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M10 3v10m-4-4 4 4 4-4M4 16h12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
-    <p class="platform-links"><a href="#windows-install" dir="ltr">Windows</a><span aria-hidden="true">/</span><a href="#mac-install" dir="ltr">Mac</a><span aria-hidden="true">/</span><a href="#linux-install" data-he="Linux מקוד מקור">Linux from source</a></p>
+    <div class="hero-lead">
+      <h1><span data-he="כל פריים.">Make the cut.</span><span data-he="בידיים שלכם.">Make it yours.</span></h1>
+      <div class="hero-copy">
+        <p class="intro" data-he="חותכים וידאו, מעצבים את הסאונד ומוסיפים כתוביות. עורך חינמי שמייצא מהמחשב שלכם.">Cut video, shape the sound and add captions. A free editor that exports on your computer.</p>
+        <div class="download-action">
+          <a id="downloadButton" class="button download-link" href="/downloads/CUTROOM-1.1-Beta.zip" download><span data-he="הורדת CUTROOM">Download CUTROOM</span><svg width="18" height="18" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M10 3v10m-4-4 4 4 4-4M4 16h12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
+          <span class="download-meta"><span dir="ltr">1.1 Beta</span><span data-he="קוד פתוח">Open source</span></span>
+        </div>
+        <p class="platform-links"><a href="#windows-install" dir="ltr">Windows</a><span aria-hidden="true">/</span><a href="#mac-install" dir="ltr">Mac</a><span aria-hidden="true">/</span><a href="#linux-install" data-he="Linux מהמקור">Linux from source</a></p>
+      </div>
+    </div>
     <figure class="editor-preview" id="inside">
-      <button id="expandShot" class="shot-button" type="button" aria-label="Enlarge editor screenshot"><img id="editorImage" src="/assets/editor.png?v=20260928-text2" width="1440" height="900" fetchpriority="high" alt="CUTROOM dark editor with custom captions and independent A/B timeline tracks; synthetic test footage" data-he-alt="עורך CUTROOM הכהה עם כתוביות ורצועות A/B עצמאיות; חומר גלם סינתטי לבדיקות"><span class="enlarge-label" data-he="לחצו להגדלה">Tap to enlarge</span></button>
-      <figcaption data-he="העורך האמיתי · חומר גלם סינתטי לדוגמה">Actual editor · Synthetic demo footage</figcaption>
+      <button id="expandShot" class="shot-button" type="button" aria-label="Enlarge editor screenshot"><img id="editorImage" src="/assets/editor-demo.png?v=20261001-studio" width="1440" height="900" fetchpriority="high" alt="Actual CUTROOM dark editor with an original illustrated demo scene, captions and genuine audio waveforms" data-he-alt="עורך CUTROOM כהה עם סצנת הדגמה מקורית, כתוביות וגלי קול אמיתיים"><span class="enlarge-label"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M2 6V2h4m4 0h4v4M2 10v4h4m4 0h4v-4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg><span data-he="פתיחת העורך בגודל מלא">See the full editor</span></span></button>
+      <figcaption><span data-he="העורך האמיתי · חומר הדגמה סינתטי">Actual editor · Synthetic demo footage</span><span class="preview-note" data-he="מהחומר המקורי עד ה־MP4">From source to MP4</span></figcaption>
     </figure>
   </section>
   <section class="capabilities shell" id="workflow" aria-label="From recording to MP4">
+    <div class="section-heading"><h2 data-he="כל מה שהקאט שלכם צריך.">Everything your cut needs.</h2><p data-he="עריכה ידנית, או טיוטה ראשונה בעזרת AI. הטיימליין תמיד נשאר בידיים שלכם.">Edit by hand, or start with an optional AI draft. The timeline stays in your hands.</p></div>
     <ol>
-      <li><span class="step-no">01</span><h2 data-he="חותכים">Cut</h2><p data-he="מפצלים, מקצרים ומסדרים.">Split, trim and reorder.</p></li>
-      <li><span class="step-no">02</span><h2 data-he="מוסיפים כתוביות">Caption</h2><p data-he="כותבים טקסט או מייבאים כתוביות.">Write text or import subtitles.</p></li>
-      <li><span class="step-no">03</span><h2 data-he="מייצאים">Export</h2><p data-he="יוצרים MP4, בלי סימן מים.">Make an MP4. No watermark.</p></li>
+      <li><span class="step-no">01</span><div><h3 data-he="בחרו את הרגעים">Find your moments</h3><p data-he="חתכו, סדרו והשוו למקור. שינויים תמיד ניתנים לעריכה.">Trim, reorder and compare with the source. Keep every change editable.</p></div></li>
+      <li><span class="step-no">02</span><div><h3 data-he="תנו לסאונד מקום">Give sound its space</h3><p data-he="גלי קול אמיתיים ומיקסר לעוצמה, השתקה וסולו של מקורות האודיו.">Real waveforms and a mixer for source volume, mute and solo.</p></div></li>
+      <li><span class="step-no">03</span><div><h3 data-he="סיימו עם כתוביות">Finish with captions</h3><p data-he="הוסיפו טקסט או ייבאו כתוביות. ייצאו MP4 בלי סימן מים של CUTROOM.">Add text or import subtitles. Export MP4 without a CUTROOM watermark.</p></div></li>
     </ol>
   </section>
   <section class="support shell" id="guide">
-    <h2 data-he="כמה דברים לפני שמתחילים">A few things before you start</h2>
-    <p class="beta-summary" data-he="גרסה 1.1 בטא, חינמית בקוד פתוח. התקנה ראשונה דורשת אינטרנט. התחילו מהקלטה קצרה ובדקו את הייצוא.">1.1 Beta, free and open source. First setup needs internet. Try a short recording and check the export.</p>
+    <div><h2 data-he="מתחילים מהמחשב שלכם.">Start on your computer.</h2><p class="beta-summary" data-he="Windows ו־Mac בבטא. Linux בהתקנה מהמקור. ההתקנה הראשונה צריכה אינטרנט; עריכה ידנית לא צריכה חשבון או AI.">Windows and Mac in beta. Linux from source. First setup needs internet; manual editing needs no account or AI.</p><div class="guide-links"><a href="/downloads/USER_GUIDE_EN.md" download>English guide</a><a href="/downloads/USER_GUIDE_HE.md" download lang="he">מדריך בעברית</a><a href="/downloads/CUTROOM-1.1-Beta.zip.sha256" download>SHA-256</a></div></div>
     <div class="faq" id="help">
-      <details id="install-help"><summary data-he="איך מתקינים במערכת שלי?">How do I install it?</summary><div class="answer">
+      <details id="install-help"><summary data-he="התקנה ב־Windows, Mac ו־Linux">Install on Windows, Mac or Linux</summary><div class="answer">
         <p class="release-label">WINDOWS + MAC · 1.1 BETA</p>
-        <p data-he="ב־ZIP יש בדיוק שתי תיקיות: windows ו־mac. בכל אחת מפעיל, START HERE.html לעזרה ו־App לקבצים הטכניים. חלצו הכול והשאירו אותם יחד; תלויות ומודלי AI אינם כלולים.">The ZIP has exactly two folders: windows and mac. Each has a launcher, START HERE.html for help, and App for technical files. Extract everything and keep them together; dependencies and AI models are not bundled.</p>
-        <p id="windows-install" data-he="Windows: לחצו פעמיים על START CUTROOM.bat שבתיקיית windows. ההתקנה מורידה תלויות חסרות; השאירו את חלון ההפעלה פתוח.">Windows: Double-click START CUTROOM.bat in windows. Setup downloads missing dependencies; keep the launch window open.</p>
-        <p id="mac-install" data-he="Mac: נדרש macOS 15 ומעלה, Apple Silicon או Intel. הפעילו START CUTROOM.command שבתיקיית mac. נדרשים Python 3.11/3.12 ו־FFmpeg 7; ההתקנה משתמשת ב־Homebrew קיים לאחר אישורכם. זו בטא לא חתומה מקוד מקור, ותמלול מקומי פועל על CPU. בדיקות Finder, Safari וביצועים עם חומר גלם אמיתי עדיין נדרשות.">Mac: macOS 15+, Apple Silicon or Intel. Open START CUTROOM.command in mac. It needs Python 3.11/3.12 and FFmpeg 7; setup uses existing Homebrew with your approval. This is not a signed Mac app. Local transcription uses the CPU. Finder, Safari and real-footage performance still need manual testing.</p>
-        <p id="linux-install" data-he="Linux: מקוד מקור בלבד; אין חבילה ב־ZIP ושימוש ב־Linux אמיתי טרם אומת. נדרשים Python 3.11/3.12, venv/pip ו־FFmpeg/FFprobe עם תמיכת כתוביות. הוראות הסקריפטים במדריך המערכות.">Linux: source only, with no packaged download or verified native Linux QA. It needs Python 3.11/3.12, venv/pip and FFmpeg/FFprobe with subtitle support. Follow the scripts in the platform guide.</p>
-        <a href="https://github.com/VanoPeradze/cutroom/blob/master/docs/PLATFORMS.md" data-he="מדריך התקנה לפי מערכת">Platform installation guide</a><a href="https://github.com/VanoPeradze/cutroom/blob/master/docs/MAC_BETA.md" data-he="מדריך בטא ל־Mac">Mac beta guide</a>
+        <p data-he="ב־ZIP יש בדיוק שתי תיקיות: windows ו־mac. בכל אחת קובץ הפעלה, START HERE.html לעזרה ו־App עם קובצי האפליקציה. חלצו הכל ושמרו אותם יחד; כלי ההרצה ומודלי AI לא כלולים.">The ZIP has exactly two folders: windows and mac. Each has a launcher, START HERE.html for help, and App. Extract everything and keep them together; dependencies and AI models are not bundled.</p>
+        <p id="windows-install" data-he="Windows: לחצו פעמיים על START CUTROOM.bat בתיקיית windows. ההתקנה מורידה כלים חסרים; השאירו את חלון ההפעלה פתוח.">Windows: Double-click START CUTROOM.bat in windows. Setup downloads missing dependencies; keep the launch window open.</p>
+        <p id="mac-install" data-he="Mac: נדרש macOS 15 ומעלה, Apple Silicon או Intel. פתחו START CUTROOM.command בתיקיית mac. נדרשים Python 3.11/3.12 ו־FFmpeg 7; ההתקנה משתמשת ב־Homebrew קיים באישורכם. זו אינה אפליקציית Mac חתומה. תמלול מקומי משתמש ב־CPU. מדריך הבטא מפרט את בדיקות Finder, Gatekeeper ו־Safari שעוד נדרשות.">Mac: macOS 15+, Apple Silicon or Intel. Open START CUTROOM.command in mac. It needs Python 3.11/3.12 and FFmpeg 7; setup uses existing Homebrew with your approval. This is not a signed Mac app. Local transcription uses the CPU. The beta guide lists the remaining Finder, Gatekeeper and Safari checks.</p>
+        <p id="linux-install" data-he="Linux: התקנה מהמקור בלבד; אין חבילה להורדה או בדיקת Linux מקומית מאומתת. נדרשים Python 3.11/3.12, venv/pip ו־FFmpeg/FFprobe עם תמיכה בכתוביות. עקבו אחרי מדריך הפלטפורמות.">Linux: source only, with no packaged download or verified native Linux QA. It needs Python 3.11/3.12, venv/pip and FFmpeg/FFprobe with subtitle support. Follow the platform guide.</p>
+        <a href="https://github.com/VanoPeradze/cutroom/blob/master/docs/PLATFORMS.md" data-he="מדריך התקנה לכל מערכת">Platform installation guide</a><a href="https://github.com/VanoPeradze/cutroom/blob/master/docs/MAC_BETA.md" data-he="מדריך בטא ל־Mac">Mac beta guide</a>
       </div></details>
-      <details id="ai-help"><summary data-he="צריך AI או מפתח API?">Do I need AI or an API key?</summary><div class="answer">
-        <p id="local-help" data-he="לא. עריכה ידנית וייצוא אינם דורשים מודלים או חשבון AI. AI מקומי הוא אפשרות נוספת עם הורדת מודלים; Story AI משתמש גם ב־Ollama.">No. Manual editing and export need no AI models or account. Optional local AI needs model downloads; Story AI also uses Ollama.</p>
-        <p id="cloud-help" data-he="אפשר לחבר ספק ענן תואם עם המפתח שלכם. אודיו ותמלול נשלחים רק לאחר בחירת הספק והסכמה; מכסות ותשלום תלויים בחשבון שלכם.">You can connect a compatible cloud provider with your own key. Audio and transcripts are sent after your choice and consent; provider quotas and charges apply.</p>
+      <details id="ai-help"><summary data-he="AI הוא בחירה שלכם">AI is your choice</summary><div class="answer">
+        <p id="local-help" data-he="עריכה ידנית וייצוא לא צריכים מודלי AI או חשבון. AI מקומי הוא אפשרות ודורש הורדת מודלים; Story AI משתמש גם ב־Ollama.">Manual editing and export need no AI models or account. Optional local AI needs model downloads; Story AI also uses Ollama.</p>
+        <p id="cloud-help" data-he="אפשר לחבר ספק ענן תואם עם מפתח משלכם. אודיו ותמלול נשלחים רק לאחר הבחירה והאישור שלכם; המכסות והתשלומים של הספק חלים.">You can connect a compatible cloud provider with your own key. Audio and transcripts are sent after your choice and consent; provider quotas and charges apply.</p>
         <a href="https://github.com/VanoPeradze/cutroom/blob/master/docs/AI_CONNECTIONS.md" data-he="הגדרת AI ופרטיות">AI setup and privacy</a>
       </div></details>
-      <details id="privacy-help"><summary data-he="איפה נשמר הווידאו שלי?">Where does my footage go?</summary><div class="answer">
-        <p data-he="האתר אינו מקבל הקלטות. העריכה, התצוגה המקדימה והייצוא מתבצעים במחשב שלכם. שיתוף עם ספק AI בענן הוא אפשרות נפרדת שמצריכה הסכמה.">This website does not accept recordings. Editing, preview and export run on your computer. Sharing with a cloud AI provider is a separate choice requiring consent.</p>
+      <details id="privacy-help"><summary data-he="החומרים נשארים אצלכם">Your footage stays with you</summary><div class="answer">
+        <p data-he="האתר אינו מקבל הקלטות. עריכה, תצוגה מקדימה וייצוא רצים במחשב שלכם. שיתוף עם ספק AI בענן הוא בחירה נפרדת שדורשת אישור.">This website does not accept recordings. Editing, preview and export run on your computer. Sharing with a cloud AI provider is a separate choice requiring consent.</p>
         <a href="/privacy.html" data-he="פרטיות ועוגיות">Privacy and cookies</a>
       </div></details>
     </div>
-    <div class="guide-links"><a href="/downloads/USER_GUIDE_EN.md" download>English guide</a><a href="/downloads/USER_GUIDE_HE.md" download lang="he">מדריך בעברית</a><a href="/downloads/CUTROOM-1.1-Beta.zip.sha256" download>SHA-256</a></div>
   </section>
 </main>
-<footer class="footer shell"><span data-he="חינמי. קוד פתוח. על המחשב שלכם.">Free. Open source. On your computer.</span><div><a href="https://github.com/VanoPeradze/cutroom" dir="ltr">GitHub</a><a href="https://github.com/VanoPeradze/cutroom/issues/new/choose" data-he="דיווח על בעיה">Report an issue</a><a href="/downloads/LICENSE" download>MIT License</a><a href="/privacy.html" data-he="פרטיות">Privacy</a></div></footer>
-<dialog id="imageDialog" class="image-dialog" aria-label="Editor screenshot"><button id="closeImage" type="button" data-he="סגירה">Close</button><img id="expandedImage" src="/assets/editor.png?v=20260928-text2" width="1440" height="900" alt="CUTROOM editor with synthetic test footage" data-he-alt="עורך CUTROOM עם חומר גלם סינתטי לבדיקות"></dialog>
+<footer class="footer shell"><span data-he="חינם. קוד פתוח. הקאט שלכם.">Free. Open source. Your cut.</span><div><a href="https://github.com/VanoPeradze/cutroom" dir="ltr">GitHub</a><a href="https://github.com/VanoPeradze/cutroom/issues/new/choose" data-he="דיווח על תקלה">Report an issue</a><a href="/downloads/LICENSE" download>MIT License</a><a href="/privacy.html" data-he="פרטיות">Privacy</a></div></footer>
+<dialog id="imageDialog" class="image-dialog" aria-label="Editor screenshot"><button id="closeImage" type="button" data-he="סגירה">Close</button><img id="expandedImage" src="/assets/editor-demo.png?v=20261001-studio" width="1440" height="900" alt="Actual CUTROOM editor with original synthetic demo footage" data-he-alt="עורך CUTROOM אמיתי עם חומר הדגמה סינתטי מקורי"></dialog>
 </body>
 </html>
