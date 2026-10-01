@@ -11,7 +11,7 @@ from .config import Settings
 from .edit_styles import enrich_brief_with_style
 from .editing import SOURCE_MIXER_DEFAULT_LAYOUTS, apply_camera_overrides, apply_timeline_overrides
 from .audio import analyze_audio, audio_policy, build_audio_actions, constrain_gain_ranges_to_speech, protect_silence_ranges_from_speech
-from .intelligence import PACE_LIMITS, StoryPlanningError, build_story_beats, language_from_text, plan_edit
+from .intelligence import CRITIC_REVIEW_CONTRACT, PACE_LIMITS, StoryPlanningError, build_story_beats, language_from_text, plan_edit
 from .jobs import JobCancelled, JobContext
 from .media import detect_scenes
 from .media_library import validate_media_bounds
@@ -384,6 +384,10 @@ def _edit_quality_review(
         if critic.get("verdict") != "pass":
             warnings.append({"type": "story_review", "message":
                 "The automatic continuity check did not give this edit a clear pass. Review it before exporting."})
+        if critic.get("unapplied_actions"):
+            warnings.append({"type": "story_review", "message":
+                "Some continuity-check changes were not applied to the final selection. "
+                "Review the draft; those requests were not treated as completed repairs."})
 
     semantic = merge_ranges((decision or {}).get("story_ranges") or [], gap=0.75)
     anchors = _planned_story_anchors(segments, decision or {}, semantic)
@@ -2303,12 +2307,21 @@ def analyze_project(
         "director-editorial-transcript", normalized_editorial_transcript["segments"],
     )
     cached_editorial = (cached_analysis or {}).get("editorial_cache")
+    # A full decision cache also reuses its critic. Old reviews must be checked
+    # again on an explicit rebuild, without invalidating ASR/chapter context.
     reusable_editorial = bool(
         reusable_context
         and not transcript_upgraded
         and isinstance(cached_editorial, dict)
         and isinstance(cached_editorial.get("decision"), dict)
         and isinstance((cached_analysis or {}).get("segments"), list)
+        and (
+            cached_editorial.get("review_contract") == CRITIC_REVIEW_CONTRACT
+            or (
+                not (cached_analysis or {}).get("story_hierarchy")
+                and not str((cached_analysis or {}).get("engine") or "").endswith("_hierarchical_story")
+            )
+        )
         and cached_editorial.get("transcript_fingerprint") == editorial_transcript_fingerprint
         and cache_fingerprints_match(cached_fingerprints, cache_fingerprints, ("story",))
     )
@@ -2583,6 +2596,7 @@ def analyze_project(
         "model_selection": model_selection,
         "planner_warnings": planner_warnings,
         "editorial_cache": {
+            "review_contract": CRITIC_REVIEW_CONTRACT,
             "transcript_fingerprint": editorial_transcript_fingerprint,
             "decision": copy.deepcopy(decision),
         },

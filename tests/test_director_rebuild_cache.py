@@ -170,6 +170,39 @@ def test_corrected_transcript_invalidates_editorial_cache(semantic_project):
     assert "corrected explanation" in saved["analysis"]["segments"][3]["text"]
 
 
+@pytest.mark.parametrize("stale_contract", [None, "legacy-unvalidated-critic"])
+def test_legacy_critic_pass_cannot_bypass_review_on_explicit_rebuild(semantic_project, stale_contract):
+    store, settings, project_id, calls, context = semantic_project
+
+    def legacy(current):
+        current["analysis"]["story_hierarchy"]["critic"] = {"verdict": "pass", "issues": []}
+        current["analysis"]["editorial_cache"].pop("review_contract", None)
+        if stale_contract:
+            current["analysis"]["editorial_cache"]["review_contract"] = stale_contract
+
+    store.update(project_id, legacy)
+    before = store.load(project_id)
+    assert before["analysis"]["story_hierarchy"]["critic"]["verdict"] == "pass"
+    assert calls == {"transcribe": 1, "plan": 1}  # Opening/loading never starts AI.
+    director.analyze_project(context(), project_id, store, settings)
+    assert calls == {"transcribe": 1, "plan": 2}  # Rebuild retains ASR, reruns editorial review.
+    from cutroom.intelligence import CRITIC_REVIEW_CONTRACT
+    assert store.load(project_id)["analysis"]["editorial_cache"]["review_contract"] == CRITIC_REVIEW_CONTRACT
+
+
+def test_legacy_basic_cleanup_cache_does_not_require_a_story_model(semantic_project):
+    store, settings, project_id, calls, context = semantic_project
+
+    def basic_cleanup(current):
+        current["analysis"]["story_hierarchy"] = None
+        current["analysis"]["engine"] = "deterministic"
+        current["analysis"]["editorial_cache"].pop("review_contract", None)
+
+    store.update(project_id, basic_cleanup)
+    director.analyze_project(context(), project_id, store, settings)
+    assert calls == {"transcribe": 1, "plan": 1}
+
+
 def test_rebuild_preserves_explicit_restore_after_target_enforcement(semantic_project):
     store, settings, project_id, calls, context = semantic_project
     store.update(project_id, lambda current: current["manual"].update({"keeps": [{"start": 0.0, "end": 8.0}]}))
