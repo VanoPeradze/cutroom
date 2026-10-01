@@ -1,10 +1,10 @@
 {
   "version": "1.1-beta",
-  "filename": "CUTROOM-1.1-Beta-edit-layout-20261001.zip",
-  "build_id": "CUTROOM-1.1-beta-20261001-061244",
-  "bytes": 3151308,
-  "sha256": "87b223be9ca10d6ad75e8a2eae87d1a414f47d14116993f695fe6f71c1f0f70f",
-  "manifest_sha256": "2319cbf51983e6a2cc850dcae1c88466a44f7957a8d378e647e63495545f935e",
-  "url": "https://cutroom-studio--i8l1lahyxi.expo.app/downloads/CUTROOM-1.1-Beta-edit-layout-20261001.zip",
-  "note": "Immutable deployment of the approved Windows Edit-inspector layout baseline. Restores desktop Edit range/move controls by scoping timeline-dock CSS and refreshing the stylesheet cache; includes real-browser geometry regression. Other editor features are preserved. The combined candidate preserves its complete contents under windows/. No bundled runtime; clean-machine installation remains unverified."
+  "filename": "CUTROOM-1.1-Beta-panels-footer-20261001.zip",
+  "build_id": "CUTROOM-1.1-beta-20261001-074751",
+  "bytes": 3159309,
+  "sha256": "9822faf76d4318fe91387629ed97ed7d10b5a8ab1f169c783ac6e499ec5797a1",
+  "manifest_sha256": "66feb26164c7d8a3c8295c2f7b47b754da4b426b7a433cfcf57a813d911e410d",
+  "url": "https://cutroom-studio--a7gu98jcbl.expo.app/downloads/CUTROOM-1.1-Beta-panels-footer-20261001.zip",
+  "note": "Immutable deployment of the approved Windows editor-panel clarity and footer-layout baseline from source commit 7912ebaca6bf7075888aa8e04e861167e527356a. Separates Master controls from Voice/Effects controls while preserving editor/export behavior. The combined candidate preserves its complete contents under windows/. No bundled runtime; clean-machine installation remains unverified."
 }
