@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1 Beta - 2026-10-01 - Trustworthy continuity review
+
+- Empty, incomplete or contradictory Story AI reviews cannot report a continuity pass. Drafts remain editable and clearly require review.
+- Continuity repair requests are distinguished from changes actually kept after story-slot and duration safeguards. A no-op or restored passage is not reported as a completed repair.
+- An explicit AI rebuild checks older continuity reviews again while retaining reusable transcription and chapter context. Opening a project does not trigger AI or model downloads. These checks do not certify every preset's semantic quality.
+
 ## 1.1 Beta - 2026-10-01 - Chroma Key and AI draft controls
 
 - Added per-source A/B **Chroma Key** in Studio's Layout panel. Local FFmpeg replaces the selected color with a solid color or ready image from the Media library before layout/export; images cover the source frame and can crop at the edges. Explicit current-frame PNG inspection uses saved settings; the main player remains Original playback. Background video, B-underlay and transparent MP4 output are not supported. [Guide](docs/CHROMA_KEY.md)

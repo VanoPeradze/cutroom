@@ -18,6 +18,7 @@ from .config import Settings
 from .utils import clamp, merge_ranges, normalize_text, range_duration
 
 STORY_CACHE_PIPELINE = "hierarchical-story-2026-09-06.full-chapter-input"
+CRITIC_REVIEW_CONTRACT = "critic-review-2026-10-01.effective-actions-v1"
 
 FILLERS: dict[str, set[str]] = {
     "en": {"um", "uh", "erm", "like", "basically", "actually", "literally", "you know", "i mean", "so"},
@@ -1616,7 +1617,7 @@ def _fit_story_selection_to_budget(
         "after_duration": round(after, 3),
         "removed_beat_ids": [identifier for identifier in selected if identifier not in fitted],
     }
-    return output
+    return _reconcile_critic_actions(output)
 
 
 def _select_story_beats(
@@ -1812,6 +1813,30 @@ def _select_story_beats(
     return clean, candidates
 
 
+def _reconcile_critic_actions(selection: dict[str, Any]) -> dict[str, Any]:
+    """Record effective revisions after all slot and duration safeguards."""
+    critic = selection.get("critic") or {}
+    if "selection_before" not in critic:
+        return selection  # Older cached/plugin reviews have no action baseline.
+    before = set(critic["selection_before"])
+    final = set(selection.get("keep_beat_ids") or [])
+    added = [identifier for identifier in critic["requested_added"]
+             if identifier not in before and identifier in final]
+    removed = [identifier for identifier in critic["requested_removed"]
+               if identifier in before and identifier not in final]
+    unapplied = [
+        {"action": "add", "beat_id": identifier,
+         "reason": "already_selected" if identifier in before else "not_kept_in_final_selection"}
+        for identifier in critic["requested_added"] if identifier not in added
+    ] + [
+        {"action": "remove", "beat_id": identifier,
+         "reason": "not_selected" if identifier not in before else "retained_in_final_selection"}
+        for identifier in critic["requested_removed"] if identifier not in removed
+    ]
+    return {**selection, "critic": {**critic, "added": added, "removed": removed,
+                                   "unapplied_actions": unapplied}}
+
+
 def _critic_story_selection(
     settings: Settings,
     selection: dict[str, Any],
@@ -1854,8 +1879,23 @@ def _critic_story_selection(
         ],
     }
     result = _call_ollama_story_pass(settings, payload, 220, cancel_check)
-    additions = [str(value) for value in result.get("add_beat_ids", []) if str(value) in valid]
-    removals = {str(value) for value in result.get("remove_beat_ids", []) if str(value) in valid}
+    required = {"verdict", "add_beat_ids", "remove_beat_ids", "issues", "summary"}
+    if not isinstance(result, dict) or not required.issubset(result):
+        raise StoryPlanningError("Story critic returned an incomplete review; no continuity pass was verified.")
+    if (not isinstance(result["verdict"], str) or result["verdict"] not in {"pass", "revise"}
+            or not isinstance(result["summary"], str)):
+        raise StoryPlanningError("Story critic returned an invalid review verdict or summary.")
+    for key in ("add_beat_ids", "remove_beat_ids", "issues"):
+        if not isinstance(result[key], list) or any(not isinstance(value, str) for value in result[key]):
+            raise StoryPlanningError("Story critic returned invalid review lists.")
+    if any(identifier not in valid for key in ("add_beat_ids", "remove_beat_ids") for identifier in result[key]):
+        raise StoryPlanningError("Story critic requested a change to an unknown story beat.")
+    additions = list(dict.fromkeys(result["add_beat_ids"]))
+    removals = set(result["remove_beat_ids"])
+    if set(additions) & removals or (result["verdict"] == "pass" and (
+        additions or removals or any(issue.strip() for issue in result["issues"])
+    )):
+        raise StoryPlanningError("Story critic returned contradictory changes or unresolved issues with a pass.")
     final = [identifier for identifier in selected if identifier not in removals]
     for identifier in additions:
         if identifier not in final:
@@ -1874,13 +1914,14 @@ def _critic_story_selection(
     output["opening_beat_id"] = final[0]
     output["closing_beat_id"] = final[-1]
     output["critic"] = {
-        "verdict": str(result.get("verdict") or "pass")[:16],
+        "verdict": result["verdict"],
         "issues": [str(value)[:320] for value in result.get("issues", []) if str(value).strip()][:8],
         "summary": str(result.get("summary") or "")[:600],
-        "added": additions,
-        "removed": sorted(removals),
+        "selection_before": selected,
+        "requested_added": additions,
+        "requested_removed": sorted(removals),
     }
-    return output
+    return _reconcile_critic_actions(output)
 
 
 def _story_decision_from_beats(result: dict[str, Any] | None, beats: list[dict[str, Any]], segments: list[dict[str, Any]]) -> dict[str, Any] | None:
