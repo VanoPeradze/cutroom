@@ -33,6 +33,8 @@ from cutroom.edit_styles import UnknownEditStyle, get_edit_style, public_edit_st
 from cutroom.editing import ManualEditError, apply_manual_edit, strip_private_edit_history
 from cutroom.sequence import SEQUENCE_ACTION_FIELDS, editor_sequence_snapshot
 from cutroom.source_tracks import SourceTrackError
+from cutroom.composition import CHROMA_KEY_ACTION_FIELDS, chroma_background_asset, chroma_video_source, source_chroma_key
+from cutroom.effects import build_chroma_key_nodes, chroma_key_capability
 from cutroom.stabilization import StabilizationError, stabilization_capability
 from cutroom.stabilization_assets import pinned_stabilization_source, prepare_stabilized_asset
 from cutroom.track_locks import TrackLockedError, require_tracks_unlocked
@@ -599,6 +601,12 @@ def _reset_manual_after_source_change(
         "crop": {"A": dict(crop["A"])} if keep_a_timeline and isinstance(crop.get("A"), dict) else {},
         "history": {"undo_count": 0, "redo_count": 0},
     }
+    previous_keys = previous.get("chroma_key")
+    if isinstance(previous_keys, dict):
+        retained_keys = {key: copy.deepcopy(value) for key, value in previous_keys.items()
+                         if key in {"A", "B"} and key != slot and chroma_video_source(project, key)}
+        if retained_keys:
+            project["manual"]["chroma_key"] = retained_keys
     # B replacement/removal must not discard independent A clip edits. B's
     # local media mapping is obsolete, however, and must never reach its new
     # recording. Preserve explicit [] as an intentional empty A track.
@@ -1030,7 +1038,7 @@ def create_app(settings: Settings | None = None) -> Flask:
     def manual_edit(project_id: str):
         payload = _json_object(caption_import=True)
         action = str(payload.get("action") or "").strip().lower()
-        track_fields = {"slot", "locked"} if action == "set_track_lock" else SEQUENCE_ACTION_FIELDS.get(action, SOURCE_TRACK_EDIT_FIELDS.get(action))
+        track_fields = {"slot", "locked"} if action == "set_track_lock" else SEQUENCE_ACTION_FIELDS.get(action, SOURCE_TRACK_EDIT_FIELDS.get(action, CHROMA_KEY_ACTION_FIELDS.get(action)))
         media_fields = MEDIA_ACTION_FIELDS.get(action)
         text_fields = TEXT_ACTION_FIELDS.get(action)
         _reject_unknown_fields(
@@ -1045,6 +1053,8 @@ def create_app(settings: Settings | None = None) -> Flask:
         )
         if track_fields is not None:
             optional = {"mode", "slot"} if action in {"sequence_move_range", "sequence_close_gaps", "sequence_trim_edge"} else {"mode"}
+            if action == "set_chroma_key":
+                optional.add("background_asset_id")
             missing = sorted(track_fields - optional - payload.keys())
             if missing:
                 raise APIInputError("invalid_field", f"Required source track field: {missing[0]}")
@@ -1052,7 +1062,7 @@ def create_app(settings: Settings | None = None) -> Flask:
             _require_optional_string(payload, "clip_id", max_length=128)
             _require_optional_string(payload, "mode", max_length=16)
         expected_revision = payload.pop("expected_revision", None)
-        if (action in SEQUENCE_ACTION_FIELDS or media_fields is not None or text_fields is not None or action == "set_track_lock") and expected_revision is None:
+        if (action in SEQUENCE_ACTION_FIELDS or media_fields is not None or text_fields is not None or action in {"set_track_lock", "set_chroma_key", "reset_chroma_key"}) and expected_revision is None:
             raise APIInputError("invalid_field", "Timeline edits require the displayed project's expected_revision.")
         if expected_revision is not None and (
             isinstance(expected_revision, bool)
@@ -1067,6 +1077,11 @@ def create_app(settings: Settings | None = None) -> Flask:
                     or any(job.kind in {"director", "refine"} for job in jobs.active(project_id=project_id))
                 ):
                     raise APIInputError("project_busy", "Wait for active editing or source import to finish before changing track locks.", 409)
+                if action in {"set_chroma_key", "reset_chroma_key"}:
+                    if active_uploads.get(project_id, 0) or jobs.active(project_id=project_id):
+                        raise APIInputError("project_busy", "Wait for active processing or source import to finish before changing Chroma Key.", 409)
+                    if action == "set_chroma_key" and payload.get("enabled") is True and not chroma_key_capability(settings)["available"]:
+                        raise APIInputError("chroma_unavailable", "The installed FFmpeg does not support Chroma Key. Your footage and edits are unchanged.", 409)
                 if (media_fields is not None or text_fields is not None) and (active_uploads.get(project_id, 0) or jobs.active(project_id=project_id)):
                     raise APIInputError("project_busy", "Wait for active processing or media import to finish before editing media or text.", 409)
                 project = store.update(
@@ -1077,6 +1092,91 @@ def create_app(settings: Settings | None = None) -> Flask:
         except ManualEditError as error:
             raise APIInputError("invalid_manual_edit", str(error)) from error
         return jsonify({"project": _public_project(project)})
+
+    @app.get("/api/chroma-key/status")
+    def chroma_status():
+        return jsonify(chroma_key_capability(settings))
+
+    @app.get("/api/projects/<project_id>/chroma-preview/<slot>")
+    def chroma_preview(project_id: str, slot: str):
+        if set(request.args) - {"time", "revision"}:
+            raise APIInputError("invalid_field", "Chroma frame preview accepts only time and revision.")
+        project = store.load(project_id)
+        if slot not in {"A", "B"} or not chroma_video_source(project, slot):
+            raise APIInputError("source_required", "Choose an available video source A or B.")
+        revision = request.args.get("revision", "")
+        if not re.fullmatch(r"[0-9]{1,20}", revision) or int(revision) != project["revision"]:
+            raise APIInputError("revision_conflict", "Refresh the project before previewing this source.", 409)
+        try:
+            native_time = float(request.args.get("time", "0"))
+        except (TypeError, ValueError, OverflowError) as error:
+            raise APIInputError("invalid_field", "Frame time must be a finite source time.") from error
+        source = project["sources"][slot]
+        duration = float(source["duration"])
+        if not math.isfinite(native_time) or not 0 <= native_time < duration:
+            raise APIInputError("invalid_field", "Frame time must be inside this source.")
+        config = source_chroma_key(project, slot)
+        if config["enabled"] and not chroma_key_capability(settings)["available"]:
+            raise APIInputError("chroma_unavailable", "The installed FFmpeg does not support Chroma Key.", 409)
+        root = store.project_dir(project_id)
+        source_path = _safe_project_child(root, source.get("relative_path"))
+        if source_path is None or not source_path.is_file():
+            raise APIInputError("source_missing", "The original source file is unavailable.", 409)
+        background_path = None
+        background_identity = None
+        try:
+            background = chroma_background_asset(project, slot)
+            if background is not None:
+                background_path = safe_asset_path(root, background.get("path"))
+                if not background_path.is_file():
+                    raise FileNotFoundError("Missing project background image")
+                background_stat = background_path.stat()
+                background_identity = [config["background_asset_id"], background_stat.st_size, background_stat.st_mtime_ns]
+        except (ValueError, OSError) as error:
+            raise APIInputError("chroma_background_unavailable", "The saved background image is unavailable. Choose a ready project image, switch to solid color, or disable the key.", 409) from error
+        # Render a bounded source frame with the exact export key/background
+        # graph. The ordinary browser video remains an original-footage view.
+        width, height = max(2, int(source["width"]) // 2 * 2), max(2, int(source["height"]) // 2 * 2)
+        factor = min(1.0, 640 / max(width, height))
+        preview_width, preview_height = max(2, int(width * factor) // 2 * 2), max(2, int(height * factor) // 2 * 2)
+        cache = root / "cache" / "chroma-preview"
+        cache.mkdir(parents=True, exist_ok=True)
+        identity = json.dumps([revision, slot, round(native_time, 6), source.get("generation"), config, background_identity], sort_keys=True)
+        frame = cache / (hashlib.sha256(identity.encode()).hexdigest() + ".png")
+        if not frame.is_file():
+            temporary = cache / (uuid.uuid4().hex + ".png")
+            # Key at the same source dimensions as export, then downscale the
+            # opaque result. Never change edge sampling just for this preview.
+            try:
+                nodes = build_chroma_key_nodes("0:v", "keynative", config, width, height, 25, 1, prefix="keypreview",
+                                               background_label="1:v" if background_path is not None else None)
+            except ValueError as error:
+                raise APIInputError("chroma_preview_unsupported", "This source's dimensions are not supported by Chroma Key. Disable the key to continue editing.", 422) from error
+            nodes.append(f"[keynative]scale={preview_width}:{preview_height}[keyframe]")
+            command = [settings.ffmpeg, "-nostdin", "-hide_banner", "-loglevel", "error", "-threads", "1",
+                       "-ss", f"{native_time:.6f}", "-i", str(source_path)]
+            if background_path is not None:
+                command += ["-threads", "1", "-loop", "1", "-framerate", "25", "-t", "1", "-protocol_whitelist", "file,pipe", "-i", str(background_path)]
+            command += ["-filter_complex_threads", "1",
+                       "-filter_complex", ";".join(nodes), "-map", "[keyframe]", "-frames:v", "1", "-an",
+                       "-threads", "1", "-y", str(temporary)]
+            try:
+                result = subprocess.run(command, capture_output=True, timeout=15)
+                if result.returncode or not temporary.is_file():
+                    raise APIInputError("chroma_preview_failed", "Could not create the frame preview. Your original footage is unchanged.", 422)
+                if store.load(project_id)["revision"] != project["revision"]:
+                    raise APIInputError("revision_conflict", "The project changed while creating this preview. Refresh and retry.", 409)
+                temporary.replace(frame)
+            except subprocess.TimeoutExpired as error:
+                raise APIInputError("chroma_preview_timeout", "Frame preview timed out. Retry at a different source time.", 503) from error
+            finally:
+                temporary.unlink(missing_ok=True)
+        if store.load(project_id)["revision"] != project["revision"]:
+            raise APIInputError("revision_conflict", "The project changed while creating this preview. Refresh and retry.", 409)
+        response = send_file(frame, mimetype="image/png", conditional=False, max_age=0)
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["X-Cutroom-Project-Revision"] = str(project["revision"])
+        return response
 
     @app.post("/api/projects/<project_id>/assets")
     def upload_asset(project_id: str):
@@ -2273,6 +2373,7 @@ def _model_status(settings: Settings) -> dict[str, Any]:
         "story_ai_ready": bool(story.get("ready")),
         "selected_story_model": story.get("selected_model"),
         "recommended_story_model": story.get("recommended_model"),
+        "story_ai_selection": story,
     }
 
 

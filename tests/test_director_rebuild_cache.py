@@ -111,6 +111,49 @@ def test_new_editorial_instruction_replans_without_retranscription(semantic_proj
     assert calls == {"transcribe": 1, "plan": 2}
 
 
+def test_saved_commentary_keeps_planned_anchors_with_truthful_review(semantic_project, monkeypatch):
+    store, settings, project_id, _calls, context = semantic_project
+    segments = [
+        {"id": "s0001", "start": 1.73, "end": 8.63},
+        {"id": "s0002", "start": 9.76, "end": 12.39},
+        {"id": "s0003", "start": 12.93, "end": 14.03},
+        {"id": "s0004", "start": 14.57, "end": 16.03},
+        {"id": "s0005", "start": 20.19, "end": 21.47},
+        {"id": "s0006", "start": 40.08, "end": 43.26},
+    ]
+    decision = {
+        "keep_ids": ["s0001", "s0002", "s0003", "s0004", "s0006"],
+        "remove_ids": ["s0005"], "highlight_ids": ["s0001"],
+        "opening_id": "s0001", "closing_id": "s0006",
+        "story_beat_ids": ["b0001", "b0003"],
+        "story_ranges": [{"start": 1.73, "end": 16.03, "beat_id": "b0001"},
+                         {"start": 40.08, "end": 43.26, "beat_id": "b0003"}],
+    }
+    monkeypatch.setattr(director, "_plan_edit_with_cancel", lambda *_args, **_kwargs: ({
+        "segments": copy.deepcopy(segments), "decision": copy.deepcopy(decision),
+        "story_beats": [], "story_hierarchy": {"critic": {"verdict": "pass"}},
+    }, "fixture_story"))
+    store.update(project_id, lambda current: current["settings"].update({
+        "edit_style": "stream_commentary", "target_duration": 30.0,
+    }))
+
+    director.analyze_project(context(), project_id, store, settings)
+    saved = store.load(project_id)
+    assert saved["draft"]["keep_ranges"] == [
+        {"start": 1.73, "end": 16.03}, {"start": 40.08, "end": 43.26},
+    ]
+    assert saved["draft"]["output_duration"] == pytest.approx(17.48)
+    assert saved["draft"]["partial_ai"] is True
+    assert saved["draft"]["quality_review"]["needs_review"] is True
+    assert [row["type"] for row in saved["draft"]["quality_review"]["warnings"]] == ["style_moment_constraint"]
+
+    store.update(project_id, lambda current: current["settings"].update({"target_duration": 15.0}))
+    director.analyze_project(context(), project_id, store, settings)
+    saved = store.load(project_id)
+    assert saved["draft"]["partial_ai"] is True
+    assert "story_anchor_missing" in [row["type"] for row in saved["draft"]["quality_review"]["warnings"]]
+
+
 def test_corrected_transcript_invalidates_editorial_cache(semantic_project):
     store, settings, project_id, calls, context = semantic_project
 
@@ -204,6 +247,116 @@ def test_rebuild_preserves_reordered_edit_sequence_beyond_original_source_durati
     assert after["manual"]["sequence"] == before["manual"]["sequence"]
     assert after["manual"]["source_tracks"] == before["manual"]["source_tracks"]
     assert editor_sequence_snapshot(after)["active"] is True
+
+
+def test_preset_rebuild_reports_preserved_manual_timeline_and_keeps_undo(semantic_project):
+    from cutroom.editing import apply_manual_edit
+    from cutroom.sequence import editor_sequence_snapshot
+
+    store, settings, project_id, _calls, context = semantic_project
+    store.update(project_id, lambda current: apply_manual_edit(
+        current, {"action": "sequence_split_all", "time": 10.0},
+    ))
+    before = store.load(project_id)
+    before_timeline = editor_sequence_snapshot(before)
+    job_context = context()
+    result = director.analyze_project(
+        job_context, project_id, store, settings, {"edit_style": "competitive_clutch"},
+    )
+    after = store.load(project_id)
+    assert after["draft"]["edit_style"] == "competitive_clutch"
+    assert editor_sequence_snapshot(after) == before_timeline
+    assert result["applied_to_timeline"] is False
+    assert result["timeline_preserved"] is True
+    assert "manual timeline was kept" in result["message"]
+    assert job_context.job.message == result["message"]
+    assert after["manual"]["_history"] == before["manual"]["_history"]
+    assert after["manual"]["history"] == before["manual"]["history"]
+    # The explicit application changes the actual editor projection. Undo/redo
+    # restore the user's clip boundaries, rather than merely toggling a badge.
+    store.update(project_id, lambda current: apply_manual_edit(current, {"action": "sequence_reset"}))
+    applied = editor_sequence_snapshot(store.load(project_id))
+    assert applied["active"] is False
+    assert applied["duration"] == 30.0
+    assert applied["duration"] != before_timeline["duration"]
+    store.update(project_id, lambda current: apply_manual_edit(current, {"action": "undo"}))
+    assert editor_sequence_snapshot(store.load(project_id)) == before_timeline
+    store.update(project_id, lambda current: apply_manual_edit(current, {"action": "redo"}))
+    assert editor_sequence_snapshot(store.load(project_id)) == applied
+
+
+def test_preset_without_manual_sequence_is_applied_to_editor_timeline(semantic_project):
+    from cutroom.sequence import editor_sequence_snapshot
+
+    store, settings, project_id, _calls, context = semantic_project
+    result = director.analyze_project(
+        context(), project_id, store, settings, {"edit_style": "competitive_clutch"},
+    )
+    saved = store.load(project_id)
+    assert result["applied_to_timeline"] is True
+    assert result["timeline_preserved"] is False
+    assert editor_sequence_snapshot(saved)["duration"] == saved["draft"]["output_duration"]
+    assert result["message"] == "Your first edit is ready"
+
+
+def test_clean_vod_keeps_natural_cleanup_controls_and_full_recording(semantic_project, monkeypatch):
+    from cutroom.edit_styles import get_edit_style
+
+    store, settings, project_id, _calls, context = semantic_project
+    monkeypatch.setattr(director, "analyze_audio", lambda *_args, **_kwargs: {
+        "available": True, "duration": 300.0,
+        "ranges": {"silence": [{"start": 40.0, "end": 41.0}, {"start": 100.0, "end": 170.0}]},
+        "summary": {"silence_threshold_dbfs": -42.0}, "waveform": [],
+    })
+    style = get_edit_style("clean_vod")
+    result = director.analyze_project(
+        context(), project_id, store, settings,
+        {**style["defaults"], "edit_style": "clean_vod"},
+    )
+    draft = result["draft"]
+    assert draft["audio_policy"]["silence_min_seconds"] == 1.20
+    assert draft["audio_policy"]["silence_keep_seconds"] == 0.48
+    assert draft["audio_policy"]["max_remove_ratio"] == 0.16
+    assert draft["audio_policy"]["normalize"] is False
+    assert draft["output_duration"] >= 300.0 * 0.84
+    assert any(row["start"] <= 40.0 and row["end"] >= 41.0 for row in draft["keep_ranges"])
+
+
+def test_unusable_ai_response_warning_and_actual_model_survive_saved_draft_and_cache(semantic_project, monkeypatch):
+    from cutroom import intelligence
+
+    store, settings, project_id, _calls, context = semantic_project
+    calls = []
+    monkeypatch.setattr(intelligence, "_ollama_inventory", lambda _: (True, {"qwen3.5:4b"}))
+    monkeypatch.setattr(intelligence, "_call_ollama", lambda _settings, payload:
+                        calls.append(payload["model"]) or {"title": "Done"})
+
+    def plan(job_context, segments, current_settings, brief, **kwargs):
+        return intelligence.plan_edit(segments, current_settings, brief, **kwargs,
+                                      cancel_check=job_context.check_cancelled)
+
+    monkeypatch.setattr(director, "_plan_edit_with_cancel", plan)
+    job_context = context()
+    result = director.analyze_project(job_context, project_id, store, settings, {
+        "goal": "youtube", "instruction": "Preserve the explanations.", "captions": True,
+        "performance_mode": "quality",
+    })
+    saved = store.load(project_id)
+    assert calls == ["qwen3.5:4b"]
+    assert result["engine"] == "deterministic"
+    assert result["model_selection"]["selected_model"] == "qwen3.5:4b"
+    assert result["model_selection"]["requested_model"] == "qwen3.5:9b"
+    assert result["model_selection"]["using_fallback"] is True
+    assert result["warnings"][0]["type"] == "story_ai_fallback"
+    assert saved["draft"]["model_selection"] == result["model_selection"]
+    assert saved["analysis"]["model_selection"] == result["model_selection"]
+    assert saved["draft"]["partial_ai"] is True
+    assert result["warnings"][0] in saved["draft"]["quality_review"]["warnings"]
+    assert "Basic cleanup draft ready" in job_context.job.message
+    cached = director.analyze_project(context(), project_id, store, settings)
+    assert calls == ["qwen3.5:4b"]
+    assert cached["warnings"] == result["warnings"]
+    assert cached["model_selection"] == result["model_selection"]
 
 
 def _add_media_layers(store, project_id, *, start=40, end=60, sequence=False, second_source=False):

@@ -2,6 +2,12 @@
 
 **An exploratory Windows/macOS beta, with a Linux source development path, for feedback from creators and editors. Not a production release, security certification or promise of professional-quality automatic edits.** Public access to a download does not change those quality boundaries.
 
+## Chroma Key and AI draft controls - 2026-10-01
+
+- [Chroma Key](CHROMA_KEY.md) applies separately to source A/B, using local FFmpeg to replace a chosen color with a solid color or ready Media-library image. The image covers the source frame and can crop at the edges. The explicit current-frame PNG and export use saved settings; ordinary playback remains unkeyed. Background video, B-underlay and transparent output are not supported. Apply/Reset support Undo/Redo; missing filters block enabling/processed-frame preview, while disabling or resetting a saved key remains available.
+- AI results keep an existing manual timeline until **Apply new AI draft** is confirmed; Undo restores it. Single-moment styles use their duration budget, while Clean VOD retains natural cleanup. Requested/selected Story models and an installed fallback are reported explicitly; missing models are not downloaded automatically.
+- These source changes require current-source and exact-package release checks. See the release manifest for the public build. No new representative Hebrew/English accuracy, semantic edit-quality or real-footage performance result is claimed here; native/manual platform limits below still apply.
+
 ## Editor reliability, mixer and stabilization - 2026-09-30
 
 - The candidate passed **1,816 Python regressions** (3 skipped on Windows) and **538 frontend checks**. Python includes frontend wrappers, so these totals overlap. These local results used baseline `8a8c7e6957f02536e44701b27aee78a798c0fab5` plus the editor changes; the earlier commit does not already contain them.

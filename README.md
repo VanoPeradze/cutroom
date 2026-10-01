@@ -58,6 +58,7 @@ Linux needs Python 3.11/3.12 with `venv` and `pip`, FFmpeg/FFprobe and the setup
 - **Camera and screen layouts:** adjust source roles, framing and synchronization.
 - **Media, sound and captions:** add B-roll, images, music, voiceover, titles and SRT/VTT captions. Source waveforms work without AI; the compact mixer shows live audio levels.
 - **Optional footage stabilization:** create a separate local copy when your FFmpeg supports it. It may crop/zoom edges; your original stays untouched. [Stabilization guide](docs/STABILIZATION.md)
+- **Optional Chroma Key:** remove a source color and replace it with a solid color or imported image, separately for A/B. Check a saved-settings frame before exporting. [Chroma Key guide](docs/CHROMA_KEY.md)
 - **Local MP4 export:** choose landscape or vertical output, 720p through 4K, and frame-rate options up to 60 FPS. Higher settings do not create missing source detail.
 
 [Editing walkthrough](docs/USER_GUIDE_EN.md) · [Timeline controls](docs/INDEPENDENT_TRACKS.md) · [Keyboard shortcuts](docs/KEYBOARD_SHORTCUTS.md)
@@ -65,6 +66,8 @@ Linux needs Python 3.11/3.12 with `venv` and `pip`, FFmpeg/FFprobe and the setup
 ## Choose how AI works
 
 **Manual editing** needs no AI account or models. **Local AI** uses downloaded speech/Story models and your computer's resources. **Optional cloud AI** uses your own Groq or compatible provider account.
+
+Check the reported Story model: a missing preferred 9B/2B model can use an installed configured fallback, 4B by default; downloads require an explicit choice. A new AI draft keeps your manual timeline until you confirm **Apply new AI draft**, with Undo available.
 
 Editing and rendering stay local in every mode. After cloud consent, selected audio and transcript/editing context go to your chosen provider; its billing and privacy terms apply. Models are not bundled, and a chat subscription alone does not provide API access.
 

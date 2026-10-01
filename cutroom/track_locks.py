@@ -64,6 +64,7 @@ def validate_locked_track_changes(before: dict[str, Any], after: dict[str, Any])
             # omits. They cannot be silently replaced while their lane is locked.
             changed |= _lane_data(old_manual.get("source_tracks"), slot) != _lane_data(new_manual.get("source_tracks"), slot)
         changed |= _lane_data(old_manual.get("crop"), slot) != _lane_data(new_manual.get("crop"), slot)
+        changed |= _lane_data(old_manual.get("chroma_key"), slot) != _lane_data(new_manual.get("chroma_key"), slot)
         if slot == "A":
             changed |= old_manual.get("embedded_camera") != new_manual.get("embedded_camera")
         if slot == "B":

@@ -35,7 +35,7 @@ DOC_FILES = (
     "docs/TRANSCRIPT_EVALUATION.md", "docs/QUALITY_AND_LIMITS.md", "docs/UIUX_SKILL_CSS.md",
     "docs/INDEPENDENT_TRACKS.md", "docs/BETA_FEEDBACK.md", "docs/BETA_STATUS.md", "docs/MODELS.md",
     "docs/CONTRIBUTING.md", "docs/AI_CONNECTIONS.md", "docs/PUBLISHING.md", "docs/PLATFORMS.md",
-    "docs/EDITOR_ROADMAP.md", "docs/STABILIZATION.md",
+    "docs/EDITOR_ROADMAP.md", "docs/STABILIZATION.md", "docs/CHROMA_KEY.md",
     "docs/USER_GUIDE_EN.md", "docs/USER_GUIDE_HE.md", "docs/SHOWCASE_EN.md", "docs/SHOWCASE_HE.md",
 )
 # Only reviewed, purpose-made app screenshots belong in the tester package.

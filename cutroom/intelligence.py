@@ -487,23 +487,14 @@ def _model_preferences(settings: Settings, brief: dict[str, Any]) -> list[str]:
     preferred.extend([base, *fallbacks])
     output: list[str] = []
     for model in preferred:
-        clean = model.removesuffix(":latest")
+        clean = model.strip().removesuffix(":latest")
         if clean and clean not in output:
             output.append(clean)
     return output
 
 
 def _select_editor_model(settings: Settings, brief: dict[str, Any]) -> str:
-    from .cloud_ai import enabled, connection
-    if enabled(settings):
-        return str(connection(settings)["model"])
-    installed = _installed_models(settings)
-    preferred = _model_preferences(settings, brief)
-    if installed:
-        for model in preferred:
-            if model in installed:
-                return model
-    return preferred[0] if preferred else "qwen3.5:4b"
+    return str(_ready_story_model_status(settings, brief)["selected_model"])
 
 
 def story_ai_status(settings: Settings, brief: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -516,23 +507,44 @@ def story_ai_status(settings: Settings, brief: dict[str, Any] | None = None) -> 
         provider_label = "Groq" if provider == "groq" else "OpenAI-compatible"
         return {"ready": bool(ready), "provider": provider, "provider_label": provider_label, "ollama_available": False,
                 "installed_models": [], "selected_model": selected["model"] if ready else None,
-                "recommended_model": selected["model"], "reason": None if ready else "cloud_key_required"}
+                "recommended_model": selected["model"], "reason": None if ready else "cloud_key_required",
+                "requested_model": selected["model"], "requested_model_installed": None,
+                "using_fallback": False, "fallback_reason": None,
+                "message": (f"Using configured {provider_label} model {selected['model']}." if ready
+                            else f"Connect {provider_label} in AI connection before creating a cloud edit.")}
+    preferred = _model_preferences(settings, brief)
+    requested = preferred[0] if preferred else "qwen3.5:4b"
     if not settings.ai.get("enabled", True):
         return {
             "ready": False, "ollama_available": False, "installed_models": [], "selected_model": None,
-            "recommended_model": str(settings.ai.get("editor_model", "qwen3.5:4b")).removesuffix(":latest"),
-            "reason": "ai_disabled",
+            "recommended_model": requested, "requested_model": requested, "requested_model_installed": None,
+            "using_fallback": False, "fallback_reason": None, "reason": "ai_disabled",
+            "message": "Story AI is disabled. Enable AI or continue with manual editing.",
         }
     available, installed = _ollama_inventory(settings)
-    preferred = _model_preferences(settings, brief)
-    selected = next((model for model in preferred if model in installed), None)
-    recommended = str(settings.ai.get("editor_model", "qwen3.5:4b")).removesuffix(":latest")
+    selected = next((model for model in preferred if model in installed), None) if available else None
+    using_fallback = bool(selected and selected != requested)
+    if not available:
+        message = "Story AI requires Ollama to be running. Start the local AI engine and retry."
+    elif not selected:
+        message = (f"Requested model {requested} is not installed. Install a configured model explicitly "
+                   "in AI connection, or continue manually.")
+    elif using_fallback:
+        message = (f"Requested model {requested} is not installed. Using installed {selected} for this edit. "
+                   "Review this draft; install the requested model explicitly in AI connection if needed.")
+    else:
+        message = f"Using installed model {selected}."
     return {
         "ready": bool(available and selected),
         "ollama_available": available,
         "installed_models": sorted(installed),
         "selected_model": selected,
-        "recommended_model": recommended,
+        "requested_model": requested,
+        "requested_model_installed": requested in installed if available else None,
+        "recommended_model": requested,
+        "using_fallback": using_fallback,
+        "fallback_reason": "requested_model_missing" if using_fallback else None,
+        "message": message,
         "reason": (
             None
             if available and selected
@@ -541,6 +553,20 @@ def story_ai_status(settings: Settings, brief: dict[str, Any] | None = None) -> 
             else "story_model_missing"
         ),
     }
+
+
+def _ready_story_model_status(settings: Settings, brief: dict[str, Any]) -> dict[str, Any]:
+    """Use the same checked selection for status and execution; never guess a model."""
+    status = story_ai_status(settings, brief)
+    if not status["ready"]:
+        raise StoryAIUnavailableError(str(status["message"]))
+    return status
+
+
+def _model_selection_details(status: dict[str, Any]) -> dict[str, Any]:
+    return {key: status.get(key) for key in (
+        "requested_model", "requested_model_installed", "selected_model", "using_fallback", "fallback_reason", "message",
+    )}
 
 
 def _call_ollama(settings: Settings, payload: dict[str, Any], timeout: int = 180) -> dict[str, Any] | None:
@@ -2088,15 +2114,9 @@ def hierarchical_story_edit(
     cancel_check: Callable[[], None] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     _check_cancelled(cancel_check)
-    status = story_ai_status(settings, brief)
-    if not status["ready"]:
-        recommended = status["recommended_model"]
-        if status["reason"] == "cloud_key_required":
-            provider_label = str(status.get("provider_label") or "cloud AI")
-            raise StoryAIUnavailableError(f"Connect {provider_label} in AI connection before creating a cloud edit.")
-        if status["reason"] == "ollama_unavailable":
-            raise StoryAIUnavailableError("Story AI requires Ollama to be running before a semantic edit can be created.")
-        raise StoryAIUnavailableError(f"Story AI model {recommended} must be installed before creating a semantic edit.")
+    status = _ready_story_model_status(settings, brief)
+    if status.get("using_fallback") and progress:
+        progress(0.01, status["message"])
     model = str(status["selected_model"])
     expected_cache_fingerprint = story_cache_fingerprint(segments, brief, model)
     mode = str(brief.get("performance_mode") or settings.ai.get("performance_mode", "auto"))
@@ -2230,6 +2250,7 @@ def hierarchical_story_edit(
         "cache_fingerprint": expected_cache_fingerprint,
         "cache_pipeline": STORY_CACHE_PIPELINE,
         "model": model,
+        "model_selection": _model_selection_details(status),
         "chapter_count": len(chapters),
         "chapters": [
             {"id": item["id"], "start": item["start"], "end": item["end"], "duration": item["duration"], "beat_ids": item["beat_ids"]}
@@ -2256,7 +2277,8 @@ def hierarchical_story_edit(
     return decision, hierarchy
 
 
-def _ollama_chat(settings: Settings, segments: list[dict[str, Any]], brief: dict[str, Any], cancel_check: Callable[[], None] | None = None) -> dict[str, Any] | None:
+def _ollama_chat(settings: Settings, segments: list[dict[str, Any]], brief: dict[str, Any], cancel_check: Callable[[], None] | None = None,
+                 *, model_status: dict[str, Any] | None = None) -> dict[str, Any] | None:
     if not settings.ai.get("enabled", True):
         return None
     max_segments = int(settings.ai.get("max_llm_segments", 180))
@@ -2283,7 +2305,7 @@ def _ollama_chat(settings: Settings, segments: list[dict[str, Any]], brief: dict
         "Remove clear retakes, false starts, filler-only lines, off-topic detours and redundant repetition when appropriate. "
         "Return JSON only with keys: keep_ids, remove_ids, highlight_ids, title, summary, opening_id, closing_id."
     )
-    model = _select_editor_model(settings, brief)
+    model = str((model_status or _ready_story_model_status(settings, brief))["selected_model"])
     payload = {
         "model": model, "stream": False, "format": "json",
         "options": {"temperature": 0.10, "num_ctx": 8192, "num_predict": 1100},
@@ -2299,7 +2321,7 @@ def _ollama_chat(settings: Settings, segments: list[dict[str, Any]], brief: dict
 
 
 def _validate_llm_result(result: dict[str, Any] | None, segments: list[dict[str, Any]]) -> dict[str, Any] | None:
-    if not result:
+    if not isinstance(result, dict) or not result:
         return None
     valid_ids = {item["id"] for item in segments}
 
@@ -2309,7 +2331,7 @@ def _validate_llm_result(result: dict[str, Any] | None, segments: list[dict[str,
             return []
         unique: list[str] = []
         for value in values:
-            if value in valid_ids and value not in unique:
+            if isinstance(value, str) and value in valid_ids and value not in unique:
                 unique.append(value)
             if limit and len(unique) >= limit:
                 break
@@ -2318,14 +2340,20 @@ def _validate_llm_result(result: dict[str, Any] | None, segments: list[dict[str,
     remove = valid_list("remove_ids")
     keep = [item for item in valid_list("keep_ids") if item not in remove]
     highlights = valid_list("highlight_ids", 8)
+    if not (keep or remove or highlights) or set(remove) == valid_ids:
+        # A title-only/foreign-ID response is not an edit. Removing everything
+        # would later restore the whole recording defensively, hiding a no-op.
+        return None
+    opening = result.get("opening_id")
+    closing = result.get("closing_id")
     return {
         "keep_ids": keep,
         "remove_ids": remove,
         "highlight_ids": highlights,
         "title": str(result.get("title") or "AI draft")[:120],
         "summary": str(result.get("summary") or "A coherent first edit based on the transcript.")[:500],
-        "opening_id": result.get("opening_id") if result.get("opening_id") in valid_ids else None,
-        "closing_id": result.get("closing_id") if result.get("closing_id") in valid_ids else None,
+        "opening_id": opening if isinstance(opening, str) and opening in valid_ids else None,
+        "closing_id": closing if isinstance(closing, str) and closing in valid_ids else None,
     }
 
 
@@ -2391,17 +2419,28 @@ def plan_edit(
         )
 
     _check_cancelled(cancel_check)
-    from .cloud_ai import enabled
-    response = _ollama_chat(settings, enriched, brief, cancel_check=cancel_check) if enabled(settings) else _ollama_chat(settings, enriched, brief)
+    status = story_ai_status(settings, brief)
+    if settings.ai.get("enabled", True) and not status["ready"]:
+        raise StoryAIUnavailableError(str(status["message"]))
+    if status.get("using_fallback") and progress:
+        progress(0.01, status["message"])
+    response = _ollama_chat(settings, enriched, brief, cancel_check=cancel_check, model_status=status)
     llm = _validate_llm_result(response, enriched)
     _check_cancelled(cancel_check)
     if llm:
-        return {"segments": enriched, "decision": llm, "story_beats": [], "story_hierarchy": None}, (
+        return {"segments": enriched, "decision": llm, "story_beats": [], "story_hierarchy": None,
+                "model_selection": _model_selection_details(status), "warnings": []}, (
             str(settings.ai.get("cloud_connection", {}).get("provider") or "groq").replace("-", "_")
             if settings.ai.get("cloud_connection", {}).get("mode", "local") != "local"
             else "ollama"
         )
-    return {"segments": enriched, "decision": deterministic_edit(enriched, brief), "story_beats": [], "story_hierarchy": None}, "deterministic"
+    warning = {
+        "type": "story_ai_fallback" if settings.ai.get("enabled", True) else "ai_disabled",
+        "message": ("Story AI did not return a valid edit; a basic transcript cleanup draft was created. Review it before exporting."
+                    if settings.ai.get("enabled", True) else "AI is disabled; this is a basic transcript cleanup draft."),
+    }
+    return {"segments": enriched, "decision": deterministic_edit(enriched, brief), "story_beats": [], "story_hierarchy": None,
+            "model_selection": _model_selection_details(status), "warnings": [warning]}, "deterministic"
 
 def language_from_text(text: str, fallback: str = "en") -> str:
     counts = Counter({

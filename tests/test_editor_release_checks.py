@@ -97,6 +97,10 @@ def test_required_evidence_includes_waveform_stabilization_and_mixer_contracts()
         "test_copy_is_a_project_asset_and_original_timeline_and_bytes_stay_unchanged",
         "test_real_music_ducking_responds_to_source_speech",
         "test_real_fades_and_mutes_preserve_library_audio_with_silent_source",
+        "test_real_chroma_replaces_only_selected_video_and_preserves_audio_and_original",
+        "test_real_frame_keys_at_native_geometry_before_downscale_and_preserves_source",
+        "test_preset_rebuild_reports_preserved_manual_timeline_and_keeps_undo",
+        "test_single_moment_style_does_not_join_distant_semantic_stories",
     } <= checks.REQUIRED_CASES
 
 
@@ -147,10 +151,20 @@ def test_available_filter_inventory_records_the_actual_runtime(monkeypatch):
     def run(command, **kwargs):
         assert kwargs["encoding"] == "utf-8" and kwargs["check"] is True
         assert kwargs["timeout"] == 20
-        text = " ... vidstabdetect V->V detect\n ... vidstabtransform V->V transform\n" if "-filters" in command else f"{command[0]} version reviewed\n"
+        names = ("vidstabdetect", "vidstabtransform", "chromakey", "overlay", "split", "drawbox", "format", "scale", "crop", "setsar", "setpts")
+        text = "".join(f" ... {name} V->V reviewed\n" for name in names) if "-filters" in command else f"{command[0]} version reviewed\n"
         return SimpleNamespace(stdout=text)
     monkeypatch.setattr(checks.subprocess, "run", run)
     result = checks.inspect_ffmpeg()
     assert result["stabilization_filters"] == ["vidstabdetect", "vidstabtransform"]
     assert result["ffmpeg"] == "ffmpeg version reviewed"
     assert result["ffprobe"] == "ffprobe version reviewed"
+    assert "chromakey" in result["chroma_filters"]
+
+
+def test_vidstab_alone_cannot_skip_required_real_chroma_release_check(monkeypatch):
+    monkeypatch.setattr(checks.shutil, "which", lambda name: name)
+    monkeypatch.setattr(checks.subprocess, "run", lambda *_a, **_k: SimpleNamespace(
+        stdout=" ... vidstabdetect V->V detect\n ... vidstabtransform V->V transform\n"))
+    with pytest.raises(RuntimeError, match="required media filters.*chromakey"):
+        checks.inspect_ffmpeg()

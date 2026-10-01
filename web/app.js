@@ -1,7 +1,8 @@
-import { applyTranslations, dictionaries } from "./i18n.js?v=1.1-beta-3";
+import { applyTranslations, dictionaries } from "./i18n.js?v=1.1-beta-5";
 import { TimelineView, formatTime, editableClips, timelineDuration, sequenceBlocks, sequenceGaps, rippleMoveStart } from "./timeline.js?v=1.1-beta-9";
 import { MediaStudio } from "./media-studio.js?v=1.1-beta-6";
 import { StabilizationStudio } from "./stabilization-studio.js?v=1.1-beta-1";
+import { ChromaStudio } from "./chroma-studio.js?v=1.1-beta-2";
 import { SourceReview } from "./source-review.js?v=1.1-beta-8";
 import { initWorkspace } from "./workspace.js?v=1.1-beta-4";
 import { KEYBOARD_PROFILES, resolveEditorShortcut, isEditorTransportSpace, shortcutRows } from "./keyboard.js?v=1.1-beta-2";
@@ -17,6 +18,8 @@ const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 
 const state = {
   project: null,
+  aiDraftNotice: null,
+  aiDraftConfirmation: null,
   projects: [],
   locale: "en",
   dictionary: null,
@@ -227,6 +230,7 @@ function initializeMediaStudio() {
   state.stabilizationStudio = new StabilizationStudio(panel, {...state.mediaStudio.options, flush: () => state.mediaStudio.flush()});
   state.stabilizationStudio.node.id = "stabilizationTool";
   document.getElementById("openStabilizationStudio")?.addEventListener("click", openStabilizationTools);
+  initializeChromaStudio();
   const speed = document.createElement("div"); speed.className = "picture-speed"; speed.dataset.editorShortcuts = "off";
   speed.innerHTML = '<label>Picture speed <select aria-label="Picture speed"><option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="1">1×</option><option value="1.5">1.5×</option><option value="2">2×</option><option value="4">4×</option></select><span></span></label><p>Picture only: keeps clip length and speech timing. May lose lip sync or hold the last source frame. Select A or B to choose which picture changes.</p>';
   elements.clipTrimForm.after(speed); state.pictureSpeed = speed;
@@ -234,6 +238,30 @@ function initializeMediaStudio() {
     const clip = state.pictureSpeedClip; if (!clip || foregroundBusy()) return;
     pauseAllMedia();
     await runUiAction(() => applyManualEdit("sequence_speed", {slot:clip.slot,clip_id:clip.id,speed:Number(event.target.value)}), "Changing picture speed");
+  });
+}
+
+function initializeChromaStudio() {
+  if (typeof ChromaStudio === "undefined") return;
+  const root = document.getElementById("chromaStudio");
+  if (!root) return;
+  state.chromaStudio = new ChromaStudio(root, {
+    project: () => state.project, edit: applyManualEdit, pause: pauseAllMedia,
+    busy: () => foregroundBusy() || state.manualEditBusy,
+    translate: (key, fallback) => state.dictionary?.[key] || fallback, api,
+    sourceTime: slot => elements[`preview${slot}`]?.currentTime || 0,
+    openMedia: () => openStudioTab("media"),
+    frame: async ({projectId, slot, time, revision}, signal) => {
+      const query = new URLSearchParams({time:String(time), revision:String(revision)});
+      const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/chroma-preview/${slot}?${query}`, {signal});
+      if (!response.ok) {
+        let message = `Frame preview failed (HTTP ${response.status}).`;
+        try { const payload = await response.json(); message = payload.message || message; } catch (_error) {}
+        throw new Error(message);
+      }
+      if (!response.headers.get("content-type")?.includes("image/png")) throw new Error("The frame preview did not return a PNG image.");
+      return response.blob();
+    },
   });
 }
 
@@ -475,6 +503,9 @@ async function boot() {
 }
 
 function bindEvents() {
+  document.getElementById("applyAiDraftButton")?.addEventListener("click", openAiDraftConfirmation);
+  document.getElementById("confirmApplyAiDraft")?.addEventListener("click", confirmAiDraftApply);
+  for (const id of ["cancelApplyAiDraft", "closeApplyAiDraft"]) document.getElementById(id)?.addEventListener("click", () => document.getElementById("aiDraftApplyDialog")?.close());
   elements.newProjectButton.addEventListener("click", () => state.welcome?.chooseService());
   elements.dialogNewProject.addEventListener("click", () => runUiAction(async () => { elements.projectsDialog.close(); await goHome(); state.welcome?.chooseService(); }));
   elements.homeButton.addEventListener("click", () => runUiAction(goHome));
@@ -587,9 +618,7 @@ function bindEvents() {
   $$("[data-open-studio-tab]").forEach((button) => {
     button.addEventListener("click", () => openStudioTab(button.dataset.openStudioTab));
   });
-  elements.reviewSpeechSettings.addEventListener("click", () => {
-    if (openStudioTab("transcript")) elements.spokenLanguageSelect.focus();
-  });
+  elements.reviewSpeechSettings.addEventListener("click", openSpeechReviewSettings);
   $$(".refine-grid button").forEach((button) => button.addEventListener("click", () => refineDraft(button.dataset.command)));
   elements.reelCandidateList.addEventListener("click", async (event) => {
     const button = event.target.closest("button[data-candidate-id]");
@@ -1212,6 +1241,7 @@ function renderLanguageDetectionStatus() {
 
 function applyGoalMode(goal, applyDefaults = false) {
   const normalized = ["short", "youtube", "podcast", "clean"].includes(goal) ? goal : "short";
+  renderEditStyleNote(normalized);
   if (elements.durationGroup) elements.durationGroup.hidden = ["youtube", "clean"].includes(normalized);
   const explainer = {
     short: ["shortModeTitle", "shortModeText"],
@@ -1298,6 +1328,11 @@ function renderEditStyleChoices() {
     button.setAttribute("aria-checked", String(active));
     button.tabIndex = active ? 0 : -1;
   });
+  renderEditStyleNote();
+}
+
+function renderEditStyleNote(goal = elements.goalChoices?.querySelector("button.active")?.dataset.value || state.project?.settings?.goal || "short") {
+  const selected = state.selectedEditStyle || state.project?.settings?.edit_style || "smart";
   const style = editStyleById(selected);
   if (elements.editStyleNote) {
     const description = localizedStyleValue(style?.description);
@@ -1305,7 +1340,8 @@ function renderEditStyleChoices() {
       "כל סגנון משנה את בחירת הרגעים והקצב. היעד, פורמט הפלט והאורך שבחרתם נשמרים. פריסת מסך + מצלמה לעולם לא מופעלת בלי אישור מפורש.",
       "Each style changes moment selection and pacing. Your goal, output format and duration stay selected. Screen + camera layout is never enabled without explicit confirmation.",
     );
-    elements.editStyleNote.textContent = description ? `${description} ${evidence}` : evidence;
+    const goalNote = selected === "clean_vod" && goal === "short" ? t("cleanVodShortNote") : "";
+    elements.editStyleNote.textContent = [goalNote, description, evidence].filter(Boolean).join(" ");
   }
 }
 
@@ -1559,6 +1595,8 @@ function renderSources() {
 }
 
 function renderReadiness() {
+  state.chromaStudio?.render();
+  renderAiDraftNotice();
   if (!elements.readiness) return;
   const source = state.project?.sources?.A;
   const ready = Boolean(source);
@@ -2438,6 +2476,76 @@ async function refreshProjectAfterDirector(projectId, attempts = 3) {
   throw lastError || new Error("Could not refresh the completed Draft");
 }
 
+function aiDraftStamp(draft) {
+  const sort = value => Array.isArray(value) ? value.map(sort) : value && typeof value === "object"
+    ? Object.fromEntries(Object.keys(value).sort().map(key => [key, sort(value[key])])) : value;
+  return JSON.stringify(sort(draft));
+}
+
+function rememberDirectorResult(job) {
+  const result = job?.result, project = state.project;
+  if (!project?.id || !result || job?.project_id !== project.id || result.project_id !== project.id) return false;
+  const preserved = result.applied_to_timeline === false && result.timeline_preserved === true && result.variation_changed !== false
+    && project?.manual?.sequence && result.draft && aiDraftStamp(result.draft) === aiDraftStamp(project.draft);
+  state.aiDraftNotice = preserved ? {projectId:project.id, draftStamp:aiDraftStamp(result.draft)} : null;
+  renderAiDraftNotice();
+  return Boolean(preserved);
+}
+
+function currentAiDraftNotice() {
+  const notice = state.aiDraftNotice;
+  return notice && notice.projectId === state.project?.id && state.project?.manual?.sequence
+    && notice.draftStamp === aiDraftStamp(state.project.draft) ? notice : null;
+}
+
+function directorCompletionNotice(job, preserved = false) {
+  const draft = state.project?.draft;
+  const current = Boolean(state.project?.id && job?.project_id === state.project.id
+    && job?.result?.project_id === state.project.id && job.result.draft
+    && aiDraftStamp(job.result.draft) === aiDraftStamp(draft));
+  const basicCleanup = current && (draft.engine === "deterministic_story_fallback"
+    || (draft.quality_review?.warnings || []).some(warning => warning?.type === "story_ai_fallback"));
+  const transcriptFallback = current && (state.project?.analysis?.warnings || []).some(warning => warning?.type === "transcript_fallback");
+  const warning = transcriptFallback ? t("speechStyleFallbackReady") : current && draft.engine === "audio_visual_highlights" ? t("audioHighlightsReady")
+    : basicCleanup ? t("basicCleanupReady") : "";
+  return {message:[preserved ? t("aiDraftKept") : warning ? "" : t("draftReady"), warning].filter(Boolean).join(" "),
+    kind:preserved || warning ? "info" : "success"};
+}
+
+function renderAiDraftNotice() {
+  const notice = document.getElementById("aiDraftNotice"); if (!notice) return;
+  notice.hidden = !currentAiDraftNotice();
+  const text = notice.querySelector("p"); if (text) text.textContent = t("aiDraftKept");
+  const button = document.getElementById("applyAiDraftButton");
+  if (button) { button.textContent = t("aiDraftApply"); button.disabled = state.manualEditBusy || foregroundBusy() || state.draftDirtyReasons.size > 0; }
+  const host = state.studio.open ? elements.advancedPanel?.querySelector(".studio-header") : elements.resultPanel;
+  if (!notice.hidden && host && notice.parentElement !== host) {
+    if (state.studio.open) host.appendChild(notice); else host.insertBefore(notice, host.firstChild);
+  }
+}
+
+async function openAiDraftConfirmation() {
+  if (!currentAiDraftNotice() || foregroundBusy() || state.manualEditBusy || state.draftDirtyReasons.size) return;
+  const projectId = state.project.id;
+  if (!(await flushCurrentProjectSaves()) || state.project?.id !== projectId || !currentAiDraftNotice()) return;
+  state.aiDraftConfirmation = {projectId, revision:state.project.revision, draftStamp:aiDraftStamp(state.project.draft)};
+  const dialog = document.getElementById("aiDraftApplyDialog"); if (!dialog) return;
+  document.getElementById("confirmApplyAiDraft").disabled = false;
+  dialog.showModal();
+}
+
+async function confirmAiDraftApply() {
+  const intent = state.aiDraftConfirmation, dialog = document.getElementById("aiDraftApplyDialog");
+  const isCurrent = () => Boolean(intent && currentAiDraftNotice() && intent.projectId === state.project?.id
+    && intent.revision === state.project.revision && intent.draftStamp === aiDraftStamp(state.project.draft));
+  if (!dialog?.open || document.getElementById("confirmApplyAiDraft").disabled) return;
+  if (!isCurrent() || state.manualEditBusy || foregroundBusy()) { dialog?.close(); return; }
+  document.getElementById("confirmApplyAiDraft").disabled = true;
+  const updated = await applyManualEdit("sequence_reset", {}, {isCurrent});
+  dialog?.close(); state.aiDraftConfirmation = null;
+  if (updated && state.project?.id === intent.projectId) { state.aiDraftNotice = null; renderAiDraftNotice(); toast(t("aiDraftApplied"), "success"); }
+}
+
 async function recoverActiveJobs(projectId, viewToken) {
   if (!projectId || state.recoveringJobs.has(projectId)) return;
   state.recoveringJobs.add(projectId);
@@ -2485,10 +2593,13 @@ async function recoverActiveJobs(projectId, viewToken) {
       const latestDirector = recent
         .filter((job) => ["director", "refine"].includes(job?.kind))
         .sort((left, right) => Date.parse(right.created_at || 0) - Date.parse(left.created_at || 0))[0];
+      if (latestDirector?.status === "completed" && state.project?.draft) rememberDirectorResult(latestDirector);
       if (latestDirector?.status === "completed" && !state.project?.draft) {
         try {
           await refreshProjectAfterDirector(projectId);
-          if (options.announceReady !== false) toast(t("draftReady"), "success");
+          const preserved = rememberDirectorResult(latestDirector);
+          const notice = directorCompletionNotice(latestDirector, preserved);
+          toast(notice.message, notice.kind);
         } catch (error) {
           showAnalysisError(error.message);
         }
@@ -2585,7 +2696,11 @@ async function pollJob(jobId, options = {}) {
             reject(error);
             return true;
           }
-          toast(t("draftReady"), "success");
+          const preserved = rememberDirectorResult(job);
+          if (options.announceReady !== false) {
+            const notice = directorCompletionNotice(job, preserved);
+            toast(notice.message, notice.kind);
+          }
         } else if (job.project_id && job.kind === "prepare_source") {
           try {
             const projectPayload = await api(`/api/projects/${encodeURIComponent(job.project_id)}`);
@@ -2723,7 +2838,9 @@ async function cancelActiveJob() {
 function renderDraft() {
   state.mediaStudio?.render();
   state.stabilizationStudio?.render();
+  state.chromaStudio?.render();
   state.textStudio?.render();
+  renderAiDraftNotice();
   const draft = editorProject().draft;
   elements.draftTitle.textContent = draft.title || state.project.name;
   elements.draftSummary.textContent = draft.summary || "";
@@ -2824,14 +2941,22 @@ function renderDraftWarning() {
   const audioHighlights = engine === "audio_visual_highlights";
   const fallback = engine === "deterministic_story_fallback";
   const limitedHighlights = (state.project?.analysis?.warnings || []).some((warning) => warning.type === "limited_highlight_evidence");
+  const transcriptFallback = (state.project?.analysis?.warnings || []).some((warning) => warning.type === "transcript_fallback");
   const reviewWarnings = (state.project?.draft?.quality_review?.warnings || [])
     .map((warning) => warning?.message).filter((message) => typeof message === "string" && message);
-  elements.draftWarning.hidden = !audioHighlights && !fallback && !limitedHighlights && !reviewWarnings.length;
+  elements.draftWarning.hidden = !audioHighlights && !fallback && !limitedHighlights && !transcriptFallback && !reviewWarnings.length;
   elements.draftWarningText.textContent = [
-    audioHighlights ? t("audioHighlightWarning") : fallback ? t("storyFallbackWarning") : "",
+    transcriptFallback ? t("transcriptFallbackActionable") : audioHighlights ? t("audioHighlightWarning") : fallback ? t("storyFallbackWarning") : "",
     limitedHighlights ? t("limitedHighlightWarning") : "",
     ...reviewWarnings,
   ].filter(Boolean).join(" ");
+}
+
+function openSpeechReviewSettings() {
+  if (!openStudioTab("transcript")) return;
+  const language = elements.spokenLanguageSelect;
+  const disclosure = language?.closest("details"); if (disclosure) disclosure.open = true;
+  language?.focus(); language?.scrollIntoView({block:"nearest"});
 }
 
 function sourceAspect() {
@@ -4539,6 +4664,9 @@ function updatePreviewUI(time) {
     ? state.preview.sourceUnmapped ? "Full source · no Source A clip at the selected edit position; original position unchanged"
       : inCut(time) ? "Full source · excluded footage is included in playback" : "Full source · plays the original recording"
     : inCut(time) ? "Edited cut · inspecting excluded footage; Play skips to a kept section" : "Edited cut · plays kept sections only; seeking does not change this mode";
+  if (elements.previewModeHint && Object.values(state.project?.manual?.chroma_key || {}).some(settings => settings?.enabled)) {
+    elements.previewModeHint.textContent += ` ${t("chromaOriginalPlayback")}`;
+  }
   updatePreviewCaption(time);
 }
 
@@ -4668,6 +4796,7 @@ function setAdvanced(open) {
     }
     if (elements.resultPanel) elements.resultPanel.inert = true;
     state.studio.open = true;
+    renderAiDraftNotice();
     updatePreviewUI(previewPlaybackTime());
     dockRuntimeStatus();
     elements.advancedButton.setAttribute("aria-expanded", "true");
@@ -4688,6 +4817,7 @@ function setAdvanced(open) {
   document.body.classList.remove("studio-open");
   elements.advancedPanel.hidden = true;
   state.studio.open = false;
+  renderAiDraftNotice();
   updatePreviewUI(previewPlaybackTime());
   dockRuntimeStatus();
   state.sourceMixerPreviewLayout = null;
@@ -5686,6 +5816,7 @@ async function applyManualEdit(action, detail = {}, { isCurrent = () => true } =
     if (state.project?.id !== projectId || !isCurrent()) return payload.project;
     state.project = payload.project;
     if (action === "set_track_lock") {
+      state.chromaStudio?.render();
       state.timeline?.cancelGesture?.();
       if (state.timeline) { state.timeline.project = editorProject(); state.timeline.scheduleDraw(); }
       state.trackProtection?.render();
@@ -5693,6 +5824,7 @@ async function applyManualEdit(action, detail = {}, { isCurrent = () => true } =
     }
     if (liveMediaAction) {
       state.mediaStudio?.render();
+      state.chromaStudio?.render();
       state.textStudio?.render();
       if (state.timeline) { state.timeline.project = editorProject(); state.timeline.scheduleDraw(); }
       updateMediaPreview();
@@ -6533,26 +6665,32 @@ function renderModelStatus() {
   }
   const models = state.system?.models;
   const runtime = state.system?.runtime;
+  const selection = models?.story_ai_selection;
+  const fallback = selection?.using_fallback === true;
   const installed = Boolean(models?.story_ai_ready);
   const engineAvailable = runtime?.state !== "disabled" && (typeof models?.ollama?.available === "boolean" ? models.ollama.available : Boolean(runtime?.available));
   const ready = engineAvailable && installed;
   const preparing = Boolean(state.aiPreparePromise);
   const installing = Boolean(state.modelInstallPending || state.modelInstallJob);
   const starting = preparing || ["idle", "checking", "starting"].includes(runtime?.state);
-  let title = ready ? "Story AI ready" : engineAvailable ? "One-time AI setup" : "Local AI needs attention";
-  let detail = ready ? `${models.selected_story_model || models.editor_model || "Installed model"} · Runs on this computer`
+  let title = ready ? fallback ? "Story AI ready with a fallback model" : "Story AI ready" : engineAvailable ? "One-time AI setup" : "Local AI needs attention";
+  const actualModel = selection?.selected_model || models?.selected_story_model || "Installed model";
+  const fallbackDetail = selection?.message || (selection?.fallback_reason === "requested_model_missing"
+    ? `${selection.requested_model || "The requested model"} is not installed. Using the installed fallback; download the requested model only if you choose to.`
+    : `Using an installed fallback for ${selection?.requested_model || "the requested model"}.`);
+  let detail = ready ? `${actualModel} · ${fallback ? fallbackDetail : "Runs on this computer"}`
     : engineAvailable ? `${models?.recommended_story_model || "A Story AI model"} is needed. Download only with your confirmation; it can require several GB.`
       : (runtime?.available ? "The local AI engine is no longer responding. Use Retry AI to restart it." : runtime?.message) || state.system?.error || "Checking the local AI engine…";
   if (starting) { title = "Preparing local AI…"; detail = "Starting the local engine. Your footage stays on this computer."; }
   if (runtime?.state === "disabled" && !preparing) title = "Local AI is disabled";
   if (installing) { title = "Downloading Story AI…"; detail = "One-time model setup. You can stop this download using Stop process."; }
   if (starting && !preparing && state.runtimeRefreshAttempts >= 20) detail = "The engine is taking longer than expected. Use Retry AI to check again.";
-  elements.modelStatus.className = `model-status ${ready && !preparing && !installing ? "ready" : "partial"}`;
-  elements.modelStatus.dataset.state = installing ? "installing" : starting ? "starting" : ready ? "ready" : engineAvailable ? "missing-model" : "missing-engine";
+  elements.modelStatus.className = `model-status ${ready && !fallback && !preparing && !installing ? "ready" : "partial"}`;
+  elements.modelStatus.dataset.state = installing ? "installing" : starting ? "starting" : ready ? fallback ? "fallback-model" : "ready" : engineAvailable ? "missing-model" : "missing-engine";
   $("b", elements.modelStatus).textContent = title;
   $("small", elements.modelStatus).textContent = detail;
-  elements.modelButton.hidden = !engineAvailable || installed || preparing || installing;
-  elements.modelButton.textContent = "Download model…";
+  elements.modelButton.hidden = !engineAvailable || (installed && !(fallback && selection?.requested_model_installed === false)) || preparing || installing;
+  elements.modelButton.textContent = fallback ? "Download requested model" : "Download model…";
   elements.retryAIButton.hidden = runtime?.can_retry === false || (ready && !preparing && !installing);
   elements.retryAIButton.textContent = preparing ? "Preparing…" : "Retry AI";
   for (const button of [elements.modelButton, elements.retryAIButton]) button.disabled = preparing || installing || foregroundBusy();
@@ -6577,6 +6715,7 @@ function prepareLocalAI() {
           story_ai_ready: Boolean(payload.story_ai?.ready),
           selected_story_model: payload.story_ai?.selected_model || null,
           recommended_story_model: payload.story_ai?.recommended_model || null,
+          story_ai_selection: payload.story_ai || null,
         },
       };
       return payload;

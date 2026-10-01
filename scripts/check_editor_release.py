@@ -24,6 +24,9 @@ ROOT = Path(__file__).resolve().parents[1]
 TEST_FILES = (
     "test_waveform_preparation.py", "test_stabilization.py",
     "test_stabilization_api.py", "test_media_command_encoding.py",
+    "test_chroma_settings.py", "test_chroma_editing.py", "test_chroma_render.py", "test_chroma_image_background.py", "test_chroma_api.py",
+    "test_director_rebuild_cache.py", "test_style_story_selection.py",
+    "test_editor_model_selection.py",
     "test_media_render.py",
 )
 SELECTORS = tuple(f"tests/{name}" for name in TEST_FILES[:-1]) + (
@@ -45,11 +48,30 @@ REQUIRED_CASES = {
     "test_real_synthetic_stabilization_copy_prepares_waveform_and_downloads_original_resolution",
     "test_real_music_ducking_responds_to_source_speech",
     "test_real_fades_and_mutes_preserve_library_audio_with_silent_source",
+    "test_real_chroma_replaces_only_selected_video_and_preserves_audio_and_original",
+    "test_real_chroma_keeps_independent_removed_footage_black",
+    "test_real_frame_keys_at_native_geometry_before_downscale_and_preserves_source",
+    "test_real_nonuniform_image_background_and_library_overlay_keep_pixels_audio_and_sources",
+    "test_real_render_project_keeps_unused_existing_b_before_background_image",
+    "test_real_shared_image_nodes_generate_the_same_known_png_preview_pixels",
+    "test_missing_filter_never_mutates_project_but_disabling_remains_possible",
+    "test_preset_rebuild_reports_preserved_manual_timeline_and_keeps_undo",
+    "test_preset_without_manual_sequence_is_applied_to_editor_timeline",
+    "test_clean_vod_keeps_natural_cleanup_controls_and_full_recording",
+    "test_single_moment_style_does_not_join_distant_semantic_stories",
+    "test_commentary_preserves_planned_ending_when_separate_story_parts_fit_budget",
+    "test_final_review_exposes_planned_ending_lost_to_unavoidable_budget",
+    "test_saved_commentary_keeps_planned_anchors_with_truthful_review",
+    "test_no_available_configured_model_never_sends_request_to_missing_model",
+    "test_installed_fallback_is_usable_but_identified_as_different_model",
+    "test_missing_or_unusable_model_edit_is_labelled_basic_cleanup",
 }
 FEATURE_FILES = {
     "cutroom/audio.py", "cutroom/media.py", "cutroom/sequence.py",
     "cutroom/stabilization.py", "cutroom/stabilization_assets.py", "server.py",
     "web/stabilization-studio.js", "web/stabilization-studio.css",
+    "cutroom/composition.py", "cutroom/effects.py", "cutroom/director.py", "cutroom/intelligence.py",
+    "web/chroma-studio.js", "web/chroma-studio.css",
 }
 
 
@@ -94,12 +116,16 @@ def inspect_ffmpeg() -> dict:
                                 text=True, encoding="utf-8", errors="replace", timeout=20, check=True)
         return result.stdout
     filters = output([ffmpeg, "-nostdin", "-hide_banner", "-filters"])
-    found = set(re.findall(r"^\s*[.TSC]{3}\s+(vidstabdetect|vidstabtransform)\s+", filters, re.MULTILINE))
-    if found != {"vidstabdetect", "vidstabtransform"}:
+    required = {"vidstabdetect", "vidstabtransform", "chromakey", "overlay", "split", "drawbox", "format", "scale", "crop", "setsar", "setpts"}
+    found = set(re.findall(r"^\s*[.TSC]{3}\s+(\w+)\s+", filters, re.MULTILINE))
+    if not {"vidstabdetect", "vidstabtransform"} <= found:
         raise RuntimeError("This release runner lacks required vidstab filters; real stabilization tests must not skip")
+    if missing := required - found:
+        raise RuntimeError(f"This release runner lacks required media filters: {', '.join(sorted(missing))}; real media tests must not skip")
     return {"ffmpeg": output([ffmpeg, "-version"]).splitlines()[0],
             "ffprobe": output([ffprobe, "-version"]).splitlines()[0],
-            "stabilization_filters": sorted(found)}
+            "stabilization_filters": ["vidstabdetect", "vidstabtransform"],
+            "chroma_filters": sorted(required - {"vidstabdetect", "vidstabtransform"})}
 
 
 def verify_test_report(path: Path) -> dict:
