@@ -264,6 +264,48 @@ test('relocated mixer faders, mute, solo and ducking still reach their original 
   assert.deepEqual(plain(run('requests')), []);
 });
 
+test('Master is a separate real output row while all relocated channel controls remain connected', () => {
+  const {run,nodes}=fixture(),audio=nodes.get('studioPanelAudio');
+  const channels=audio.querySelector('.mixer-channels'),master=audio.querySelector('.mixer-master');
+  const roles=['source','music','voice','effects','master'];
+  assert.deepEqual(channels.children.map(row=>row.dataset.channel),roles.slice(0,4),'the four input channels keep their order without Master occupying their grid');
+  assert.ok(master,'Master has its own output section');
+  assert.equal(master.parentElement,channels.parentElement);
+  assert.equal(channels.parentElement.children[channels.parentElement.children.indexOf(channels)+1],master,'Master follows the input channels in reading and keyboard order');
+  assert.deepEqual(master.children.map(row=>row.dataset.channel),['master']);
+  assert.deepEqual(channels.children.map(row=>row.querySelector('[data-channel-name]').textContent),['Original','Music','Voiceover','Effects']);
+  assert.equal(master.children[0].querySelector('[data-channel-name]').textContent,'Master');
+  assert.deepEqual(audio.querySelectorAll('[data-mix]').map(range=>range.dataset.mix),roles.map(role=>`${role}_db`));
+  assert.equal(audio.querySelectorAll('.mixer-channel-meter').length,5);
+  assert.equal(nodes.get('studioPanelMedia').querySelector('[data-mix]'),null,'the single mixer stays in the primary Audio panel');
+  for(const [index,role] of roles.entries()) {
+    const row=audio.querySelector(`[data-channel=${role}]`),range=row.querySelector('[data-mix]'),meter=row.querySelector('meter');
+    assert.equal(row,run(`state.mediaStudio.channelMeters.get('${role}').row`));
+    assert.equal(meter,run(`state.mediaStudio.channelMeters.get('${role}').meter`),'the visible meter is the actual measured channel output');
+    assert.equal(range.dataset.mix,`${role}_db`);
+    range.value=String(-5-index);dispatch('input',range);
+    assert.equal(run(`state.mediaStudio.pending.get('mixer').${role}_db`),-5-index);
+    assert.equal(run('previewCalls.length'),index+1,'each relocated fader dispatches exactly once');
+  }
+  for(const [index,role] of roles.slice(0,4).entries()) {
+    const mute=audio.querySelector(`[data-mute=${role}]`),solo=audio.querySelector(`[data-solo=${role}]`);
+    dispatch('click',mute);assert.equal(run(`state.mediaStudio.mixer().${role}_muted`),role!=='music');
+    dispatch('click',solo);assert.equal(run('state.mediaStudio.solo'),role);
+    assert.equal(run('previewCalls.length'),5+(index+1)*2);
+  }
+  assert.equal(master.querySelector('[data-mute]'),null);assert.equal(master.querySelector('[data-solo]'),null);
+  assert.equal(run("Object.keys(state.mediaStudio.pending.get('mixer')).some(key=>key.includes('solo'))"),false,'Solo remains preview-only');
+  run(`state.mediaStudio.solo=null;
+    state.mediaStudio.analyser={fftSize:4,getFloatTimeDomainData(samples){samples.fill(.75);}};
+    state.mediaStudio.audioBuses=new Map(['source','music','voice','effects'].map((role,index)=>[role,{analyser:{fftSize:4,getFloatTimeDomainData(samples){samples.fill(.5/(index+1));}}}]));
+    for(const role of ['source','music','voice','effects'])state.mediaStudio.players.set(role,{role,wanted:true,element:{paused:false},gain:{gain:{value:1}}});
+    state.mediaStudio.updateMeters(true);`);
+  for(const role of roles) assert.ok(audio.querySelector(`[data-channel=${role}]`).querySelector('meter').value>0,`${role} renders its measured signal`);
+  assert.match(master.querySelector('meter').getAttribute('aria-valuetext'),/-2\.5 dBFS/);
+  run('state.mediaStudio.pause();');for(const meter of audio.querySelectorAll('.mixer-channel-meter'))assert.equal(meter.value,0);
+  assert.deepEqual(plain(run('requests')),[]);assert.deepEqual(plain(run('mutations')),[]);
+});
+
 test('relocated mixer restores saved gain, selected source label and measured master output on the visible panel', () => {
   const {run, nodes} = fixture(); const audio = nodes.get('studioPanelAudio');
   run(`state.mediaStudio.renderMixer(); state.mediaStudio.analyser={fftSize:4,getFloatTimeDomainData(samples){samples.fill(.5);}};state.mediaStudio.updateMeters(true);`);

@@ -54,11 +54,14 @@ export class MediaStudio {
         <div class="media-actions"><button type="button" data-action="split">Split at playhead</button><button type="button" data-action="duplicate">Duplicate</button><button type="button" data-action="remove">Remove</button></div>
       </section>
       <details class="audio-mixer" data-editor-shortcuts="off"><summary><span>Audio mixer</span><small class="mixer-summary-level">Paused</small></summary>
+        <div class="mixer-body">
         <p class="mixer-help">Mute changes preview & export. Solo isolates a channel in preview only.</p>
         <div class="mixer-channels"></div>
+        <div class="mixer-master"></div>
         <label class="ducking-choice"><input type="checkbox" data-ducking> Lower music while speech plays</label>
         <p class="mixer-level-text">Play to monitor the mix.</p>
         <p class="mixer-help mixer-export-note">Live sample peaks, before the preview limiter. Export normalization can change final loudness.</p>
+        </div>
       </details>`;
     const mediaStatus = root.querySelector('.media-status');
     const mixerStatus = options.audioPanel?.querySelector('.mixer-save-status');
@@ -85,7 +88,7 @@ export class MediaStudio {
         const solo = document.createElement('button'); solo.type = 'button'; solo.textContent = 'S'; solo.title = 'Solo in preview only'; solo.dataset.solo = role; solo.setAttribute('aria-label', `Solo ${name} in preview only`); actions.append(solo);
       }
       this.channelMeters.set(role,{row,meter,level});
-      root.querySelector('.mixer-channels').append(row);
+      root.querySelector(role === 'master' ? '.mixer-master' : '.mixer-channels').append(row);
     }
     root.querySelector('input[type=file]').addEventListener('change', event => { const file = event.target.files[0]; event.target.value = ''; if (file) this.upload(file); });
     this.audioRoot = root.querySelector('.audio-mixer');

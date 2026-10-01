@@ -59,9 +59,19 @@
   .advanced-panel.studio-workspace .advanced-content { grid-column: 2; grid-row: 2; min-height: 0; overflow-y: auto; border: 0; }
   .advanced-panel.studio-workspace .studio-preview-dock { grid-column: 4; grid-row: 2; padding: 10px 16px; }
   .advanced-panel.studio-workspace .inspector-divider { display: flex; align-items: center; justify-content: center; grid-column: 3; grid-row: 2; cursor: ew-resize; touch-action: none; background: var(--surface-chrome); }
-  .studio-workspace .mixer-channel[data-channel=master] { position: sticky; bottom: 0; z-index: 2; background: var(--surface-chrome); }
-  .studio-workspace .mixer-channel:not([data-channel=master]) { scroll-margin-block-end: 100px; }
-  .advanced-panel.studio-workspace .advanced-content:has(#studioPanelAudio.active) { scroll-padding-block-end: 100px; }
+  .advanced-panel.studio-workspace:not(.inspector-collapsed) .advanced-content:has(#studioPanelAudio.active) { display: flex; flex-direction: column; }
+  .studio-workspace #studioPanelAudio.active { display: flex; flex-direction: column; flex: 1; min-height: 390px; }
+  .studio-workspace #studioPanelAudio .mixer-save-status { flex: 0 0 auto; }
+  .studio-workspace #studioPanelAudio .audio-mixer[open] { flex: 1 1 0; min-height: 0; }
+  .studio-workspace #studioPanelAudio .audio-mixer[open] > .mixer-body { display: flex; flex-direction: column; height: calc(100% - 42px); min-height: 0; }
+  .studio-workspace #studioPanelAudio .mixer-body > :not(.mixer-channels) { flex: 0 0 auto; }
+  .studio-workspace #studioPanelAudio .mixer-channels { flex: 1 1 0; min-height: 90px; overflow-y: auto; scroll-padding-block: 8px; }
+  .studio-workspace #studioPanelAudio :is(.mixer-channels,.mixer-master) { scrollbar-gutter: stable; overflow-x: hidden; }
+  .studio-workspace #studioPanelAudio .mixer-master { overflow-y: auto; }
+  .studio-workspace #studioPanelAudio .mixer-body > .mixer-help { margin: 0 0 6px; }
+  .studio-workspace #studioPanelAudio .ducking-choice { margin-top: 6px; }
+  .studio-workspace #studioPanelAudio .mixer-level-text { margin: 4px 0; }
+  .studio-workspace #studioPanelAudio .mixer-body > .mixer-export-note { padding-top: 4px; margin-bottom: 0; }
   .advanced-panel.studio-workspace.inspector-collapsed:not([hidden]),.advanced-panel.studio-workspace.studio-transcript.inspector-collapsed:not([hidden]) { grid-template-columns: var(--workspace-rail-width) 0 0 minmax(0,1fr); }
   .advanced-panel.studio-workspace.inspector-collapsed .inspector-divider { display: none; }
 }
