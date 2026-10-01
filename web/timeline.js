@@ -389,10 +389,27 @@ export class TimelineView {
       if (!Number.isFinite(clip.start) || !Number.isFinite(clip.end) || clip.end <= clip.start) continue;
       const group = text ? clip.kind : asset.kind === 'audio' ? (clip.role || 'music') : 'visual';
       let row = rows.find(row => row.group === group && row.clips.every(item => item.end <= clip.start || item.start >= clip.end));
-      if (!row) { row = {group,clips:[]}; rows.push(row); }
+      if (!row) { row = {group,type:text ? 'text' : asset.kind === 'audio' ? 'audio' : 'visual',clips:[]}; rows.push(row); }
       row.clips.push(clip);
     }
-    return rows.map((row,index)=>({...row,top:this.baseHeight()+index*46,bottom:this.baseHeight()+(index+1)*46}));
+    let top = this.baseHeight();
+    return rows.map(row => {
+      const height = row.type === 'visual' ? 60 : row.type === 'audio' ? 56 : 44;
+      const kinds = row.type === 'visual' ? new Set(row.clips.map(clip => this.project.assets[clip.asset_id].kind)) : null;
+      const label = row.type === 'visual' ? kinds.size === 1 ? [...kinds][0].toUpperCase() : 'VIDEO / IMAGE'
+        : ({music:'MUSIC',voice:'VOICEOVER',effects:'EFFECTS',title:'TEXT',caption:'CAPTIONS'}[row.group] || 'TEXT');
+      const lane = {...row,label,height,top,bottom:top+height};
+      top = lane.bottom;
+      return lane;
+    });
+  }
+
+  mediaLayout() {
+    const rows = this.mediaRows();
+    const top = rows.at(-1)?.bottom ?? this.baseHeight();
+    const caption = (this.project?.settings?.burn_captions !== false || this.project?.settings?.captions)
+      && this.project?.analysis?.transcript?.segments?.length ? {top,bottom:top+30,height:30,label:'CAPTIONS'} : null;
+    return {rows,caption,height:caption?.bottom ?? top};
   }
 
   mediaAtEvent(event) {
@@ -410,20 +427,26 @@ export class TimelineView {
       this.scroll.scrollTop = Math.max(0, row.bottom - this.scroll.clientHeight + 8);
   }
 
-  drawMedia(ctx, px, width) {
+  drawMedia(ctx, px, width, layout = this.mediaLayout()) {
     const left = this.scroll.scrollLeft || 0, right=left+this.scroll.clientWidth;
-    for (const row of this.mediaRows()) {
-      ctx.fillStyle='#102027'; ctx.fillRect(0,row.top,width,42);
+    for (const row of layout.rows) {
+      ctx.fillStyle='#102027'; ctx.fillRect(0,row.top,width,row.height-4);
       for (const saved of row.clips) {
         const clip=this.gesture?.media?.id === saved.id ? {...saved,...this.gesture.patch} : saved;
         const asset=clip.id?.startsWith('text_') ? {kind:'text',name:clip.text} : this.project.assets[clip.asset_id], x=clip.start*px, w=(clip.end-clip.start)*px;
         if (x+w<left || x>right) continue;
-        ctx.fillStyle=asset.kind==='text' ? '#665127' : asset.kind==='audio' ? '#264e44' : '#51436b'; ctx.fillRect(x,row.top+1,w,40);
+        ctx.fillStyle=asset.kind==='text' ? '#665127' : asset.kind==='audio' ? '#264e44' : '#51436b'; ctx.fillRect(x,row.top+1,w,row.height-6);
         const image=this.mediaImages?.get(asset.thumbnail_url);
-        ctx.save(); ctx.beginPath(); ctx.rect(x+1,row.top+2,Math.max(0,w-2),38); ctx.clip();
-        if(image) { ctx.globalAlpha=.7; for(let ix=Math.max(x,left); ix<x+w && ix<right;ix+=62) ctx.drawImage(image,ix,row.top+2,60,38); ctx.globalAlpha=1; }
+        ctx.save(); ctx.beginPath(); ctx.rect(x+1,row.top+2,Math.max(0,w-2),row.height-8); ctx.clip();
+        if(image) {
+          const imageHeight=row.height-8,imageWidth=imageHeight*(Number(image.width)||60)/Math.max(1,Number(image.height)||38);
+          ctx.globalAlpha=.7;
+          for(let ix=Math.max(x,left); ix<x+w && ix<right;ix+=imageWidth+2) ctx.drawImage(image,ix,row.top+2,imageWidth,imageHeight);
+          ctx.globalAlpha=1;
+        }
         const waveform=asset.waveform || [];
         if(waveform.length && asset.kind==='audio') {
+          const waveTop=row.top+18,waveBottom=row.bottom-7,mid=(waveTop+waveBottom)/2,maxAmp=(waveBottom-waveTop)/2;
           ctx.strokeStyle='#86dcc0'; ctx.beginPath();
           for(let ix=Math.max(x,left);ix<Math.min(x+w,right);ix+=3) {
             const source=Number(clip.source_start||0)+(ix/px-clip.start);
@@ -434,28 +457,29 @@ export class TimelineView {
             // point sampling can hide short transients at Fit/low zoom.
             let value=0;
             for(let bin=first;bin<=last;bin++) value=Math.max(value,Math.abs(Number(waveform[bin])||0));
-            const amp=Math.min(15,value*15); ctx.moveTo(ix,row.top+25-amp); ctx.lineTo(ix,row.top+25+amp);
+            const amp=Math.min(maxAmp,value*maxAmp); ctx.moveTo(ix,mid-amp); ctx.lineTo(ix,mid+amp);
           } ctx.stroke();
         }
         ctx.fillStyle='rgba(0,0,0,.75)'; ctx.fillRect(Math.max(x,left),row.top+2,Math.min(w,300),14);
         ctx.fillStyle='#f0edf5'; ctx.font='10px ui-monospace, monospace';
-        ctx.fillText(`${asset.kind==='text' ? clip.kind==='title' ? 'Text' : 'Caption' : asset.kind==='audio' ? clip.role : asset.kind} · ${asset.name}${Number.isFinite(clip.speed)&&clip.speed!==1 ? ` · ${clip.speed}×` : ''}`,Math.max(x+5,left+5),row.top+12);
+        const nameX=Math.max(x+5,left+ctx.measureText(row.label).width+22);
+        ctx.fillText(`${asset.kind==='text' ? clip.kind==='title' ? 'Text' : 'Caption' : asset.kind==='audio' ? clip.role || 'music' : asset.kind} · ${asset.name}${Number.isFinite(clip.speed)&&clip.speed!==1 ? ` · ${clip.speed}×` : ''}`,nameX,row.top+12);
         ctx.strokeStyle='#d4c84f';ctx.beginPath();
-        if(clip.fade_in>0){ctx.moveTo(x,row.top+40);ctx.lineTo(x+clip.fade_in*px,row.top+3);}
-        if(clip.fade_out>0){ctx.moveTo(x+w-clip.fade_out*px,row.top+3);ctx.lineTo(x+w,row.top+40);}ctx.stroke();
+        if(clip.fade_in>0){ctx.moveTo(x,row.bottom-6);ctx.lineTo(x+clip.fade_in*px,row.top+18);}
+        if(clip.fade_out>0){ctx.moveTo(x+w-clip.fade_out*px,row.top+18);ctx.lineTo(x+w,row.bottom-6);}ctx.stroke();
         ctx.restore();
-        ctx.strokeStyle=this.mediaSelection===clip.id ? '#ffe174':'#b8a4d1'; ctx.lineWidth=this.mediaSelection===clip.id ? 2:1; ctx.strokeRect(x+.5,row.top+1.5,Math.max(0,w-1),39);
-        if(this.mediaSelection===clip.id){ctx.fillStyle='#fff';ctx.fillRect(x,row.top+11,3,20);ctx.fillRect(x+w-3,row.top+11,3,20);}
+        ctx.strokeStyle=this.mediaSelection===clip.id ? '#ffe174':'#b8a4d1'; ctx.lineWidth=this.mediaSelection===clip.id ? 2:1; ctx.strokeRect(x+.5,row.top+1.5,Math.max(0,w-1),row.height-7);
+        if(this.mediaSelection===clip.id){ctx.fillStyle='#fff';ctx.fillRect(x,row.top+18,3,row.height-26);ctx.fillRect(x+w-3,row.top+18,3,row.height-26);}
       }
     }
-    if((this.project?.settings?.burn_captions !== false || this.project?.settings?.captions) && this.project?.analysis?.transcript?.segments?.length) {
-      const top=this.baseHeight()+this.mediaRows().length*46;
-      ctx.fillStyle='#1c2630';ctx.fillRect(0,top,width,28);
+    if(layout.caption) {
+      const {top,height}=layout.caption;
+      ctx.fillStyle='#1c2630';ctx.fillRect(0,top,width,height-2);
       for(const caption of this.audioTimelineRanges(this.project.analysis.transcript.segments)) {
         const x=caption.start*px,w=(caption.end-caption.start)*px;
         if(x+w<left || x>right)continue;
-        ctx.fillStyle='#384962';ctx.fillRect(x+1,top+1,Math.max(1,w-2),26);
-        ctx.save();ctx.beginPath();ctx.rect(x+2,top,Math.max(0,w-4),28);ctx.clip();ctx.fillStyle='#eef3ff';ctx.font='10px sans-serif';ctx.fillText(`Cc ${caption.text}`,Math.max(x+4,left),top+17);ctx.restore();
+        ctx.fillStyle='#384962';ctx.fillRect(x+1,top+1,Math.max(1,w-2),height-4);
+        ctx.save();ctx.beginPath();ctx.rect(x+2,top,Math.max(0,w-4),height-2);ctx.clip();ctx.fillStyle='#eef3ff';ctx.font='10px sans-serif';ctx.fillText(`Cc ${caption.text}`,Math.max(x+4,left+70),top+17);ctx.restore();
       }
     }
   }
@@ -485,7 +509,7 @@ export class TimelineView {
     this.compact = this.sourceReview || Boolean(this.scroll.closest?.(".studio-timeline-dock"));
     const sequence = Boolean(this.project?.manual?.sequence);
     const extra = !sequence && this.hasTrackLanes() ? 68 : 0;
-    const cssHeight = this.baseHeight()+this.mediaRows().length*46+((this.project?.settings?.burn_captions !== false || this.project?.settings?.captions) && this.project?.analysis?.transcript?.segments?.length ? 30:0);
+    const mediaLayout = this.mediaLayout(), cssHeight = mediaLayout.height;
     const dpr = Math.min(1.5, window.devicePixelRatio || 1, Math.sqrt(16000000/Math.max(1,width*cssHeight)));
     this.canvas.style.width = `${width}px`;
     this.canvas.style.height = `${cssHeight}px`;
@@ -514,10 +538,10 @@ export class TimelineView {
     this.drawLayouts(ctx, px);
     this.drawWaveform(ctx, px, width);
     ctx.restore();
-    this.drawLabels(ctx);
-    this.drawMedia(ctx,px,width);
+    this.drawMedia(ctx,px,width,mediaLayout);
     if (this.selection) this.drawSelection(ctx, this.selection, px, cssHeight);
     if (this.cutAnchor != null) this.drawPendingCut(ctx, px, cssHeight);
+    this.drawLabels(ctx,mediaLayout);
     if (this.hoverTime != null) this.drawHover(ctx, this.hoverTime, px, cssHeight);
     this.drawPlayhead(ctx, px, cssHeight);
     if (this.snapGuide) this.drawSnapGuide(ctx, px, cssHeight);
@@ -637,10 +661,6 @@ export class TimelineView {
           ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, bottom); ctx.stroke();
         }
       }
-      const protectedTrack = this.lockedTargets(slot).length > 0;
-      ctx.fillStyle = "rgba(8,16,19,.94)"; ctx.fillRect(viewportLeft + 4, top + 4, protectedTrack ? 96 : 52, 21);
-      ctx.fillStyle = active ? "#ffffff" : "#8da1a6";
-      ctx.font = "700 9px ui-monospace, monospace"; ctx.fillText(`VIDEO ${slot}${protectedTrack ? " · LOCKED" : ""}`, viewportLeft + 9, top + 18);
     }
   }
 
@@ -853,13 +873,24 @@ export class TimelineView {
     return mapped;
   }
 
-  drawLabels(ctx) {
+  drawLabels(ctx, layout = this.mediaLayout()) {
     ctx.font = "700 9px ui-monospace, SFMono-Regular, Consolas, monospace";
     const labels = this.compact ? [["EDIT",80],["LAYOUT",123],["AUDIO",144]] : [["EDIT",127],["LAYOUT",199],["AUDIO",232]];
     if (this.sourceReview) labels.splice(0, labels.length, ["SOURCE",80],["AUDIO",144]);
     if (this.project?.manual?.sequence) { labels.splice(0, labels.length, ["LAYOUT",this.project.sources?.B ? 167 : 111],["AUDIO",this.project.sources?.B ? 198 : 142]); }
     else if (this.hasTrackLanes()) { labels[1][1] += 68; labels[2][1] += 68; }
     const viewportLeft = this.scroll.scrollLeft || 0;
+    if (this.hasTrackLanes()) for (const slot of ["A", "B"]) {
+      if (this.project?.manual?.sequence && !this.project.sources?.[slot]) continue;
+      const {top} = this.trackLane(slot), protectedTrack = this.lockedTargets(slot).length > 0;
+      const active = this.editTarget === slot || (this.project?.manual?.sequence && this.editTarget === "edit");
+      ctx.fillStyle = "rgba(8,16,19,.94)"; ctx.fillRect(viewportLeft + 4, top + 4, protectedTrack ? 96 : 52, 21);
+      ctx.fillStyle = active ? "#ffffff" : "#8da1a6";
+      ctx.font = "700 9px ui-monospace, monospace"; ctx.fillText(`VIDEO ${slot}${protectedTrack ? " · LOCKED" : ""}`, viewportLeft + 9, top + 18);
+    }
+    labels.push(...layout.rows.map(row => [row.label,row.top+13]));
+    if (layout.caption) labels.push([layout.caption.label,layout.caption.top+17]);
+    ctx.font = "700 10px ui-monospace, monospace";
     for (const [label,y] of labels) {
       const width = ctx.measureText(label).width + 12;
       ctx.fillStyle = "rgba(9,11,13,.94)"; ctx.fillRect(viewportLeft + 4, y - 11, width, 17);
@@ -909,10 +940,13 @@ export class TimelineView {
     const stamp = this.project?.manual?.sequence || this.sourceReview ? formatFrameTime(time, 1 / sequenceFrame(this.project)) : formatTime(time, true);
     const label = `${operation}${stamp}`;
     ctx.font = "10px ui-monospace, monospace";
-    const w = ctx.measureText(label).width + 12;
-    const labelX = Math.max(2, Math.min(this.geometry().width - w - 2, x - w / 2));
+    const left = this.scroll.scrollLeft || 0, viewport = this.scroll.clientWidth || this.geometry().viewport;
+    const w = Math.min(ctx.measureText(label).width + 12,Math.max(0,viewport-4));
+    const labelX = Math.max(left+2, Math.min(left+viewport-w-2, x-w/2));
+    ctx.save(); ctx.beginPath(); ctx.rect(labelX,31,w,20); ctx.clip();
     ctx.fillStyle = "#f4f7f7"; ctx.fillRect(labelX, 31, w, 20);
     ctx.fillStyle = "#081013"; ctx.fillText(label, labelX + 6, 45);
+    ctx.restore();
   }
 
   drawSnapGuide(ctx, px, height) {

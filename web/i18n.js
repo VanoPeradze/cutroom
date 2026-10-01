@@ -1,4 +1,5 @@
 const en = {
+  inspectorHide:"Hide tools", inspectorShow:"Show tools", inspectorResize:"Resize tool panel", inspectorWidth:"Tool panel {width} pixels wide", inspectorResizeHint:"Drag to resize tools. Left/Right arrows resize; double-click resets.",
   audioTab:"Audio", audioMixer:"Mixer", stabilizeFootage:"Stabilize footage", mixerSaveHint:"Changes save automatically.",
   skip: "Skip to content", saved: "Saved", projects: "Projects", language: "Language", advanced: "Advanced", studio: "Studio", studioWorkspaceTitle: "Your creative workspace", backToDirector: "Project overview", studioNeedsDraft: "Create a first edit before opening Studio.", render: "Export",
   welcomeBadge: "YOUR LOCAL WORKSPACE", welcomeTitle: "What will you create today?", welcomeLead: "Start with your footage. Let Director build a first cut, then make it yours in the editor.", newProject: "Create project", recent: "Your projects", localMode: "Runs locally", privateWorkspace: "Your footage stays on this computer", trustOpen: "Free & open source", trustLocal: "Local-first processing", trustFormats: "Reels & YouTube",
@@ -20,6 +21,7 @@ const en = {
 
 const he = {
   ...en,
+  inspectorHide:"הסתרת כלים", inspectorShow:"הצגת כלים", inspectorResize:"שינוי רוחב חלונית הכלים", inspectorWidth:"רוחב חלונית הכלים: {width} פיקסלים", inspectorResizeHint:"גררו לשינוי רוחב הכלים. החצים ימינה ושמאלה משנים רוחב; לחיצה כפולה מאפסת.",
   audioTab:"אודיו", audioMixer:"מיקסר", stabilizeFootage:"ייצוב צילום", mixerSaveHint:"השינויים נשמרים אוטומטית.",
   skip: "דלג לתוכן", saved: "נשמר", projects: "פרויקטים", language: "שפה", advanced: "מתקדם", studio: "Studio", studioWorkspaceTitle: "עריכה מדויקת, באותו מסך", backToDirector: "חזרה ל־Director", studioNeedsDraft: "צריך ליצור עריכה ראשונה לפני פתיחת Studio.", render: "ייצוא",
   welcomeBadge: "עורך וידאו AI מקומי", welcomeTitle: "העריכה הראשונה שלך, בלי להתחיל מאפס.", welcomeLead: "מכניסים צילום אחד או שניים. CUTROOM מתמלל, מסנכרן, מוצא את הרגעים החזקים ובונה Draft שאפשר לדייק ולייצא.", newProject: "צור פרויקט חדש", recent: "פרויקטים אחרונים", localMode: "עובד מקומית", privateWorkspace: "חומר הגלם נשאר במחשב שלך", trustOpen: "חינמי וקוד פתוח", trustLocal: "עיבוד מקומי", trustFormats: "Reels ו־YouTube",
