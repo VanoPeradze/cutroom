@@ -27,10 +27,10 @@ CUTROOM turns camera recordings, screen captures and gameplay into an **editable
 **No CUTROOM subscription. No CUTROOM watermark. MIT-licensed source.** Optional cloud AI uses your own provider account; its quotas and charges are separate.
 
 <p align="center">
-  <img src="docs/images/editor.png" alt="CUTROOM dark editor with independent A/B timelines, captions and video preview" width="960">
+  <img src="docs/images/editor.png" alt="CUTROOM dark editor with bottom workspace navigation, real audio waveforms, captions and video preview" width="960">
 </p>
 
-*The real editor in dark mode, using synthetic test footage. Color bars show the interface, not AI editing quality.*
+*The real editor in dark mode, using an original synthetic coastal demo and procedural audio. This is a product screenshot, not an AI editing result.*
 
 ## From recording to export
 
@@ -44,13 +44,15 @@ The editor runs locally and opens in your browser. Choose your platform:
 
 | Platform | Start here | Beta status |
 | --- | --- | --- |
-| **Windows** | [Download and extract the ZIP](https://cutroom-studio.expo.app/#download), then open `windows/START CUTROOM.bat`. A source checkout uses `run_windows.bat`. | Windows beta launcher; fresh-computer and broad hardware QA remain ongoing. |
-| **macOS** | Use the same ZIP, then open `mac/START CUTROOM.command`. | macOS 15+, Apple Silicon and Intel. Publication requires current-source automated checks on both; Finder/Gatekeeper and Safari still need manual QA. |
+| **Windows** | [Choose the Windows ZIP](https://cutroom-studio.expo.app/#download), extract it, then open `START CUTROOM.bat` beside `App`. A source checkout uses `run_windows.bat`. | Windows beta launcher; fresh-computer and broad hardware QA remain ongoing. |
+| **macOS** | [Choose the Mac ZIP](https://cutroom-studio.expo.app/#download), extract it, then open `START CUTROOM.command` beside `App`. | macOS 15+, Apple Silicon and Intel. Publication requires current-source automated checks on both; Finder/Gatekeeper and Safari still need manual QA. |
 | **Linux** | Use the [repository source](https://github.com/VanoPeradze/cutroom) and follow the [Linux setup steps](docs/PLATFORMS.md#linux-source-based-development-path). | Source-based development path; no Linux folder in the ZIP or verified end-to-end Linux QA yet. |
 
-The Windows/Mac ZIP contains source and launchers. **First setup needs internet** for dependencies; local AI models are separate, optional downloads. Keep **App**, **START HERE.html** and your launcher together, and keep the launch window open while editing. The Mac launcher is unsigned, and local Mac transcription currently uses the CPU.
+Each platform ZIP contains source and its launcher. The older combined download remains compatible: open its `windows` or `mac` folder first. **First setup needs internet** for dependencies; local AI models are separate, optional downloads. Keep **App**, **START HERE.html** and your launcher together, and keep the launch window open while editing. The Mac launcher is unsigned, and local Mac transcription currently uses the CPU.
 
 Linux needs Python 3.11/3.12 with `venv` and `pip`, FFmpeg/FFprobe and the setup/run scripts. The [platform guide](docs/PLATFORMS.md) covers exact commands, prerequisites and troubleshooting for every platform. To get this editor update, download a fresh copy, extract it separately and back up saved projects before migrating them.
+
+Use the bottom workspace bar for **Media, Edit, Layout, Captions, Audio and Output**. Focused tools get their own wide area; the player and timeline stay beside them. Panel widths are saved per workspace.
 
 ## Your edit stays editable
 
@@ -58,7 +60,7 @@ Linux needs Python 3.11/3.12 with `venv` and `pip`, FFmpeg/FFprobe and the setup
 - **Camera and screen layouts:** adjust source roles, framing and synchronization.
 - **Media, sound and captions:** add B-roll, images, music, voiceover, titles and SRT/VTT captions. Source waveforms work without AI; the compact mixer shows live audio levels.
 - **Optional footage stabilization:** create a separate local copy when your FFmpeg supports it. It may crop/zoom edges; your original stays untouched. [Stabilization guide](docs/STABILIZATION.md)
-- **Optional Chroma Key:** remove a source color and replace it with a solid color or imported image, separately for A/B. Check a saved-settings frame before exporting. [Chroma Key guide](docs/CHROMA_KEY.md)
+- **Green screen / Chroma key:** remove a color from A/B or imported project videos. Media overlays can reveal the moving video underneath, with live edited playback, per-video settings and Undo. Color/image backgrounds and an exact processed-frame check are also available. [Chroma Key guide](docs/CHROMA_KEY.md)
 - **Local MP4 export:** choose landscape or vertical output, 720p through 4K, and frame-rate options up to 60 FPS. Higher settings do not create missing source detail.
 
 [Editing walkthrough](docs/USER_GUIDE_EN.md) · [Timeline controls](docs/INDEPENDENT_TRACKS.md) · [Keyboard shortcuts](docs/KEYBOARD_SHORTCUTS.md)

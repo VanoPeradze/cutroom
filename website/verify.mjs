@@ -3,6 +3,7 @@ import {resolve, dirname, sep} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createHash} from 'node:crypto';
 import assert from 'node:assert/strict';
+import {downloadEntries, verifyArchive} from './prepare-download.mjs';
 const root = dirname(fileURLToPath(import.meta.url));
 const html = readFileSync(resolve(root,'public/index.html'),'utf8');
 const publicRoot = resolve(root,'public');
@@ -41,11 +42,15 @@ assert.ok(!html.includes('5.6.1'), 'Stale application version on the public page
 assert.match(release.sha256, /^[a-f0-9]{64}$/);
 assert.ok(Number.isSafeInteger(release.bytes) && release.bytes > 0);
 assert.equal(release.url, 'https://cutroom-studio.expo.app/downloads/'+zip);
-const bytes = readFileSync(resolve(root,'public/downloads',zip));
-const hash = createHash('sha256').update(bytes).digest('hex');
-assert.equal(hash,readFileSync(resolve(root,'public/downloads',zip+'.sha256'),'utf8').trim().split(/\s+/)[0]);
-assert.equal(hash,release.sha256,'The approved beta archive changed');
-assert.equal(bytes.length,release.bytes);
+for (const entry of downloadEntries(release)) {
+  assert.ok(html.includes('/downloads/'+entry.filename+'"'), 'Missing exact archive link');
+  assert.ok(html.includes('/downloads/'+entry.filename+'.sha256"'), 'Missing exact checksum link');
+  const bytes = readFileSync(resolve(root,'public/downloads',entry.filename));
+  verifyArchive(bytes, entry);
+  const sidecar = readFileSync(resolve(root,'public/downloads',entry.filename+'.sha256'),'utf8').trim().split(/\s+/);
+  assert.equal(sidecar[0], entry.sha256);
+  assert.equal(sidecar[1], entry.filename);
+}
 assert.ok(!html.includes('127.0.0.1')&&!html.includes('C:/Users/'),'Local-only reference leaked');
 const {expo}=JSON.parse(readFileSync(resolve(root,'app.json'),'utf8'));
 assert.equal(expo.web.output,'static','Only the static website may be deployed');

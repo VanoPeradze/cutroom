@@ -13,6 +13,9 @@ class Element {
   removeAttribute(key) { delete this.attrs[key]; delete this[key]; }
   append(...nodes) { for (const node of nodes) { if (node.parentElement) node.parentElement.children = node.parentElement.children.filter(item => item !== node); this.children.push(node); node.parentElement = this; } }
   appendChild(node) { this.append(node); }
+  // A native select cannot retain a value until a matching option exists.
+  get value() { return this.tagName === 'select' ? (this.children.find(n => n.value === this._value)?.value || '') : this._value; }
+  set value(value) { this._value = this.tagName === 'select' && !this.children.some(n => n.value === String(value)) ? '' : String(value); }
   get firstChild() { return this.children[0]; }
   insertBefore(node, next) { this.append(node); this.children = this.children.filter(item => item !== node); const at = this.children.indexOf(next); this.children.splice(at < 0 ? 0 : at, 0, node); }
   matches(selector) {
@@ -51,7 +54,7 @@ async function chromaFixture() {
   const source = fs.readFileSync('web/chroma-studio.js','utf8').replace(/^export /gm,'');
   vm.runInContext(source+'\nthis.api={ChromaStudio,chromaSettings,CHROMA_DEFAULTS};',context);
   const studio = new context.api.ChromaStudio(root, {
-    project:()=>project, busy:()=>busy, pause:()=>{paused++;}, sourceTime:()=>3,
+    project:()=>project, busy:()=>busy, pause:()=>{paused++;}, sourceTime:()=>3, selectedTarget:()=> 'A',
     api:async()=>({available:true,supports:['solid','image'],mp4_alpha:false}),
     frame:async request=>{calls.push(['frame',plain(request)]);return {id:'frame'};},
     edit:async(action,detail,options)=>{
@@ -74,7 +77,7 @@ test('chroma controls expose exact per-source saved settings and never change th
   studio.source.value='B'; studio.source.onchange(); assert.equal(studio.settings().color,'#0000FF');
   studio.source.value='A'; studio.source.onchange(); assert.equal(studio.settings().tolerance,.25);
   await studio.apply.onclick();
-  assert.deepEqual(f.calls,[['set_chroma_key',{slot:'A',enabled:true,color:'#00FF00',tolerance:.25,edge_softness:.15,background_color:'#345678',background_asset_id:null}]]);
+  assert.deepEqual(f.calls,[['set_chroma_key',{slot:'A',enabled:true,color:'#00FF00',tolerance:.25,edge_softness:.15,background_color:'#345678',background_asset_id:null,background_mode:'replace'}]]);
   assert.equal(f.project().manual.chroma_key.B.color,'#0000FF'); assert.equal(studio.dirty(),false); assert.match(studio.status.textContent,/Saved/);
 });
 
@@ -181,7 +184,7 @@ function directorFixture() {
   const app=fs.readFileSync('web/app.js','utf8').replace(/^import .*;\r?\n/gm,'').replace(/\nboot\(\)\.catch\(\(error\) => \{[\s\S]*?\n\}\);/,'');
   vm.runInContext(app+`\nforegroundBusy=()=>false;flushCurrentProjectSaves=async()=>true;toast=(...args)=>globalThis.toasts.push(args);
     applyManualEdit=async(action,detail,options)=>{globalThis.calls.push([action,detail,options.isCurrent()]);state.project={...state.project,revision:state.project.revision+1,manual:{}};return state.project;};
-    this.ui={state,elements,rememberDirectorResult,currentAiDraftNotice,directorCompletionNotice,renderAiDraftNotice,openAiDraftConfirmation,confirmAiDraftApply,renderEditStyleNote,renderModelStatus,prepareLocalAI,renderDraftWarning,openSpeechReviewSettings};`,Object.assign(context,{calls,toasts}));
+    this.ui={state,elements,rememberDirectorResult,currentAiDraftNotice,directorCompletionNotice,renderAiDraftNotice,openAiDraftConfirmation,confirmAiDraftApply,renderEditStyleNote,renderModelStatus,prepareLocalAI,renderDraftWarning,openSpeechReviewSettings,renderDurationReview};`,Object.assign(context,{calls,toasts}));
   const {ui}=context;ui.state.dictionary=context.dictionaries.en;
   ui.state.project={id:'current',revision:8,draft:{engine:'style',segments:[{start:0,end:10}]},manual:{sequence:{tracks:{A:[{id:'manual-kept'}]}}}};
   ui.elements.resultPanel=get('resultPanel');ui.elements.advancedPanel=get('advancedPanel');
@@ -269,4 +272,107 @@ test('runtime preparation preserves full selection evidence and makes no automat
   await f.ui.prepareLocalAI();assert.equal(f.ui.state.system.models.selected_story_model,'gemma3:4b');assert.equal(f.ui.state.system.models.recommended_story_model,'gemma3:9b');
   assert.equal(f.ui.state.system.models.story_ai_selection.requested_model_installed,false);assert.equal(f.ui.state.system.models.story_ai_selection.using_fallback,true);
   assert.deepEqual(plain(f.run('prepareCalls')),[['/api/runtime/prepare',{performance_mode:'auto'}]]);
+});
+
+
+// All-project video regressions: imported clips are independent native-time
+// targets, including when they have the same display filename as A/B.
+const importedVideo=(letter,extra={})=>({id:'asset_'+letter.repeat(32),kind:'video',status:'ready',name:'green.mp4',width:640,height:360,duration:8,thumbnail_url:'/api/thumbnail/'+letter,...extra});
+test('green screen has a permanently visible labelled section and genuine all-video thumbnail choices',async()=>{
+  const f=await chromaFixture(),a=importedVideo('a'),b=importedVideo('b');
+  f.switchProject({...f.project(),revision:8,assets:{[a.id]:a,[b.id]:b}});
+  assert.equal(f.studio.node.tagName,'section');
+  assert.match(f.studio.node.querySelector('[data-chroma-copy="chromaTitle"]').textContent,/Green screen.*Chroma key/);
+  assert.deepEqual(plain(f.studio.targets()).map(item=>item.id),['A','B',a.id,b.id]);
+  const radios=f.studio.node.querySelectorAll('[data-chroma-target]');assert.equal(radios.length,4);
+  assert.equal(radios[0].checked,true);assert.equal(radios[2].value,a.id);assert.equal(radios[2].disabled,false);
+  assert.equal(f.studio.node.querySelectorAll('.chroma-source-thumb').length,2);
+  const labels=f.studio.node.querySelectorAll('.chroma-source-caption');
+  assert.match(labels[2].textContent,/aaaaaaaa/);assert.match(labels[3].textContent,/bbbbbbbb/);
+  assert.notEqual(labels[2].textContent,labels[3].textContent);
+});
+test('imported video edits and reset use stable asset ID and never mutate another same-named video',async()=>{
+  const f=await chromaFixture(),a=importedVideo('a'),b=importedVideo('b');
+  f.switchProject({...f.project(),revision:8,assets:{[a.id]:a,[b.id]:b}});
+  f.studio.source.value=a.id;f.studio.source.onchange();f.input('enabled',true);f.input('color','#AA1234');
+  assert.equal(f.studio.apply.disabled,false);await f.studio.save(false);
+  assert.equal(f.calls[0][1].slot,a.id);assert.equal(f.project().manual.chroma_key[a.id].color,'#AA1234');
+  assert.equal(f.project().manual.chroma_key[b.id],undefined);assert.equal(f.project().manual.chroma_key.A,undefined);
+  await f.studio.save(true);assert.deepEqual(f.calls[1],['reset_chroma_key',{slot:a.id}]);
+});
+test('native imported-video preview time is explicit, independent of the A/B playhead and bounded to the selected file',async()=>{
+  const f=await chromaFixture(),a=importedVideo('a');f.switchProject({...f.project(),revision:8,assets:{[a.id]:a}});
+  f.studio.source.value=a.id;f.studio.source.onchange();
+  const time=f.studio.node.querySelector('[data-chroma-time]');assert.equal(time.disabled,false);time.value='6.125';time.oninput();
+  await f.studio.refreshFrame();assert.equal(f.calls[0][1].time,6.125);assert.equal(f.calls[0][1].slot,a.id);
+  assert.match(f.studio.node.querySelector('[data-chroma-frame-caption]').textContent,/green.mp4/);
+  time.value='500';time.oninput();await f.studio.refreshFrame();assert.equal(f.calls[1][1].time,7.999);
+  f.studio.source.value='B';f.studio.source.onchange();await f.studio.refreshFrame();assert.equal(f.calls[2][1].time,3);
+  f.studio.source.value=a.id;f.studio.source.onchange();assert.equal(Number(time.value),7.999);
+});
+test('missing, failed and preparing video choices stay explicit; audio/images cannot become chroma targets',async()=>{
+  const f=await chromaFixture(),ready=importedVideo('a'),pending=importedVideo('b',{status:'preparing'}),failed=importedVideo('c',{status:'failed'}),audio=importedVideo('d',{kind:'audio'}),image=importedVideo('e',{kind:'image'});
+  f.switchProject({...f.project(),revision:8,assets:Object.fromEntries([ready,pending,failed,audio,image].map(item=>[item.id,item]))});
+  assert.deepEqual(plain(f.studio.targets()).map(item=>item.id),['A','B',ready.id,pending.id,failed.id]);
+  const radios=f.studio.node.querySelectorAll('[data-chroma-target]');assert.equal(radios[3].disabled,true);assert.equal(radios[4].disabled,true);
+  f.studio.source.value=ready.id;f.studio.source.onchange();f.input('enabled',true);
+  f.switchProject({...f.project(),revision:9,assets:{}});assert.equal(f.studio.source.value,ready.id);
+  assert.equal(f.studio.apply.disabled,true);assert.equal(f.studio.refresh.disabled,true);assert.match(f.studio.status.textContent,/unavailable/i);
+  await f.studio.save(false);await f.studio.refreshFrame();assert.equal(f.calls.length,0);
+});
+test('selected asset saved settings survive reopening and Undo; drafts are never copied into a replacement file',async()=>{
+  const f=await chromaFixture(),a=importedVideo('a');f.switchProject({...f.project(),revision:8,assets:{[a.id]:a}});
+  f.studio.source.value=a.id;f.studio.source.onchange();f.input('enabled',true);f.input('tolerance',.33);await f.studio.save(false);
+  const saved=f.project();f.switchProject({id:'other-project',revision:1,sources:{},manual:{}});f.switchProject(saved);
+  assert.equal(f.studio.source.value,a.id);assert.equal(f.studio.settings().tolerance,.33);
+  f.switchProject({...saved,revision:10,manual:{...saved.manual,chroma_key:{}}});assert.equal(f.studio.settings().enabled,false);
+  f.input('enabled',true);f.switchProject({...f.project(),assets:{[a.id]:{...a,name:'replacement.mp4',relative_path:'another.mp4'}}});
+  assert.equal(f.studio.dirty(),false);assert.equal(f.studio.settings().enabled,false);
+});
+test('saving imported video preserves another target draft and stale target preview aborts on removal',async()=>{
+  const f=await chromaFixture(),a=importedVideo('a'),b=importedVideo('b');f.switchProject({...f.project(),revision:8,assets:{[a.id]:a,[b.id]:b}});
+  f.studio.source.value=a.id;f.studio.source.onchange();f.input('enabled',true);f.input('tolerance',.35);
+  f.studio.source.value=b.id;f.studio.source.onchange();f.input('enabled',true);f.input('tolerance',.45);
+  f.studio.source.value=a.id;f.studio.source.onchange();const edit=f.studio.options.edit;f.studio.options.edit=async(...args)=>{const result=await edit(...args);f.studio.render();return result;};
+  await f.studio.save(false);f.studio.source.value=b.id;f.studio.source.onchange();assert.equal(f.studio.settings().tolerance,.45);assert.equal(f.studio.dirty(),true);
+  await f.studio.save(false);let finish,signal;f.studio.options.frame=(_req,s)=>{signal=s;return new Promise(resolve=>{finish=resolve;});};const preview=f.studio.refreshFrame();
+  f.switchProject({...f.project(),revision:11,assets:{[a.id]:a}});finish({id:'stale'});await preview;
+  assert.equal(signal.aborted,true);assert.equal(f.studio.frame.src,undefined);assert.equal(f.studio.previewing,false);
+});
+test('manual project import entry is explicit, and source protection still applies only to its genuine A/B targets',async()=>{
+  const f=await chromaFixture(),a=importedVideo('a');f.switchProject({...f.project(),revision:8,assets:{[a.id]:a},manual:{track_locks:{A:true,B:true}}});
+  f.studio.source.value=a.id;f.studio.source.onchange();f.input('enabled',true);assert.equal(f.studio.apply.disabled,false);
+  let opened=0;f.studio.options.openMedia=()=>opened++;f.studio.node.querySelector('[data-chroma-add-video]').onclick();assert.equal(opened,1);assert.equal(f.calls.length,0);
+  assert.match(f.studio.node.querySelector('[data-chroma-copy="chromaPlayback"]').textContent,/Edited playback/);
+});
+
+
+test('short draft duration review is visible in overview and Studio with exact numbers and no automatic settings changes',()=>{
+  const f=directorFixture(),{ui,get}=f, notice=get('durationReview');notice.append(new Element('p'));
+  ui.state.dictionary={...ui.state.dictionary,durationDraftSummary:'AI draft: {selected}s / {requested}s maximum.',durationStyleLimit:'Style keeps {limit} moments.',durationSourceLimit:'Source: {available}s.',durationEvidenceLimit:'Review source ranges.',reviewDurationSettings:'Review style & length'};
+  ui.state.project.draft.duration_review={reason:'style_moment_limit',requested_seconds:90,selected_seconds:12,available_source_seconds:360,style_moment_limit:1};
+  const before=JSON.stringify(ui.state.project);ui.renderDurationReview();
+  assert.equal(notice.hidden,false);assert.match(notice.querySelector('p').textContent,/12s \/ 90s maximum.*1 moments/);
+  assert.equal(notice.parentElement,get('resultPanel'));ui.state.studio.open=true;ui.renderAiDraftNotice();
+  assert.equal(notice.parentElement.className,'studio-header');assert.equal(JSON.stringify(ui.state.project),before);assert.equal(f.calls.length,0);
+  ui.state.project.draft.duration_review={reason:'source_shorter',requested_seconds:90,selected_seconds:73.833,available_source_seconds:73.833};ui.renderDurationReview();assert.match(notice.querySelector('p').textContent,/73.8s/);
+  ui.state.project.draft.duration_review.reason='near_target';ui.renderDurationReview();assert.equal(notice.hidden,true);
+  ui.state.project=null;ui.renderDurationReview();assert.equal(notice.hidden,true);
+});
+
+test('reopening chooses a saved keyed Media video and green defaults recover excessive tolerance without silently saving',async()=>{
+  const f=await chromaFixture(), asset=importedVideo('c');f.studio.options.selectedTarget=()=>null;
+  const project={...f.project(),id:'reopen-layer',revision:19,assets:{[asset.id]:asset},manual:{chroma_key:{[asset.id]:{...f.api.CHROMA_DEFAULTS,enabled:true,tolerance:1,edge_softness:.61}}}};
+  f.switchProject(project);assert.equal(f.studio.source.value,asset.id);assert.equal(f.studio.node.querySelector('[data-chroma-warning]').hidden,false);
+  f.studio.node.querySelector('[data-chroma-defaults]').onclick();
+  assert.equal(f.studio.settings().tolerance,.12);assert.equal(f.studio.settings().background_mode,'transparent');assert.equal(project.manual.chroma_key[asset.id].tolerance,1);
+  f.studio.options.autoPreview=true;await f.studio.save(false);
+  assert.equal(f.project().manual.chroma_key[asset.id].background_mode,'transparent');assert.equal(f.calls.at(-1)[0],'frame');assert.equal(f.calls.at(-1)[1].slot,asset.id);
+  assert.equal(f.studio.frame.parentElement.hidden,false);
+});
+
+test('new imported video enables a layer while A/B rejects the unavailable layer mode',async()=>{
+  const f=await chromaFixture(),asset=importedVideo('d');f.input('background_mode','transparent');assert.equal(f.studio.settings().background_mode,'replace');
+  f.switchProject({...f.project(),revision:8,assets:{[asset.id]:asset}});f.studio.source.value=asset.id;f.studio.source.onchange();f.input('enabled',true);
+  assert.equal(f.studio.settings().background_mode,'transparent');assert.equal(f.project().manual.chroma_key[asset.id],undefined);
 });

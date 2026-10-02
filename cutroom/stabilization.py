@@ -194,8 +194,10 @@ def stabilize_video(
                       "-protocol_whitelist", "file,pipe", "-i", str(source)]
             if progress:
                 progress(.05, "Analyzing camera movement")
+            # Request portable text motion data explicitly. The binary default
+            # produced inconsistent pass-two corrections on Windows FFmpeg7.1.1.
             _run(common + ["-map", "0:v:0", "-an", "-vf",
-                          f"vidstabdetect=result=transforms.trf:shakiness={shakiness}:accuracy=15:show=0",
+                          f"vidstabdetect=result=transforms.trf:shakiness={shakiness}:accuracy=15:show=0:fileformat=ascii",
                           "-fps_mode", "passthrough", "-f", "null", "-"],
                  timeout=timeout, cancel_check=cancel_check, cwd=work, threads=threads)
             if not (work / "transforms.trf").is_file():

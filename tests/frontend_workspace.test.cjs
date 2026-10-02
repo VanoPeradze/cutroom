@@ -219,7 +219,7 @@ test("inspector keyboard bounds preserve room for preview and restore a wider sa
   assert.equal(h.controller.setInspectorWidth(9999),520);
   assert.equal(h.store.get("cutroom-inspector-width-v1"),"520");
   h.panel.rect.width=961; h.win.emit("resize"); h.flush();
-  assert.equal(divider.getAttribute("aria-valuenow"),"505");
+  assert.equal(divider.getAttribute("aria-valuenow"),"520");
   assert.equal(h.store.get("cutroom-inspector-width-v1"),"520");
   h.panel.rect.width=1280; h.win.emit("resize"); h.flush();
   assert.equal(divider.getAttribute("aria-valuenow"),"520");
@@ -280,4 +280,24 @@ test("tool display preferences tolerate invalid storage and cleanup restores acc
   assert.equal(h.el("workspaceToolsToggle").parentElement,null);
   assert.equal(h.panel.classList.contains("inspector-collapsed"),false);
   assert.equal(h.panel.properties.has("--workspace-inspector-width"),false);
+});
+
+test("focused workspaces keep independent widths, retain edit preference and never move media", () => {
+  const h = harness({inspector:true, savedWidth:"400"});
+  h.controller.setWorkspace("audio");
+  assert.equal(h.panel.dataset.workspace,"audio");
+  assert.equal(h.el("workspaceInspectorDivider").getAttribute("aria-valuenow"),"640");
+  h.controller.setInspectorWidth(720);
+  h.controller.setWorkspace("framing");
+  assert.equal(h.el("workspaceInspectorDivider").getAttribute("aria-valuenow"),"640");
+  h.controller.setWorkspace("timeline");
+  assert.equal(h.el("workspaceInspectorDivider").getAttribute("aria-valuenow"),"400");
+  h.controller.setWorkspace("audio");
+  assert.equal(h.el("workspaceInspectorDivider").getAttribute("aria-valuenow"),"720");
+  h.panel.rect.width = 961; h.win.emit("resize"); h.flush();
+  assert.equal(h.el("workspaceInspectorDivider").getAttribute("aria-valuenow"),"589");
+  h.panel.rect.width = 1280; h.win.emit("resize"); h.flush();
+  assert.equal(h.el("workspaceInspectorDivider").getAttribute("aria-valuenow"),"720");
+  assert.equal(h.a.parentElement,h.stage); assert.equal(h.preview.parentElement,h.dock);
+  h.controller.setWorkspace("invalid"); assert.equal(h.panel.dataset.workspace,"audio");
 });

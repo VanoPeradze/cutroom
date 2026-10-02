@@ -60,7 +60,8 @@ Free and open source (MIT). No subscription. No CUTROOM watermark.
 
 GET STARTED
 1. Extract the entire ZIP into a folder.
-2. Open it and double-click run_windows.bat.
+2. Open the launcher beside App: START CUTROOM.bat on Windows, or
+   START CUTROOM.command on Mac. In the combined ZIP, open windows/mac first.
 3. Follow the setup prompts. CUTROOM opens in your browser when ready.
 
 First setup needs internet. Some AI features need an additional download

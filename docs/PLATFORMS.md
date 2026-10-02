@@ -6,16 +6,16 @@ CUTROOM is a free, MIT-licensed, local-first video editor for editable YouTube, 
 
 | Platform | Available path | Validation and limits |
 | --- | --- | --- |
-| Windows | [Combined beta ZIP](https://cutroom-studio.expo.app/#download): `windows/START CUTROOM.bat`. A source checkout uses `run_windows.bat`. | Existing Windows beta setup; fresh-computer and broad hardware QA remain ongoing. |
-| macOS | The same ZIP: `mac/START CUTROOM.command`. | Targets macOS 15+ on Apple Silicon and Intel. Publication requires current-source automated checks on both; manual installation and Safari QA remain needed. |
+| Windows | [Windows beta ZIP](https://cutroom-studio.expo.app/#download): `START CUTROOM.bat` beside `App`. A source checkout uses `run_windows.bat`. | Existing Windows beta setup; fresh-computer and broad hardware QA remain ongoing. |
+| macOS | [Mac beta ZIP](https://cutroom-studio.expo.app/#download): `START CUTROOM.command` beside `App`. | Targets macOS 15+ on Apple Silicon and Intel. Publication requires current-source automated checks on both; manual installation and Safari QA remain needed. |
 | Linux | [Repository source](https://github.com/VanoPeradze/cutroom): `setup_linux.sh` and `run_linux.sh`. | Development path only; no Linux folder, native Linux installer or verified end-to-end Linux QA in this beta. |
 
-The download contains only **windows** and **mac**. It ships source code and launchers, not bundled Python/FFmpeg runtimes or model weights. First setup needs internet to download dependencies. The Mac launcher is not a signed/notarized `.app`. A Linux source checkout is a separate installation path.
+Choose the **Windows** or **Mac** download. Each ZIP contains its launcher, **START HERE.html**, and **App** at the top level. The existing combined ZIP remains available and contains **windows** and **mac** folders; open your platform folder first. Both layouts ship source code and launchers, not bundled Python/FFmpeg runtimes or model weights. First setup needs internet to download dependencies. The Mac launcher is not a signed/notarized `.app`. A Linux source checkout is a separate installation path.
 
 ## Windows beta
 
 1. Download the beta and extract the **entire** ZIP into a writable local folder. Do not run it inside the archive or extract over your existing installation.
-2. Open **windows** and double-click **START CUTROOM.bat**. Keep **App** and **START HERE.html** beside the launcher. If extensions are hidden, the launcher may appear as **START CUTROOM**.
+2. Double-click **START CUTROOM.bat** beside **App**. If using the combined ZIP, open **windows** first. Keep **App** and **START HERE.html** beside the launcher. If extensions are hidden, the launcher may appear as **START CUTROOM**.
 3. Let setup finish, then keep its console open while editing. Open `http://127.0.0.1:8765` if the browser does not open automatically.
 4. Start with **Manual edit**, import a short recording, export it and watch the MP4 outside CUTROOM.
 
@@ -25,8 +25,8 @@ For a GitHub source checkout, run **`run_windows.bat` from the repository root**
 
 ## macOS beta
 
-1. Use **macOS 15 or newer**, on **Apple Silicon or Intel**. Download and fully extract the same beta ZIP to a writable folder you can keep.
-2. Open **mac**, then double-click **START CUTROOM.command**. Keep **App** and **START HERE.html** beside it.
+1. Use **macOS 15 or newer**, on **Apple Silicon or Intel**. Download and fully extract the Mac beta ZIP to a writable folder you can keep.
+2. Double-click **START CUTROOM.command** beside **App**. If using the combined ZIP, open **mac** first. Keep **App** and **START HERE.html** beside it.
 3. Read the setup summary. Installation/repair of dependencies happens only after you approve the prompt.
 4. Keep Terminal open while editing. If needed, open `http://127.0.0.1:8765` after the server starts.
 5. Try a short manual project first, then review the exported MP4 and saved project after restart.

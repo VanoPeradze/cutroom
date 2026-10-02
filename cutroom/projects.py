@@ -78,6 +78,7 @@ class ProjectStore:
                 "aspect": "9:16",
                 "pace": "balanced",
                 "target_duration": 60,
+                "duration_mode": "target",
                 "layout": "auto",
                 "audio_source": "A",
                 "quality": "balanced",

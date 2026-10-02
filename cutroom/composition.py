@@ -36,8 +36,9 @@ CHROMA_KEY_DEFAULTS = {
     "edge_softness": 0.08,
     "background_color": "#000000",
     "background_asset_id": None,
+    "background_mode": "replace",
 }
-CHROMA_KEY_OPTIONAL_FIELDS = frozenset({"background_asset_id"})
+CHROMA_KEY_OPTIONAL_FIELDS = frozenset({"background_asset_id", "background_mode"})
 CHROMA_KEY_ACTION_FIELDS = {
     "set_chroma_key": frozenset({"slot", *CHROMA_KEY_DEFAULTS}),
     "reset_chroma_key": frozenset({"slot"}),
@@ -57,6 +58,8 @@ def normalize_chroma_key(value: Any = None, *, strict: bool = False) -> dict[str
         result = {**defaults, **{key: value[key] for key in defaults if key in value}}
         if not isinstance(result["enabled"], bool):
             raise ValueError("enabled must be a boolean.")
+        if result["background_mode"] not in ("replace", "transparent"):
+            raise ValueError("background_mode must be replace or transparent.")
         image_id = result["background_asset_id"]
         if image_id is not None and (not isinstance(image_id, str) or not re.fullmatch(r"asset_[0-9a-f]{32}", image_id)):
             raise ValueError("background_asset_id must identify a project image or be null.")
@@ -77,12 +80,55 @@ def normalize_chroma_key(value: Any = None, *, strict: bool = False) -> dict[str
         return defaults
 
 
-def chroma_video_source(project: Mapping[str, Any], slot: str) -> bool:
-    """Require real video metadata rather than enabling a missing/audio-only lane."""
-    source = (project.get("sources") or {}).get(slot) if slot in {"A", "B"} else None
-    return isinstance(source, Mapping) and all(
+def chroma_source(project: Mapping[str, Any], target: str) -> dict[str, Any] | None:
+    """Resolve A/B or one ready project-local video by stable asset ID.
+
+    Filenames and timeline clip IDs never identify settings: two imports with
+    the same name remain separate targets, and every use of one asset shares
+    its own source preprocessing. This helper never opens arbitrary media.
+    """
+    if not isinstance(target, str):
+        return None
+    if target in {"A", "B"}:
+        source = (project.get("sources") or {}).get(target)
+    elif re.fullmatch(r"asset_[0-9a-f]{32}", target):
+        assets = project.get("assets") or {}
+        source = assets.get(target) if isinstance(assets, Mapping) else None
+        if (not isinstance(source, Mapping) or source.get("id") != target
+                or source.get("kind") != "video" or source.get("status") != "ready"):
+            return None
+        relative = source.get("path")
+        if not isinstance(relative, str) or not relative:
+            return None
+        path = PurePosixPath(relative.replace("\\", "/"))
+        if (path.is_absolute() or ".." in path.parts or len(path.parts) < 4
+                or path.parts[:3] != ("media", "assets", target)):
+            return None
+        source = {**source, "relative_path": relative}
+    else:
+        return None
+    if not isinstance(source, Mapping) or not all(
         (_finite_number(source.get(key)) or 0) > 0 for key in ("duration", "width", "height")
-    )
+    ):
+        return None
+    if max(source["width"], source["height"]) > 16384 or source["width"] * source["height"] > 64_000_000:
+        return None
+    return copy.deepcopy(dict(source))
+
+
+def chroma_video_source(project: Mapping[str, Any], slot: str) -> bool:
+    """Require real video metadata rather than a missing/audio/image target."""
+    return chroma_source(project, slot) is not None
+
+
+def chroma_video_targets(project: Mapping[str, Any], *, used_only: bool = False) -> tuple[str, ...]:
+    """Stable inventory; unused library keys do not require export capability."""
+    assets = project.get("assets") or {}
+    used = {row.get("asset_id") for row in ((project.get("manual") or {}).get("media_clips") or [])
+            if isinstance(row, Mapping)} if used_only else None
+    return tuple(target for target in ("A", "B", *(assets if isinstance(assets, Mapping) else ()))
+                 if (target in {"A", "B"} or used is None or target in used)
+                 and chroma_video_source(project, target))
 
 
 def source_chroma_key(project: Mapping[str, Any], slot: str) -> dict[str, Any]:
@@ -97,7 +143,7 @@ def chroma_background_asset(project: Mapping[str, Any], slot: str) -> dict[str, 
     """Resolve a ready project image; never silently replace a missing choice."""
     config = source_chroma_key(project, slot)
     asset_id = config["background_asset_id"]
-    if not config["enabled"] or asset_id is None:
+    if not config["enabled"] or config["background_mode"] == "transparent" or asset_id is None:
         return None
     assets = project.get("assets") or {}
     asset = assets.get(asset_id) if isinstance(assets, Mapping) else None
@@ -129,16 +175,18 @@ def prepare_chroma_key_edit(project: Mapping[str, Any], payload: Mapping[str, An
     if set(payload) - fields - {"action"} or fields - optional - payload.keys():
         raise ValueError("Supply only the required Chroma Key fields.")
     slot = payload.get("slot")
-    if not isinstance(slot, str) or slot not in {"A", "B"} or not chroma_video_source(project, slot):
-        raise ValueError("Choose an existing video source A or B for Chroma Key.")
+    if not isinstance(slot, str) or not chroma_video_source(project, slot):
+        raise ValueError("Choose an existing source or ready project video for Chroma Key.")
     config = normalize_chroma_key({key: payload[key] for key in CHROMA_KEY_DEFAULTS if key in payload}, strict=True) if action == "set_chroma_key" else dict(CHROMA_KEY_DEFAULTS)
+    if config["enabled"] and config["background_mode"] == "transparent" and slot in ("A", "B"):
+        raise ValueError("To reveal the video underneath, add this foreground video in Media and place it on the timeline. Main A/B sources use a color or image background.")
     manual = project.get("manual") or {}
     values = manual.get("chroma_key") if isinstance(manual, Mapping) else None
     existing = values.get(slot) if isinstance(values, Mapping) else None
     staged = copy.deepcopy(dict(values)) if isinstance(values, Mapping) else {}
     staged[slot] = config
     chroma_background_asset({**project, "manual": {**manual, "chroma_key": staged}}, slot)
-    previous = {**existing, "background_asset_id": existing.get("background_asset_id")} if isinstance(existing, Mapping) else existing
+    previous = normalize_chroma_key(existing) if isinstance(existing, Mapping) else existing
     if previous == config or existing is None and config == CHROMA_KEY_DEFAULTS:
         return None
     return staged
@@ -367,7 +415,9 @@ __all__ = [
     "CHROMA_KEY_ACTION_FIELDS",
     "CHROMA_KEY_OPTIONAL_FIELDS",
     "normalize_chroma_key",
+    "chroma_source",
     "chroma_video_source",
+    "chroma_video_targets",
     "source_chroma_key",
     "chroma_background_asset",
     "prepare_chroma_key_edit",

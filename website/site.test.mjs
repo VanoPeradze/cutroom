@@ -26,14 +26,23 @@ function assertLocalized(link) {
   assert.match(link[0], />[^<>]*[A-Za-z][^<>]*</, 'The default link text must be English');
 }
 
-test('one primary download action points to the maintained beta archive', () => {
+test('one download area offers distinct real Windows and Mac archives, with Linux guide only', () => {
   const release = JSON.parse(readFileSync(new URL('./release.json', import.meta.url), 'utf8'));
   const buttons = [...html.matchAll(/<a\b[^>]*class="[^"]*\bbutton\b[^"]*"[^>]*>/g)];
-  assert.equal(buttons.length, 1, 'The landing page must have one primary action');
-  assert.match(buttons[0][0], new RegExp(`href="/downloads/${release.filename.replaceAll('.', '\\.')}"`));
-  assert.match(buttons[0][0], /\bdownload\b/);
-  assertLocalized(linksTo(html, `/downloads/${release.filename}`)[0]);
+  assert.equal(buttons.length, 2);
+  assert.equal(new Set(buttons.map(row => row[0].match(/href="([^"]+)"/)[1])).size, 2);
+  for (const platform of ['windows', 'mac']) {
+    const entry = release.platforms[platform];
+    const links = linksTo(html, `/downloads/${entry.filename}`);
+    assert.equal(links.length, 1);
+    assert.match(links[0][1], /\bdownload\b/);
+    assertLocalized(links[0]);
+    assert.equal(linksTo(html, `/downloads/${entry.filename}.sha256`).length, 1);
+  }
+  assert.equal(linksTo(html, `/downloads/${release.filename}`).length, 1);
   assert.equal(linksTo(html, `/downloads/${release.filename}.sha256`).length, 1);
+  assert.doesNotMatch(html, /href="[^"]*Linux[^"\n]*\.zip/i);
+  assert.ok(linksTo(html, `${repository}/blob/master/docs/PLATFORMS.md#linux-source-based-development-path`).length);
 });
 
 test('source and issue links remain visible without competing with download', () => {
@@ -81,10 +90,9 @@ test('the concise introduction shows an authentic bilingual dark editor preview'
   assert.doesNotMatch(html, /(?:welcome|ai-options)\.png|\bdata-shot=|<table\b/);
 });
 
-test('three platform links lead to readable localized installation guidance', () => {
+test('platform download help remains readable and localized', () => {
   const setup = region('details', 'install-help');
   for (const platform of ['windows', 'mac', 'linux']) {
-    assert.equal(linksTo(html, `#${platform}-install`).length, 1);
     assert.match(setup, new RegExp(`id="${platform}-install"[^>]*data-he="[^"]*[\\u0590-\\u05ff]`));
   }
   assert.match(setup, /Double-click START CUTROOM\.bat/);

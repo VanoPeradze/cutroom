@@ -18,6 +18,8 @@ export function initWorkspace({ document: doc = document, window: win = window, 
   let preferredHeight = null;
   let resizeGesture = null;
   let preferredWidth = null;
+  let workspaceMode = "timeline";
+  const widthKey = () => workspaceMode === "timeline" ? INSPECTOR_WIDTH_KEY : `${INSPECTOR_WIDTH_KEY}-${workspaceMode}`;
   let inspectorCollapsed = false;
   let inspectorGesture = null;
   const listeners = [];
@@ -77,13 +79,14 @@ export function initWorkspace({ document: doc = document, window: win = window, 
   }
   const widthBounds = () => {
     const available = panel.getBoundingClientRect().width || win.innerWidth || 1280;
-    const rail = panel.querySelector(".advanced-tabs")?.getBoundingClientRect().width || 84;
-    return {minimum:320, maximum:Math.max(320, Math.min(520, Math.floor(available - rail - 12 - 360)))};
+    const focused = workspaceMode !== "timeline";
+    const minimum = focused ? 440 : 320;
+    return {minimum, maximum:Math.max(minimum, Math.min(focused ? 860 : 520, Math.floor(available - 12 - 360)))};
   };
   const applyInspector = () => {
     if (!inspector) return null;
     const bounds = widthBounds();
-    const width = Math.round(Math.min(bounds.maximum, Math.max(bounds.minimum, preferredWidth ?? 360)));
+    const width = Math.round(Math.min(bounds.maximum, Math.max(bounds.minimum, preferredWidth ?? (workspaceMode === "timeline" ? 360 : 640))));
     panel.style.setProperty("--workspace-inspector-width", `${width}px`);
     panel.classList.toggle("inspector-collapsed", inspectorCollapsed);
     inspector.inert = inspectorCollapsed;
@@ -101,8 +104,8 @@ export function initWorkspace({ document: doc = document, window: win = window, 
   };
   const saveInspector = () => {
     try {
-      if (preferredWidth === null) win.localStorage.removeItem(INSPECTOR_WIDTH_KEY);
-      else win.localStorage.setItem(INSPECTOR_WIDTH_KEY, String(preferredWidth));
+      if (preferredWidth === null) win.localStorage.removeItem(widthKey());
+      else win.localStorage.setItem(widthKey(), String(preferredWidth));
       win.localStorage.setItem(INSPECTOR_COLLAPSED_KEY, String(inspectorCollapsed));
     } catch { /* Display controls also work without preference storage. */ }
   };
@@ -113,6 +116,20 @@ export function initWorkspace({ document: doc = document, window: win = window, 
     if (persist) saveInspector();
     scheduleResize();
     return applied;
+  };
+  const setWorkspace = (mode) => {
+    if (!["timeline", "media", "framing", "transcript", "audio", "settings"].includes(mode)) return;
+    if (mode !== workspaceMode) {
+      endInspectorResize(null, true);
+      workspaceMode = mode;
+      preferredWidth = null;
+      try {
+        const saved = win.localStorage.getItem(widthKey());
+        if (saved !== null && Number.isFinite(Number(saved)) && Number(saved) >= 320) preferredWidth = Number(saved);
+      } catch { /* Workspaces remain usable without saved preferences. */ }
+    }
+    panel.dataset.workspace = mode;
+    applyInspector(); scheduleResize();
   };
   const setInspectorCollapsed = (collapsed) => {
     inspectorCollapsed = Boolean(collapsed);
@@ -168,7 +185,8 @@ export function initWorkspace({ document: doc = document, window: win = window, 
     // Includes the ruler, both video lanes, layout/audio, toolbar and the
     // horizontal scrollbar that appears when zoomed in.
     const minimum = 326;
-    const maximum = Math.max(minimum, Math.floor(height - headerHeight - 14 - 220));
+    const dockHeight = panel.querySelector(".advanced-tabs") ? 72 : 0;
+    const maximum = Math.max(minimum, Math.floor(height - headerHeight - dockHeight - 14 - 220));
     return { minimum, maximum, defaultHeight: Math.min(420, Math.max(minimum, Math.round(height * .46))) };
   };
   const applyTimelineHeight = () => {
@@ -395,7 +413,7 @@ export function initWorkspace({ document: doc = document, window: win = window, 
   applyInspector();
   renderFullscreen();
   const controller = {
-    toggleFullscreen, openGuide, setTimelineHeight, setInspectorWidth, setInspectorCollapsed,
+    toggleFullscreen, openGuide, setTimelineHeight, setInspectorWidth, setInspectorCollapsed, setWorkspace,
     showInspector: () => setInspectorCollapsed(false),
     destroy() {
       disposed = true;
@@ -418,6 +436,7 @@ export function initWorkspace({ document: doc = document, window: win = window, 
       panel.style.removeProperty("--workspace-timeline-height");
       panel.style.removeProperty("--workspace-inspector-width");
       panel.classList.remove("inspector-collapsed");
+      delete panel.dataset.workspace;
       delete panel.workspaceController;
     },
   };

@@ -44,6 +44,7 @@ class Element {
       this.children.push(node); node.parentElement = this;
     }
   }
+  prepend(node) { this.append(node); this.children.pop(); this.children.unshift(node); }
   appendChild(node) { this.append(node); return node; }
   after(node) { this.parentElement?.append(node); }
   replaceChildren(...nodes) { for (const child of this.children) child.parentElement = null; this.children = []; this.append(...nodes); }
@@ -167,7 +168,7 @@ test('Audio is an accessible primary tab opening the actual existing mixer witho
 
 test('choosing a primary tool restores the display inspector without changing the project', () => {
   const {run,nodes}=fixture(); let opened=0;
-  nodes.get('advancedPanel').workspaceController={showInspector(){opened++;}};
+  nodes.get('advancedPanel').workspaceController={setWorkspace(){},showInspector(){opened++;}};
   const before=run('JSON.stringify(state.project)');
   run("selectAdvancedTab('audio');selectAdvancedTab('timeline');");
   assert.equal(opened,2); assert.equal(run('JSON.stringify(state.project)'),before);

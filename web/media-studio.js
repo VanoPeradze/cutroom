@@ -350,6 +350,14 @@ export class MediaStudio {
         item.frame.style.background=clip.fit==='contain' ? '#000':'transparent';
         Object.assign(item.element.style,{objectFit:clip.fit === 'contain' ? 'contain':'cover',transform:visualMotion(clip,time)});
         if (asset.kind === 'video') { item.element.muted = true; const target = Number(clip.video_source_start ?? clip.source_start ?? 0)+local*speed; this.syncPlayer(item,Math.min(target,Math.max(0,asset.duration-.04)),speed,playing && target < asset.duration,0); }
+        if (asset.kind === 'video' && this.options.chromaPreview) {
+          const settings=project.manual?.chroma_key?.[clip.asset_id];
+          if(settings?.enabled || item.chroma) {
+            item.chroma ||= this.options.chromaPreview(item.element);
+            item.chroma.update(settings,project.assets?.[settings?.background_asset_id]?.url);
+          }
+          if(settings?.enabled && settings.background_mode==='transparent')item.frame.style.background='transparent';
+        }
       }
       if (asset.kind === 'audio' || (asset.has_audio && clip.audio_enabled)) {
         const key=`a:${clip.id}`, item=this.player(key,'audio',asset.url,clip.role || 'music'); active.add(key);
@@ -398,6 +406,7 @@ export class MediaStudio {
     this.meterResetUntil = 0; this.updateMeters(false);
   }
   releasePlayer(key,item) {
+    item.chroma?.dispose();
     item.wanted=false; item.token++; item.element.pause?.();
     item.node?.disconnect(); item.gain?.disconnect(); item.analyser?.disconnect();
     item.element.removeAttribute?.('src'); item.element.load?.();

@@ -358,3 +358,86 @@ export function applyTranslations() {
   });
   return dictionary;
 }
+
+Object.assign(en, {
+  greenScreenNav: "Green screen", chromaTitle: "Green screen / Chroma key",
+  chromaHelp: "Choose a video, remove its background color, then check a processed frame.",
+  chromaAddVideo: "Add video in Media", chromaLibraryVideo: "Media video", chromaMainVideo: "Main source",
+  chromaUnavailable: "This video is unavailable. Choose another video or import it in Media.",
+  chromaPreparing: "Preparing video", chromaFailedVideo: "Import failed — retry in Media",
+  chromaTime: "Frame time (source seconds)", chromaPlayerTime: "Uses the selected source player time.",
+  chromaTargetHelp: "Each video has its own settings. Repeated timeline uses of the same video share them."
+});
+Object.assign(he, {
+  greenScreenNav: "מסך ירוק", chromaTitle: "מסך ירוק / Chroma key",
+  chromaHelp: "בוחרים סרטון, מסירים את צבע הרקע ובודקים פריים מעובד.",
+  chromaAddVideo: "הוספת סרטון במדיה", chromaLibraryVideo: "סרטון מהמדיה", chromaMainVideo: "מקור ראשי",
+  chromaUnavailable: "הסרטון אינו זמין. בחרו סרטון אחר או ייבאו אותו דרך מדיה.",
+  chromaPreparing: "מכין את הסרטון", chromaFailedVideo: "הייבוא נכשל — נסו שוב במדיה",
+  chromaTime: "זמן הפריים בשניות במקור", chromaPlayerTime: "לפי הזמן בנגן של המקור שנבחר.",
+  chromaTargetHelp: "לכל סרטון הגדרות משלו. הן משותפות לכל ההופעות של אותו סרטון בציר הזמן."
+});
+
+Object.assign(en, {
+  targetLength: "Maximum length",
+  durationLimitHelp: "A ceiling, not a quota. Single-moment styles may finish earlier; use highlights for several moments.",
+  durationDraftSummary: "AI draft: {selected}s / {requested}s maximum.",
+  durationStyleLimit: "This style keeps at most {limit} complete moment(s). Choose a multi-moment style to include more footage, or keep and edit this draft.",
+  durationSourceLimit: "The source is {available}s long. No footage was repeated to fill the requested length.",
+  durationEvidenceLimit: "The selection is shorter than the limit. Review its source ranges or choose clips manually; quiet footage was not added just to fill time.",
+  reviewDurationSettings: "Review style & length"
+});
+Object.assign(he, {
+  targetLength: "אורך מרבי",
+  durationLimitHelp: "תקרה, לא מכסה. סגנון של רגע אחד יכול להסתיים מוקדם יותר; לכמה רגעים בחרו היילייטס.",
+  durationDraftSummary: "טיוטת AI: ‏{selected} שניות מתוך תקרה של {requested} שניות.",
+  durationStyleLimit: "הסגנון שומר עד {limit} רגעים שלמים. כדי לכלול עוד חומר בחרו סגנון של כמה רגעים, או המשיכו לערוך את הטיוטה הזאת.",
+  durationSourceLimit: "אורך המקור הוא {available} שניות. לא חזרנו על קטעים כדי למלא את האורך המבוקש.",
+  durationEvidenceLimit: "הבחירה קצרה מהתקרה. בדקו את טווחי המקור או בחרו קטעים ידנית; לא נוסף חומר שקט רק כדי למלא זמן.",
+  reviewDurationSettings: "בדיקת הסגנון והאורך"
+});
+
+Object.assign(en, {
+  targetLength: "Edit length", durationIntent: "Length intent",
+  durationTargetMode: "Highlight sequence — aim for this length",
+  durationStyleMode: "Follow style — maximum length",
+  durationLimitHelp: "Highlights combine distinct relevant passages. Style maximum keeps the preset’s moment limit (one engagement for Competitive Clutch). Neither mode adds filler.",
+  durationDraftSummary: "AI draft: {selected}s / {requested}s requested.",
+  durationStyleLimit: "This style keeps at most {limit} complete moment(s). Choose Highlight sequence to include more relevant passages, or keep and edit this draft.",
+  durationEvidenceLimit: "Eligible passages produced a shorter edit. Review the selected ranges or add footage manually; nothing was repeated to fill time."
+});
+Object.assign(he, {
+  targetLength: "אורך העריכה", durationIntent: "מטרת האורך",
+  durationTargetMode: "רצף היילייטס — לשאוף לאורך הזה",
+  durationStyleMode: "לפי הסגנון — אורך מרבי",
+  durationLimitHelp: "היילייטס מחברים קטעים רלוונטיים נפרדים. מצב סגנון שומר את מספר הרגעים של הסגנון (אירוע יחיד ב־Competitive Clutch). אין הוספת חומר למילוי זמן.",
+  durationDraftSummary: "טיוטת AI: ‏{selected} שניות מתוך {requested} שהתבקשו.",
+  durationStyleLimit: "הסגנון שומר עד {limit} רגעים שלמים. בחרו רצף היילייטס כדי לכלול קטעים רלוונטיים נוספים, או המשיכו לערוך את הטיוטה.",
+  durationEvidenceLimit: "הקטעים המתאימים הניבו עריכה קצרה יותר. בדקו את הבחירה או הוסיפו קטעים ידנית; לא שוכפל חומר למילוי זמן."
+});
+
+Object.assign(en, {
+  chromaHelp:'Choose the foreground video, choose what appears behind it, then remove the color and apply.',
+  chromaSource:'1 · Foreground video', chromaColor:'3 · Color to remove', chromaMode:'2 · Background',
+  chromaUnderneath:'Video underneath (Media layer)', chromaReplace:'Color or image',
+  chromaGreenDefaults:'Use green-screen defaults',
+  chromaHighTolerance:'This tolerance can remove the subject too. Start with the green-screen defaults, then increase gradually.',
+  chromaLayerHelp:'For a moving background, keep it as main footage and add the green-screen video in Media, on top. Choose Video underneath here.',
+  chromaOpaque:'Video underneath reveals earlier timeline layers. Color or image replaces the background inside this video. The final MP4 combines all layers.',
+  chromaApply:'Apply & preview', chromaSaved:'Saved. Edited playback and export use these settings. You can Undo this change.',
+  chromaPlayback:'Edited playback shows the saved key. This processed frame checks exact edges; checkerboard means the video underneath will show through.'
+});
+Object.assign(he, {
+  chromaHelp:'בחרו את הסרטון הקדמי, בחרו מה יופיע מאחוריו, ואז הסירו את הצבע והחילו.',
+  chromaSource:'1 · הסרטון הקדמי', chromaColor:'3 · הצבע להסרה', chromaMode:'2 · הרקע',
+  chromaUnderneath:'הסרטון שמתחת (שכבת מדיה)', chromaReplace:'צבע או תמונה',
+  chromaGreenDefaults:'הגדרות התחלה למסך ירוק',
+  chromaHighTolerance:'סבילות כזאת עלולה להסיר גם את התוכן הרצוי. התחילו מהגדרות המסך הירוק והעלו בהדרגה.',
+  chromaLayerHelp:'לרקע נע, השאירו אותו כסרטון הראשי והוסיפו את סרטון המסך הירוק במדיה מעליו. בחרו כאן בסרטון שמתחת.',
+  chromaOpaque:'הסרטון שמתחת יופיע דרך הצבע שהוסר. צבע או תמונה מחליפים את הרקע בתוך הסרטון. קובץ MP4 הסופי משלב את השכבות.',
+  chromaApply:'החלה ותצוגה', chromaSaved:'נשמר. הנגן במצב עריכה והייצוא משתמשים בהגדרות אלו. אפשר לבטל את השינוי.',
+  chromaPlayback:'הנגן במצב עריכה מציג את המסך הירוק. הפריים המעובד בודק את הקצוות המדויקים; משבצות מסמנות שקיפות לסרטון שמתחת.'
+});
+
+Object.assign(en, {chromaOriginalPlayback:'Original footage; switch to Edited cut to see chroma key.',chromaLivePlayback:'Chroma-key playback preview; check the processed frame for exact edges.'});
+Object.assign(he, {chromaOriginalPlayback:'חומר מקורי; עברו לתצוגת עריכה כדי לראות מסך ירוק.',chromaLivePlayback:'תצוגת מסך ירוק בנגן; בדקו את הפריים המעובד לקצוות מדויקים.'});

@@ -38,7 +38,7 @@ def build_chroma_key_nodes(
     width: int, height: int, fps: float, duration: float, prefix: str = "chroma",
     *, background_label: str | None = None,
 ) -> list[str]:
-    """Flatten a keyed genuine source onto its chosen opaque solid/image background.
+    """Key a genuine source, retaining alpha for Media layers when requested.
 
     Call before timeline gaps, framing and effects. Never key generated black
     gaps. Labels and geometry are compiler-owned, not request expressions.
@@ -54,7 +54,8 @@ def build_chroma_key_nodes(
     clean = normalize_chroma_key(config, strict=True)
     if not clean["enabled"]:
         return [f"{source}null{target}"]
-    if clean["background_asset_id"] is not None and background is None:
+    transparent = clean["background_mode"] == "transparent"
+    if not transparent and clean["background_asset_id"] is not None and background is None:
         raise ValueError("The chosen Chroma Key image must be supplied for this preview or export. Choose another image or reset Chroma Key.")
     if background is not None and clean["background_asset_id"] is None:
         raise ValueError("An image input requires a selected Chroma Key background image.")
@@ -68,6 +69,8 @@ def build_chroma_key_nodes(
             or not math.isfinite(duration) or not 0 < duration <= 24 * 60 * 60
             or not isinstance(prefix, str) or not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*", prefix)):
         raise ValueError("Unsupported Chroma Key source geometry or clock.")
+    if transparent:
+        return [f"{source}setpts=PTS-STARTPTS,scale={width}:{height},setsar=1,{chroma_key_filter(clean)}{target}"]
     if background is not None:
         return [
             f"{source}setpts=PTS-STARTPTS,scale={width}:{height},setsar=1,{chroma_key_filter(clean)}[{prefix}key]",
@@ -93,7 +96,7 @@ def _chroma_filters(executable: str, size: int, modified_ns: int) -> bool:
 
 def chroma_key_capability(settings: Any) -> dict[str, Any]:
     """Cheap, read-only inspection of the existing local FFmpeg; no setup."""
-    result = {"available": False, "engine": "ffmpeg-chromakey", "supports": ["solid", "image"], "mp4_alpha": False,
+    result = {"available": False, "engine": "ffmpeg-chromakey", "supports": ["solid", "image", "media-layer"], "mp4_alpha": False,
               "message": "Chroma Key needs the chromakey filter in the installed FFmpeg."}
     try:
         executable = shutil.which(settings.ffmpeg)

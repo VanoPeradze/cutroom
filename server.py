@@ -33,7 +33,7 @@ from cutroom.edit_styles import UnknownEditStyle, get_edit_style, public_edit_st
 from cutroom.editing import ManualEditError, apply_manual_edit, strip_private_edit_history
 from cutroom.sequence import SEQUENCE_ACTION_FIELDS, editor_sequence_snapshot
 from cutroom.source_tracks import SourceTrackError
-from cutroom.composition import CHROMA_KEY_ACTION_FIELDS, chroma_background_asset, chroma_video_source, source_chroma_key
+from cutroom.composition import CHROMA_KEY_ACTION_FIELDS, chroma_background_asset, chroma_source, chroma_video_source, source_chroma_key
 from cutroom.effects import build_chroma_key_nodes, chroma_key_capability
 from cutroom.stabilization import StabilizationError, stabilization_capability
 from cutroom.stabilization_assets import pinned_stabilization_source, prepare_stabilized_asset
@@ -102,6 +102,7 @@ SETTINGS_FIELDS = {
     "aspect",
     "pace",
     "target_duration",
+    "duration_mode",
     "layout",
     "audio_source",
     "quality",
@@ -369,6 +370,8 @@ def _validate_settings_payload(payload: dict[str, Any]) -> None:
                 "caption_words_per_line must be an integer between "
                 f"{CAPTION_WORDS_PER_LINE_RANGE[0]} and {CAPTION_WORDS_PER_LINE_RANGE[1]}.",
             )
+    if "duration_mode" in payload and payload["duration_mode"] not in ("target", "style"):
+        raise APIInputError("invalid_field", "duration_mode must be target or style.")
     if "target_duration" in payload:
         value = payload["target_duration"]
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not 0 < float(value) <= 86_400:
@@ -604,7 +607,7 @@ def _reset_manual_after_source_change(
     previous_keys = previous.get("chroma_key")
     if isinstance(previous_keys, dict):
         retained_keys = {key: copy.deepcopy(value) for key, value in previous_keys.items()
-                         if key in {"A", "B"} and key != slot and chroma_video_source(project, key)}
+                         if key != slot and chroma_video_source(project, key)}
         if retained_keys:
             project["manual"]["chroma_key"] = retained_keys
     # B replacement/removal must not discard independent A clip edits. B's
@@ -1054,11 +1057,11 @@ def create_app(settings: Settings | None = None) -> Flask:
         if track_fields is not None:
             optional = {"mode", "slot"} if action in {"sequence_move_range", "sequence_close_gaps", "sequence_trim_edge"} else {"mode"}
             if action == "set_chroma_key":
-                optional.add("background_asset_id")
+                optional.update({"background_asset_id", "background_mode"})
             missing = sorted(track_fields - optional - payload.keys())
             if missing:
                 raise APIInputError("invalid_field", f"Required source track field: {missing[0]}")
-            _require_optional_string(payload, "slot", max_length=1)
+            _require_optional_string(payload, "slot", max_length=38 if action in CHROMA_KEY_ACTION_FIELDS else 1)
             _require_optional_string(payload, "clip_id", max_length=128)
             _require_optional_string(payload, "mode", max_length=16)
         expected_revision = payload.pop("expected_revision", None)
@@ -1084,9 +1087,20 @@ def create_app(settings: Settings | None = None) -> Flask:
                         raise APIInputError("chroma_unavailable", "The installed FFmpeg does not support Chroma Key. Your footage and edits are unchanged.", 409)
                 if (media_fields is not None or text_fields is not None) and (active_uploads.get(project_id, 0) or jobs.active(project_id=project_id)):
                     raise APIInputError("project_busy", "Wait for active processing or media import to finish before editing media or text.", 409)
+                def apply_requested_edit(current):
+                    # A stale ready library record must not enable keying on a
+                    # missing file. Reset/disable remains available for recovery.
+                    if (action == "set_chroma_key" and payload.get("enabled") is True
+                            and str(payload.get("slot", "")).startswith("asset_")):
+                        selected = chroma_source(current, payload["slot"])
+                        if selected is not None:
+                            selected_path = _safe_project_child(store.project_dir(project_id), selected.get("relative_path"))
+                            if selected_path is None or not selected_path.is_file():
+                                raise APIInputError("source_missing", "The selected project video file is unavailable. Import it again or disable its key.", 409)
+                    return apply_manual_edit(current, payload)
                 project = store.update(
                     project_id,
-                    lambda current: apply_manual_edit(current, payload),
+                    apply_requested_edit,
                     expected_revision=expected_revision,
                 )
         except ManualEditError as error:
@@ -1102,8 +1116,9 @@ def create_app(settings: Settings | None = None) -> Flask:
         if set(request.args) - {"time", "revision"}:
             raise APIInputError("invalid_field", "Chroma frame preview accepts only time and revision.")
         project = store.load(project_id)
-        if slot not in {"A", "B"} or not chroma_video_source(project, slot):
-            raise APIInputError("source_required", "Choose an available video source A or B.")
+        source = chroma_source(project, slot)
+        if source is None:
+            raise APIInputError("source_required", "Choose an available source or ready project video.")
         revision = request.args.get("revision", "")
         if not re.fullmatch(r"[0-9]{1,20}", revision) or int(revision) != project["revision"]:
             raise APIInputError("revision_conflict", "Refresh the project before previewing this source.", 409)
@@ -1111,7 +1126,6 @@ def create_app(settings: Settings | None = None) -> Flask:
             native_time = float(request.args.get("time", "0"))
         except (TypeError, ValueError, OverflowError) as error:
             raise APIInputError("invalid_field", "Frame time must be a finite source time.") from error
-        source = project["sources"][slot]
         duration = float(source["duration"])
         if not math.isfinite(native_time) or not 0 <= native_time < duration:
             raise APIInputError("invalid_field", "Frame time must be inside this source.")
@@ -1141,7 +1155,9 @@ def create_app(settings: Settings | None = None) -> Flask:
         preview_width, preview_height = max(2, int(width * factor) // 2 * 2), max(2, int(height * factor) // 2 * 2)
         cache = root / "cache" / "chroma-preview"
         cache.mkdir(parents=True, exist_ok=True)
-        identity = json.dumps([revision, slot, round(native_time, 6), source.get("generation"), config, background_identity], sort_keys=True)
+        source_stat = source_path.stat()
+        identity = json.dumps([revision, slot, round(native_time, 6), source.get("generation"),
+            source.get("relative_path"), source_stat.st_size, source_stat.st_mtime_ns, config, background_identity], sort_keys=True)
         frame = cache / (hashlib.sha256(identity.encode()).hexdigest() + ".png")
         if not frame.is_file():
             temporary = cache / (uuid.uuid4().hex + ".png")
