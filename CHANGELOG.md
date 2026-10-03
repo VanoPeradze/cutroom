@@ -2,6 +2,8 @@
 
 ## Final workspace arrangement
 
+- Added vertical numeric scrubbing and focused-field wheel adjustment, with native steps/limits, Shift fine control, cancellation and one committed edit per gesture. Typing, keyboard input and normal panel scrolling remain available.
+
 - Ordered workspaces as Media, Edit, Layout, Audio, Captions and Output, with matching RTL and keyboard navigation.
 - Moved Green screen into Edit → Effects, separate from clip controls. Key color/defaults precede background; fine-tuning and exact-frame inspection expand when needed. Layout retains composition and framing.
 - Gave tools the full available height and narrower defaults, preserving space for preview and timeline. Single-source camera setup stays folded unless a detected camera needs review.

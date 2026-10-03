@@ -369,6 +369,7 @@ export function initWorkspace({ document: doc = document, window: win = window, 
   shell.appendChild(create("p", "workspace-guide-intro", "The AI draft is a starting point. Your original footage stays untouched, and manual changes can be undone."));
   const steps = create("ol", "workspace-guide-steps");
   const help = [
+    ["Adjust numeric values", "Drag a number vertically: up increases it and down decreases it. A slider's numeric readout can be dragged too. Hold Shift for slower adjustment. Release to apply once; Escape cancels. The mouse wheel changes only the focused field and groups a short burst into one change. Typing and arrow keys remain available."],
     ["Follow the workspace bar", "Media imports your files. Edit contains Clip controls and Effects · Green screen. Layout controls picture composition and framing, followed by Audio, Captions and Output. Arrow keys follow the workspace order, including right-to-left interfaces."],
     ["Remove a green screen", "Open Edit → Effects · Green screen, choose the foreground video, use green-screen defaults or choose its key color, then choose the background and Apply & preview. Fine-tune edges opens tolerance and softness. Each video keeps its own settings with Undo; Edited video shows the saved key."],
     ["Find your moment", "Click the ruler to seek. Space plays or pauses. Edited video shows your cut; Full source lets you inspect the original without changing the edit."],

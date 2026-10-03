@@ -8,6 +8,8 @@ Use **Day / Night** in the top bar to change the app's appearance; your choice i
 
 Use the **bottom workspace bar** to switch between Media, Edit, Layout, Audio, Captions and Output. Import or build a draft from Project overview, refine it in these workspaces, then use Export. Audio opens the mixer directly. Edit separates Clip controls from Effects · Green screen, with fine-tuning collapsed until needed. Layout contains composition and framing. Stabilize footage opens its Media tool from Effects. The player and timeline remain available; resize the divider to give your tools more room. Each workspace remembers its width.
 
+**Numeric controls:** drag a number or a slider’s numeric readout up to increase it and down to decrease it. Hold Shift for slower adjustment. Release to apply one change; Escape or losing window focus cancels a drag. The wheel changes only the focused field and groups a short burst into one change. Typing and arrow keys remain available. Controls keep their existing limits, steps and Apply/save behavior.
+
 ## The quick path
 
 1. Choose the Windows or Mac download and extract the entire ZIP. Its launcher sits beside **App**. If using the older combined ZIP, open **windows** or **mac** first. On Windows, double-click **`START CUTROOM.bat`**. On Mac, double-click **`START CUTROOM.command`**. Read and approve the setup prompts, and keep the launch window open. Leave **START HERE.html** (offline help) and **App** (technical files and saved work) beside the launcher. Older Windows packages and GitHub source checkouts still use `run_windows.bat`. Mac users: read the [Mac setup guide](https://github.com/VanoPeradze/cutroom/blob/master/docs/MAC_BETA.md) first; macOS 15+ is required, and first-time dependencies may require Homebrew.

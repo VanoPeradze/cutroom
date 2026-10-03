@@ -5,7 +5,7 @@ import { StabilizationStudio } from "./stabilization-studio.js?v=1.1-beta-1";
 import { ChromaStudio } from "./chroma-studio.js?v=1.1-beta-chroma-edit-2";
 import { ChromaPreview } from "./chroma-preview.js?v=1.1-beta-chroma-edit-2";
 import { SourceReview } from "./source-review.js?v=1.1-beta-8";
-import { initWorkspace } from "./workspace.js?v=1.1-beta-focused-2";
+import { initWorkspace } from "./workspace.js?v=1.1-beta-focused-3";
 import { KEYBOARD_PROFILES, resolveEditorShortcut, isEditorTransportSpace, shortcutRows } from "./keyboard.js?v=1.1-beta-2";
 import { AudioThresholdView } from "./audio-meter.js?v=1.1-beta-1";
 import { initWelcome, workflowSettings, cloudProviderName } from "./welcome.js?v=1.1-beta-1";
@@ -13,6 +13,7 @@ import { initLocalModels } from "./local-models.js?v=1.1-beta-1";
 import { trackClips, trackAt, hasSourceTracks, SourceTimelineClock } from "./source-tracks.js?v=1.1-beta-1";
 import { initTrackProtection } from "./track-protection.js?v=1.1-beta-1";
 import { TextStudio } from "./text-studio.js?v=1.1-beta-2";
+import { initNumericScrub } from "./numeric-scrub.js?v=1.1-beta-1";
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -452,6 +453,13 @@ async function boot() {
   cacheElements();
   state.dictionary = applyTranslations("en");
   bindEvents();
+  initNumericScrub({ document, window, canEdit: () => !foregroundBusy() && !state.manualEditBusy,
+    context: () => [state.project?.id, state.project?.revision, state.mediaStudio?.selected, state.textStudio?.selected, state.trimClip?.id].join('|'),
+    onCommit: field => {
+      if (field.dataset.media || field.dataset.mix) void state.mediaStudio?.flush();
+      else if (field.dataset.text) void state.textStudio?.flush();
+      else if (/^embedded(?:Camera[XYWH]|Content[XY])$/.test(field.id)) void flushEmbeddedCameraSave();
+    } });
   const localModels = initLocalModels({ document, api, busy: foregroundBusy,
     changed: async () => { state.runtimeGeneration += 1; await loadSystem(); },
   });

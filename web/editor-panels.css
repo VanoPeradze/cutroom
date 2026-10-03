@@ -1,4 +1,6 @@
 /* Display-only workspaces. The real player, timeline and controls stay mounted. */
+input[type=number],label:has(input[type=range]) output { cursor:ns-resize; }
+.numeric-scrubbing,.numeric-scrubbing * { cursor:ns-resize !important; user-select:none !important; }
 .studio-workspace { --workspace-inspector-width: 360px; }
 .studio-workspace .studio-header { gap:18px; }
 .studio-workspace .studio-workflow { display:flex; align-items:center; gap:14px; list-style:none; padding:0; margin:0; color:var(--muted); font-size:12px; white-space:nowrap; }

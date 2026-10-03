@@ -200,6 +200,7 @@ test("late startup checks do not override a project opened from the welcome scre
     initWelcome = () => ({});
     initLocalModels = () => null;
     initWorkspace = () => {};
+    globalThis.initNumericScrub = () => {};
     initTrackProtection = () => null;
     initializeKeyboardProfile = () => {};
     TimelineView = class {};
