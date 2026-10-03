@@ -9,7 +9,8 @@ export function chromaSettings(value = {}) {
 
 const copies = {
   chromaTitle:'Green screen / Chroma key', chromaHelp:'Choose the foreground video, choose what appears behind it, then remove the color and apply.',
-  chromaSource:'1 · Foreground video', chromaEnable:'Enable chroma key', chromaColor:'3 · Color to remove',
+  chromaFineTune:'Fine-tune edges', chromaHow:'How layers work',
+  chromaSource:'1 · Foreground video', chromaEnable:'Enable chroma key', chromaColor:'2 · Color to remove',
   chromaTolerance:'Tolerance', chromaEdge:'Edge softness', chromaBackground:'Replacement color',
   chromaReplacement:'Replacement background', chromaSolid:'Solid color', chromaImport:'Add an image in Media', chromaImageMissing:'Unavailable image — choose another or reset',
   chromaToleranceHelp:'Higher values remove a wider range of colors.', chromaEdgeHelp:'Higher values blend the edges into the replacement color.',
@@ -29,7 +30,7 @@ const copies = {
   chromaPreparing:'Preparing video', chromaFailedVideo:'Import failed — retry in Media',
   chromaTime:'Frame time (source seconds)', chromaPlayerTime:'Uses the selected source player time.',
   chromaTargetHelp:'Each video has its own settings. Repeated timeline uses of the same video share them.',
-  chromaMode:'2 · Background', chromaUnderneath:'Video underneath (Media layer)', chromaReplace:'Color or image',
+  chromaMode:'3 · Background', chromaUnderneath:'Video underneath (Media layer)', chromaReplace:'Color or image',
   chromaGreenDefaults:'Use green-screen defaults', chromaHighTolerance:'This tolerance can remove the subject too. Start with the green-screen defaults, then increase gradually.',
   chromaLayerHelp:'For a moving background, keep it as main footage and add the green-screen video in Media, on top. Choose Video underneath here.',
 
@@ -42,40 +43,39 @@ export class ChromaStudio {
     this.node.dataset.editorShortcuts = 'off'; this.node.setAttribute('aria-labelledby', 'chromaTitle');
     this.node.innerHTML = `
       <header class="chroma-heading"><h3 id="chromaTitle" data-chroma-copy="chromaTitle"></h3><small data-chroma-summary></small></header>
-      <p class="media-help" data-chroma-copy="chromaHelp"></p>
       <fieldset class="chroma-targets"><legend data-chroma-copy="chromaSource"></legend><div class="chroma-source-list" data-chroma-targets></div></fieldset>
       <select data-chroma-source hidden aria-hidden="true" tabindex="-1"></select>
       <button type="button" class="chroma-import" data-chroma-add-video data-chroma-copy="chromaAddVideo"></button>
-      <p class="chroma-selected" data-chroma-selected></p>
-      <p class="media-help" data-chroma-copy="chromaTargetHelp"></p>
+      <p class="chroma-selected sr-only" data-chroma-selected></p>
       <div class="chroma-workspace"><div class="chroma-controls">
       <label class="chroma-enable"><input type="checkbox" data-chroma="enabled"><span data-chroma-copy="chromaEnable"></span></label>
       <div class="chroma-settings">
+        <label class="chroma-color"><span data-chroma-copy="chromaColor"></span><input type="color" data-chroma="color"><output data-chroma-value="color"></output></label>
+        <button type="button" data-chroma-defaults data-chroma-copy="chromaGreenDefaults"></button>
         <label class="chroma-source"><span data-chroma-copy="chromaMode"></span><select data-chroma="background_mode"><option value="transparent" data-chroma-copy="chromaUnderneath"></option><option value="replace" data-chroma-copy="chromaReplace"></option></select></label>
-        <p class="media-help" data-chroma-copy="chromaLayerHelp"></p>
         <label class="chroma-source" data-chroma-replacement><span data-chroma-copy="chromaReplacement"></span><select data-chroma="background_asset_id" data-chroma-background aria-label="Replacement background"></select></label>
         <button type="button" class="chroma-import" data-chroma-import data-chroma-copy="chromaImport"></button>
         <label class="chroma-color" data-chroma-solid><span data-chroma-copy="chromaBackground"></span><input type="color" data-chroma="background_color"><output data-chroma-value="background_color"></output></label>
-        <button type="button" data-chroma-defaults data-chroma-copy="chromaGreenDefaults"></button>
-        <label class="chroma-color"><span data-chroma-copy="chromaColor"></span><input type="color" data-chroma="color"><output data-chroma-value="color"></output></label>
+        <details class="chroma-fine-tune"><summary data-chroma-copy="chromaFineTune"></summary><div class="chroma-fine-tune-controls">
         <label class="chroma-range"><span data-chroma-copy="chromaTolerance"></span><input type="range" data-chroma="tolerance" min="0.01" max="1" step="0.01" aria-describedby="chromaToleranceHelp"><output data-chroma-value="tolerance"></output></label>
         <p class="media-help" id="chromaToleranceHelp" data-chroma-copy="chromaToleranceHelp"></p>
-        <p class="chroma-warning" data-chroma-warning data-chroma-copy="chromaHighTolerance" role="status" hidden></p>
         <label class="chroma-range"><span data-chroma-copy="chromaEdge"></span><input type="range" data-chroma="edge_softness" min="0" max="1" step="0.01" aria-describedby="chromaEdgeHelp"><output data-chroma-value="edge_softness"></output></label>
         <p class="media-help" id="chromaEdgeHelp" data-chroma-copy="chromaEdgeHelp"></p>
+        </div></details>
+        <p class="chroma-warning" data-chroma-warning data-chroma-copy="chromaHighTolerance" role="status" hidden></p>
       </div>
-      <p class="media-help" data-chroma-copy="chromaOpaque"></p>
       <div class="chroma-actions"><button type="button" data-chroma-apply data-chroma-copy="chromaApply"></button><button type="button" data-chroma-reset data-chroma-copy="chromaReset"></button></div>
       <p class="media-status" data-chroma-status role="status" aria-live="polite"></p>
       </div>
-      <section class="chroma-preview" aria-label="Current-frame key preview">
-        <h4 data-chroma-copy="chromaFrame"></h4><p class="media-help" data-chroma-copy="chromaPlayback"></p>
+      <details class="chroma-preview" aria-label="Current-frame key preview">
+        <summary data-chroma-copy="chromaFrame"></summary><p class="media-help" data-chroma-copy="chromaPlayback"></p>
         <label class="chroma-time"><span data-chroma-copy="chromaTime"></span><input type="number" data-chroma-time min="0" step="0.001"></label>
         <p class="media-help" data-chroma-player-time data-chroma-copy="chromaPlayerTime"></p>
         <button type="button" data-chroma-refresh data-chroma-copy="chromaRefresh"></button>
         <figure hidden><img data-chroma-frame alt="Saved chroma-key frame"><figcaption data-chroma-frame-caption></figcaption></figure>
         <p class="media-status" data-chroma-preview-status role="status" aria-live="polite"></p>
-      </section></div>`;
+      </details></div>
+      <details class="chroma-help"><summary data-chroma-copy="chromaHow"></summary><p class="media-help" data-chroma-copy="chromaLayerHelp"></p><p class="media-help" data-chroma-copy="chromaTargetHelp"></p><p class="media-help" data-chroma-copy="chromaOpaque"></p></details>`;
     root.append(this.node);
     this.source = this.node.querySelector('[data-chroma-source]'); this.status = this.node.querySelector('[data-chroma-status]');
     this.apply = this.node.querySelector('[data-chroma-apply]'); this.reset = this.node.querySelector('[data-chroma-reset]');
@@ -276,6 +276,7 @@ export class ChromaStudio {
       const blob = await this.options.frame({projectId:project.id, slot, time, revision:project.revision}, this.previewAbort.signal);
       if (generation !== this.previewGeneration || this.project()?.id !== project.id || this.project()?.revision !== project.revision || this.source.value !== slot) return;
       this.frameUrl = URL.createObjectURL(blob); this.frame.src = this.frameUrl; this.frame.parentElement.hidden = false;
+      this.node.querySelector('.chroma-preview').open = true;
       this.frame.alt = `${this.copy('chromaFrame')} · ${this.targetLabel(slot)} · ${time.toFixed(3)} s`;
       this.node.querySelector('[data-chroma-frame-caption]').textContent = `${this.targetLabel(slot)} · ${time.toFixed(3)} s · ${this.copy('chromaReady')}`;
       this.previewStatus.textContent = '';

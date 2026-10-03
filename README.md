@@ -60,7 +60,7 @@ Use the bottom workspace bar for **Media, Edit, Layout, Captions, Audio and Outp
 - **Camera and screen layouts:** adjust source roles, framing and synchronization.
 - **Media, sound and captions:** add B-roll, images, music, voiceover, titles and SRT/VTT captions. Source waveforms work without AI; the compact mixer shows live audio levels.
 - **Optional footage stabilization:** create a separate local copy when your FFmpeg supports it. It may crop/zoom edges; your original stays untouched. [Stabilization guide](docs/STABILIZATION.md)
-- **Green screen / Chroma key:** remove a color from A/B or imported project videos. Media overlays can reveal the moving video underneath, with live edited playback, per-video settings and Undo. Color/image backgrounds and an exact processed-frame check are also available. [Chroma Key guide](docs/CHROMA_KEY.md)
+- **Green screen / Chroma key:** open **Edit > Effects · Green screen** to remove a color from A/B or imported project videos. Media overlays can reveal the moving video underneath, with live edited playback, per-video settings and Undo. Color/image backgrounds and an exact processed-frame check are also available. [Chroma Key guide](docs/CHROMA_KEY.md)
 - **Local MP4 export:** choose landscape or vertical output, 720p through 4K, and frame-rate options up to 60 FPS. Higher settings do not create missing source detail.
 
 [Editing walkthrough](docs/USER_GUIDE_EN.md) · [Timeline controls](docs/INDEPENDENT_TRACKS.md) · [Keyboard shortcuts](docs/KEYBOARD_SHORTCUTS.md)

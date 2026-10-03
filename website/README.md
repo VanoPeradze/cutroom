@@ -161,3 +161,5 @@ approved update needs reviewed release metadata, a new build ID and exact checks
 
 Website checks do not prove AI editing quality or a successful installation on another PC.
 Expo hosting remains subject to its plan limits and terms; video editing stays local.
+
+The editor workflow is **Media → Edit → Layout → Audio → Captions → Output**. Green screen lives in **Edit → Effects · Green screen**; Layout contains picture composition, sizing and framing. The canonical editor screenshot must show this order before release.

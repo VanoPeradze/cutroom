@@ -1,10 +1,17 @@
 # Changelog
 
+## Final workspace arrangement
+
+- Ordered workspaces as Media, Edit, Layout, Audio, Captions and Output, with matching RTL and keyboard navigation.
+- Moved Green screen into Edit → Effects, separate from clip controls. Key color/defaults precede background; fine-tuning and exact-frame inspection expand when needed. Layout retains composition and framing.
+- Gave tools the full available height and narrower defaults, preserving space for preview and timeline. Single-source camera setup stays folded unless a detected camera needs review.
+
+
 ## 1.1 Beta - 2026-10-02 - Green-screen playback and layer order
 
 - Fixed Media green-screen overlays hiding the background with an opaque rectangle. **Video underneath** retains alpha through placement and motion until compositing over earlier layers.
 - Added saved-settings chroma preview in edited playback for A/B and Media video; original footage mode stays original. Exact native-size FFmpeg frame checks remain available and refresh after Apply.
-- Ordered the controls as foreground, background, removed color and Apply. Reopening prefers the keyed video; selected Media clips carry into Layout. Added green-screen starting settings and a warning for tolerance values that can erase the subject.
+- Ordered the controls as foreground, removed color, background and Apply. Reopening prefers the keyed video; selected video clips carry into Edit Effects. Added green-screen starting settings and a warning for tolerance values that can erase the subject.
 - Preserved existing color/image settings, Undo/Redo, per-video persistence and source files. Verified an authorized local recording through browser playback, save/reopen/history and a real 1080p MP4 export; private media is excluded from source and packages.
 
 ## 1.1 Beta - 2026-10-01 - Green screen for project videos

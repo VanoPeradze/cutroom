@@ -1,11 +1,11 @@
-import { applyTranslations, dictionaries } from "./i18n.js?v=1.1-beta-chroma-live-1";
+import { applyTranslations, dictionaries } from "./i18n.js?v=1.1-beta-chroma-edit-2";
 import { TimelineView, formatTime, editableClips, timelineDuration, sequenceBlocks, sequenceGaps, rippleMoveStart } from "./timeline.js?v=1.1-beta-9";
-import { MediaStudio } from "./media-studio.js?v=1.1-beta-chroma-live-1";
+import { MediaStudio } from "./media-studio.js?v=1.1-beta-chroma-edit-2";
 import { StabilizationStudio } from "./stabilization-studio.js?v=1.1-beta-1";
-import { ChromaStudio } from "./chroma-studio.js?v=1.1-beta-chroma-live-1";
-import { ChromaPreview } from "./chroma-preview.js?v=1.1-beta-chroma-live-1";
+import { ChromaStudio } from "./chroma-studio.js?v=1.1-beta-chroma-edit-2";
+import { ChromaPreview } from "./chroma-preview.js?v=1.1-beta-chroma-edit-2";
 import { SourceReview } from "./source-review.js?v=1.1-beta-8";
-import { initWorkspace } from "./workspace.js?v=1.1-beta-focused-1";
+import { initWorkspace } from "./workspace.js?v=1.1-beta-focused-2";
 import { KEYBOARD_PROFILES, resolveEditorShortcut, isEditorTransportSpace, shortcutRows } from "./keyboard.js?v=1.1-beta-2";
 import { AudioThresholdView } from "./audio-meter.js?v=1.1-beta-1";
 import { initWelcome, workflowSettings, cloudProviderName } from "./welcome.js?v=1.1-beta-1";
@@ -253,7 +253,7 @@ function initializeChromaStudio() {
     busy: () => foregroundBusy() || state.manualEditBusy,
     translate: (key, fallback) => state.dictionary?.[key] || fallback, api,
     sourceTime: slot => elements[`preview${slot}`]?.currentTime || 0,
-    selectedTarget: () => state.project?.manual?.media_clips?.find(clip => clip.id === (state.timeline?.mediaSelection || state.mediaStudio?.selected))?.asset_id,
+    selectedTarget: () => state.project?.manual?.media_clips?.find(clip => clip.id === state.timeline?.mediaSelection)?.asset_id || state.trimClip?.slot,
     openMedia: () => openStudioTab("media"),
     frame: async ({projectId, slot, time, revision}, signal) => {
       const query = new URLSearchParams({time:String(time), revision:String(revision)});
@@ -673,6 +673,7 @@ function bindEvents() {
 
   elements.advancedButton.addEventListener("click", toggleAdvanced);
   elements.closeAdvanced.addEventListener("click", () => setAdvanced(false));
+  $$('[data-edit-tool]').forEach(button => button.addEventListener('click', () => selectEditTool(button.dataset.editTool)));
   elements.studioRenderButton.addEventListener("click", openExportDialog);
   $$(".advanced-tabs button").forEach((button) => {
     button.addEventListener("click", () => selectAdvancedTab(button.dataset.tab));
@@ -741,6 +742,7 @@ function bindEvents() {
   elements.manualClear.addEventListener("click", () => { state.markIn = null; state.timeline?.clearSelection(); elements.timelineCanvas.focus(); });
   elements.manualRange.addEventListener("click", () => {
     openStudioTab("timeline");
+    selectEditTool("clip");
     elements.timelineRangeForm.hidden = !elements.timelineRangeForm.hidden;
     elements.manualRange.setAttribute("aria-expanded", String(!elements.timelineRangeForm.hidden));
     renderRangeEditors();
@@ -798,6 +800,7 @@ function bindEvents() {
   elements.manualRestore.addEventListener("click", () => runManualRangeEdit("restore_range"));
   elements.editorMoreButton.addEventListener("click", () => {
     if (!openStudioTab("timeline")) return;
+    selectEditTool("clip");
     elements.editorMoreTools.open = true;
     elements.editorMoreTools.scrollIntoView({ block: "nearest" });
     elements.editorMoreTools.querySelector("summary").focus();
@@ -4027,7 +4030,7 @@ function renderEmbeddedCameraEditor() {
     resetEmbeddedEditor();
     // Once marked, keep the large source picker out of the way. Do not reopen
     // it on every autosave or playback update, or discard the user's choice.
-    elements.embeddedCameraEditor.open = !embeddedCameraIsActive();
+    elements.embeddedCameraEditor.open = candidate?.candidate_source === "vision" && !embeddedCameraIsActive();
   }
   if (state.embeddedEditor.error) elements.embeddedCameraEditor.open = true;
   const changedSuggestion = !state.embeddedEditor.dirty && state.embeddedEditor.candidateKey !== candidateKey;
@@ -4965,17 +4968,34 @@ function updateStudioStatus() {
   elements.studioDraftStatus.textContent = `${formatTime(draft.output_duration || 0)} · ${aspect}${dirty}`;
 }
 
+function selectEditTool(tool) {
+  const effects = tool === "effects";
+  document.getElementById("editClipTools").hidden = effects;
+  document.getElementById("editVideoEffects").hidden = !effects;
+  $$('[data-edit-tool]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.editTool === tool)));
+  if (effects) followChromaSelection();
+  elements.advancedPanel?.workspaceController?.setEditEffects(effects);
+  document.getElementById('studioInspector').scrollTop = 0;
+  if (window.matchMedia?.("(max-width: 960px), (max-height: 600px)").matches) {
+    document.getElementById(effects ? 'editVideoEffects' : 'editClipTools').scrollIntoView({block:'start', inline:'nearest'});
+  }
+}
+
+function followChromaSelection() {
+  const tool = state.chromaStudio, selected = tool?.options.selectedTarget?.();
+  if (selected && tool.validSource(selected) && tool.source.value !== selected && !tool.saving) {
+    tool.source.value = selected; tool.source.onchange();
+  }
+}
+
 function selectAdvancedTab(tab) {
   elements.advancedPanel?.workspaceController?.setWorkspace(tab);
   elements.advancedPanel?.workspaceController?.showInspector();
   if (tab === "audio") state.mediaStudio?.openMixer();
   if (tab === "framing") {
     loadCropControls(elements.cropSourceSelect?.value || "A", false);
-    const tool=state.chromaStudio, selected=tool?.options.selectedTarget?.();
-    if (selected && tool.validSource(selected) && tool.source.value !== selected && !tool.saving) {
-      tool.source.value=selected; tool.source.onchange();
-    }
   }
+  if (tab === "timeline" && !document.getElementById("editVideoEffects")?.hidden) followChromaSelection();
   elements.advancedPanel.classList.toggle("studio-transcript", tab === "transcript");
   let activePanel = null;
   $$(".advanced-tabs button").forEach((button) => {
@@ -4992,11 +5012,12 @@ function selectAdvancedTab(tab) {
   });
   if (tab === "timeline") window.setTimeout(() => state.timeline.draw(), 20);
   if (tab === "transcript") renderTranscript();
+  $(`.advanced-tabs button[data-tab="${tab}"]`)?.scrollIntoView({block:"nearest", inline:"nearest"});
   requestAnimationFrame(() => state.timeline?.scheduleDraw?.());
   // Compact layouts have a single page scroller. Edit should reveal the
   // timeline; other tabs reveal their tools. Desktop keeps its player still.
-  if (window.matchMedia?.("(max-width: 960px), (max-height: 680px)").matches) {
-    const target = tab === "timeline" ? document.getElementById("studioTimelineDock") : activePanel;
+  if (window.matchMedia?.("(max-width: 960px), (max-height: 600px)").matches) {
+    const target = tab === "timeline" && document.getElementById("editVideoEffects")?.hidden ? document.getElementById("studioTimelineDock") : activePanel;
     target?.scrollIntoView({ block: "start", inline: "nearest", behavior: "instant" });
   } else if (activePanel?.parentElement) {
     activePanel.parentElement.scrollTop = 0;
@@ -5201,6 +5222,7 @@ function openSourceReview() {
 function openSourceInsert() {
   if (!state.project?.editor_sequence || foregroundBusy() || state.manualEditBusy) return false;
   if (!openStudioTab("timeline")) return false;
+  selectEditTool("clip");
   const target = activeEditTarget();
   const slot = target === "edit" ? transcriptSourceSlot() : target;
   state.timeline?.clearSelection();

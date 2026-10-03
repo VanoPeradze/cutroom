@@ -286,10 +286,10 @@ test("focused workspaces keep independent widths, retain edit preference and nev
   const h = harness({inspector:true, savedWidth:"400"});
   h.controller.setWorkspace("audio");
   assert.equal(h.panel.dataset.workspace,"audio");
-  assert.equal(h.el("workspaceInspectorDivider").getAttribute("aria-valuenow"),"640");
+  assert.equal(h.el("workspaceInspectorDivider").getAttribute("aria-valuenow"),"560");
   h.controller.setInspectorWidth(720);
   h.controller.setWorkspace("framing");
-  assert.equal(h.el("workspaceInspectorDivider").getAttribute("aria-valuenow"),"640");
+  assert.equal(h.el("workspaceInspectorDivider").getAttribute("aria-valuenow"),"480");
   h.controller.setWorkspace("timeline");
   assert.equal(h.el("workspaceInspectorDivider").getAttribute("aria-valuenow"),"400");
   h.controller.setWorkspace("audio");
@@ -300,4 +300,19 @@ test("focused workspaces keep independent widths, retain edit preference and nev
   assert.equal(h.el("workspaceInspectorDivider").getAttribute("aria-valuenow"),"720");
   assert.equal(h.a.parentElement,h.stage); assert.equal(h.preview.parentElement,h.dock);
   h.controller.setWorkspace("invalid"); assert.equal(h.panel.dataset.workspace,"audio");
+});
+
+test("Edit effects preserves separate widths across tabs without moving or restarting video", () => {
+  const h = harness({inspector:true,savedWidth:"400"});
+  h.controller.setEditEffects(true);
+  assert.equal(h.el("workspaceInspectorDivider").getAttribute("aria-valuenow"),"460");
+  h.controller.setInspectorWidth(510);
+  h.controller.setWorkspace("framing");
+  assert.equal(h.el("workspaceInspectorDivider").getAttribute("aria-valuenow"),"480");
+  h.controller.setWorkspace("timeline");
+  assert.equal(h.el("workspaceInspectorDivider").getAttribute("aria-valuenow"),"510");
+  h.controller.setEditEffects(false);
+  assert.equal(h.el("workspaceInspectorDivider").getAttribute("aria-valuenow"),"400");
+  assert.equal(h.a.parentElement,h.stage);
+  assert.equal(h.preview.parentElement,h.dock);
 });

@@ -56,7 +56,7 @@ async function keyedFrame() {
   await click(`[data-project-id="${projectId}"] [data-project-action="open"]`);
   await wait(()=>cdp.eval(`!document.body.classList.contains('welcome-mode')&&!document.getElementById('advancedButton').disabled`));
   await cdp.eval(`if(document.getElementById('advancedPanel').hidden)document.getElementById('advancedButton').click()`);
-  await click('#studioTabFraming');
+  await click('#studioTabTimeline');await click('#editToolEffects');
   const initial=await project();const asset=Object.values(initial.assets).find(a=>a.kind==='video');assert.ok(asset);
   await wait(()=>cdp.eval(`!!document.querySelector('[data-chroma-target="${asset.id}"]')&&!document.querySelector('[data-chroma-target="${asset.id}"]').disabled`));
   await click(`[data-chroma-target="${asset.id}"]`);
@@ -89,7 +89,7 @@ async function keyedFrame() {
   await wait(()=>cdp.eval(`!!document.querySelector('[data-project-id="${projectId}"] [data-project-action="open"]')`));
   await click(`[data-project-id="${projectId}"] [data-project-action="open"]`);
   await wait(()=>cdp.eval(`!document.body.classList.contains('welcome-mode')&&!document.getElementById('advancedButton').disabled`));
-  await cdp.eval(`if(document.getElementById('advancedPanel').hidden)document.getElementById('advancedButton').click()`);await click('#studioTabFraming');
+  await cdp.eval(`if(document.getElementById('advancedPanel').hidden)document.getElementById('advancedButton').click()`);await click('#studioTabTimeline');await click('#editToolEffects');
   await wait(()=>cdp.eval(`document.querySelector('[data-chroma-source]').value===${JSON.stringify(asset.id)}`));
   assert.equal(await cdp.eval(`document.querySelector('[data-chroma="background_mode"]').value`),'transparent');
   assert.equal(await cdp.eval(`document.querySelector('[data-chroma="tolerance"]').value`),'0.12');
