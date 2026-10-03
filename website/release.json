@@ -3,14 +3,14 @@
   "label": "1.1 Beta",
   "layout": "windows-mac-folders-v1",
   "filename": "CUTROOM-1.1-Beta.zip",
-  "bytes": 6534884,
-  "sha256": "2a21d24f0c2ae463a2056c831a576b5409ed5090eae0bce271b83a001438c38d",
-  "build_id": "CUTROOM-1.1-beta-mac-20261003-000459",
+  "bytes": 6553589,
+  "sha256": "4782598960fa25e97c8a5426a7cdf47634e95651c1f38abad90278e15829618a",
+  "build_id": "CUTROOM-1.1-beta-mac-20261003-002717",
   "release_state": "local-candidate",
-  "source_commit": "311ac8692858541ee94b0762e25599c8969e67d5",
+  "source_commit": "5345dfe720f952d8fa847f5a6099c1180c0382a4",
   "base_commit": "7741a6209e2eb7411ece471a5d0f052767a4366a",
   "uncommitted_changes": false,
-  "editor_revision": "chroma-edit-effects-workflow-spacious-layout-duration",
+  "editor_revision": "chroma-edit-effects-workflow-numeric-scrub-duration",
   "mac_validation_url": null,
   "validated_pr_head": null,
   "native_mac_validation": "pending",
@@ -18,14 +18,14 @@
   "platforms": {
     "windows": {
       "filename": "CUTROOM-1.1-Beta-Windows.zip",
-      "bytes": 3257560,
-      "sha256": "275564bd785adb4e9574fdb20b362035606d9842e695c8631c174fd7437cf243",
+      "bytes": 3266864,
+      "sha256": "8d44e0c0f5c9cd947b06b1ba290f978119ef5f45024973d1fb3ed4557afb0eb3",
       "url": "https://cutroom-studio.expo.app/downloads/CUTROOM-1.1-Beta-Windows.zip"
     },
     "mac": {
       "filename": "CUTROOM-1.1-Beta-Mac.zip",
-      "bytes": 3269066,
-      "sha256": "6d32264f351a2441a0f5100c509c420387fde77a5daaecc9b04c6408d99f7282",
+      "bytes": 3278373,
+      "sha256": "76f117b0e2f6267102c25fa7cbaf655d74d6219681d7d8a4989d8cddb8a8e45f",
       "url": "https://cutroom-studio.expo.app/downloads/CUTROOM-1.1-Beta-Mac.zip"
     }
   },

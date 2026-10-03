@@ -1,10 +1,10 @@
 {
   "version": "1.1-beta",
-  "filename": "CUTROOM-1.1-Beta-windows-311ac869-20261003.zip",
-  "build_id": "CUTROOM-1.1-beta-20261003-000459",
-  "bytes": 3257560,
-  "sha256": "275564bd785adb4e9574fdb20b362035606d9842e695c8631c174fd7437cf243",
-  "manifest_sha256": "bbcd986eaa7bf3dbd8c52a3f6516a2856ecfa1b46b4136603b4677a9c0c70d00",
-  "url": "https://cutroom-studio--z0f9f4gzuz.expo.app/downloads/CUTROOM-1.1-Beta-windows-311ac869-20261003.zip",
-  "note": "Immutable validation deployment of reviewed product source 311ac8692858541ee94b0762e25599c8969e67d5. Includes saved chroma alpha compositing and playback, Edit Effects, Media/Edit/Layout/Audio/Captions/Output order, responsive workspace spacing, duration intent and stabilization. Private footage/configuration, runtimes and models are excluded. Native Apple Silicon/Intel candidate CI is required before production publication."
+  "filename": "CUTROOM-1.1-Beta-windows-5345dfe7-20261003.zip",
+  "build_id": "CUTROOM-1.1-beta-20261003-002717",
+  "bytes": 3266864,
+  "sha256": "8d44e0c0f5c9cd947b06b1ba290f978119ef5f45024973d1fb3ed4557afb0eb3",
+  "manifest_sha256": "9af87c1249d957e1fb447218828dd152f6ddcf1290a146fb80a185b327b32604",
+  "url": "https://cutroom-studio--4ld3u6vkic.expo.app/downloads/CUTROOM-1.1-Beta-windows-5345dfe7-20261003.zip",
+  "note": "Immutable validation deployment of reviewed product source 5345dfe720f952d8fa847f5a6099c1180c0382a4. Includes chroma alpha/playback, Edit Effects, workflow order, spacious panels, numeric drag/focused wheel with single-gesture history, duration intent and stabilization. No private footage/configuration, runtimes or models. Exact native Apple Silicon/Intel candidate CI is required before production publication."
 }
