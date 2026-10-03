@@ -416,7 +416,22 @@
             </section>
           </div>
           <div class="tab-panel" id="studioPanelFraming" role="tabpanel" aria-labelledby="studioTabFraming" tabindex="0" data-panel="framing">
-            <header class="studio-tool-intro"><div><p>02 · LAYOUT</p><h3>Frame your video</h3></div><span>Choose a layout, then adjust the selected clip. Changes save automatically.</span></header>
+            <header class="studio-tool-intro"><div><h3>Layout</h3></div><span>Choose a layout, then adjust the selected clip. Changes save automatically.</span></header>
+            <details class="framing-layout framing-disclosure layout-disclosure" open>
+              <summary>Clip framing</summary>
+              <p id="cropScopeStatus" role="status">Select a clip to frame it independently.</p>
+              <details class="framing-source-preview"><summary>Original source preview</summary><div class="crop-preview" id="cropPreview"><video id="cropVideo" muted playsinline></video><div class="crop-thirds"><i></i><i></i><i></i><i></i></div></div></details>
+              <div class="framing-controls">
+                <label><span>Frame source</span><select id="cropSourceSelect"><option value="A">A</option><option value="B">B</option></select></label>
+                <label><span data-i18n="horizontalFocus">Horizontal focus</span><input id="cropX" type="range" min="0" max="100" value="50"></label>
+                <label><span data-i18n="verticalFocus">Vertical focus</span><input id="cropY" type="range" min="0" max="100" value="50"></label>
+                <label><span data-i18n="zoom">Zoom</span><input id="cropZoom" type="range" min="100" max="220" value="100"></label>
+                <button class="button ghost" id="resetCrop" data-i18n="resetFraming">Reset framing</button>
+                <details class="layout-default-disclosure"><summary>Next Director build default</summary><label><span>Default layout <small class="rebuild-chip" data-rebuild-chip>Draft rebuild</small></span><select id="layoutSelect"><option value="auto" data-i18n="auto">Automatic</option><option value="A">A only</option><option value="B">B only</option><option value="stacked" data-i18n="stacked">Stacked</option><option value="side_by_side" data-i18n="sideBySide">Side by side</option><option value="pip">Picture in Picture</option><option value="embedded_stack" data-i18n="embeddedCamera">Screen + embedded camera</option></select></label></details>
+                <p class="embedded-crop-help" id="embeddedCropHelp" hidden>Camera + screen layout is active here. Use the camera area and Main screen focus controls above; changes save automatically. General source crop controls do not affect this composition.</p>
+                <div class="camera-detection" id="cameraDetection" hidden><b data-i18n="cameraFound">Camera window found</b><p data-i18n="cameraFoundHelp">A stable face area was found. Confirm it before using this composition.</p><button class="button ghost compact" id="useEmbeddedCamera" data-i18n="useLayout">Use layout</button></div>
+              </div>
+            </details>
             <section class="source-mixer" id="sourceMixer" aria-labelledby="sourceMixerTitle">
               <div class="source-mixer-head">
                 <div><p class="eyebrow">SOURCE MIXER</p><h3 id="sourceMixerTitle">Source control</h3><p id="sourceMixerHelp">AI suggests a layout; your choice always wins.</p></div>
@@ -556,26 +571,11 @@
                 </details>
               </div>
             </section>
-            <details class="framing-layout framing-disclosure layout-disclosure" open>
-              <summary>Clip framing</summary>
-              <p id="cropScopeStatus" role="status">Select a clip to frame it independently.</p>
-              <details class="framing-source-preview"><summary>Original source preview</summary><div class="crop-preview" id="cropPreview"><video id="cropVideo" muted playsinline></video><div class="crop-thirds"><i></i><i></i><i></i><i></i></div></div></details>
-              <div class="framing-controls">
-                <label><span>Frame source</span><select id="cropSourceSelect"><option value="A">A</option><option value="B">B</option></select></label>
-                <label><span data-i18n="horizontalFocus">Horizontal focus</span><input id="cropX" type="range" min="0" max="100" value="50"></label>
-                <label><span data-i18n="verticalFocus">Vertical focus</span><input id="cropY" type="range" min="0" max="100" value="50"></label>
-                <label><span data-i18n="zoom">Zoom</span><input id="cropZoom" type="range" min="100" max="220" value="100"></label>
-                <button class="button ghost" id="resetCrop" data-i18n="resetFraming">Reset framing</button>
-                <details class="layout-default-disclosure"><summary>Next Director build default</summary><label><span>Default layout <small class="rebuild-chip" data-rebuild-chip>Draft rebuild</small></span><select id="layoutSelect"><option value="auto" data-i18n="auto">Automatic</option><option value="A">A only</option><option value="B">B only</option><option value="stacked" data-i18n="stacked">Stacked</option><option value="side_by_side" data-i18n="sideBySide">Side by side</option><option value="pip">Picture in Picture</option><option value="embedded_stack" data-i18n="embeddedCamera">Screen + embedded camera</option></select></label></details>
-                <p class="embedded-crop-help" id="embeddedCropHelp" hidden>Camera + screen layout is active here. Use the camera area and Main screen focus controls above; changes save automatically. General source crop controls do not affect this composition.</p>
-                <div class="camera-detection" id="cameraDetection" hidden><b data-i18n="cameraFound">Camera window found</b><p data-i18n="cameraFoundHelp">A stable face area was found. Confirm it before using this composition.</p><button class="button ghost compact" id="useEmbeddedCamera" data-i18n="useLayout">Use layout</button></div>
-              </div>
-            </details>
           </div>
           <div class="tab-panel" id="studioPanelTranscript" role="tabpanel" aria-labelledby="studioTabTranscript" tabindex="0" data-panel="transcript">
-            <header class="studio-tool-intro"><div><p>03 / TEXT &amp; CAPTIONS</p><h3>Make every word count</h3></div><span>Add your own text, import subtitles, or correct an AI transcript.</span></header>
+            <header class="studio-tool-intro"><div><p>TEXT &amp; CAPTIONS</p><h3>Captions</h3></div><span>Add text to the edit, or work with the recorded speech below.</span></header>
             <section id="textStudio" class="text-studio" aria-label="Custom text and captions"></section>
-            <details class="caption-settings-disclosure"><summary>AI subtitle style &amp; speech language</summary>
+            <details class="caption-settings-disclosure inspector-section"><summary>AI subtitle style &amp; speech language</summary>
             <section class="caption-control-panel" aria-labelledby="captionControlTitle">
               <div class="caption-control-head">
                 <div><h4 id="captionControlTitle">Subtitle output</h4><p id="captionControlStatus">Burned captions are enabled.</p></div>
@@ -593,6 +593,7 @@
                 <label><span><b>Words per caption</b><small>Fewer words create faster, punchier captions.</small></span><div class="caption-range"><input id="captionWordsPerLine" type="range" min="2" max="12" step="1" value="9"><output id="captionWordsPerLineOut">9</output></div></label>
               </div>
             </section></details>
+            <details class="inspector-section" id="transcriptSection"><summary>Recorded speech · Transcript</summary>
             <section class="transcript-editor-card" aria-labelledby="transcriptEditorTitle">
               <div class="transcript-editor-head"><div><h4 id="transcriptEditorTitle">Transcript</h4><p>Select to seek. Editing text never deletes footage.</p></div><span id="transcriptLanguage"></span></div>
               <div class="transcript-toolbar"><input id="transcriptSearch" dir="auto" type="search" data-i18n-placeholder="searchTranscript" placeholder="Search transcript"><select id="transcriptFilter" aria-label="Transcript filter"><option value="all">All lines</option><option value="kept">In the edit</option><option value="removed">Removed</option></select></div>
@@ -604,10 +605,10 @@
                 <div class="transcript-detail-footer"><span id="transcriptEditStatus" role="status">Saved</span><button id="transcriptDiscard" type="button">Discard changes</button><button id="transcriptSave" class="button primary compact" type="submit">Save text</button></div>
                 <div class="transcript-line-navigation"><button id="transcriptPrevious" type="button">← Previous line</button><button id="transcriptNext" type="button">Next line →</button><button id="transcriptSaveAll" type="button">Save all changes</button></div>
               </form>
-            </section>
+            </section></details>
           </div>
           <div class="tab-panel" id="studioPanelSettings" role="tabpanel" aria-labelledby="studioTabSettings" tabindex="0" data-panel="settings">
-            <header class="studio-tool-intro"><div><p>04 · OUTPUT</p><h3>Finish and export</h3></div><span>Tune pace, sound, format and performance. Rebuild only when an AI edit decision must change.</span></header>
+            <header class="studio-tool-intro"><div><h3>Output</h3></div><span>Choose your video format, then Export from the top bar.</span></header>
             <div class="draft-rebuild-notice" id="draftRebuildNotice" role="status" hidden>
               <div><b id="draftRebuildTitle">Draft rebuild required</b><span id="draftRebuildText">These editorial changes apply after rebuilding the Draft.</span></div>
               <button class="button primary compact" id="rebuildDraftButton" type="button">Rebuild Draft</button>
@@ -623,13 +624,12 @@
 
                 </div>
               </section>
-              <section class="studio-section finishing-section">
-                <div class="studio-section-head"><b>Automatic finishing</b><small>Safe, deterministic finishing tools.</small></div>
+              <details class="studio-section finishing-section inspector-section"><summary>Automatic finishing</summary>
                 <div class="finishing-control-grid">
                   <label class="toggle-row"><span><b data-i18n="autoReframe">Automatic framing</b><small data-i18n="autoReframeHelp">Uses the detected speaker center</small><small class="rebuild-chip" data-rebuild-chip>Draft rebuild</small></span><input id="autoReframe" type="checkbox" checked></label>
                   <label class="toggle-row"><span><b data-i18n="editorialEffects">Smart editorial effects</b><small data-i18n="editorialEffectsHelp">Subtle, bounded emphasis at story peaks; no extra model and no free-form AI commands.</small></span><input id="effectsToggle" type="checkbox" checked></label>
                 </div>
-              </section>
+              </details>
               <details class="ai-draft-settings"><summary>AI draft settings <small>Changes require rebuilding the draft</small></summary>
                 <div id="studioRuntimeDock" class="runtime-status-dock"></div>
                   <label><span><span data-i18n="performanceMode">Performance mode</span><small class="rebuild-chip" data-rebuild-chip>Draft rebuild</small></span><select id="performanceModeSelect"><option value="auto" data-i18n="auto">Automatic</option><option value="lite" data-i18n="liteMode">Lite</option><option value="balanced" data-i18n="balanced">Balanced</option><option value="quality" data-i18n="qualityMode">Quality</option></select></label>

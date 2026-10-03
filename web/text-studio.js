@@ -12,11 +12,12 @@ export class TextStudio {
   constructor(root, stage, options) {
     this.root=root; this.stage=stage; this.options=options; this.projectId=null; this.selected=null;
     this.pending=new Map(); this.overrides=new Map(); this.dragOverrides=new Map(); this.saving=null; this.timer=null; this.importing=false; this.limit=100;
-    root.innerHTML=`<div class="text-studio-head"><h4>Your text & captions</h4><p>Add a title or subtitle at the playhead. No AI needed.</p></div>
-      <div class="text-actions"><button type="button" data-add="title">Add text</button><button type="button" data-add="caption">Add caption</button><button type="button" data-import>Import SRT / VTT</button></div>
+    root.innerHTML=`<div class="text-studio-head"><h4>Your text & captions</h4></div>
+      <div class="text-actions"><button type="button" data-add="title">Add text</button><button type="button" data-add="caption">Add caption</button></div>
+      <details class="text-import inspector-section"><summary>Import caption file</summary><button type="button" data-import>Choose SRT / VTT</button>
       <input type="file" accept=".srt,.vtt" aria-label="Import captions file" hidden>
       <label class="text-replace"><input type="checkbox" data-replace> Replace my existing custom captions when importing</label>
-      <p class="text-help">Times refer to the edited video, not the original recording. Imported text does not replace the AI transcript. Turn off AI subtitles below if you do not want both.</p>
+      <p class="text-help">Times refer to the edited video, not the original recording. Imported text does not replace the AI transcript. Turn off AI subtitles below if you do not want both.</p></details>
       <p class="text-status" role="status" aria-live="polite">Text appears on its own timeline lane and is included in the video.</p>
       <div class="text-recovery" hidden><button type="button" data-retry>Retry save</button><button type="button" data-discard>Discard unsaved text changes</button></div>
       <label class="text-search">Find custom text<input type="search" data-search placeholder="Search titles and captions"></label>
@@ -69,6 +70,7 @@ export class TextStudio {
       input.disabled=this.importing;
     }
     this.root.querySelector('.text-recovery').hidden=!this.pending.size;
+    this.root.querySelector('.text-search').hidden = !this.clips().length;
     this.renderList();
   }
   renderList(){

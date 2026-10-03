@@ -4984,7 +4984,7 @@ function selectEditTool(tool) {
   if (effects) followChromaSelection();
   elements.advancedPanel?.workspaceController?.setEditEffects(effects);
   document.getElementById('studioInspector').scrollTop = 0;
-  if (window.matchMedia?.("(max-width: 960px), (max-height: 600px)").matches) {
+  if (window.matchMedia?.("(max-width: 899px), (max-height: 600px)").matches) {
     document.getElementById(effects ? 'editVideoEffects' : 'editClipTools').scrollIntoView({block:'start', inline:'nearest'});
   }
 }
@@ -5024,7 +5024,7 @@ function selectAdvancedTab(tab) {
   requestAnimationFrame(() => state.timeline?.scheduleDraw?.());
   // Compact layouts have a single page scroller. Edit should reveal the
   // timeline; other tabs reveal their tools. Desktop keeps its player still.
-  if (window.matchMedia?.("(max-width: 960px), (max-height: 600px)").matches) {
+  if (window.matchMedia?.("(max-width: 899px), (max-height: 600px)").matches) {
     const target = tab === "timeline" && document.getElementById("editVideoEffects")?.hidden ? document.getElementById("studioTimelineDock") : activePanel;
     target?.scrollIntoView({ block: "start", inline: "nearest", behavior: "instant" });
   } else if (activePanel?.parentElement) {

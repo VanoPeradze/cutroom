@@ -1,6 +1,6 @@
 // Display-only controls. No project edits, media restarts, or playback changes.
-const TIMELINE_HEIGHT_KEY = "cutroom-timeline-height-v3";
-const INSPECTOR_WIDTH_KEY = "cutroom-inspector-width-v1";
+const TIMELINE_HEIGHT_KEY = "cutroom-timeline-height-v4";
+const INSPECTOR_WIDTH_KEY = "cutroom-inspector-width-v2";
 const INSPECTOR_COLLAPSED_KEY = "cutroom-inspector-collapsed-v1";
 
 export function initWorkspace({ document: doc = document, window: win = window, onResize = () => {}, openShortcuts = () => {}, translate = (key, fallback) => fallback } = {}) {
@@ -53,7 +53,7 @@ export function initWorkspace({ document: doc = document, window: win = window, 
   status.setAttribute("role", "status");
   status.setAttribute("aria-live", "polite");
   preview.appendChild(status);
-  const divider = create("div", "workspace-divider", "Resize video / timeline");
+  const divider = create("div", "workspace-divider");
   divider.id = "workspaceDivider";
   divider.tabIndex = 0;
   divider.setAttribute("role", "separator");
@@ -80,14 +80,25 @@ export function initWorkspace({ document: doc = document, window: win = window, 
   }
   const widthBounds = () => {
     const available = panel.getBoundingClientRect().width || win.innerWidth || 1280;
-    const focused = workspaceMode !== "timeline" || editEffects;
-    const minimum = focused ? 380 : 320;
-    return {minimum, maximum:Math.max(minimum, Math.min(focused ? 860 : 520, Math.floor(available - 12 - 360)))};
+    const minimum = 280;
+    return {minimum, maximum:Math.max(minimum, Math.min(420, Math.floor(available * .34)))};
+  };
+  const readWidthPreference = () => {
+    try {
+      const current = win.localStorage.getItem(widthKey());
+      const legacy = current === null;
+      const saved = legacy ? win.localStorage.getItem(widthKey().replace('width-v2','width-v1')) : current;
+      const value = Number(saved), bounds = widthBounds();
+      // Retain sensible display preferences; oversized old panels return to the
+      // balanced default. Old keys and all project settings remain untouched.
+      return saved !== null && Number.isFinite(value) && value >= bounds.minimum
+        && (!legacy || value <= bounds.maximum) ? value : null;
+    } catch { return null; }
   };
   const applyInspector = () => {
     if (!inspector) return null;
     const bounds = widthBounds();
-    const defaultWidth = workspaceMode === "timeline" ? (editEffects ? 460 : 360) : workspaceMode === "framing" ? 480 : 560;
+    const defaultWidth = 344;
     const width = Math.round(Math.min(bounds.maximum, Math.max(bounds.minimum, preferredWidth ?? defaultWidth)));
     panel.style.setProperty("--workspace-inspector-width", `${width}px`);
     panel.classList.toggle("inspector-collapsed", inspectorCollapsed);
@@ -124,11 +135,7 @@ export function initWorkspace({ document: doc = document, window: win = window, 
     if (mode !== workspaceMode) {
       endInspectorResize(null, true);
       workspaceMode = mode;
-      preferredWidth = null;
-      try {
-        const saved = win.localStorage.getItem(widthKey());
-        if (saved !== null && Number.isFinite(Number(saved)) && Number(saved) >= 320) preferredWidth = Number(saved);
-      } catch { /* Workspaces remain usable without saved preferences. */ }
+      preferredWidth = readWidthPreference();
     }
     panel.dataset.workspace = mode;
     applyInspector(); scheduleResize();
@@ -138,11 +145,7 @@ export function initWorkspace({ document: doc = document, window: win = window, 
     endInspectorResize(null, true);
     editEffects = Boolean(effects);
     panel.dataset.editEffects = String(editEffects);
-    preferredWidth = null;
-    try {
-      const saved = win.localStorage.getItem(widthKey());
-      if (saved !== null && Number.isFinite(Number(saved)) && Number(saved) >= 320) preferredWidth = Number(saved);
-    } catch { /* Effects remain available when storage is blocked. */ }
+    preferredWidth = readWidthPreference();
     applyInspector(); scheduleResize();
   };
   const setInspectorCollapsed = (collapsed) => {
@@ -170,7 +173,7 @@ export function initWorkspace({ document: doc = document, window: win = window, 
     listen(inspectorDivider, "pointermove", event => {
       if (!inspectorGesture || event.pointerId !== inspectorGesture.pointerId) return;
       event.preventDefault();
-      const direction = doc.documentElement.dir === "rtl" ? -1 : 1;
+      const direction = doc.documentElement.dir === "rtl" ? 1 : -1;
       setInspectorWidth(inspectorGesture.width + direction * (event.clientX - inspectorGesture.x), false);
     });
     listen(inspectorDivider, "pointerup", event => endInspectorResize(event));
@@ -180,7 +183,7 @@ export function initWorkspace({ document: doc = document, window: win = window, 
     listen(inspectorDivider, "keydown", event => {
       if (event.key === "Escape" && inspectorGesture) { event.preventDefault(); event.stopPropagation(); endInspectorResize(null, true); return; }
       const bounds = widthBounds(), step = event.shiftKey ? 64 : 16;
-      const direction = doc.documentElement.dir === "rtl" ? -1 : 1;
+      const direction = doc.documentElement.dir === "rtl" ? 1 : -1;
       const next = event.key === "ArrowRight" ? applyInspector() + step * direction : event.key === "ArrowLeft" ? applyInspector() - step * direction
         : event.key === "Home" ? bounds.minimum : event.key === "End" ? bounds.maximum : null;
       if (next === null) return;
@@ -196,12 +199,13 @@ export function initWorkspace({ document: doc = document, window: win = window, 
   const heightBounds = () => {
     const height = panel.getBoundingClientRect().height || Math.max(400, (win.innerHeight || 800) - 64);
     const headerHeight = panel.querySelector(".studio-header")?.getBoundingClientRect().height || 44;
-    // Includes the ruler, both video lanes, layout/audio, toolbar and the
-    // horizontal scrollbar that appears when zoomed in.
-    const minimum = height < 650 ? 260 : 326;
-    const dockHeight = panel.querySelector(".advanced-tabs") ? 72 : 0;
-    const maximum = Math.max(minimum, Math.floor(height - headerHeight - dockHeight - 14 - (height < 650 ? 180 : 220)));
-    return { minimum, maximum, defaultHeight: Math.min(420, Math.max(minimum, Math.round(height * .46))) };
+    // Extra tracks scroll inside the timeline instead of taking height from
+    // the monitor. Even a previously oversized timeline preserves the player.
+    const minimum = 184;
+    const dockHeight = panel.querySelector(".advanced-tabs") ? 44 : 0;
+    const monitorMinimum = Math.min(420, Math.max(320, Math.round(height * .5)));
+    const maximum = Math.max(minimum, Math.floor(height - headerHeight - dockHeight - 8 - monitorMinimum));
+    return { minimum, maximum, defaultHeight: Math.min(280, Math.max(232, Math.round(height * .26))) };
   };
   const applyTimelineHeight = () => {
     const bounds = heightBounds();
@@ -420,10 +424,12 @@ export function initWorkspace({ document: doc = document, window: win = window, 
   observer?.observe(panel, { attributes: true, attributeFilter: ["hidden"] });
   observer?.observe(doc.documentElement, { attributes: true, attributeFilter: ["lang", "dir"] });
   try {
-    const saved = win.localStorage.getItem(TIMELINE_HEIGHT_KEY);
-    if (saved !== null && Number.isFinite(Number(saved)) && Number(saved) >= 326) preferredHeight = Number(saved);
-    const savedWidth = win.localStorage.getItem(INSPECTOR_WIDTH_KEY);
-    if (savedWidth !== null && Number.isFinite(Number(savedWidth)) && Number(savedWidth) >= 320) preferredWidth = Number(savedWidth);
+    const current = win.localStorage.getItem(TIMELINE_HEIGHT_KEY);
+    const saved = current ?? win.localStorage.getItem('cutroom-timeline-height-v3');
+    const value = Number(saved), bounds = heightBounds();
+    if (saved !== null && Number.isFinite(value) && value >= bounds.minimum
+      && (current !== null || value <= bounds.maximum)) preferredHeight = value;
+    preferredWidth = readWidthPreference();
     inspectorCollapsed = win.localStorage.getItem(INSPECTOR_COLLAPSED_KEY) === "true";
   } catch { /* Default proportions work without storage. */ }
   applyTimelineHeight();
