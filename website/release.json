@@ -3,17 +3,17 @@
   "label": "1.1 Beta",
   "layout": "windows-mac-folders-v1",
   "filename": "CUTROOM-1.1-Beta.zip",
-  "bytes": 6562983,
-  "sha256": "975f1bb630e3597fb06a4fb778a33bf1f8af43f0fec7927d4dfe1da5d49a8b70",
-  "build_id": "CUTROOM-1.1-beta-mac-20261003-075758",
-  "release_state": "local-candidate",
+  "bytes": 6562920,
+  "sha256": "f9042bed8e511a444a35c2cdf798f9b7bc8925a1b8b5a7064e96eadfb95acbb1",
+  "build_id": "CUTROOM-1.1-beta-mac-20261003-080346",
+  "release_state": "validated",
   "source_commit": "d1fd1bd081999e1be385281c36d71502c9748831",
   "base_commit": "7741a6209e2eb7411ece471a5d0f052767a4366a",
   "uncommitted_changes": false,
   "editor_revision": "preview-first-workspace-chroma-numeric-duration",
-  "mac_validation_url": null,
-  "validated_pr_head": null,
-  "native_mac_validation": "pending",
+  "mac_validation_url": "https://github.com/VanoPeradze/cutroom/actions/runs/37108237483",
+  "validated_pr_head": "4bbd85d46aace2a54b040d626e8c0c0c86101668",
+  "native_mac_validation": "passed",
   "url": "https://cutroom-studio.expo.app/downloads/CUTROOM-1.1-Beta.zip",
   "platforms": {
     "windows": {
@@ -24,10 +24,11 @@
     },
     "mac": {
       "filename": "CUTROOM-1.1-Beta-Mac.zip",
-      "bytes": 3283069,
-      "sha256": "36ff9463cd52cc001a2ce3a5aefc2dafc61aaf4ea3d1ad78b9b4a39f081716f1",
+      "bytes": 3283004,
+      "sha256": "6b1efe38988354ba2f75376e5c81c7e205f08ec84716b23eea03a333468a1e75",
       "url": "https://cutroom-studio.expo.app/downloads/CUTROOM-1.1-Beta-Mac.zip"
     }
   },
-  "update_date": "2026-10-03"
+  "update_date": "2026-10-03",
+  "native_tested_merge_commit": "59dfc4836b2b78fb955c56cf4c7fed99082d1d38"
 }
