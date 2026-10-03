@@ -71,7 +71,14 @@ try {
    await pause(200);
    const geometry=await cdp.eval("(()=>{const ids=['advancedPanel','studioInspector','studioPreviewDock','studioTimelineDock','previewStage','editToolEffects'];const out={};for(const id of ids){const e=document.getElementById(id),r=e.getBoundingClientRect();out[id]={x:r.x,y:r.y,w:r.width,h:r.height,scrollWidth:e.scrollWidth,clientWidth:e.clientWidth,scrollHeight:e.scrollHeight,clientHeight:e.clientHeight};}const tabs=[...document.querySelectorAll('.advanced-tabs button')];out.tabs=tabs.map(e=>({tab:e.dataset.tab,x:e.getBoundingClientRect().x}));out.page={w:document.documentElement.scrollWidth,viewport:innerWidth};return out;})()");
    evidence.rows.push({width,height,tab,...geometry});
-   if(width>960&&height>600){assert.ok(geometry.studioPreviewDock.h>=140);assert.ok(geometry.studioTimelineDock.h>=250);assert.ok(geometry.studioTimelineDock.y+geometry.studioTimelineDock.h<=height-55);}
+   if(width>=900&&height>600){
+    assert.ok(geometry.previewStage.h>=Math.min(300,height-444)-1,'Preview keeps useful height with tools and timeline open');
+    assert.ok(geometry.studioTimelineDock.h>=184);
+    assert.equal(geometry.studioTimelineDock.x,0);
+    assert.equal(geometry.studioTimelineDock.w,width,'Timeline spans the complete edit');
+    assert.ok(geometry.studioTimelineDock.y+geometry.studioTimelineDock.h<=height-43);
+    assert.ok(geometry.studioInspector.w<=420,'Tool panels preserve space for the monitor');
+   }
    assert.ok(geometry.page.w<=width+1,'No page horizontal overflow');
    assert.ok(geometry.studioInspector.scrollWidth<=geometry.studioInspector.clientWidth+1,'No clipped tool controls');
    await screenshot('layout-'+width+'x'+height+'-'+tab);

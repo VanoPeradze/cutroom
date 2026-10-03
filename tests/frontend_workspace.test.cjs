@@ -16,7 +16,7 @@ class Target {
 class Element extends Target {
   constructor(tag, doc) {
     super(); this.tagName = tag; this.doc = doc; this.children = []; this.attrs = new Map(); this.dataset = {};
-    this.classes = new Set(); this.hidden = false; this.open = false; this.rect = { height: 656 }; this.capture = null;
+    this.classes = new Set(); this.hidden = false; this.open = false; this.rect = { height: 800 }; this.capture = null;
     this.classList = { add: (v) => this.classes.add(v), remove: (v) => this.classes.delete(v), contains: (v) => this.classes.has(v),
       toggle: (v, on) => on ? this.classes.add(v) : this.classes.delete(v) };
     this.properties = new Map(); this.style = { setProperty: (k, v) => this.properties.set(k, v), removeProperty: (k) => this.properties.delete(k) };
@@ -164,10 +164,10 @@ test("divider resizing is bounded, keyboard accessible, persistent and resettabl
   assert.equal(divider.getAttribute("data-editor-shortcuts"), "off", "resize arrows must not seek the editing timeline");
   const initial = Number(divider.getAttribute("aria-valuenow"));
   divider.emit("keydown", event({ key: "ArrowUp" })); assert.equal(Number(divider.getAttribute("aria-valuenow")), initial + 24);
-  divider.emit("keydown", event({ key: "End" })); assert.equal(Number(divider.getAttribute("aria-valuenow")), 378);
-  assert.equal(h.controller.setTimelineHeight(9999), 378); assert.equal(h.controller.setTimelineHeight(-10), 326);
+  divider.emit("keydown", event({ key: "End" })); assert.equal(Number(divider.getAttribute("aria-valuenow")), 348);
+  assert.equal(h.controller.setTimelineHeight(9999), 348); assert.equal(h.controller.setTimelineHeight(-10), 184);
   divider.emit("dblclick"); assert.equal(Number(divider.getAttribute("aria-valuenow")), initial);
-  assert.equal(h.store.has("cutroom-timeline-height-v3"), false);
+  assert.equal(h.store.has("cutroom-timeline-height-v4"), false);
 });
 
 test("divider drag updates live and cancellation restores previous preference", () => {
@@ -177,14 +177,14 @@ test("divider drag updates live and cancellation restores previous preference", 
   d.emit("pointercancel", event({ pointerId: 4 })); assert.equal(Number(d.getAttribute("aria-valuenow")), initial);
   d.emit("pointerdown", event({ button: 0, pointerId: 5, clientY: 300 }));
   d.emit("pointermove", event({ pointerId: 5, clientY: 270 })); d.emit("pointerup", event({ pointerId: 5 }));
-  assert.equal(h.store.get("cutroom-timeline-height-v3"), String(initial + 30));
+  assert.equal(h.store.get("cutroom-timeline-height-v4"), String(initial + 30));
   assert.equal(h.panel.classList.contains("workspace-resizing"), false);
 });
 
 test("invalid display preferences or blocked storage do not break the editor", () => {
-  const invalid = harness({ savedHeight: "NaN" }); assert.equal(invalid.el("workspaceDivider").getAttribute("aria-valuenow"), "326");
+  const invalid = harness({ savedHeight: "NaN" }); assert.equal(invalid.el("workspaceDivider").getAttribute("aria-valuenow"), "232");
   const h = harness({ storageDenied: true }); assert.doesNotThrow(() => h.controller.setTimelineHeight(320));
-  assert.equal(h.el("workspaceDivider").getAttribute("aria-valuenow"), "326");
+  assert.equal(h.el("workspaceDivider").getAttribute("aria-valuenow"), "320");
 });
 
 test("guide explains clip tools and opens existing shortcut help", () => {
@@ -216,33 +216,33 @@ test("one accessible tool toggle and separator control the original inspector wi
 
 test("inspector keyboard bounds preserve room for preview and restore a wider saved preference after resize", () => {
   const h = harness({inspector:true}), divider = h.el("workspaceInspectorDivider");
-  assert.equal(h.controller.setInspectorWidth(9999),520);
-  assert.equal(h.store.get("cutroom-inspector-width-v1"),"520");
+  assert.equal(h.controller.setInspectorWidth(9999),420);
+  assert.equal(h.store.get("cutroom-inspector-width-v2"),"420");
   h.panel.rect.width=961; h.win.emit("resize"); h.flush();
-  assert.equal(divider.getAttribute("aria-valuenow"),"520");
-  assert.equal(h.store.get("cutroom-inspector-width-v1"),"520");
+  assert.equal(divider.getAttribute("aria-valuenow"),"326");
+  assert.equal(h.store.get("cutroom-inspector-width-v2"),"420");
   h.panel.rect.width=1280; h.win.emit("resize"); h.flush();
-  assert.equal(divider.getAttribute("aria-valuenow"),"520");
-  divider.emit("keydown",event({key:"Home"})); assert.equal(divider.getAttribute("aria-valuenow"),"320");
-  divider.emit("keydown",event({key:"ArrowRight"})); assert.equal(divider.getAttribute("aria-valuenow"),"336");
-  divider.emit("keydown",event({key:"End"})); assert.equal(divider.getAttribute("aria-valuenow"),"520");
+  assert.equal(divider.getAttribute("aria-valuenow"),"420");
+  divider.emit("keydown",event({key:"Home"})); assert.equal(divider.getAttribute("aria-valuenow"),"280");
+  divider.emit("keydown",event({key:"ArrowLeft"})); assert.equal(divider.getAttribute("aria-valuenow"),"296");
+  divider.emit("keydown",event({key:"End"})); assert.equal(divider.getAttribute("aria-valuenow"),"420");
 });
 
 test("inspector drag, RTL arrows, cancellation and double-click use display preferences only", () => {
   const h = harness({inspector:true}), d=h.el("workspaceInspectorDivider");
   d.emit("pointerdown",event({button:0,pointerId:4,clientX:400}));
-  d.emit("pointermove",event({pointerId:5,clientX:470})); assert.equal(d.getAttribute("aria-valuenow"),"360");
-  d.emit("pointermove",event({pointerId:4,clientX:448})); assert.equal(d.getAttribute("aria-valuenow"),"408");
-  d.emit("pointerup",event({pointerId:4})); assert.equal(h.store.get("cutroom-inspector-width-v1"),"408");
+  d.emit("pointermove",event({pointerId:5,clientX:470})); assert.equal(d.getAttribute("aria-valuenow"),"344");
+  d.emit("pointermove",event({pointerId:4,clientX:352})); assert.equal(d.getAttribute("aria-valuenow"),"392");
+  d.emit("pointerup",event({pointerId:4})); assert.equal(h.store.get("cutroom-inspector-width-v2"),"392");
   h.doc.documentElement.dir="rtl";
-  d.emit("keydown",event({key:"ArrowLeft"})); assert.equal(d.getAttribute("aria-valuenow"),"424");
+  d.emit("keydown",event({key:"ArrowLeft"})); assert.equal(d.getAttribute("aria-valuenow"),"376");
   d.emit("pointerdown",event({button:0,pointerId:6,clientX:400}));
-  d.emit("pointermove",event({pointerId:6,clientX:370})); assert.equal(d.getAttribute("aria-valuenow"),"454");
-  d.emit("keydown",event({key:"Escape"})); assert.equal(d.getAttribute("aria-valuenow"),"424");
-  assert.equal(h.store.get("cutroom-inspector-width-v1"),"424");
+  d.emit("pointermove",event({pointerId:6,clientX:430})); assert.equal(d.getAttribute("aria-valuenow"),"406");
+  d.emit("keydown",event({key:"Escape"})); assert.equal(d.getAttribute("aria-valuenow"),"376");
+  assert.equal(h.store.get("cutroom-inspector-width-v2"),"376");
   assert.equal(h.panel.classList.contains("inspector-resizing"),false);
-  d.emit("dblclick"); assert.equal(d.getAttribute("aria-valuenow"),"360");
-  assert.equal(h.store.has("cutroom-inspector-width-v1"),false);
+  d.emit("dblclick"); assert.equal(d.getAttribute("aria-valuenow"),"344");
+  assert.equal(h.store.has("cutroom-inspector-width-v2"),false);
   assert.equal(h.a.parentElement,h.stage); assert.equal(h.b.parentElement,h.stage);
 });
 
@@ -266,14 +266,14 @@ test("tool labels and separator announcements refresh through the injected live 
   h.doc.documentElement.lang="he";h.doc.documentElement.dir="rtl";h.observe();h.flush();
   assert.equal(h.el("workspaceToolsToggle").textContent,dictionary.inspectorHide);
   assert.equal(h.el("workspaceInspectorDivider").getAttribute("aria-label"),dictionary.inspectorResize);
-  assert.equal(h.el("workspaceInspectorDivider").getAttribute("aria-valuetext"),"רוחב: 360 פיקסלים");
+  assert.equal(h.el("workspaceInspectorDivider").getAttribute("aria-valuetext"),"רוחב: 344 פיקסלים");
   h.controller.setInspectorCollapsed(true);assert.equal(h.el("workspaceToolsToggle").textContent,dictionary.inspectorShow);
 });
 
 test("tool display preferences tolerate invalid storage and cleanup restores accessibility", () => {
   const h=harness({inspector:true,savedWidth:"NaN",storageDenied:true});
   assert.doesNotThrow(()=>h.controller.setInspectorWidth(-10));
-  assert.equal(h.el("workspaceInspectorDivider").getAttribute("aria-valuenow"),"320");
+  assert.equal(h.el("workspaceInspectorDivider").getAttribute("aria-valuenow"),"280");
   h.controller.setInspectorCollapsed(true); h.controller.destroy(); h.flush();
   assert.equal(h.el("studioInspector").inert,false);
   assert.equal(h.el("studioInspector").getAttribute("aria-hidden"),undefined);
@@ -286,18 +286,18 @@ test("focused workspaces keep independent widths, retain edit preference and nev
   const h = harness({inspector:true, savedWidth:"400"});
   h.controller.setWorkspace("audio");
   assert.equal(h.panel.dataset.workspace,"audio");
-  assert.equal(h.el("workspaceInspectorDivider").getAttribute("aria-valuenow"),"560");
+  assert.equal(h.el("workspaceInspectorDivider").getAttribute("aria-valuenow"),"344");
   h.controller.setInspectorWidth(720);
   h.controller.setWorkspace("framing");
-  assert.equal(h.el("workspaceInspectorDivider").getAttribute("aria-valuenow"),"480");
+  assert.equal(h.el("workspaceInspectorDivider").getAttribute("aria-valuenow"),"344");
   h.controller.setWorkspace("timeline");
   assert.equal(h.el("workspaceInspectorDivider").getAttribute("aria-valuenow"),"400");
   h.controller.setWorkspace("audio");
-  assert.equal(h.el("workspaceInspectorDivider").getAttribute("aria-valuenow"),"720");
+  assert.equal(h.el("workspaceInspectorDivider").getAttribute("aria-valuenow"),"420");
   h.panel.rect.width = 961; h.win.emit("resize"); h.flush();
-  assert.equal(h.el("workspaceInspectorDivider").getAttribute("aria-valuenow"),"589");
+  assert.equal(h.el("workspaceInspectorDivider").getAttribute("aria-valuenow"),"326");
   h.panel.rect.width = 1280; h.win.emit("resize"); h.flush();
-  assert.equal(h.el("workspaceInspectorDivider").getAttribute("aria-valuenow"),"720");
+  assert.equal(h.el("workspaceInspectorDivider").getAttribute("aria-valuenow"),"420");
   assert.equal(h.a.parentElement,h.stage); assert.equal(h.preview.parentElement,h.dock);
   h.controller.setWorkspace("invalid"); assert.equal(h.panel.dataset.workspace,"audio");
 });
@@ -305,14 +305,23 @@ test("focused workspaces keep independent widths, retain edit preference and nev
 test("Edit effects preserves separate widths across tabs without moving or restarting video", () => {
   const h = harness({inspector:true,savedWidth:"400"});
   h.controller.setEditEffects(true);
-  assert.equal(h.el("workspaceInspectorDivider").getAttribute("aria-valuenow"),"460");
+  assert.equal(h.el("workspaceInspectorDivider").getAttribute("aria-valuenow"),"344");
   h.controller.setInspectorWidth(510);
   h.controller.setWorkspace("framing");
-  assert.equal(h.el("workspaceInspectorDivider").getAttribute("aria-valuenow"),"480");
+  assert.equal(h.el("workspaceInspectorDivider").getAttribute("aria-valuenow"),"344");
   h.controller.setWorkspace("timeline");
-  assert.equal(h.el("workspaceInspectorDivider").getAttribute("aria-valuenow"),"510");
+  assert.equal(h.el("workspaceInspectorDivider").getAttribute("aria-valuenow"),"420");
   h.controller.setEditEffects(false);
   assert.equal(h.el("workspaceInspectorDivider").getAttribute("aria-valuenow"),"400");
   assert.equal(h.a.parentElement,h.stage);
   assert.equal(h.preview.parentElement,h.dock);
+});
+
+test("oversized legacy display settings fall back without deleting old keys or changing media", () => {
+  const h=harness({inspector:true,savedWidth:"860",savedHeight:"800"});
+  assert.equal(h.el("workspaceInspectorDivider").getAttribute("aria-valuenow"),"344");
+  assert.equal(h.el("workspaceDivider").getAttribute("aria-valuenow"),"232");
+  assert.equal(h.store.get("cutroom-inspector-width-v1"),"860");
+  assert.equal(h.store.get("cutroom-timeline-height-v3"),"800");
+  assert.equal(h.a.parentElement,h.stage); assert.equal(h.b.parentElement,h.stage);
 });

@@ -25,10 +25,9 @@ export class MediaStudio {
     this.selected = null; this.projectId = null; this.players = new Map(); this.overrides = new Map();
     this.pending = new Map(); this.timer = null; this.saving = null; this.uploading = false;
     this.root.innerHTML = `
-      <header class="studio-tool-intro"><div><p>MEDIA & AUDIO</p><h3>Build on your edit</h3></div><span>Add B-roll, images, music or voiceover. Original footage stays untouched.</span></header>
+      <header class="studio-tool-intro"><div><h3>Media</h3></div><span>Import a file, then add it at the playhead.</span></header>
       <button type="button" class="media-import button primary" data-import>Add media</button><input type="file" accept="video/*,audio/*,image/png,image/jpeg,image/webp" hidden>
       <p class="media-status" role="status" aria-live="polite">Import a file, then add it at the yellow playhead.</p>
-      <div class="media-library" aria-label="Project media"></div>
       <section class="media-inspector" hidden data-editor-shortcuts="off">
         <h4 class="media-selected-name"></h4>
         <div class="media-fields">
@@ -36,14 +35,16 @@ export class MediaStudio {
           <label>End (seconds)<input data-media="end" type="number" min="0" step="0.01"></label>
           <label data-kind="timed">Source in<input data-media="source_start" type="number" min="0" step="0.01"></label>
           <label data-kind="video">Picture speed<select data-media="speed"><option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="1">1×</option><option value="1.5">1.5×</option><option value="2">2×</option><option value="4">4×</option></select></label>
+          <label data-kind="visual">Framing<select data-media="fit"><option value="cover">Fill frame</option><option value="contain">Fit entire image</option></select></label>
+          <label data-kind="image">Motion<select data-media="motion"><option value="none">Still</option><option value="zoom_in">Slow zoom</option><option value="pan">Slow pan</option></select></label>
+        </div>
+        <details class="inspector-section media-clip-audio" data-kind="sound"><summary>Clip audio</summary><div class="media-fields">
           <label data-kind="sound">Audio group<select data-media="role"><option value="music">Music</option><option value="voice">Voiceover</option><option value="effects">Effects</option></select></label>
           <label data-kind="sound">Clip volume (dB)<input data-media="volume_db" type="range" min="-60" max="12" step="1"><output data-value="volume_db"></output></label>
           <label data-kind="sound">Fade in (seconds)<input data-media="fade_in" type="number" min="0" step="0.1"></label>
           <label data-kind="sound">Fade out (seconds)<input data-media="fade_out" type="number" min="0" step="0.1"></label>
           <label data-kind="video"><input data-media="audio_enabled" type="checkbox"> Use clip audio</label>
-          <label data-kind="visual">Framing<select data-media="fit"><option value="cover">Fill frame</option><option value="contain">Fit entire image</option></select></label>
-          <label data-kind="image">Motion<select data-media="motion"><option value="none">Still</option><option value="zoom_in">Slow zoom</option><option value="pan">Slow pan</option></select></label>
-        </div>
+        </div></details>
         <details class="media-placement"><summary>Position & size</summary><div class="media-fields">
           <label>Left (%)<input data-media="x" type="number" min="0" max="100" step="1"></label>
           <label>Top (%)<input data-media="y" type="number" min="0" max="100" step="1"></label>
@@ -53,6 +54,9 @@ export class MediaStudio {
         <p class="media-help">Drag the clip or its edges in the timeline. Changes save automatically. Picture speed does not change the main speech or music.</p>
         <div class="media-actions"><button type="button" data-action="split">Split at playhead</button><button type="button" data-action="duplicate">Duplicate</button><button type="button" data-action="remove">Remove</button></div>
       </section>
+      <details class="inspector-section media-library-section" open><summary>Project files</summary>
+      <div class="media-library" aria-label="Project media"></div>
+      </details>
       <details class="audio-mixer" data-editor-shortcuts="off"><summary><span>Audio mixer</span><small class="mixer-summary-level">Paused</small></summary>
         <div class="mixer-body">
         <p class="mixer-help">Mute changes preview & export. Solo isolates a channel in preview only.</p>

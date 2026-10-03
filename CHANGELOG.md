@@ -1,12 +1,15 @@
 # Changelog
 
-## Final workspace arrangement
+## 1.1 Beta - 2026-10-03 - Preview-first workspace
+
+- Reserved the upper workspace for the video and bounded contextual tools, with a full-width timeline and one ordered navigation row. Oversized legacy display preferences fall back without changing projects.
+- Put clip framing first in Layout, selected Media properties before the library, and caption import, AI style and transcript in separate disclosures. Verified landscape and portrait previews with tools and timeline open at desktop and narrow sizes.
 
 - Added vertical numeric scrubbing and focused-field wheel adjustment, with native steps/limits, Shift fine control, cancellation and one committed edit per gesture. Typing, keyboard input and normal panel scrolling remain available.
 
 - Ordered workspaces as Media, Edit, Layout, Audio, Captions and Output, with matching RTL and keyboard navigation.
 - Moved Green screen into Edit → Effects, separate from clip controls. Key color/defaults precede background; fine-tuning and exact-frame inspection expand when needed. Layout retains composition and framing.
-- Gave tools the full available height and narrower defaults, preserving space for preview and timeline. Single-source camera setup stays folded unless a detected camera needs review.
+- Kept contextual tools independently scrollable beside the preview. Single-source camera setup stays folded unless a detected camera needs review.
 
 
 ## 1.1 Beta - 2026-10-02 - Green-screen playback and layer order

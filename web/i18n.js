@@ -417,7 +417,7 @@ Object.assign(he, {
 });
 
 Object.assign(en, {
-  editClipTools:'Clip controls', editVideoEffects:'Effects · Green screen', chromaFineTune:'Fine-tune edges', chromaHow:'How layers work',
+  editClipTools:'Clip', editVideoEffects:'Effects', chromaFineTune:'Fine-tune edges', chromaHow:'How layers work',
     chromaHelp:'Choose the foreground video, choose what appears behind it, then remove the color and apply.',
   chromaSource:'1 · Foreground video', chromaColor:'2 · Color to remove', chromaMode:'3 · Background',
   chromaUnderneath:'Video underneath (Media layer)', chromaReplace:'Color or image',
@@ -429,7 +429,7 @@ Object.assign(en, {
   chromaPlayback:'Edited playback shows the saved key. This processed frame checks exact edges; checkerboard means the video underneath will show through.'
 });
 Object.assign(he, {
-  editClipTools:'עריכת קליפ', editVideoEffects:'אפקטים · מסך ירוק', chromaFineTune:'כוונון הקצוות', chromaHow:'איך השכבות עובדות',
+  editClipTools:'קליפ', editVideoEffects:'אפקטים', chromaFineTune:'כוונון הקצוות', chromaHow:'איך השכבות עובדות',
   chromaHelp:'בחרו את הסרטון הקדמי, בחרו מה יופיע מאחוריו, ואז הסירו את הצבע והחילו.',
   chromaSource:'1 · הסרטון הקדמי', chromaColor:'2 · הצבע להסרה', chromaMode:'3 · הרקע',
   chromaUnderneath:'הסרטון שמתחת (שכבת מדיה)', chromaReplace:'צבע או תמונה',

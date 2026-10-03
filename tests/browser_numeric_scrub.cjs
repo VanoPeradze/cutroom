@@ -101,7 +101,12 @@ try {
  assert.equal(Number(await cdp.eval('document.querySelector('+JSON.stringify(volume)+').value')),originalVolume+5);
  await click('#manualUndo');await wait(async()=>Number(await cdp.eval('document.querySelector('+JSON.stringify(volume)+').value'))===originalVolume);
  evidence.rows.push({stage:'master-volume-output-drag-and-undo',volume:originalVolume});
- await cdp.send('Page.reload');await wait(()=>cdp.eval('!!document.querySelector(\'[data-project-id="'+projectId+'"] [data-project-action="open"]\')'));
+ const loadsBeforeReload=cdp.events.filter(e=>e.method==='Page.loadEventFired').length;
+ await cdp.send('Page.reload');
+ // Page.reload acknowledges the request before the old document is replaced.
+ // Wait for the new page before looking for its project card.
+ await wait(()=>cdp.events.filter(e=>e.method==='Page.loadEventFired').length>loadsBeforeReload);
+ await wait(()=>cdp.eval('!!document.querySelector(\'[data-project-id="'+projectId+'"] [data-project-action="open"]\')'));
  await click('[data-project-id="'+projectId+'"] [data-project-action="open"]');await wait(()=>cdp.eval("!document.body.classList.contains('welcome-mode')"));
  assert.equal(await savedWidth(),.75);evidence.rows.push({stage:'saved-width-survives-reopen',width:await savedWidth()});
  evidence.errors=cdp.events.filter(e=>e.method==='Runtime.exceptionThrown'||e.method==='Log.entryAdded'&&e.params.entry.level==='error');
