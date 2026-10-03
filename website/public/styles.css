@@ -84,3 +84,23 @@ h1 em{font-style:normal}
 @media(max-width:759px){.platform-links a,.guide-links a,.footer a,.answer a{min-height:44px}}
 @media(max-width:359px){.shell,.site-header{padding-inline:16px}.site-header nav{gap:12px}h1{font-size:39px}.download-meta{margin-inline-start:9px;font-size:10px}.button{padding-inline:17px;font-size:14px}[dir=rtl] h1{font-size:38px}}
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*::before,*::after{transition:none!important;animation:none!important}}
+
+/* One download area; real platform-specific archives. */
+.download-action{display:flex;flex-wrap:wrap;gap:10px}
+.download-action .button{gap:12px;padding-inline:18px}
+.button-secondary{background:transparent;border-color:#656875;color:var(--ink)}
+.button-secondary:hover{background:#24262e;border-color:#9095a6}
+@media(max-width:420px){.download-action .button{flex:1 1 140px;font-size:13px;padding-inline:12px}}
+
+/* The editor leads; platform choices are one compact decision. */
+.hero-copy{max-width:510px}
+.download-action{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.download-action .button{min-width:0;font-size:14px;padding-inline:14px;gap:10px}
+.download-action .button svg{flex:0 0 auto}
+.platform-links{gap:6px 16px}
+.editor-preview{margin-top:30px}
+.shot-button{border-radius:10px;box-shadow:none}
+.capabilities{padding-block:60px}
+.step-no{color:#b1b8ff}
+@media(min-width:760px){.hero-lead{grid-template-columns:1.15fr 1fr;gap:48px}.hero{padding-top:42px}.hero h1{font-size:clamp(56px,5.2vw,72px)}.intro{max-width:440px;font-size:17px}.editor-preview{margin-top:32px}.capabilities{padding-block:64px}}
+@media(max-width:759px){.hero{padding-top:25px}.hero-lead{gap:15px}h1{font-size:41px;letter-spacing:-1.6px}.intro{font-size:14px;margin-bottom:16px}.download-action .button{font-size:12px;padding:10px 8px;min-height:48px;gap:8px}.platform-links{font-size:11px;margin-top:4px}.editor-preview{margin-top:18px}.editor-preview figcaption{font-size:10px}.capabilities{padding-block:38px;gap:20px}.section-heading h2{font-size:29px}.section-heading p{margin-top:10px}.support{padding-block:30px 38px}[dir=rtl] h1{font-size:40px}}

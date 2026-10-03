@@ -1,10 +1,11 @@
-import { applyTranslations, dictionaries } from "./i18n.js?v=1.1-beta-5";
+import { applyTranslations, dictionaries } from "./i18n.js?v=1.1-beta-chroma-edit-2";
 import { TimelineView, formatTime, editableClips, timelineDuration, sequenceBlocks, sequenceGaps, rippleMoveStart } from "./timeline.js?v=1.1-beta-9";
-import { MediaStudio } from "./media-studio.js?v=1.1-beta-6";
+import { MediaStudio } from "./media-studio.js?v=1.1-beta-chroma-edit-2";
 import { StabilizationStudio } from "./stabilization-studio.js?v=1.1-beta-1";
-import { ChromaStudio } from "./chroma-studio.js?v=1.1-beta-2";
+import { ChromaStudio } from "./chroma-studio.js?v=1.1-beta-chroma-edit-2";
+import { ChromaPreview } from "./chroma-preview.js?v=1.1-beta-chroma-edit-2";
 import { SourceReview } from "./source-review.js?v=1.1-beta-8";
-import { initWorkspace } from "./workspace.js?v=1.1-beta-4";
+import { initWorkspace } from "./workspace.js?v=1.1-beta-focused-3";
 import { KEYBOARD_PROFILES, resolveEditorShortcut, isEditorTransportSpace, shortcutRows } from "./keyboard.js?v=1.1-beta-2";
 import { AudioThresholdView } from "./audio-meter.js?v=1.1-beta-1";
 import { initWelcome, workflowSettings, cloudProviderName } from "./welcome.js?v=1.1-beta-1";
@@ -12,6 +13,7 @@ import { initLocalModels } from "./local-models.js?v=1.1-beta-1";
 import { trackClips, trackAt, hasSourceTracks, SourceTimelineClock } from "./source-tracks.js?v=1.1-beta-1";
 import { initTrackProtection } from "./track-protection.js?v=1.1-beta-1";
 import { TextStudio } from "./text-studio.js?v=1.1-beta-2";
+import { initNumericScrub } from "./numeric-scrub.js?v=1.1-beta-1";
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -112,7 +114,7 @@ function cacheElements() {
     "welcomeView", "workspaceView", "projectHead", "projectName", "saveState", "recentProjects", "recentList", "recentCount",
     "projectsButton", "projectsDialog", "dialogProjects", "dialogNewProject", "newProjectButton", "homeButton",
     "advancedButton", "advancedPanel", "closeAdvanced", "studioPreviewDock", "studioDirectorDock", "studioRenderButton", "studioDraftStatus", "studioPanelFraming", "renderButton", "resultRenderButton", "setupPanel", "setupSourceMixerDock", "analysisPanel", "resultPanel", "resultGrid", "previewColumn", "verdictColumn",
-    "sourceSlotA", "sourceSlotB", "sourceInputA", "sourceInputB", "cancelUploadA", "cancelUploadB", "audioCalibration", "audioMeterCanvas", "recommendedThreshold", "useRecommendedThreshold", "silenceThreshold", "silenceThresholdOut", "preSilenceMin", "preSilenceMinOut", "preSilenceKeep", "preSilenceKeepOut", "audioCutEstimate", "audioProfileSummary", "editStyleChoices", "editStyleNote", "goalChoices", "goalExplainer", "goalExplainerTitle", "goalExplainerText", "durationGroup", "targetDuration", "durationOutput", "paceChoices", "paceNote",
+    "sourceSlotA", "sourceSlotB", "sourceInputA", "sourceInputB", "cancelUploadA", "cancelUploadB", "audioCalibration", "audioMeterCanvas", "recommendedThreshold", "useRecommendedThreshold", "silenceThreshold", "silenceThresholdOut", "preSilenceMin", "preSilenceMinOut", "preSilenceKeep", "preSilenceKeepOut", "audioCutEstimate", "audioProfileSummary", "editStyleChoices", "editStyleNote", "goalChoices", "goalExplainer", "goalExplainerTitle", "goalExplainerText", "durationGroup", "targetDuration", "durationMode", "durationOutput", "paceChoices", "paceNote",
     "directorInstruction", "readiness", "generateButton", "jobMessage", "jobProgress", "cancelJobButton", "analysisError", "analysisErrorTitle", "analysisErrorMessage", "retryDirectorButton", "backFromErrorButton", "draftTitle", "draftSummary", "draftEngineBadge",
     "reelCandidates", "reelCandidatesTitle", "reelCandidateList", "draftWarning", "draftWarningText", "reviewSpeechSettings",
     "beforeDuration", "afterDuration", "decisionCount", "decisionList", "previewStage", "previewA", "previewB", "previewPaneA", "previewPaneB", "previewPlay", "playButton",
@@ -205,11 +207,12 @@ function initializeMediaStudio() {
   tab.id = "studioTabMedia"; tab.type = "button"; tab.dataset.tab = "media";
   tab.setAttribute("role", "tab"); tab.setAttribute("aria-selected", "false"); tab.setAttribute("aria-controls", "studioPanelMedia"); tab.tabIndex = -1;
   tab.innerHTML = '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 4v16M17 4v16M3 9h4m10 0h4M3 15h4m10 0h4"/></svg><span>Media</span><small>Clips & images</small>';
-  elements.advancedPanel.querySelector(".advanced-tabs").append(tab);
+  elements.advancedPanel.querySelector(".advanced-tabs").prepend(tab);
   // bindEvents already ran before this dynamically created tab.
   tab.addEventListener("click", () => selectAdvancedTab("media"));
   tab.addEventListener("keydown", handleStudioTabKeydown);
   state.mediaStudio = new MediaStudio(panel, elements.previewStage, {
+    chromaPreview: video => new ChromaPreview(video),
     project: () => state.project, audioPanel: document.getElementById("studioPanelAudio"), audioSlot: () => sourceMixerSettings().audioSlot, api, edit: applyManualEdit, pause: pauseAllMedia,
     time: previewTimelineTime, duration: editorDuration, flushSettings: flushProjectSaves,
     busy: () => Boolean(state.activeJob || state.activeUploads.size || state.jobStartLocks.size || state.stabilizationStudio?.uploading
@@ -246,10 +249,12 @@ function initializeChromaStudio() {
   const root = document.getElementById("chromaStudio");
   if (!root) return;
   state.chromaStudio = new ChromaStudio(root, {
+    autoPreview: true,
     project: () => state.project, edit: applyManualEdit, pause: pauseAllMedia,
     busy: () => foregroundBusy() || state.manualEditBusy,
     translate: (key, fallback) => state.dictionary?.[key] || fallback, api,
     sourceTime: slot => elements[`preview${slot}`]?.currentTime || 0,
+    selectedTarget: () => state.project?.manual?.media_clips?.find(clip => clip.id === state.timeline?.mediaSelection)?.asset_id || state.trimClip?.slot,
     openMedia: () => openStudioTab("media"),
     frame: async ({projectId, slot, time, revision}, signal) => {
       const query = new URLSearchParams({time:String(time), revision:String(revision)});
@@ -266,6 +271,7 @@ function initializeChromaStudio() {
 }
 
 function updateMediaPreview() {
+  updateChromaPlayback();
   updateTextPreview();
   if (!state.mediaStudio || !state.project?.draft) return;
   const project = playbackProject(), time = previewPlaybackTime(), sourceMode = previewUsesSourceTime();
@@ -275,6 +281,22 @@ function updateMediaPreview() {
   state.mediaStudio.sync(sourceMode ? time : sourceToOutputTime(time),state.preview.playing,
     {sourceMode,point,url:source ? sourceMediaUrl(source) : null,hasAudio:source?.has_audio});
   if (!sourceMode) { elements.previewA.muted = true; elements.previewB.muted = true; }
+}
+
+function updateChromaPlayback() {
+  if (typeof ChromaPreview === "undefined") return;
+  state.chromaPlayers ||= new Map();
+  const project = playbackProject();
+  for (const slot of ["A", "B"]) {
+    const video=elements[`preview${slot}`]; if (!video?.parentElement) continue;
+    // Embedded camera B is a second view of A, not a separate source.
+    const target=slot === "B" && !project?.sources?.B ? "A" : slot;
+    const settings=previewUsesSourceTime() ? null : project?.manual?.chroma_key?.[target];
+    if (settings?.enabled || state.chromaPlayers.has(slot)) {
+      if (!state.chromaPlayers.has(slot)) state.chromaPlayers.set(slot,new ChromaPreview(video));
+      state.chromaPlayers.get(slot).update(settings,project?.assets?.[settings?.background_asset_id]?.url);
+    }
+  }
 }
 
 function initializeTextStudio() {
@@ -431,6 +453,13 @@ async function boot() {
   cacheElements();
   state.dictionary = applyTranslations("en");
   bindEvents();
+  initNumericScrub({ document, window, canEdit: () => !foregroundBusy() && !state.manualEditBusy,
+    context: () => [state.project?.id, state.project?.revision, state.mediaStudio?.selected, state.textStudio?.selected, state.trimClip?.id].join('|'),
+    onCommit: field => {
+      if (field.dataset.media || field.dataset.mix) void state.mediaStudio?.flush();
+      else if (field.dataset.text) void state.textStudio?.flush();
+      else if (/^embedded(?:Camera[XYWH]|Content[XY])$/.test(field.id)) void flushEmbeddedCameraSave();
+    } });
   const localModels = initLocalModels({ document, api, busy: foregroundBusy,
     changed: async () => { state.runtimeGeneration += 1; await loadSystem(); },
   });
@@ -602,6 +631,7 @@ function bindEvents() {
     renderAudioCalibration();
     scheduleSettingsPatch({ requiresRebuild: true, reason: "audio" });
   });
+  elements.durationMode.addEventListener("change", () => scheduleSettingsPatch({ requiresRebuild: true, reason: "duration intent" }));
   elements.targetDuration.addEventListener("input", () => updateDurationControl(Number(elements.targetDuration.value)));
   elements.targetDuration.addEventListener("change", () => scheduleSettingsPatch({ requiresRebuild: true, reason: "duration" }));
   $$(".quick-values button").forEach((button) => button.addEventListener("click", () => {
@@ -619,6 +649,12 @@ function bindEvents() {
     button.addEventListener("click", () => openStudioTab(button.dataset.openStudioTab));
   });
   elements.reviewSpeechSettings.addEventListener("click", openSpeechReviewSettings);
+  document.getElementById("reviewDurationSettings")?.addEventListener("click", () => {
+    if (foregroundBusy() || state.manualEditBusy) return;
+    showSetup();
+    elements.editStyleChoices?.querySelector('button[aria-checked="true"]')?.focus();
+    elements.durationGroup?.scrollIntoView({block:"nearest"});
+  });
   $$(".refine-grid button").forEach((button) => button.addEventListener("click", () => refineDraft(button.dataset.command)));
   elements.reelCandidateList.addEventListener("click", async (event) => {
     const button = event.target.closest("button[data-candidate-id]");
@@ -645,6 +681,7 @@ function bindEvents() {
 
   elements.advancedButton.addEventListener("click", toggleAdvanced);
   elements.closeAdvanced.addEventListener("click", () => setAdvanced(false));
+  $$('[data-edit-tool]').forEach(button => button.addEventListener('click', () => selectEditTool(button.dataset.editTool)));
   elements.studioRenderButton.addEventListener("click", openExportDialog);
   $$(".advanced-tabs button").forEach((button) => {
     button.addEventListener("click", () => selectAdvancedTab(button.dataset.tab));
@@ -713,6 +750,7 @@ function bindEvents() {
   elements.manualClear.addEventListener("click", () => { state.markIn = null; state.timeline?.clearSelection(); elements.timelineCanvas.focus(); });
   elements.manualRange.addEventListener("click", () => {
     openStudioTab("timeline");
+    selectEditTool("clip");
     elements.timelineRangeForm.hidden = !elements.timelineRangeForm.hidden;
     elements.manualRange.setAttribute("aria-expanded", String(!elements.timelineRangeForm.hidden));
     renderRangeEditors();
@@ -770,6 +808,7 @@ function bindEvents() {
   elements.manualRestore.addEventListener("click", () => runManualRangeEdit("restore_range"));
   elements.editorMoreButton.addEventListener("click", () => {
     if (!openStudioTab("timeline")) return;
+    selectEditTool("clip");
     elements.editorMoreTools.open = true;
     elements.editorMoreTools.scrollIntoView({ block: "nearest" });
     elements.editorMoreTools.querySelector("summary").focus();
@@ -1092,6 +1131,7 @@ function hydrateSettings() {
   setChoiceValue(elements.paceChoices, settings.pace || "balanced");
   updatePaceNote(settings.pace || "balanced");
   elements.targetDuration.max = Math.max(15, Math.ceil(Math.min(600, state.project.sources?.A?.duration || 180)));
+  elements.durationMode.value = settings.duration_mode || "style";
   updateDurationControl(Number(settings.target_duration || 60));
   elements.directorInstruction.value = settings.instruction || "";
   const embeddedOption = elements.layoutSelect.querySelector('option[value="embedded_stack"]');
@@ -1863,6 +1903,7 @@ function currentSettings() {
     goal,
     pace,
     target_duration: Number(elements.targetDuration.value),
+    duration_mode: elements.durationMode?.value || "style",
     instruction: elements.directorInstruction.value.trim(),
     aspect: elements.aspectSelect.value,
     layout: elements.layoutSelect.value,
@@ -2513,6 +2554,7 @@ function directorCompletionNotice(job, preserved = false) {
 }
 
 function renderAiDraftNotice() {
+  renderDurationReview();
   const notice = document.getElementById("aiDraftNotice"); if (!notice) return;
   notice.hidden = !currentAiDraftNotice();
   const text = notice.querySelector("p"); if (text) text.textContent = t("aiDraftKept");
@@ -2933,6 +2975,24 @@ function renderDraftActions() {
 
 function canVaryDraft() {
   return state.project?.draft?.goal === "short" && (state.project.settings?.goal || "short") === "short";
+}
+
+function renderDurationReview() {
+  const node = document.getElementById("durationReview"); if (!node) return;
+  const draft = state.project?.draft, review = draft?.duration_review;
+  node.hidden = !review || !["style_moment_limit","limited_selection","source_shorter"].includes(review.reason);
+  if (node.hidden) return;
+  const number = value => Number.isFinite(Number(value)) ? Math.round(Number(value)*10)/10 : 0;
+  const replacements = {selected:number(review.selected_seconds), requested:number(review.requested_seconds),
+    available:number(review.available_source_seconds), limit:number(review.style_moment_limit)};
+  const key = review.reason === "style_moment_limit" ? "durationStyleLimit" : review.reason === "source_shorter" ? "durationSourceLimit" : "durationEvidenceLimit";
+  const message = t("durationDraftSummary") + " " + t(key);
+  const text = node.querySelector("p");
+  if (text) text.textContent = message.replace(/\{(selected|requested|available|limit)\}/g,(_match,key)=>String(replacements[key]));
+  const button = document.getElementById("reviewDurationSettings");
+  if (button) { button.textContent=t("reviewDurationSettings"); button.disabled=foregroundBusy() || state.manualEditBusy; }
+  const host = state.studio.open ? elements.advancedPanel?.querySelector(".studio-header") : elements.resultPanel;
+  if (host && node.parentElement !== host) host.insertBefore(node, host.firstChild);
 }
 
 function renderDraftWarning() {
@@ -3978,7 +4038,7 @@ function renderEmbeddedCameraEditor() {
     resetEmbeddedEditor();
     // Once marked, keep the large source picker out of the way. Do not reopen
     // it on every autosave or playback update, or discard the user's choice.
-    elements.embeddedCameraEditor.open = !embeddedCameraIsActive();
+    elements.embeddedCameraEditor.open = candidate?.candidate_source === "vision" && !embeddedCameraIsActive();
   }
   if (state.embeddedEditor.error) elements.embeddedCameraEditor.open = true;
   const changedSuggestion = !state.embeddedEditor.dirty && state.embeddedEditor.candidateKey !== candidateKey;
@@ -4218,6 +4278,7 @@ function pauseAllMedia() {
 }
 
 function releaseMediaHandles() {
+  state.chromaPlayers?.forEach(player => player.dispose()); state.chromaPlayers?.clear();
   state.mediaStudio?.clearPlayers();
   pauseAllMedia();
   document.querySelectorAll("video, audio").forEach((media) => {
@@ -4665,7 +4726,7 @@ function updatePreviewUI(time) {
       : inCut(time) ? "Full source · excluded footage is included in playback" : "Full source · plays the original recording"
     : inCut(time) ? "Edited cut · inspecting excluded footage; Play skips to a kept section" : "Edited cut · plays kept sections only; seeking does not change this mode";
   if (elements.previewModeHint && Object.values(state.project?.manual?.chroma_key || {}).some(settings => settings?.enabled)) {
-    elements.previewModeHint.textContent += ` ${t("chromaOriginalPlayback")}`;
+    elements.previewModeHint.textContent += ` ${t(sourceMode ? "chromaOriginalPlayback" : "chromaLivePlayback")}`;
   }
   updatePreviewCaption(time);
 }
@@ -4915,10 +4976,34 @@ function updateStudioStatus() {
   elements.studioDraftStatus.textContent = `${formatTime(draft.output_duration || 0)} · ${aspect}${dirty}`;
 }
 
+function selectEditTool(tool) {
+  const effects = tool === "effects";
+  document.getElementById("editClipTools").hidden = effects;
+  document.getElementById("editVideoEffects").hidden = !effects;
+  $$('[data-edit-tool]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.editTool === tool)));
+  if (effects) followChromaSelection();
+  elements.advancedPanel?.workspaceController?.setEditEffects(effects);
+  document.getElementById('studioInspector').scrollTop = 0;
+  if (window.matchMedia?.("(max-width: 960px), (max-height: 600px)").matches) {
+    document.getElementById(effects ? 'editVideoEffects' : 'editClipTools').scrollIntoView({block:'start', inline:'nearest'});
+  }
+}
+
+function followChromaSelection() {
+  const tool = state.chromaStudio, selected = tool?.options.selectedTarget?.();
+  if (selected && tool.validSource(selected) && tool.source.value !== selected && !tool.saving) {
+    tool.source.value = selected; tool.source.onchange();
+  }
+}
+
 function selectAdvancedTab(tab) {
+  elements.advancedPanel?.workspaceController?.setWorkspace(tab);
   elements.advancedPanel?.workspaceController?.showInspector();
   if (tab === "audio") state.mediaStudio?.openMixer();
-  if (tab === "framing") loadCropControls(elements.cropSourceSelect?.value || "A", false);
+  if (tab === "framing") {
+    loadCropControls(elements.cropSourceSelect?.value || "A", false);
+  }
+  if (tab === "timeline" && !document.getElementById("editVideoEffects")?.hidden) followChromaSelection();
   elements.advancedPanel.classList.toggle("studio-transcript", tab === "transcript");
   let activePanel = null;
   $$(".advanced-tabs button").forEach((button) => {
@@ -4935,11 +5020,12 @@ function selectAdvancedTab(tab) {
   });
   if (tab === "timeline") window.setTimeout(() => state.timeline.draw(), 20);
   if (tab === "transcript") renderTranscript();
+  $(`.advanced-tabs button[data-tab="${tab}"]`)?.scrollIntoView({block:"nearest", inline:"nearest"});
   requestAnimationFrame(() => state.timeline?.scheduleDraw?.());
   // Compact layouts have a single page scroller. Edit should reveal the
   // timeline; other tabs reveal their tools. Desktop keeps its player still.
-  if (window.matchMedia?.("(max-width: 960px), (max-height: 680px)").matches) {
-    const target = tab === "timeline" ? document.getElementById("studioTimelineDock") : activePanel;
+  if (window.matchMedia?.("(max-width: 960px), (max-height: 600px)").matches) {
+    const target = tab === "timeline" && document.getElementById("editVideoEffects")?.hidden ? document.getElementById("studioTimelineDock") : activePanel;
     target?.scrollIntoView({ block: "start", inline: "nearest", behavior: "instant" });
   } else if (activePanel?.parentElement) {
     activePanel.parentElement.scrollTop = 0;
@@ -5144,6 +5230,7 @@ function openSourceReview() {
 function openSourceInsert() {
   if (!state.project?.editor_sequence || foregroundBusy() || state.manualEditBusy) return false;
   if (!openStudioTab("timeline")) return false;
+  selectEditTool("clip");
   const target = activeEditTarget();
   const slot = target === "edit" ? transcriptSourceSlot() : target;
   state.timeline?.clearSelection();

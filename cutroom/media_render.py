@@ -5,6 +5,8 @@ import math
 from pathlib import Path
 from typing import Any
 
+from .composition import source_chroma_key
+from .effects import build_chroma_key_nodes
 from .frame_rates import project_export_fps
 
 
@@ -74,6 +76,7 @@ def master_gain_db(project: dict[str, Any]) -> float:
 def append_media_graph(
     project: dict[str, Any], width: int, height: int, duration: float,
     video_label: str, audio_label: str | None,
+    *, chroma_background_labels: dict[str, str] | None = None,
 ) -> tuple[list[str], str, str | None]:
     clips = library_clips(project)
     mixer = (project.get("manual") or {}).get("audio_mixer") or {}
@@ -82,6 +85,24 @@ def append_media_graph(
     fps = project_export_fps(project)
     first_input = 2 if (project.get("sources") or {}).get("B") else 1
     filters: list[str] = []
+    # Each occurrence has an independent decoded input and clip clock. Split a
+    # selected still image once so duplicated uses cannot consume its label twice.
+    backgrounds: dict[int, str] = {}
+    image_labels = chroma_background_labels or {}
+    for target in dict.fromkeys(clip.get("asset_id") for clip, _ in clips):
+        config = source_chroma_key(project, target)
+        if not config["enabled"] or config["background_mode"] == "transparent" or config["background_asset_id"] is None:
+            continue
+        label = image_labels.get(target)
+        if label is None:
+            raise ValueError("The selected video Chroma Key background input is unavailable")
+        indices = [index for index, (clip, _) in enumerate(clips) if clip.get("asset_id") == target]
+        if len(indices) > 1:
+            outputs = [f"[libchromaimage{index}]" for index in indices]
+            filters.append(f"{label}split={len(indices)}{''.join(outputs)}")
+            backgrounds.update(zip(indices, outputs))
+        else:
+            backgrounds[indices[0]] = label
     audio_roles: dict[str, list[str]] = {role: [] for role in ("source", "music", "effects", "voice")}
     if audio_label:
         filters.append(f"{audio_label}aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,"
@@ -112,13 +133,34 @@ def append_media_graph(
                    if clip.get("fit", "cover") == "contain" else
                    f"scale={target_w}:{target_h}:force_original_aspect_ratio=increase,crop={target_w}:{target_h}")
             frames = max(1, round(length * fps))
-            visual = (f"[{input_index}:v]trim=start={visual_start:.9f}:end={visual_start + length * speed + 1 / fps:.9f},"
+            visual_input = f"[{input_index}:v]"
+            config = source_chroma_key(project, clip.get("asset_id")) if asset["kind"] == "video" else None
+            if config and config["enabled"]:
+                native_w = max(2, int(asset["width"]) // 2 * 2)
+                native_h = max(2, int(asset["height"]) // 2 * 2)
+                output = f"[libchromasource{index}]"
+                filters.extend(build_chroma_key_nodes(
+                    visual_input, output, config, native_w, native_h, fps,
+                    max(1 / fps, _number(asset.get("duration"))), prefix=f"libchroma{index}",
+                    background_label=backgrounds.get(index),
+                ))
+                visual_input = output
+            if config and config["enabled"] and config["background_mode"] == "transparent":
+                # Keep alpha through fit/motion until the overlay meets the edit
+                # beneath it. Opaque padding or zoompan's YUV output would hide it.
+                fit = fit.replace("color=black", "color=black@0")
+            visual = (f"{visual_input}trim=start={visual_start:.9f}:end={visual_start + length * speed + 1 / fps:.9f},"
                       f"setpts=(PTS-STARTPTS)/{speed:.9f},fps={fps},{fit},setsar=1,"
                       f"tpad=stop_mode=clone:stop_duration={length + 2 / fps:.9f},trim=end_frame={frames},setpts=N/{fps}/TB")
             motion = clip.get("motion", "none")
             if motion == "zoom_in":
-                visual += (f",zoompan=z='1+0.12*min(on/{max(1, length * fps):.9f},1)':"
-                           f"x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':d=1:s={target_w}x{target_h}:fps={fps}")
+                if config and config["enabled"] and config["background_mode"] == "transparent":
+                    zoom = f"(1+0.12*min(n/{max(1, length * fps):.9f},1))"
+                    visual += (f",scale=w='ceil({target_w}*{zoom}/2)*2':h='ceil({target_h}*{zoom}/2)*2':eval=frame,"
+                               f"crop={target_w}:{target_h}:(iw-ow)/2:(ih-oh)/2")
+                else:
+                    visual += (f",zoompan=z='1+0.12*min(on/{max(1, length * fps):.9f},1)':"
+                               f"x='iw/2-iw/zoom/2':y='ih/2-ih/zoom/2':d=1:s={target_w}x{target_h}:fps={fps}")
             elif motion == "pan":
                 pan_w = int(math.ceil(target_w * 1.12 / 2)) * 2
                 pan_h = int(math.ceil(target_h * 1.12 / 2)) * 2

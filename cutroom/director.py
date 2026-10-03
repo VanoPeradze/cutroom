@@ -784,7 +784,7 @@ def _short_segment_value(segment: dict[str, Any], decision: dict[str, Any]) -> f
     return score
 
 
-SELECTION_STRATEGY_VERSION = "complete-style-moments-v4"
+SELECTION_STRATEGY_VERSION = "explicit-duration-intent-v6"
 
 
 def _selection_unit(selection_seed: Any, *parts: Any) -> float:
@@ -891,13 +891,16 @@ def _select_audio_highlight_ranges(
     avoids claiming that Story AI understood words that were never present.
     """
     target = min(float(duration), max(8.0, float(target_duration)))
-    if duration <= target + 0.05:
+    target_mode = (selection_policy or {}).get("duration_mode") == "target"
+    if duration <= target + 0.05 and not target_mode:
         return [{"start": 0.0, "end": round(duration, 3)}]
     waveform = [
         item for item in (profile.get("waveform") or [])
         if isinstance(item, dict) and float(item.get("end", 0.0)) > float(item.get("start", 0.0))
     ]
     waveform.sort(key=lambda item: (float(item.get("start", 0.0)), float(item.get("end", 0.0))))
+    if not waveform and target_mode:
+        return []  # No measured evidence: never substitute arbitrary source windows.
     if not waveform:
         return _fallback_short_story_ranges(
             duration, target, scene_points, selection_seed=selection_seed,
@@ -920,7 +923,7 @@ def _select_audio_highlight_ranges(
         return rms * 0.72 + peak * 0.28
 
     style_limit = (selection_policy or {}).get("max_moments")
-    if style_limit:
+    if style_limit or target_mode:
         before = max(0.0, _finite_number(selection_policy.get("pre_roll_seconds")))
         after = max(0.0, _finite_number(selection_policy.get("post_roll_seconds")))
         threshold = max(0.35, max(frame_energy(row) for row in waveform) * 0.55)
@@ -939,15 +942,58 @@ def _select_audio_highlight_ranges(
                 end = start + target
             energies = [frame_energy(row) for row in frames]
             score = max(energies) * 0.4 + sum(energies) / len(energies) * 0.6
-            event_candidates.append({"start": start, "end": end, "score": score})
+            # A three-second transient must not outrank a sustained engagement
+            # merely by being louder. Reward measured active time, never quiet
+            # padding; keep the explicit moment-count/chronology constraints.
+            if (selection_policy or {}).get("protect_action_span"):
+                active_seconds = sum(max(0.0, min(end, row["end"]) - max(start, row["start"])) for row in frames)
+                score *= 0.35 + 0.65 * min(1.0, active_seconds / target)
+            peak = max(frames, key=frame_energy)
+            event_candidates.append({"start": start, "end": end, "score": score,
+                                     "active_start": event["start"], "active_end": event["end"],
+                                     "center": (peak["start"] + peak["end"]) / 2})
+        ranked_events = sorted(event_candidates, key=lambda row: (-row["score"], row["start"]))
+        if target_mode:
+            # Spread equally credible events over the recording rather than
+            # silently using chronological order as an early-footage bias.
+            # Diversity cannot promote an event more than5% below the best left.
+            pending, ranked_events = ranked_events, []
+            while pending:
+                best = max(row["score"] for row in pending)
+                peers = [row for row in pending if row["score"] >= best * .95]
+                chosen = min(peers, key=lambda row: (
+                    -min((abs(row["center"] - selected["center"]) for selected in ranked_events), default=0),
+                    -row["score"], row["start"],
+                ))
+                ranked_events.append(chosen)
+                pending.remove(chosen)
         event_keep: list[dict[str, float]] = []
-        for event in sorted(event_candidates, key=lambda row: (-row["score"], row["start"])):
+        for event in ranked_events:
             candidate = merge_ranges([*event_keep, event], gap=0.0)
             if range_duration(candidate) > target + 0.05:
                 continue
             event_keep = candidate
-            if len(event_keep) >= max(1, int(style_limit)):
+            if not target_mode and len(event_keep) >= max(1, int(style_limit)):
                 break
+        if target_mode:
+            # Fit a remaining audio-backed window only within an unused event.
+            # Unlike speech passages, these are measured activity windows, not
+            # assertions that a whole fight/story has been identified.
+            for event in ranked_events:
+                remaining = target - range_duration(event_keep)
+                if remaining < 8.0:
+                    break
+                for free in invert_ranges(event_keep, duration):
+                    left, right = max(free["start"], event["start"]), min(free["end"], event["end"])
+                    if right - left < remaining or right <= event["active_start"] or left >= event["active_end"]:
+                        continue
+                    start = max(left, min(right - remaining, event["center"] - remaining / 2))
+                    end = start + remaining
+                    if end <= event["active_start"] or start >= event["active_end"]:
+                        continue
+                    event_keep = merge_ranges([*event_keep, {"start": start, "end": end}], gap=0.0)
+                    break
+            return event_keep
         if event_keep:
             return event_keep
 
@@ -1120,7 +1166,9 @@ def _select_style_story_ranges(
     speech boundaries and existing cue hints as bounded context evidence; it does
     not claim to identify a kill, joke or causal relationship from audio energy.
     """
-    moment_limit = selection_policy.get("max_moments")
+    target_mode = selection_policy.get("duration_mode") == "target"
+    moment_limit = (max(1, len(segments), len(decision.get("story_ranges") or []))
+                    if target_mode else selection_policy.get("max_moments"))
     if not moment_limit:
         return None
     moment_limit = max(1, int(moment_limit))
@@ -1742,6 +1790,26 @@ def _explicit_source_layout(project: dict[str, Any]) -> str | None:
     # resolve them against the latest role mapping, so swapping A/B cannot turn a
     # saved "screen" decision into a camera shot (or vice versa).
     return layout
+
+
+def _duration_review(brief: dict[str, Any], source_duration: float, output_duration: float,
+                     *, nonverbal: bool = False) -> dict[str, Any] | None:
+    """Explain a Short's real budget without claiming all footage was assessed."""
+    if brief.get("goal", "short") != "short":
+        return None
+    requested = max(8.0, _finite_number(brief.get("target_duration"), 60.0))
+    effective = min(requested, source_duration)
+    limit = ((brief.get("style_profile") or {}).get("selection_policy") or {}).get("max_moments")
+    shortfall = output_duration + .05 < effective * .9
+    reason = ("style_moment_limit" if shortfall and limit else
+              "limited_selection" if shortfall else
+              "source_shorter" if source_duration + .05 < requested else "near_target")
+    return {"requested_seconds": round(requested, 3), "available_source_seconds": round(source_duration, 3),
+            "effective_target_seconds": round(effective, 3), "selected_seconds": round(output_duration, 3),
+            "duration_is_ceiling": brief.get("duration_mode") != "target", "duration_mode": brief.get("duration_mode", "style"),
+            "shortfall": shortfall, "reason": reason,
+            "style_moment_limit": int(limit) if limit else None,
+            "nonverbal": nonverbal, "can_try_more_moments": bool(shortfall and limit)}
 
 
 def _effective_brief(project: dict[str, Any]) -> dict[str, Any]:
@@ -2441,7 +2509,7 @@ def analyze_project(
     # Shorts are selections from the entire recording, not "the first N seconds".
     # Build a story-shaped set of source passages first, then apply measured audio
     # cleanup and defensible transcript cleanup inside those passages.
-    if goal == "short" and duration > target_duration:
+    if goal == "short" and (duration > target_duration or brief.get("duration_mode") == "target"):
         selection_policy = ((brief.get("style_profile") or {}).get("selection_policy") or {})
         story_keep = (
             _select_audio_highlight_ranges(
@@ -2467,6 +2535,8 @@ def analyze_project(
             )
         )
         story_cuts = invert_ranges(story_keep, duration)
+        if not story_keep and brief.get("duration_mode") == "target":
+            raise ValueError("No reliable highlight passages were found. Select a manual range or review the footage; no arbitrary filler was added.")
         cuts, counts = _short_cleanup_cuts_with_floor(
             story_cuts,
             _style_cleanup_candidates(candidates, story_keep, selection_policy),
@@ -2521,6 +2591,7 @@ def analyze_project(
             has_b=bool(source_b),
         )
     output_duration = range_duration(keep_ranges)
+    duration_review = _duration_review(brief, duration, output_duration, nonverbal=nonverbal_highlights)
     quality_review = _edit_quality_review(
         transcript_quality, story_hierarchy, segments, keep_ranges, duration,
         decision=decision,
@@ -2546,6 +2617,7 @@ def analyze_project(
         "layout": requested_layout,
         "embedded_layout_confirmed": embedded_layout_confirmed,
         "target_duration": target_duration,
+        "duration_review": duration_review,
         "source_duration": duration,
         "output_duration": output_duration,
         "removed_duration": round(max(0.0, duration - output_duration), 3),
@@ -2619,8 +2691,12 @@ def analyze_project(
             + ([{
                 "type": "limited_highlight_evidence",
                 "message": (
-                    f"Found {output_duration:.0f} seconds of distinct audio-backed highlights for a "
-                    f"{target_duration:.0f}-second target. Kept a shorter edit to avoid padding it with quiet footage."
+                    f"Selected {output_duration:.1f}s for a {target_duration:.0f}s requested length. "
+                    + (f"This style keeps at most {duration_review['style_moment_limit']} complete moment(s). "
+                       "Choose a multi-moment style or a manual range to include other footage."
+                       if duration_review and duration_review.get("style_moment_limit") else
+                       "The selected evidence supports a shorter draft. Review the selection or choose a manual range; "
+                       "CUTROOM did not add quiet footage just to fill the duration.")
                 ),
             }] if nonverbal_highlights and output_duration < target_duration * 0.80 else [])
             + ([{"type": "source_b", "message": source_b_warning}] if source_b_warning else [])

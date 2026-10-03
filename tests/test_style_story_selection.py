@@ -214,3 +214,90 @@ def test_ai_story_producer_uses_the_selected_style_structure(monkeypatch, style_
     assert f"at most {selected_policy['max_moments']} distinct complete moment(s)" in system
     passed_brief = json.loads(captured["messages"][1]["content"])["brief"]
     assert "Do not invent missing action" in passed_brief["style_profile"]["guidance"]
+
+
+def test_single_moment_prefers_sustained_action_over_louder_three_second_spike():
+    from test_highlight_diversity import _profile
+    evidence = _profile(360, [(10,13,-5,-1), (100,220,-14,-8)], step=1)
+    selected = director._select_audio_highlight_ranges(
+        evidence,360,90,selection_policy=policy("competitive_clutch"),
+    )
+    assert range_duration(selected) == pytest.approx(90, abs=.001)
+    assert len(selected) == 1
+    assert selected[0]["start"] >= 94 and selected[0]["end"] <= 223
+
+
+def test_single_moment_sparse_evidence_keeps_short_event_without_padding():
+    from test_highlight_diversity import _profile
+    evidence = _profile(360, [(10,13,-5,-1)], step=1)
+    selected = director._select_audio_highlight_ranges(
+        evidence,360,90,selection_policy=policy("competitive_clutch"),
+    )
+    assert selected == [{"start":4.0,"end":16.0}]
+
+
+@pytest.mark.parametrize("style,source,selected,reason", [
+    ("competitive_clutch",360,12,"style_moment_limit"),
+    ("smart",360,12,"limited_selection"),
+    ("smart",73.833,73.833,"source_shorter"),
+    ("competitive_clutch",360,90,"near_target"),
+])
+def test_duration_review_explains_style_source_and_evidence_limits(style,source,selected,reason):
+    brief = enrich_brief_with_style({"edit_style":style,"goal":"short","target_duration":90})
+    review = director._duration_review(brief,source,selected,nonverbal=True)
+    assert review["requested_seconds"] == 90
+    assert review["selected_seconds"] == selected
+    assert review["reason"] == reason
+    assert review["duration_is_ceiling"] is True
+    assert review["can_try_more_moments"] == (reason == "style_moment_limit")
+    assert director._duration_review({"goal":"youtube","target_duration":90},360,300) is None
+
+
+def target_policy():
+    return enrich_brief_with_style({"edit_style":"competitive_clutch","goal":"short","duration_mode":"target"})["style_profile"]["selection_policy"]
+
+
+def test_target_highlights_accumulate_distinct_action_without_silent_padding():
+    from test_highlight_diversity import _profile
+    evidence = _profile(360, [(10,13,-5,-1),(100,121,-14,-8),(180,201,-14,-8),(280,301,-14,-8)], step=1)
+    selected = director._select_audio_highlight_ranges(evidence,360,90,selection_policy=target_policy())
+    assert range_duration(selected) == pytest.approx(90,abs=.001)
+    assert len(selected) == 3
+    assert selected == sorted(selected,key=lambda row:row["start"])
+    assert all(any(row["start"] < b and row["end"] > a for a,b in [(10,13),(100,121),(180,201),(280,301)]) for row in selected)
+    assert director._select_audio_highlight_ranges(_profile(360,[(10,13,-5,-1)],step=1),360,90,selection_policy=target_policy()) == [{"start":4.0,"end":16.0}]
+    assert director._select_audio_highlight_ranges(_profile(360,[],step=1),360,90,selection_policy=target_policy()) == []
+    assert director._select_audio_highlight_ranges({},360,90,selection_policy=target_policy()) == []
+
+
+def test_target_budget_caps_sustained_activity_and_short_source_without_repetition():
+    from test_highlight_diversity import _profile
+    for duration,target,events in [(360,90,[(100,220,-12,-4)]),(45,90,[(8,38,-12,-4)]),(360,90,[(10,25,-5,-1),(100,220,-14,-8)])]:
+        selected=director._select_audio_highlight_ranges(_profile(duration,events,step=1),duration,target,selection_policy=target_policy())
+        assert 0 < range_duration(selected) <= min(duration,target)+.001
+        assert all(0<=row["start"]<row["end"]<=duration for row in selected)
+        assert all(a["end"]<=b["start"] for a,b in zip(selected,selected[1:]))
+        if duration>target: assert range_duration(selected)==pytest.approx(target,abs=.001)
+
+
+def test_target_speech_retains_complete_selected_passages_and_style_maximum_remains_explicit():
+    segments=[{"id":str(i),"start":start,"end":start+30,"text":"A complete relevant idea.","editorial_score":.8} for i,start in enumerate([10,110,210])]
+    decision={"story_ranges":[dict(row) for row in segments]}
+    sequence=director._select_short_story_ranges(segments,decision,360,90,selection_policy=target_policy())
+    assert sequence==[{"start":10.0,"end":40.0},{"start":110.0,"end":140.0},{"start":210.0,"end":240.0}]
+    single=director._select_short_story_ranges(segments,decision,360,90,selection_policy=policy("competitive_clutch"))
+    assert len(single)==1 and range_duration(single)==30
+    budget=director._select_short_story_ranges(segments,decision,360,50,selection_policy=target_policy())
+    assert len(budget)==1 and range_duration(budget)==30  # Never split a complete speech passage to fill50.
+
+
+def test_duration_intent_survives_style_changes_and_keeps_old_projects_explicit():
+    target=enrich_brief_with_style({"edit_style":"competitive_clutch","duration_mode":"target","target_duration":90})
+    assert target["style_profile"]["selection_policy"]["max_moments"] is None
+    assert "Duration intent overrides" in target["style_profile"]["guidance"]
+    other=enrich_brief_with_style({**target,"edit_style":"stream_highlights"})
+    assert other["duration_mode"]=="target" and other["target_duration"]==90
+    old=enrich_brief_with_style({"edit_style":"competitive_clutch","target_duration":90})
+    assert old["style_profile"]["selection_policy"]["max_moments"]==1
+    review=director._duration_review(target,360,12,nonverbal=True)
+    assert review["duration_is_ceiling"] is False and review["reason"]=="limited_selection"

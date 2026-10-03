@@ -24,7 +24,7 @@ ROOT = Path(__file__).resolve().parents[1]
 TEST_FILES = (
     "test_waveform_preparation.py", "test_stabilization.py",
     "test_stabilization_api.py", "test_media_command_encoding.py",
-    "test_chroma_settings.py", "test_chroma_editing.py", "test_chroma_render.py", "test_chroma_image_background.py", "test_chroma_api.py",
+    "test_chroma_all_sources.py", "test_chroma_layers.py", "test_chroma_settings.py", "test_chroma_editing.py", "test_chroma_render.py", "test_chroma_image_background.py", "test_chroma_api.py",
     "test_director_rebuild_cache.py", "test_style_story_selection.py",
     "test_editor_model_selection.py", "test_critic_revisions.py",
     "test_media_render.py",
@@ -34,6 +34,18 @@ SELECTORS = tuple(f"tests/{name}" for name in TEST_FILES[:-1]) + (
     "tests/test_media_render.py::test_real_fades_and_mutes_preserve_library_audio_with_silent_source",
 )
 REQUIRED_CASES = {
+    "test_transparent_media_keeps_background_audio_timing_and_foreground",
+    "test_layer_frame_retains_alpha_and_old_api_clients_can_omit_mode",
+    "test_target_highlights_accumulate_distinct_action_without_silent_padding",
+    "test_target_budget_caps_sustained_activity_and_short_source_without_repetition",
+    "test_target_speech_retains_complete_selected_passages_and_style_maximum_remains_explicit",
+    "test_duration_intent_replans_from_cached_context_without_retranscription",
+    "test_single_moment_prefers_sustained_action_over_louder_three_second_spike",
+    "test_single_moment_sparse_evidence_keeps_short_event_without_padding",
+    "test_duration_review_explains_style_source_and_evidence_limits",
+    "test_three_plus_targets_same_filenames_save_undo_reset_and_no_cross_target_copy",
+    "test_real_imported_video_chroma_matches_preview_export_and_preserves_audio",
+    "test_imported_key_reopen_missing_file_edit_atomicity_and_safe_disable",
     "test_source_a_b_waveforms_are_measured_on_native_clocks_and_survive_reopen",
     "test_source_no_audio_and_silent_audio_have_distinct_measured_states",
     "test_imported_audio_waveforms_have_real_peaks_and_survive_public_projection",
@@ -78,7 +90,7 @@ FEATURE_FILES = {
     "cutroom/stabilization.py", "cutroom/stabilization_assets.py", "server.py",
     "web/stabilization-studio.js", "web/stabilization-studio.css",
     "cutroom/composition.py", "cutroom/effects.py", "cutroom/director.py", "cutroom/intelligence.py",
-    "web/chroma-studio.js", "web/chroma-studio.css",
+    "web/chroma-studio.js", "web/chroma-studio.css", "web/chroma-preview.js",
 }
 
 

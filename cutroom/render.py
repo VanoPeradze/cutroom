@@ -14,7 +14,7 @@ from typing import Any
 
 from .config import Settings
 from .captions import build_ass, build_srt, normalize_caption_settings
-from .composition import chroma_background_asset, select_embedded_candidate, source_chroma_key
+from .composition import chroma_background_asset, chroma_source, chroma_video_targets, select_embedded_candidate, source_chroma_key
 from .effects import build_chroma_key_nodes, chroma_key_capability, compile_automatic_effects
 from .frame_rates import project_export_fps, with_export_options
 from .cache_keys import stable_fingerprint
@@ -850,7 +850,8 @@ def _render_effects_payload(project: dict[str, Any]) -> dict[str, Any]:
     return compile_automatic_effects(project)
 
 def _chroma_background_slots(project: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
-    return [(slot, asset) for slot in ("A", "B") if (asset := chroma_background_asset(project, slot)) is not None]
+    return [(slot, asset) for slot in chroma_video_targets(project, used_only=True)
+            if (asset := chroma_background_asset(project, slot)) is not None]
 
 
 def chroma_background_input_args(project: dict[str, Any], project_dir: Path) -> list[str]:
@@ -861,7 +862,7 @@ def chroma_background_input_args(project: dict[str, Any], project_dir: Path) -> 
         path = safe_asset_path(project_dir, asset["path"])
         if not path.is_file():
             raise FileNotFoundError("The chosen Chroma Key background image is missing. Choose another image or reset Chroma Key.")
-        duration = _source_video_duration(project["sources"][slot]) + 2 / fps
+        duration = _source_video_duration(chroma_source(project, slot) or {}) + 2 / fps
         result.extend(["-loop", "1", "-framerate", str(fps), "-t", f"{duration:.9f}",
                        "-protocol_whitelist", "file,pipe", "-i", str(path)])
     return result
@@ -1066,6 +1067,7 @@ def build_filter_graph(project: dict[str, Any], width: int, height: int, caption
     video_map = "[vout]"
     media_filters, video_map, audio_map = append_media_graph(
         project, width, height, output_frames / fps, video_map, "[aout]" if has_audio else None,
+        chroma_background_labels=image_inputs,
     )
     filters.extend(media_filters)
     has_audio = audio_map is not None
@@ -1342,9 +1344,9 @@ def _render_input_fingerprint(project: dict[str, Any]) -> str:
                 )
             },
             "manual": {
-                **({"chroma_key": {slot: source_chroma_key(project, slot) for slot in ("A", "B")
+                **({"chroma_key": {slot: source_chroma_key(project, slot) for slot in chroma_video_targets(project)
                                     if source_chroma_key(project, slot)["enabled"]}}
-                   if any(source_chroma_key(project, slot)["enabled"] for slot in ("A", "B")) else {}),
+                   if any(source_chroma_key(project, slot)["enabled"] for slot in chroma_video_targets(project)) else {}),
                 "crop": manual.get("crop"),
                 "source_mixer": manual.get("source_mixer"),
                 "source_tracks": manual.get("source_tracks"),
@@ -1496,7 +1498,7 @@ def render_project(context: JobContext, project_id: str, store: ProjectStore, se
         raise FileNotFoundError(f"Source B media is missing: {source_b.name}")
     media_inputs = library_input_args(project, store.project_dir(project_id))
     chroma_inputs = chroma_background_input_args(project, store.project_dir(project_id))
-    if any(source_chroma_key(project, slot)["enabled"] for slot in ("A", "B")):
+    if any(source_chroma_key(project, slot)["enabled"] for slot in chroma_video_targets(project, used_only=True)):
         capability = chroma_key_capability(settings)
         if not capability["available"]:
             raise ValueError(capability["message"])

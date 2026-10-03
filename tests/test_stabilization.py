@@ -72,17 +72,30 @@ def _pcm(path, settings):
     ]).stdout
 
 
-def test_real_two_pass_reduces_jitter_preserves_frame_clock_and_copied_audio(tmp_path):
+@pytest.mark.parametrize("threads", [1, 2, 4])
+def test_real_two_pass_reduces_jitter_preserves_frame_clock_and_copied_audio(tmp_path, monkeypatch, threads):
     stabilization = importlib.import_module("cutroom.stabilization")
     settings = _settings()
     if not stabilization.stabilization_capability(settings)["available"]:
         pytest.skip("FFmpeg lacks the optional libvidstab filters")
+    settings.raw["ffmpeg_threads"] = threads
+    run = stabilization._run
+    motion_headers = []
+    def record_motion_data(args, **kwargs):
+        result = run(args, **kwargs)
+        if "-vf" in args and "vidstabdetect" in args[args.index("-vf") + 1]:
+            motion_headers.append((kwargs["cwd"] / "transforms.trf").read_bytes()[:10])
+        return result
+    monkeypatch.setattr(stabilization, "_run", record_motion_data)
     folder = tmp_path / "creator footage \u05d1\u05d3\u05d9\u05e7\u05d4"
     source = _make_shaky_video(folder, settings)
     target = folder / "stabilized copy \u05e2\u05d5\u05ea\u05e7.mp4"
     original_hash = hashlib.sha256(source.read_bytes()).hexdigest()
     messages = []
     assert stabilization.stabilize_video(source, target, settings, lambda _, message: messages.append(message)) == target.resolve()
+    # Binary motion data gave nondeterministic corrections on Windows FFmpeg7.1.1.
+    # Verify the actual inter-pass format, while retaining the same quality gate.
+    assert motion_headers == [b"VID.STAB 1"]
     assert hashlib.sha256(source.read_bytes()).hexdigest() == original_hash
     before, after = _streams(source, settings), _streams(target, settings)
     video_before = next(row for row in before["streams"] if row["codec_type"] == "video")

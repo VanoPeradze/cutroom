@@ -30,7 +30,7 @@ def semantic_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
             "has_audio": True, "size": source.stat().st_size,
         }
         current["settings"].update({
-            "goal": "short", "edit_style": "smart", "target_duration": 60.0,
+            "goal": "short", "edit_style": "smart", "target_duration": 60.0, "duration_mode": "style",
             "spoken_language": "auto", "auto_reframe": False,
         })
 
@@ -567,3 +567,13 @@ def test_preparation_cannot_enable_unselected_or_stale_embedded_layout(semantic_
     saved = store.load(project_id)
     assert saved["draft"]["embedded_layout_confirmed"] is False
     assert {row["camera"] for row in saved["draft"]["camera_plan"]} == {"A"}
+
+
+def test_duration_intent_replans_from_cached_context_without_retranscription(semantic_project):
+    store, settings, project_id, calls, context = semantic_project
+    store.update(project_id,lambda current:current["settings"].update({"duration_mode":"target"}))
+    director.analyze_project(context(),project_id,store,settings)
+    assert calls == {"transcribe":1,"plan":2}
+    assert store.load(project_id)["draft"]["duration_review"]["duration_mode"]=="target"
+    director.analyze_project(context(),project_id,store,settings)
+    assert calls == {"transcribe":1,"plan":2}

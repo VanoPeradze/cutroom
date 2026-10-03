@@ -200,6 +200,7 @@ test("late startup checks do not override a project opened from the welcome scre
     initWelcome = () => ({});
     initLocalModels = () => null;
     initWorkspace = () => {};
+    globalThis.initNumericScrub = () => {};
     initTrackProtection = () => null;
     initializeKeyboardProfile = () => {};
     TimelineView = class {};
@@ -1622,7 +1623,7 @@ test("a ready draft opens Studio by default and closing restores both overview d
   assert.equal(run('state.preview.mode'), 'source', 'reopening Studio also preserves Full source');
 });
 
-test("vertical tool-rail navigation leaves the persistent timeline and selection intact", () => {
+test("workspace navigation leaves the persistent timeline and selection intact", () => {
   const { run, selectors } = app();
   const tabs = ["timeline", "framing", "transcript", "settings"].map((tab) => {
     const button = node(); button.dataset.tab = tab; button.focus = () => {};
@@ -1640,6 +1641,7 @@ test("vertical tool-rail navigation leaves the persistent timeline and selection
     globalThis.resetCount = 0;
     state.timeline = { selection: { start: 12, end: 18 }, draw() {}, setProject() { resetCount++; } };
     document.getElementById("studioTimelineDock").hidden = false;
+    document.getElementById("editVideoEffects").hidden = true;
     globalThis.keyEvent = { key: "ArrowDown", currentTarget: document.querySelectorAll(".advanced-tabs button")[0], preventDefault() {} };
     handleStudioTabKeydown(keyEvent);
   `);

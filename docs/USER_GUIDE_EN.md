@@ -6,9 +6,13 @@ Start with the short path below. The later sections explain the controls when yo
 
 Use **Day / Night** in the top bar to change the app's appearance; your choice is saved in this browser. The video preview keeps its original colors. **Guide** opens searchable help from any screen. While a job is running, its status and **Stop process** stay together below the navigation.
 
+Use the **bottom workspace bar** to switch between Media, Edit, Layout, Audio, Captions and Output. Import or build a draft from Project overview, refine it in these workspaces, then use Export. Audio opens the mixer directly. Edit separates Clip controls from Effects · Green screen, with fine-tuning collapsed until needed. Layout contains composition and framing. Stabilize footage opens its Media tool from Effects. The player and timeline remain available; resize the divider to give your tools more room. Each workspace remembers its width.
+
+**Numeric controls:** drag a number or a slider’s numeric readout up to increase it and down to decrease it. Hold Shift for slower adjustment. Release to apply one change; Escape or losing window focus cancels a drag. The wheel changes only the focused field and groups a short burst into one change. Typing and arrow keys remain available. Controls keep their existing limits, steps and Apply/save behavior.
+
 ## The quick path
 
-1. Extract the entire ZIP, then open **windows** or **mac**. On Windows, double-click **`START CUTROOM.bat`**. On Mac, double-click **`START CUTROOM.command`**. Read and approve the setup prompts, and keep the launch window open. Leave **START HERE.html** (offline help) and **App** (technical files and saved work) beside the launcher. Older Windows packages and GitHub source checkouts still use `run_windows.bat`. Mac users: read the [Mac setup guide](https://github.com/VanoPeradze/cutroom/blob/master/docs/MAC_BETA.md) first; macOS 15+ is required, and first-time dependencies may require Homebrew.
+1. Choose the Windows or Mac download and extract the entire ZIP. Its launcher sits beside **App**. If using the older combined ZIP, open **windows** or **mac** first. On Windows, double-click **`START CUTROOM.bat`**. On Mac, double-click **`START CUTROOM.command`**. Read and approve the setup prompts, and keep the launch window open. Leave **START HERE.html** (offline help) and **App** (technical files and saved work) beside the launcher. Older Windows packages and GitHub source checkouts still use `run_windows.bat`. Mac users: read the [Mac setup guide](https://github.com/VanoPeradze/cutroom/blob/master/docs/MAC_BETA.md) first; macOS 15+ is required, and first-time dependencies may require Homebrew.
 2. Choose **Manual edit** and add a short, non-sensitive recording as source A. This lets you learn the editor without waiting for AI models or inference.
 3. Choose **Open manual editor**. Click the timeline ruler to seek. **Space** plays or pauses.
 4. Choose **Range**, drag over an unwanted passage and select **Remove from video**. Try **Undo**. Then select **Cut** and click once to split a clip.
@@ -195,7 +199,7 @@ New two-source Reels default to **Stacked**: camera top 30%, screen bottom 70%, 
 
 For an embedded camera, open **Camera area in this recording** and drag its rectangle; the picker starts folded once configured. Open **Precise camera position** only when you need numeric controls. **Main screen focus** sets the default screen position; a clip's own framing takes priority. **More layouts** contains side-by-side, picture-in-picture and the style default. A fixed rectangle does not track a moving camera. **Original source preview** and **Source order preview** are optional reference monitors; **Layout by section** lists composition blocks. If saving fails, the camera picker opens and offers **Retry save**; do not close the editor until it shows **Saved**.
 
-Open **Studio > Layout > Chroma Key**, below **Stabilize footage**, to key source A or B. Choose the removed color and a solid-color or image background, then **Apply changes**. For an image, import it through **Media & audio > Add media**, wait until ready and choose it in the background selector; it covers the source frame and can crop at the edges. **Refresh current frame** shows a saved-settings PNG at the selected source's current time; the main player remains Original playback. Export uses the saved key, with Undo/Redo and per-source Reset available. [Steps and limits](CHROMA_KEY.md)
+Open **Edit > Effects · Green screen**. Choose the foreground video, its key color or green-screen defaults, then the background. Fine-tune edges is optional. For a moving background, keep it as main footage and add the foreground through **Media > Add media**, place it on the timeline and select **Video underneath**. **Use green-screen defaults** starts at 12% tolerance; 100% can erase the whole foreground. **Apply & preview** saves the settings, updates edited playback and generates an exact processed frame. Original footage mode stays unkeyed. A/B and Media also support color/image backgrounds. Each video has independent settings with Undo/Redo and Reset. Browser edges can differ from the exact FFmpeg frame/export. [Steps and limits](CHROMA_KEY.md)
 
 ## 8. Add text and control captions
 
@@ -261,3 +265,7 @@ Closing the browser does not stop the application. Save text, wait for the save 
 | Text prevents shortening the edit | Trim, move or remove the custom text that would be past the new end; text does not ripple automatically |
 
 Report the exact action/error, build name, input length/language and a redacted screenshot with the [feedback form](BETA_FEEDBACK.md). Never include API keys or the entire private `data` folder. The beta is not certified across all PCs, languages or footage; [limitations](BETA_STATUS.md) distinguish automated checks from real-world validation.
+
+
+### Edit length
+Choose **Highlight sequence — aim for this length** to combine distinct relevant passages toward the duration. **Follow style — maximum length** keeps the style’s moment limit: Competitive Clutch keeps one engagement. A target is approximate, never permission to repeat footage or add irrelevant filler. Review shortfall notices and source ranges; audio-only selection identifies activity, not the meaning of a fight. Older projects retain their prior style limit until you change this choice.

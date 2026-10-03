@@ -12,11 +12,11 @@
   <link rel="stylesheet" href="/assets/workspace.css?v=1.1-beta-3">
   <link rel="stylesheet" href="/assets/media-studio.css?v=1.1-beta-5">
   <link rel="stylesheet" href="/assets/stabilization-studio.css?v=1.1-beta-1">
-  <link rel="stylesheet" href="/assets/chroma-studio.css?v=1.1-beta-2">
+  <link rel="stylesheet" href="/assets/chroma-studio.css?v=1.1-beta-chroma-edit-3">
   <link rel="stylesheet" href="/assets/text-studio.css?v=1.1-beta-2">
   <link rel="stylesheet" href="/assets/welcome.css?v=1.1-beta-2">
   <link rel="stylesheet" href="/assets/creator-ui.css?v=1.1-beta-12">
-  <link rel="stylesheet" href="/assets/editor-panels.css?v=1.1-beta-2">
+  <link rel="stylesheet" href="/assets/editor-panels.css?v=1.1-beta-focused-3">
 </head>
 <body class="welcome-mode">
   <a class="skip-link" href="#main" data-i18n="skip">Skip to content</a>
@@ -214,9 +214,12 @@
 
 
           <fieldset class="brief-group duration-group" id="durationGroup">
-            <legend data-i18n="targetLength">Target length</legend>
+            <legend data-i18n="targetLength">Edit length</legend>
+            <label for="durationMode" data-i18n="durationIntent">Length intent</label>
+            <select id="durationMode" aria-describedby="durationLimitHelp"><option value="target" data-i18n="durationTargetMode">Highlight sequence — aim for this length</option><option value="style" data-i18n="durationStyleMode">Follow style — maximum length</option></select>
+            <small id="durationLimitHelp" data-i18n="durationLimitHelp">Aim for the chosen length, or let the style finish earlier. Useful footage only; no filler.</small>
             <div class="duration-control">
-              <input id="targetDuration" type="range" min="15" max="180" step="5" value="60">
+              <input id="targetDuration" type="range" min="15" max="180" step="5" value="60" aria-describedby="durationLimitHelp">
               <output id="durationOutput">60s</output>
             </div>
             <div class="quick-values">
@@ -285,6 +288,7 @@
       </section>
 
       <section class="result-panel" id="resultPanel" hidden>
+        <div id="durationReview" class="ai-draft-notice duration-review" role="status" hidden><p></p><button type="button" class="button ghost compact" id="reviewDurationSettings" data-i18n="reviewDurationSettings">Review style &amp; length</button></div>
         <div id="aiDraftNotice" class="ai-draft-notice" role="status" hidden><p data-i18n="aiDraftKept">New draft ready; your manual timeline was kept.</p><button id="applyAiDraftButton" type="button" class="button ghost compact" data-i18n="aiDraftApply">Apply new AI draft</button></div>
         <div class="result-header">
           <div><p class="eyebrow" data-i18n="firstDraft">First edit</p><span id="draftEngineBadge" class="engine-badge"></span><h2 id="draftTitle">CUTROOM Draft</h2><p id="draftSummary"></p></div>
@@ -350,9 +354,9 @@
         </div>
       </section>
 
-      <section class="advanced-panel studio-workspace" id="advancedPanel" hidden>
+      <section class="advanced-panel studio-workspace" id="advancedPanel" data-workspace="timeline" hidden>
         <div class="advanced-header studio-header">
-          <div><p class="eyebrow">CUTROOM STUDIO</p><h2>Your creative workspace</h2></div>
+          <ol class="studio-workflow" aria-label="Editing workflow"><li><b>1</b> Import</li><li><b>2</b> Draft</li><li aria-current="step"><b>3</b> Refine</li><li><b>4</b> Export</li></ol>
           <div class="studio-header-actions">
             <div class="quick-aspect" id="quickAspectChoices" role="group" aria-label="Video format">
               <button type="button" data-output-aspect="16:9" aria-pressed="false" title="Landscape video. Changes preview and export; keeps your edits. No AI required.">16:9 <span>Landscape</span></button>
@@ -364,11 +368,11 @@
           </div>
         </div>
         <aside class="studio-preview-dock" id="studioPreviewDock" aria-label="Live preview"></aside>
-        <div class="advanced-tabs" role="tablist" aria-label="Studio workflow" aria-orientation="vertical">
+        <div class="advanced-tabs" role="tablist" aria-label="Editing workspaces" aria-orientation="horizontal">
           <button id="studioTabTimeline" class="active" role="tab" aria-selected="true" aria-controls="studioPanelTimeline" tabindex="0" data-tab="timeline"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="m8 8 13 13M8 16 21 3"/></svg><span>Edit</span><small>Director</small></button>
-          <button id="studioTabFraming" role="tab" aria-selected="false" aria-controls="studioPanelFraming" tabindex="-1" data-tab="framing"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M3 9h18"/></svg><span>Layout</span><small>Sources</small></button>
-          <button id="studioTabTranscript" role="tab" aria-selected="false" aria-controls="studioPanelTranscript" tabindex="-1" data-tab="transcript"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M6 14h5m3 0h4M6 10h12"/></svg><span>Captions</span><small>Language &amp; text</small></button>
+          <button id="studioTabFraming" role="tab" aria-selected="false" aria-controls="studioPanelFraming" tabindex="-1" data-tab="framing"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M3 9h18"/></svg><span>Layout</span><small>Composition &amp; framing</small></button>
           <button id="studioTabAudio" role="tab" aria-selected="false" aria-controls="studioPanelAudio" tabindex="-1" data-tab="audio"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m11 4-5 4H3v8h3l5 4V4Z"/><path d="M15 8a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14"/></svg><span data-i18n="audioTab">Audio</span><small data-i18n="audioMixer">Mixer</small></button>
+          <button id="studioTabTranscript" role="tab" aria-selected="false" aria-controls="studioPanelTranscript" tabindex="-1" data-tab="transcript"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M6 14h5m3 0h4M6 10h12"/></svg><span>Captions</span><small>Language &amp; text</small></button>
           <button id="studioTabSettings" role="tab" aria-selected="false" aria-controls="studioPanelSettings" tabindex="-1" data-tab="settings"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="2" fill="var(--surface-chrome)"/><circle cx="15" cy="17" r="2" fill="var(--surface-chrome)"/></svg><span>Output</span><small>Format &amp; export</small></button>
         </div>
         <div class="advanced-content" id="studioInspector">
@@ -376,8 +380,13 @@
           <div class="tab-panel" id="studioPanelAudio" role="tabpanel" aria-labelledby="studioTabAudio" tabindex="0" data-panel="audio" hidden><p class="media-status mixer-save-status" role="status" aria-live="polite" data-i18n="mixerSaveHint">Changes save automatically.</p></div>
           
           <div class="tab-panel active" id="studioPanelTimeline" role="tabpanel" aria-labelledby="studioTabTimeline" tabindex="0" data-panel="timeline">
+            <div class="edit-tool-switch" role="group" aria-label="Edit tools">
+              <button type="button" id="editToolClip" data-edit-tool="clip" aria-pressed="true" aria-controls="editClipTools" data-i18n="editClipTools">Clip controls</button>
+              <button type="button" id="editToolEffects" data-edit-tool="effects" aria-pressed="false" aria-controls="editVideoEffects" data-i18n="editVideoEffects">Effects · Green screen</button>
+            </div>
+            <div id="editClipTools">
             <section id="emptyTimeline" class="empty-timeline" hidden><h3>Your timeline is empty</h3><p>Your original recordings are safe. Add footage or Undo to bring your edit back.</p><button id="emptyTimelineAdd" class="button primary" type="button">Add source footage</button></section>
-            <header class="studio-tool-intro"><div><p>01 / EDIT</p><h3>Clip controls</h3></div><span>Select a clip in the timeline to adjust it. Drag its middle to move it, or its edges to trim. Use Range to select a section to remove.</span></header>
+            <header class="studio-tool-intro"><div><p>01 / EDIT</p><h3>Clip controls</h3></div><span>Select a clip to trim or move it. Choose Range to remove a section.</span></header>
             <form class="clip-trim-bar" id="clipTrimForm" hidden><strong id="clipTrimTitle">Selected clip</strong><label>Timeline start <input id="clipTrimIn" type="number" step="0.001" min="0" required></label><label>Timeline end <input id="clipTrimOut" type="number" step="0.001" min="0" required></label><label id="clipSourceField" hidden>Source in <input id="clipSourceIn" type="number" step="0.001" min="0"></label><span>seconds</span><button id="clipTrimApply" type="submit">Apply trim</button><button id="clipMove" type="button" hidden>Move to start</button><span id="clipTrimStatus" role="status"></span></form>
             <form class="clip-trim-bar" id="sourceInsertForm" hidden><strong id="sourceInsertTitle">Add source footage</strong><label>Source <select id="sourceInsertSlot" aria-label="Footage source"><option value="A">A</option><option value="B">B</option></select></label><label>Source in <input id="sourceInsertIn" type="text" inputmode="decimal" value="0" required></label><label>Source out <input id="sourceInsertOut" type="text" inputmode="decimal" required></label><label>Insert at (edit time) <input id="sourceInsertAt" type="text" inputmode="decimal" value="0" required></label><button type="submit">Insert footage</button><button type="button" id="sourceInsertCancel">Cancel</button><span id="sourceInsertStatus" role="status">Original source times · seconds or mm:ss.mmm. Inserts on this track only.</span></form>
             <details class="editor-more track-protection" id="trackProtection" hidden>
@@ -400,11 +409,14 @@
             <div class="source-range-actions"><button type="button" data-range-point="timeline:start">Start at playhead</button><button type="button" data-range-point="timeline:end">End at playhead</button></div>
           </form>
             <details class="editor-ai-suggestions"><summary>AI suggestions</summary><div id="studioDirectorDock"></div></details>
+            </div>
+            <section id="editVideoEffects" aria-label="Video effects" hidden>
+              <div id="chromaStudio"></div>
+              <button id="openStabilizationStudio" type="button" class="button ghost compact source-stabilization-entry" aria-controls="stabilizationTool" data-i18n="stabilizeFootage">Stabilize footage</button>
+            </section>
           </div>
           <div class="tab-panel" id="studioPanelFraming" role="tabpanel" aria-labelledby="studioTabFraming" tabindex="0" data-panel="framing">
             <header class="studio-tool-intro"><div><p>02 · LAYOUT</p><h3>Frame your video</h3></div><span>Choose a layout, then adjust the selected clip. Changes save automatically.</span></header>
-            <button id="openStabilizationStudio" type="button" class="button ghost compact source-stabilization-entry" aria-controls="stabilizationTool" data-i18n="stabilizeFootage">Stabilize footage</button>
-            <div id="chromaStudio"></div>
             <section class="source-mixer" id="sourceMixer" aria-labelledby="sourceMixerTitle">
               <div class="source-mixer-head">
                 <div><p class="eyebrow">SOURCE MIXER</p><h3 id="sourceMixerTitle">Source control</h3><p id="sourceMixerHelp">AI suggests a layout; your choice always wins.</p></div>
@@ -806,6 +818,6 @@
       <footer class="connection-actions"><button class="button ghost" id="forgetCloudKey" type="button">Forget session key</button><button class="button primary" id="saveAIConnection" type="submit">Use this connection</button></footer>
     </form>
   </dialog>
-  <script type="module" src="/assets/app.js?v=1.1-beta-23"></script>
+  <script type="module" src="/assets/app.js?v=1.1-beta-chroma-edit-3"></script>
 </body>
 </html>

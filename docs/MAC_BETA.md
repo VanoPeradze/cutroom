@@ -1,7 +1,7 @@
 # CUTROOM 1.1 Beta for Mac
 
 The same free, MIT-licensed editor, with a separate Mac setup and launcher.
-The combined download contains exactly two folders: **windows** and **mac**.
+The separate Mac ZIP contains **START CUTROOM.command**, **START HERE.html**, and **App**. The compatible combined download still contains exactly two folders: **windows** and **mac**.
 The current **1.1 Beta editor revision** updates the shared application in both
 folders: source waveforms, the A/B duration boundary fix, live mixer meters,
 Unicode media-name handling and optional local stabilization. It has a new build
@@ -10,7 +10,7 @@ ID/checksums; it is not a documentation-only refresh.
 ## Start on a Mac
 
 1. Extract the entire ZIP. Move the extracted folder somewhere you can keep it.
-2. Open **mac**, then double-click **START CUTROOM.command**. Keep **App** beside it.
+2. Double-click **START CUTROOM.command** beside **App**. In the combined ZIP, open **mac** first. Keep **App** beside it.
 3. Read the setup summary before agreeing to dependency installation. First setup requires internet.
 4. Keep the Terminal window open. The editor opens in your browser when ready.
 5. Start with **Edit it yourself** and a short recording. AI is optional.

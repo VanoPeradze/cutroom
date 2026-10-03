@@ -12,7 +12,7 @@ from cutroom.render import _render_input_fingerprint, build_filter_graph
 
 
 DEFAULT = {"enabled": False, "color": "#00FF00", "tolerance": 0.12,
-           "edge_softness": 0.08, "background_color": "#000000", "background_asset_id": None}
+           "edge_softness": 0.08, "background_color": "#000000", "background_asset_id": None, "background_mode": "replace"}
 
 
 def project():
@@ -119,7 +119,7 @@ def test_capability_is_cached_by_existing_binary_identity_and_gracefully_reports
     names.remove("chromakey")
     unavailable = chroma_key_capability(settings)
     assert unavailable["available"] is False and len(calls) == 2
-    assert unavailable["mp4_alpha"] is False and unavailable["supports"] == ["solid", "image"]
+    assert unavailable["mp4_alpha"] is False and unavailable["supports"] == ["solid", "image", "media-layer"]
     _chroma_filters.cache_clear()
 
 

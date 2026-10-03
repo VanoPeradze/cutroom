@@ -48,7 +48,8 @@ def test_render_button_is_in_topbar():
 def test_director_is_primary_and_advanced_is_hidden():
     html = (ROOT / "web/index.html").read_text(encoding="utf-8")
     assert 'id="generateButton"' in html
-    assert 'id="advancedPanel" hidden' in html
+    panel = re.search(r'<section\b[^>]*\bid="advancedPanel"[^>]*>', html)
+    assert panel and re.search(r'\bhidden(?:\s|>)', panel.group())
     assert "One main edit plus ranked Reel options from the same analysis" in html
 
 

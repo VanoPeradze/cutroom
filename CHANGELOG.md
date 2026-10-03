@@ -1,5 +1,30 @@
 # Changelog
 
+## Final workspace arrangement
+
+- Added vertical numeric scrubbing and focused-field wheel adjustment, with native steps/limits, Shift fine control, cancellation and one committed edit per gesture. Typing, keyboard input and normal panel scrolling remain available.
+
+- Ordered workspaces as Media, Edit, Layout, Audio, Captions and Output, with matching RTL and keyboard navigation.
+- Moved Green screen into Edit → Effects, separate from clip controls. Key color/defaults precede background; fine-tuning and exact-frame inspection expand when needed. Layout retains composition and framing.
+- Gave tools the full available height and narrower defaults, preserving space for preview and timeline. Single-source camera setup stays folded unless a detected camera needs review.
+
+
+## 1.1 Beta - 2026-10-02 - Green-screen playback and layer order
+
+- Fixed Media green-screen overlays hiding the background with an opaque rectangle. **Video underneath** retains alpha through placement and motion until compositing over earlier layers.
+- Added saved-settings chroma preview in edited playback for A/B and Media video; original footage mode stays original. Exact native-size FFmpeg frame checks remain available and refresh after Apply.
+- Ordered the controls as foreground, removed color, background and Apply. Reopening prefers the keyed video; selected video clips carry into Edit Effects. Added green-screen starting settings and a warning for tolerance values that can erase the subject.
+- Preserved existing color/image settings, Undo/Redo, per-video persistence and source files. Verified an authorized local recording through browser playback, save/reopen/history and a real 1080p MP4 export; private media is excluded from source and packages.
+
+## 1.1 Beta - 2026-10-01 - Green screen for project videos
+
+- Made **Green screen / Chroma key** visible in Layout, with the selected video's name and preview. No AI/model setup is required.
+- Added ready project Media videos alongside main footage A/B. Settings remain independent per video and apply to all timeline uses of an imported video before placement; duplicate filenames do not share settings. Audio and images remain unsupported foreground targets, and preparing/missing video is reported rather than silently selecting another file.
+- Kept saved-settings single-frame preview, export, Undo/Redo and per-video Reset aligned. Main playback remains original/unkeyed; solid-color or image replacement remains the supported background.
+- Added an explicit length intent: a highlight sequence accumulates distinct eligible passages toward the requested duration; the style maximum preserves a single engagement when chosen. Shortfalls remain visible, with no duplicated footage or arbitrary filler. Older projects retain their style contract until changed.
+- Requested portable ASCII stabilization motion data to avoid inconsistent binary-format corrections seen on Windows FFmpeg7.1.1.
+- Publication requires current-source Windows/native macOS compatibility checks and exact final-package validation. This entry does not claim manual Mac/Linux installation or real-footage keying quality was tested.
+
 ## 1.1 Beta - 2026-10-01 - Trustworthy continuity review
 
 - Empty, incomplete or contradictory Story AI reviews cannot report a continuity pass. Drafts remain editable and clearly require review.
