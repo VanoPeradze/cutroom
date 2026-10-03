@@ -86,6 +86,7 @@ test('the concise introduction shows an authentic bilingual dark editor preview'
   assert.match(image, /alt="[^"]+"/);
   assert.match(image, /data-he-alt="[^"]*[\u0590-\u05ff]/);
   assert.match(image, /fetchpriority="high"/);
+  assert.deepEqual(readFileSync(new URL("./public/assets/editor-demo.png", import.meta.url)), readFileSync(new URL("../docs/images/editor.png", import.meta.url)), "Website screenshot must match the current editor guide");
   assert.match(hero, /Actual editor · Synthetic demo footage/);
   assert.doesNotMatch(html, /(?:welcome|ai-options)\.png|\bdata-shot=|<table\b/);
 });
