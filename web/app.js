@@ -3522,7 +3522,8 @@ function placeSourceMixer(hasSource) {
     return;
   }
   if (elements.studioPanelFraming && elements.sourceMixer.parentElement !== elements.studioPanelFraming) {
-    elements.studioPanelFraming.insertBefore(elements.sourceMixer, $(".framing-layout", elements.studioPanelFraming));
+    // Match the initial Layout order when these controls return from setup.
+    elements.studioPanelFraming.appendChild(elements.sourceMixer);
   }
   if (elements.setupSourceMixerDock) elements.setupSourceMixerDock.hidden = true;
 }

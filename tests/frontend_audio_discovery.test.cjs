@@ -46,6 +46,11 @@ class Element {
   }
   prepend(node) { this.append(node); this.children.pop(); this.children.unshift(node); }
   appendChild(node) { this.append(node); return node; }
+  insertBefore(node, reference) {
+    this.append(node);
+    if (reference) { this.children.pop(); this.children.splice(this.children.indexOf(reference), 0, node); }
+    return node;
+  }
   after(node) { this.parentElement?.append(node); }
   replaceChildren(...nodes) { for (const child of this.children) child.parentElement = null; this.children = []; this.append(...nodes); }
   matches(selector) {
@@ -145,6 +150,33 @@ function fixture({mediaReady = true} = {}) {
   `);
   return {run, nodes, tabs, panels, document};
 }
+
+test('Layout keeps framing before source controls after setup becomes a draft and on reopening existing drafts', () => {
+  for (const direction of ['ltr', 'rtl']) {
+    const {run, nodes, document} = fixture({mediaReady:false});
+    document.documentElement.dir = direction;
+    const panel = nodes.get('studioPanelFraming'), mixer = nodes.get('sourceMixer');
+    const framing = new Element('details'); framing.className = 'framing-layout';
+    // Start from the real HTML's order, including the already-drafted path.
+    const html = web('index.html');
+    assert.ok(html.indexOf('class="framing-layout') < html.indexOf('id="sourceMixer"'));
+    panel.append(framing, mixer);
+    const project = run('JSON.stringify(state.project)');
+    run('placeSourceMixer(true)');
+    assert.deepEqual(panel.children, [framing, mixer]);
+    run('globalThis.existingDraft=state.project.draft;state.project.draft=null;placeSourceMixer(true)');
+    assert.equal(mixer.parentElement, nodes.get('setupSourceMixerDock'));
+    assert.equal(nodes.get('setupSourceMixerDock').hidden, false);
+    let handled = 0; mixer.addEventListener('click', () => handled++);
+    run('state.project.draft=existingDraft;placeSourceMixer(true);placeSourceMixer(true)');
+    assert.deepEqual(panel.children, [framing, mixer], direction + ': setup must return controls after clip framing');
+    assert.equal(nodes.get('setupSourceMixerDock').hidden, true);
+    assert.equal(nodes.get('setupSourceMixerDock').children.length, 0);
+    dispatch('click', mixer); assert.equal(handled, 1, 'Moving the existing controls retains their handlers');
+    assert.equal(run('JSON.stringify(state.project)'), project);
+    assert.deepEqual(plain(run('requests')), []); assert.deepEqual(plain(run('mutations')), []);
+  }
+});
 
 test('Audio is an accessible primary tab opening the actual existing mixer without changing the edit', () => {
   const {run, nodes, tabs} = fixture();
