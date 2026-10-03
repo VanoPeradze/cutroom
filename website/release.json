@@ -3,15 +3,31 @@
   "label": "1.1 Beta",
   "layout": "windows-mac-folders-v1",
   "filename": "CUTROOM-1.1-Beta.zip",
-  "bytes": 6451110,
-  "sha256": "65b39f344418ab172faf371c303f32e196938a6d78e22d6e0a270f9ccb293361",
-  "build_id": "CUTROOM-1.1-beta-mac-20261001-151942",
-  "editor_revision": "chroma-preset-review-quality-v2",
-  "revision_note": "Preserves local solid/image Chroma Key and editable AI drafts. Critic responses are validated; requested actions are reconciled with actual selected footage and protected story anchors. An explicit AI rebuild refreshes stale editorial-review results while reusing transcription/chapter caches. AI drafts still require semantic review.",
-  "source_commit": "1b36d0175f84274901e4aa934255bb0df4f32205",
-  "validated_pr_head": "13669c86c3bc3ddb2fb55351ec958372ecb88900",
-  "mac_validation_url": "https://github.com/VanoPeradze/cutroom/actions/runs/36882972096",
-  "tested_artifact_id": 11172761127,
-  "update_date": "2026-10-01",
-  "url": "https://cutroom-studio.expo.app/downloads/CUTROOM-1.1-Beta.zip"
+  "bytes": 6534884,
+  "sha256": "2a21d24f0c2ae463a2056c831a576b5409ed5090eae0bce271b83a001438c38d",
+  "build_id": "CUTROOM-1.1-beta-mac-20261003-000459",
+  "release_state": "local-candidate",
+  "source_commit": "311ac8692858541ee94b0762e25599c8969e67d5",
+  "base_commit": "7741a6209e2eb7411ece471a5d0f052767a4366a",
+  "uncommitted_changes": false,
+  "editor_revision": "chroma-edit-effects-workflow-spacious-layout-duration",
+  "mac_validation_url": null,
+  "validated_pr_head": null,
+  "native_mac_validation": "pending",
+  "url": "https://cutroom-studio.expo.app/downloads/CUTROOM-1.1-Beta.zip",
+  "platforms": {
+    "windows": {
+      "filename": "CUTROOM-1.1-Beta-Windows.zip",
+      "bytes": 3257560,
+      "sha256": "275564bd785adb4e9574fdb20b362035606d9842e695c8631c174fd7437cf243",
+      "url": "https://cutroom-studio.expo.app/downloads/CUTROOM-1.1-Beta-Windows.zip"
+    },
+    "mac": {
+      "filename": "CUTROOM-1.1-Beta-Mac.zip",
+      "bytes": 3269066,
+      "sha256": "6d32264f351a2441a0f5100c509c420387fde77a5daaecc9b04c6408d99f7282",
+      "url": "https://cutroom-studio.expo.app/downloads/CUTROOM-1.1-Beta-Mac.zip"
+    }
+  },
+  "update_date": "2026-10-03"
 }
