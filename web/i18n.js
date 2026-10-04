@@ -1,4 +1,10 @@
 const en = {
+  chromaReplacement:"Replacement background", chromaSolid:"Solid color", chromaImport:"Add an image in Media", chromaImageMissing:"Unavailable image — choose another or reset", chromaOriginalPlayback:"Original playback; chroma key appears in the current-frame preview and export.",
+  cleanVodShortNote:"Clean VOD will still create a Short with your selected target length. Choose YouTube for a full-length cleanup.",
+  aiDraftKept:"New draft ready; your manual timeline was kept.", aiDraftApply:"Apply new AI draft", aiDraftApplied:"New AI draft applied. You can Undo to restore your manual edit.", aiDraftApplyTitle:"Apply the new AI draft?", aiDraftApplyCopy:"This replaces your manual timeline with the latest AI draft. You can Undo to restore your manual edit.", aiDraftKeep:"Keep manual timeline",
+  chromaTitle:"Chroma key", chromaHelp:"Remove a green screen or another flat color from one source.", chromaSource:"Footage", chromaEnable:"Enable chroma key", chromaColor:"Color to remove", chromaTolerance:"Tolerance", chromaEdge:"Edge softness", chromaBackground:"Replacement color", chromaToleranceHelp:"Higher values remove a wider range of colors.", chromaEdgeHelp:"Higher values blend the edges into the replacement color.", chromaOpaque:"The removed area uses this color or project image before Layout is applied. Images fill the source frame; edges may be cropped. MP4 has no transparency.", chromaApply:"Apply changes", chromaReset:"Reset this source", chromaOff:"Off", chromaOn:"On", chromaReady:"Applies to this source throughout the edit. Changes support Undo.", chromaPending:"Changes are not saved yet. Apply them to use them in export.", chromaSaving:"Saving chroma key.", chromaSaved:"Saved. Refresh the current-frame preview; export uses these settings. You can Undo this change.", chromaFailed:"Changes were not saved. Try again.", chromaNeedsSource:"Add footage and create an edit to use chroma key.", chromaFrame:"Current-frame key preview", chromaRefresh:"Refresh current frame", chromaPlayback:"The main player shows original footage. This frame and export use the saved chroma settings.", chromaChecking:"Checking local chroma-key support.", chromaPreviewing:"Preparing the saved-settings frame preview.", chromaApplyFirst:"Apply changes before refreshing the frame preview.", chromaPreviewFailed:"Could not prepare this frame. Try again.", chromaLocked:"This source is protected. Unlock it in Edit to change chroma key.",
+  inspectorHide:"Hide tools", inspectorShow:"Show tools", inspectorResize:"Resize tool panel", inspectorWidth:"Tool panel {width} pixels wide", inspectorResizeHint:"Drag to resize tools. Left/Right arrows resize; double-click resets.",
+  audioTab:"Audio", audioMixer:"Mixer", stabilizeFootage:"Stabilize footage", mixerSaveHint:"Changes save automatically.",
   skip: "Skip to content", saved: "Saved", projects: "Projects", language: "Language", advanced: "Advanced", studio: "Studio", studioWorkspaceTitle: "Your creative workspace", backToDirector: "Project overview", studioNeedsDraft: "Create a first edit before opening Studio.", render: "Export",
   welcomeBadge: "YOUR LOCAL WORKSPACE", welcomeTitle: "What will you create today?", welcomeLead: "Start with your footage. Let Director build a first cut, then make it yours in the editor.", newProject: "Create project", recent: "Your projects", localMode: "Runs locally", privateWorkspace: "Your footage stays on this computer", trustOpen: "Free & open source", trustLocal: "Local-first processing", trustFormats: "Reels & YouTube",
   stepFootage: "Preparation", stepBrief: "Director", stepDraft: "Draft", director: "AI Director", setupTitle: "What are we editing today?", setupHelp: "Add one or two sources. With two, choose the screen, camera and audio before Director starts.",
@@ -18,7 +24,14 @@ const en = {
 };
 
 const he = {
+  chromaReplacement:"רקע חלופי", chromaSolid:"צבע אחיד", chromaImport:"הוספת תמונה דרך Media", chromaImageMissing:"התמונה אינה זמינה — בחרו אחרת או אפסו", chromaOriginalPlayback:"ניגון המקור; הסרת הרקע מופיעה בתצוגת הפריים הנוכחי ובייצוא.",
+  audioHighlightsReady:"טיוטה לפי קול ושינויים חזותיים מוכנה; לא ניתן היה לתמלל את הדיבור באמינות. בדקו את האזהרה לפני ייצוא.", basicCleanupReady:"טיוטת ניקוי בסיסית מוכנה; Story AI לא יצר עריכה תקינה. בדקו את האזהרה לפני ייצוא.", speechStyleFallbackReady:"סגנון העריכה המבוסס על דיבור לא נוצר; הטיוטה משתמשת בקול ובפעילות חזותית. בדקו את הגדרות הדיבור לפני בנייה מחדש.", transcriptFallbackActionable:"סגנון העריכה המבוסס על דיבור לא נוצר כי לא ניתן היה לתמלל באמינות. הטיוטה משתמשת בקול ובפעילות חזותית. בהגדרות הדיבור בחרו את השפה המדויקת ו־Quality, ואז בנו את הטיוטה מחדש. Quality עשוי להיות איטי יותר במעבד; בדקו את התוצאה החדשה לפני ייצוא.",
   ...en,
+  cleanVodShortNote:"בבחירת Short, סגנון Clean VOD עדיין יוצר סרטון קצר באורך שבחרתם. בחרו YouTube לניקוי וידאו באורך מלא.",
+  aiDraftKept:"הטיוטה החדשה מוכנה; ציר הזמן הידני שלכם נשמר.", aiDraftApply:"החלת טיוטת ה־AI החדשה", aiDraftApplied:"טיוטת ה־AI החדשה הוחלה. אפשר לבטל כדי לשחזר את העריכה הידנית.", aiDraftApplyTitle:"להחיל את טיוטת ה־AI החדשה?", aiDraftApplyCopy:"הפעולה מחליפה את ציר הזמן הידני בטיוטת ה־AI האחרונה. אפשר לבטל כדי לשחזר את העריכה הידנית.", aiDraftKeep:"שמירת ציר הזמן הידני",
+  chromaTitle:"הסרת צבע רקע", chromaHelp:"מסירים מסך ירוק או צבע אחיד אחר ממקור אחד.", chromaSource:"מקור וידאו", chromaEnable:"הפעלת הסרת צבע רקע", chromaColor:"הצבע להסרה", chromaTolerance:"סבילות", chromaEdge:"ריכוך קצה", chromaBackground:"צבע רקע חלופי", chromaToleranceHelp:"ערך גבוה מסיר טווח רחב יותר של צבעים.", chromaEdgeHelp:"ערך גבוה ממזג את הקצוות עם צבע הרקע החלופי.", chromaOpaque:"האזור שהוסר מתמלא בצבע אחיד זה לפני החלת הפריסה. MP4 אינו שקוף.", chromaApply:"החלת השינויים", chromaReset:"איפוס מקור זה", chromaOff:"כבוי", chromaOn:"פעיל", chromaReady:"חל על מקור זה לאורך העריכה. אפשר לבטל את השינויים.", chromaPending:"השינויים עדיין לא נשמרו. החילו אותם כדי להשתמש בהם בייצוא.", chromaSaving:"שומר את הגדרות הסרת הרקע.", chromaSaved:"נשמר. רעננו את הפריים הנוכחי; הייצוא משתמש בהגדרות אלו. אפשר לבטל את השינוי.", chromaFailed:"השינויים לא נשמרו. נסו שוב.", chromaNeedsSource:"הוסיפו מקור וידאו וצרו עריכה כדי להסיר צבע רקע.", chromaFrame:"תצוגת הסרת הרקע בפריים הנוכחי", chromaRefresh:"רענון הפריים הנוכחי", chromaPlayback:"הנגן הראשי מציג את הווידאו המקורי. פריים זה והייצוא משתמשים בהגדרות הסרת הרקע שנשמרו.", chromaChecking:"בודק תמיכה מקומית בהסרת צבע רקע.", chromaPreviewing:"מכין פריים עם ההגדרות שנשמרו.", chromaApplyFirst:"החילו את השינויים לפני רענון הפריים.", chromaPreviewFailed:"לא ניתן להכין את הפריים. נסו שוב.", chromaLocked:"מקור זה מוגן. שחררו את הנעילה בלשונית Edit כדי לשנות את הסרת הרקע.",
+  inspectorHide:"הסתרת כלים", inspectorShow:"הצגת כלים", inspectorResize:"שינוי רוחב חלונית הכלים", inspectorWidth:"רוחב חלונית הכלים: {width} פיקסלים", inspectorResizeHint:"גררו לשינוי רוחב הכלים. החצים ימינה ושמאלה משנים רוחב; לחיצה כפולה מאפסת.",
+  audioTab:"אודיו", audioMixer:"מיקסר", stabilizeFootage:"ייצוב צילום", mixerSaveHint:"השינויים נשמרים אוטומטית.",
   skip: "דלג לתוכן", saved: "נשמר", projects: "פרויקטים", language: "שפה", advanced: "מתקדם", studio: "Studio", studioWorkspaceTitle: "עריכה מדויקת, באותו מסך", backToDirector: "חזרה ל־Director", studioNeedsDraft: "צריך ליצור עריכה ראשונה לפני פתיחת Studio.", render: "ייצוא",
   welcomeBadge: "עורך וידאו AI מקומי", welcomeTitle: "העריכה הראשונה שלך, בלי להתחיל מאפס.", welcomeLead: "מכניסים צילום אחד או שניים. CUTROOM מתמלל, מסנכרן, מוצא את הרגעים החזקים ובונה Draft שאפשר לדייק ולייצא.", newProject: "צור פרויקט חדש", recent: "פרויקטים אחרונים", localMode: "עובד מקומית", privateWorkspace: "חומר הגלם נשאר במחשב שלך", trustOpen: "חינמי וקוד פתוח", trustLocal: "עיבוד מקומי", trustFormats: "Reels ו־YouTube",
   stepFootage: "הכנה", stepBrief: "Director", stepDraft: "Draft", director: "AI Director", setupTitle: "מה אנחנו עורכים היום?", setupHelp: "העלו מקור אחד או שניים. עם שני מקורות בוחרים מסך, מצלמה וקול לפני שה־Director מתחיל.",
@@ -254,6 +267,10 @@ Object.assign(en, {
   anotherCutUnchanged: "No different cut found with the current settings. Your edit was kept.",
   limitedHighlightWarning: "The result is shorter than requested because the recording did not contain enough distinct strong moments.",
   audioHighlightWarning: "This draft uses audio activity and scene changes because speech could not be transcribed reliably. Spoken context may be missing. If your footage contains speech, check its language and audio source, then rebuild.",
+  audioHighlightsReady: "Audio and scene highlights ready; speech could not be transcribed reliably. Review the warning before exporting.",
+  basicCleanupReady: "Basic cleanup draft ready; Story AI did not produce a valid edit. Review the warning before exporting.",
+  speechStyleFallbackReady: "The requested speech-based edit style was not created; this draft uses sound and visual activity. Review speech settings before rebuilding.",
+  transcriptFallbackActionable: "The requested speech-based edit style was not created because speech could not be transcribed reliably. This draft uses sound and visual activity. In speech settings, choose the exact speech language and Quality, then rebuild the draft. Quality can be slower on CPU; review the new result before exporting.",
   storyFallbackWarning: "Story AI was unavailable for this draft. A fallback edit was built from the transcript; review the selected moments before exporting.",
   reviewSpeechSettings: "Review speech settings",
   decision_audio_highlights: "Audio + visual highlights selected from the recording",
@@ -341,3 +358,88 @@ export function applyTranslations() {
   });
   return dictionary;
 }
+
+Object.assign(en, {
+  greenScreenNav: "Green screen", chromaTitle: "Green screen / Chroma key",
+  chromaHelp: "Choose a video, remove its background color, then check a processed frame.",
+  chromaAddVideo: "Add video in Media", chromaLibraryVideo: "Media video", chromaMainVideo: "Main source",
+  chromaUnavailable: "This video is unavailable. Choose another video or import it in Media.",
+  chromaPreparing: "Preparing video", chromaFailedVideo: "Import failed — retry in Media",
+  chromaTime: "Frame time (source seconds)", chromaPlayerTime: "Uses the selected source player time.",
+  chromaTargetHelp: "Each video has its own settings. Repeated timeline uses of the same video share them."
+});
+Object.assign(he, {
+  greenScreenNav: "מסך ירוק", chromaTitle: "מסך ירוק / Chroma key",
+  chromaHelp: "בוחרים סרטון, מסירים את צבע הרקע ובודקים פריים מעובד.",
+  chromaAddVideo: "הוספת סרטון במדיה", chromaLibraryVideo: "סרטון מהמדיה", chromaMainVideo: "מקור ראשי",
+  chromaUnavailable: "הסרטון אינו זמין. בחרו סרטון אחר או ייבאו אותו דרך מדיה.",
+  chromaPreparing: "מכין את הסרטון", chromaFailedVideo: "הייבוא נכשל — נסו שוב במדיה",
+  chromaTime: "זמן הפריים בשניות במקור", chromaPlayerTime: "לפי הזמן בנגן של המקור שנבחר.",
+  chromaTargetHelp: "לכל סרטון הגדרות משלו. הן משותפות לכל ההופעות של אותו סרטון בציר הזמן."
+});
+
+Object.assign(en, {
+  targetLength: "Maximum length",
+  durationLimitHelp: "A ceiling, not a quota. Single-moment styles may finish earlier; use highlights for several moments.",
+  durationDraftSummary: "AI draft: {selected}s / {requested}s maximum.",
+  durationStyleLimit: "This style keeps at most {limit} complete moment(s). Choose a multi-moment style to include more footage, or keep and edit this draft.",
+  durationSourceLimit: "The source is {available}s long. No footage was repeated to fill the requested length.",
+  durationEvidenceLimit: "The selection is shorter than the limit. Review its source ranges or choose clips manually; quiet footage was not added just to fill time.",
+  reviewDurationSettings: "Review style & length"
+});
+Object.assign(he, {
+  targetLength: "אורך מרבי",
+  durationLimitHelp: "תקרה, לא מכסה. סגנון של רגע אחד יכול להסתיים מוקדם יותר; לכמה רגעים בחרו היילייטס.",
+  durationDraftSummary: "טיוטת AI: ‏{selected} שניות מתוך תקרה של {requested} שניות.",
+  durationStyleLimit: "הסגנון שומר עד {limit} רגעים שלמים. כדי לכלול עוד חומר בחרו סגנון של כמה רגעים, או המשיכו לערוך את הטיוטה הזאת.",
+  durationSourceLimit: "אורך המקור הוא {available} שניות. לא חזרנו על קטעים כדי למלא את האורך המבוקש.",
+  durationEvidenceLimit: "הבחירה קצרה מהתקרה. בדקו את טווחי המקור או בחרו קטעים ידנית; לא נוסף חומר שקט רק כדי למלא זמן.",
+  reviewDurationSettings: "בדיקת הסגנון והאורך"
+});
+
+Object.assign(en, {
+  targetLength: "Edit length", durationIntent: "Length intent",
+  durationTargetMode: "Highlight sequence — aim for this length",
+  durationStyleMode: "Follow style — maximum length",
+  durationLimitHelp: "Highlights combine distinct relevant passages. Style maximum keeps the preset’s moment limit (one engagement for Competitive Clutch). Neither mode adds filler.",
+  durationDraftSummary: "AI draft: {selected}s / {requested}s requested.",
+  durationStyleLimit: "This style keeps at most {limit} complete moment(s). Choose Highlight sequence to include more relevant passages, or keep and edit this draft.",
+  durationEvidenceLimit: "Eligible passages produced a shorter edit. Review the selected ranges or add footage manually; nothing was repeated to fill time."
+});
+Object.assign(he, {
+  targetLength: "אורך העריכה", durationIntent: "מטרת האורך",
+  durationTargetMode: "רצף היילייטס — לשאוף לאורך הזה",
+  durationStyleMode: "לפי הסגנון — אורך מרבי",
+  durationLimitHelp: "היילייטס מחברים קטעים רלוונטיים נפרדים. מצב סגנון שומר את מספר הרגעים של הסגנון (אירוע יחיד ב־Competitive Clutch). אין הוספת חומר למילוי זמן.",
+  durationDraftSummary: "טיוטת AI: ‏{selected} שניות מתוך {requested} שהתבקשו.",
+  durationStyleLimit: "הסגנון שומר עד {limit} רגעים שלמים. בחרו רצף היילייטס כדי לכלול קטעים רלוונטיים נוספים, או המשיכו לערוך את הטיוטה.",
+  durationEvidenceLimit: "הקטעים המתאימים הניבו עריכה קצרה יותר. בדקו את הבחירה או הוסיפו קטעים ידנית; לא שוכפל חומר למילוי זמן."
+});
+
+Object.assign(en, {
+  editClipTools:'Clip', editVideoEffects:'Effects', chromaFineTune:'Fine-tune edges', chromaHow:'How layers work',
+    chromaHelp:'Choose the foreground video, choose what appears behind it, then remove the color and apply.',
+  chromaSource:'1 · Foreground video', chromaColor:'2 · Color to remove', chromaMode:'3 · Background',
+  chromaUnderneath:'Video underneath (Media layer)', chromaReplace:'Color or image',
+  chromaGreenDefaults:'Use green-screen defaults',
+  chromaHighTolerance:'This tolerance can remove the subject too. Start with the green-screen defaults, then increase gradually.',
+  chromaLayerHelp:'For a moving background, keep it as main footage and add the green-screen video in Media, on top. Choose Video underneath here.',
+  chromaOpaque:'Video underneath reveals earlier timeline layers. Color or image replaces the background inside this video. The final MP4 combines all layers.',
+  chromaApply:'Apply & preview', chromaSaved:'Saved. Edited playback and export use these settings. You can Undo this change.',
+  chromaPlayback:'Edited playback shows the saved key. This processed frame checks exact edges; checkerboard means the video underneath will show through.'
+});
+Object.assign(he, {
+  editClipTools:'קליפ', editVideoEffects:'אפקטים', chromaFineTune:'כוונון הקצוות', chromaHow:'איך השכבות עובדות',
+  chromaHelp:'בחרו את הסרטון הקדמי, בחרו מה יופיע מאחוריו, ואז הסירו את הצבע והחילו.',
+  chromaSource:'1 · הסרטון הקדמי', chromaColor:'2 · הצבע להסרה', chromaMode:'3 · הרקע',
+  chromaUnderneath:'הסרטון שמתחת (שכבת מדיה)', chromaReplace:'צבע או תמונה',
+  chromaGreenDefaults:'הגדרות התחלה למסך ירוק',
+  chromaHighTolerance:'סבילות כזאת עלולה להסיר גם את התוכן הרצוי. התחילו מהגדרות המסך הירוק והעלו בהדרגה.',
+  chromaLayerHelp:'לרקע נע, השאירו אותו כסרטון הראשי והוסיפו את סרטון המסך הירוק במדיה מעליו. בחרו כאן בסרטון שמתחת.',
+  chromaOpaque:'הסרטון שמתחת יופיע דרך הצבע שהוסר. צבע או תמונה מחליפים את הרקע בתוך הסרטון. קובץ MP4 הסופי משלב את השכבות.',
+  chromaApply:'החלה ותצוגה', chromaSaved:'נשמר. הנגן במצב עריכה והייצוא משתמשים בהגדרות אלו. אפשר לבטל את השינוי.',
+  chromaPlayback:'הנגן במצב עריכה מציג את המסך הירוק. הפריים המעובד בודק את הקצוות המדויקים; משבצות מסמנות שקיפות לסרטון שמתחת.'
+});
+
+Object.assign(en, {chromaOriginalPlayback:'Original footage; switch to Edited cut to see chroma key.',chromaLivePlayback:'Chroma-key playback preview; check the processed frame for exact edges.'});
+Object.assign(he, {chromaOriginalPlayback:'חומר מקורי; עברו לתצוגת עריכה כדי לראות מסך ירוק.',chromaLivePlayback:'תצוגת מסך ירוק בנגן; בדקו את הפריים המעובד לקצוות מדויקים.'});

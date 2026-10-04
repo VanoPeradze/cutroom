@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Start CUTROOM on Mac</title>
+<style>
+  :root { color-scheme: dark; font: 17px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #10151d; color: #edf2fa; }
+  body { max-width: 780px; margin: 0 auto; padding: 44px 24px 80px; }
+  h1 { font-size: 2.4rem; line-height: 1.1; margin-bottom: 14px; } h2 { margin-top: 36px; font-size: 1.3rem; }
+  a { color: #9bceff; } code { background: #263142; padding: 3px 7px; border-radius: 5px; overflow-wrap: anywhere; }
+  pre { background: #263142; padding: 16px; border-radius: 10px; white-space: pre-wrap; overflow-wrap: anywhere; }
+  pre code { padding: 0; } li { margin: 10px 0; } .note { border-left: 3px solid #70aaf4; padding-left: 16px; }
+</style>
+<h1>CUTROOM on Mac</h1>
+<p>Mac Beta · Apple Silicon and Intel · macOS 15 or later</p>
+<ol>
+  <li>Extract the entire Mac ZIP. If you downloaded the combined Windows/Mac ZIP, open its <strong>mac</strong> folder first. Keep the launcher and <strong>App</strong> folder together in a writable location, such as Documents.</li>
+  <li>Double-click <strong>START CUTROOM.command</strong>. Terminal shows setup progress and opens the editor in your browser.</li>
+  <li>On the first run, review the listed downloads and type <strong>yes</strong> to install them. This may take several minutes. Keep Terminal open until setup finishes.</li>
+</ol>
+<p class="note">The runtime is installed in <code>App/.venv</code>. Setup does not download AI models. Once setup is complete, launching CUTROOM and editing local media work offline; models need to be installed before using their AI features offline.</p>
+
+<h2>If macOS blocks the launcher</h2>
+<p>This beta launcher is a shell script and is not a notarized Mac application. If you trust this download, try Control-click → <strong>Open</strong>. If your macOS version does not offer that option, use <strong>System Settings → Privacy &amp; Security → Open Anyway</strong> for this launcher after attempting to open it. See <a href="https://support.apple.com/en-us/102445">Apple’s instructions for opening an app from an unidentified developer</a>.</p>
+<p>If the archive utility did not preserve executable permissions, open Terminal, type <code>/bin/bash </code> (including the space), drag <strong>START CUTROOM.command</strong> from Finder into Terminal, and press Return. Dragging the file safely fills in its path, including spaces.</p>
+
+<h2>If Python or FFmpeg is missing</h2>
+<p>The launcher can install dependencies through an existing <a href="https://brew.sh/">Homebrew</a> installation after you approve. It never installs Homebrew itself or requests administrator access.</p>
+<p>If you do not have Homebrew, follow the instructions on its official website. Then open Terminal and run:</p>
+<pre><code>brew install python@3.12 ffmpeg@7</code></pre>
+<p>Double-click the CUTROOM launcher again. <a href="https://formulae.brew.sh/formula/ffmpeg@7">FFmpeg 7</a> includes the libass subtitles filter, H.264 encoder, and AAC encoder that CUTROOM checks before starting. CUTROOM discovers its private Homebrew location without changing global links.</p>
+<p>This beta also checks the rendering options it needs. FFmpeg 9 removed some of them, so a newer FFmpeg installation may be incompatible. The launcher uses <code>ffmpeg@7</code> when installed and asks before installing it when needed. If you set custom FFmpeg paths, an incompatible override must be corrected or unset before starting.</p>
+<p>Existing native Python 3.11 or 3.12 installations from <a href="https://www.python.org/downloads/macos/">python.org</a> also work. Python 3.13 and later are not supported by this beta. Advanced users may set <code>CUTROOM_PYTHON</code>, <code>CUTROOM_FFMPEG</code>, and <code>CUTROOM_FFPROBE</code> to full executable paths before starting from Terminal.</p>
+
+<h2>Optional local AI</h2>
+<p>Install <a href="https://ollama.com/download/mac">Ollama for Mac</a> and place it in Applications for local AI editing. CUTROOM finds its application binary automatically. Choose models in CUTROOM when you are ready; model downloads can be large. Transcription currently runs on the Mac CPU and can take time on long videos. Manual editing does not require Ollama.</p>
+
+<h2>Stopping, moving, and troubleshooting</h2>
+<p>Keep the Terminal window open while using CUTROOM. Press <strong>Control-C</strong> in that window to stop its server. CUTROOM does not stop an Ollama service used by other apps.</p>
+<p>If setup fails, the Terminal window keeps the error visible. Check your internet connection and free disk space, then run the launcher again. Repairs require approval before downloading packages. Your projects live in <code>App/data</code> by default; keep that folder when updating or moving the package.</p>
+<p>If you move CUTROOM and its Python environment no longer works, close CUTROOM, rename <code>App/.venv</code> to <code>.venv-old</code>, and run the launcher to create a new environment. Your project files stay in <code>App/data</code>.</p>
+</html>

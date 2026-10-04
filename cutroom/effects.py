@@ -15,7 +15,102 @@ from __future__ import annotations
 import math
 import re
 from dataclasses import dataclass
+from functools import lru_cache
+from pathlib import Path
+import shutil
+import subprocess
 from typing import Any, Mapping
+
+from .composition import normalize_chroma_key
+
+
+def chroma_key_filter(config: Mapping[str, Any]) -> str:
+    """The shared key stage for export and the bounded current-frame preview."""
+    clean = normalize_chroma_key(config, strict=True)
+    if not clean["enabled"]:
+        return "null"
+    return (f"format=yuva420p,chromakey=0x{clean['color'][1:]}:"
+            f"{clean['tolerance']:.6f}:{clean['edge_softness']:.6f}")
+
+
+def build_chroma_key_nodes(
+    input_label: str, output_label: str, config: Mapping[str, Any],
+    width: int, height: int, fps: float, duration: float, prefix: str = "chroma",
+    *, background_label: str | None = None,
+) -> list[str]:
+    """Key a genuine source, retaining alpha for Media layers when requested.
+
+    Call before timeline gaps, framing and effects. Never key generated black
+    gaps. Labels and geometry are compiler-owned, not request expressions.
+    """
+    def label(value: str) -> str:
+        value = value if value.startswith("[") else f"[{value}]"
+        if not re.fullmatch(r"\[(?:[0-9]+:v|[A-Za-z][A-Za-z0-9_]*)\]", value):
+            raise ValueError("Invalid Chroma Key graph label.")
+        return value
+
+    source, target = label(input_label), label(output_label)
+    background = label(background_label) if background_label is not None else None
+    clean = normalize_chroma_key(config, strict=True)
+    if not clean["enabled"]:
+        return [f"{source}null{target}"]
+    transparent = clean["background_mode"] == "transparent"
+    if not transparent and clean["background_asset_id"] is not None and background is None:
+        raise ValueError("The chosen Chroma Key image must be supplied for this preview or export. Choose another image or reset Chroma Key.")
+    if background is not None and clean["background_asset_id"] is None:
+        raise ValueError("An image input requires a selected Chroma Key background image.")
+    if (isinstance(width, bool) or isinstance(height, bool)
+            or not isinstance(width, int) or not isinstance(height, int)
+            or not 2 <= width <= 16384 or not 2 <= height <= 16384
+            or width % 2 or height % 2 or width * height > 64_000_000
+            or isinstance(fps, bool) or not isinstance(fps, (int, float))
+            or not math.isfinite(fps) or not 1 <= fps <= 240
+            or isinstance(duration, bool) or not isinstance(duration, (int, float))
+            or not math.isfinite(duration) or not 0 < duration <= 24 * 60 * 60
+            or not isinstance(prefix, str) or not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*", prefix)):
+        raise ValueError("Unsupported Chroma Key source geometry or clock.")
+    if transparent:
+        return [f"{source}setpts=PTS-STARTPTS,scale={width}:{height},setsar=1,{chroma_key_filter(clean)}{target}"]
+    if background is not None:
+        return [
+            f"{source}setpts=PTS-STARTPTS,scale={width}:{height},setsar=1,{chroma_key_filter(clean)}[{prefix}key]",
+            f"{background}setpts=PTS-STARTPTS,scale={width}:{height}:force_original_aspect_ratio=increase:flags=lanczos,"
+            f"crop={width}:{height},setsar=1,format=yuv420p[{prefix}fill]",
+            f"[{prefix}fill][{prefix}key]overlay=eof_action=endall:shortest=1:repeatlast=0,format=yuv420p{target}",
+        ]
+    return [
+        f"{source}setpts=PTS-STARTPTS,scale={width}:{height},setsar=1,split=2[{prefix}picture][{prefix}background]",
+        f"[{prefix}picture]{chroma_key_filter(clean)}[{prefix}key]",
+        f"[{prefix}background]drawbox=x=0:y=0:w=iw:h=ih:color=0x{clean['background_color'][1:]}:t=fill,format=yuv420p[{prefix}fill]",
+        f"[{prefix}fill][{prefix}key]overlay=eof_action=endall:shortest=1:repeatlast=0,format=yuv420p{target}",
+    ]
+
+
+@lru_cache(maxsize=8)
+def _chroma_filters(executable: str, size: int, modified_ns: int) -> bool:
+    from .media import run_command
+    result = run_command([executable, "-nostdin", "-hide_banner", "-filters"], timeout=10)
+    filters = set(re.findall(r"^\s*[.TSC]{3}\s+(\w+)\s+", result.stdout, re.MULTILINE))
+    return {"chromakey", "overlay", "split", "drawbox", "format", "scale", "crop", "setsar", "setpts"}.issubset(filters)
+
+
+def chroma_key_capability(settings: Any) -> dict[str, Any]:
+    """Cheap, read-only inspection of the existing local FFmpeg; no setup."""
+    result = {"available": False, "engine": "ffmpeg-chromakey", "supports": ["solid", "image", "media-layer"], "mp4_alpha": False,
+              "message": "Chroma Key needs the chromakey filter in the installed FFmpeg."}
+    try:
+        executable = shutil.which(settings.ffmpeg)
+        if executable is None:
+            return result
+        path = Path(executable)
+        info = path.stat()
+        result["available"] = _chroma_filters(str(path), info.st_size, info.st_mtime_ns)
+    except (OSError, ValueError, subprocess.SubprocessError):
+        result["message"] = "CUTROOM could not inspect the installed FFmpeg for Chroma Key."
+        return result
+    if result["available"]:
+        result["message"] = "Local Chroma Key with an opaque solid or project image replacement background is available."
+    return result
 
 
 PIPELINE_VERSION = "editorial-effects-v1"

@@ -170,6 +170,26 @@ function settingsApp() {
   return fixture;
 }
 
+test("live media and mixer autosaves do not pause, seek or reload the preview", async () => {
+  for (const action of ['media_update','set_audio_mixer']) {
+    const {run}=app();
+    run(`
+      state.project={id:'mix',revision:1,draft:{keep_ranges:[{start:0,end:10}]},sources:{A:{duration:10}},manual:{}};
+      state.preview.playing=true;
+      previewTimelineTime=()=>3; foregroundBusy=()=>false;
+      renderReadiness=renderManualControls=renderSourceMixer=()=>{};
+      flushProjectSaves=async()=>{}; updateMediaPreview=()=>{};
+      pausePreview=renderDraft=seekSourcePreview=()=>{throw new Error('must keep playback continuous');};
+      state.timeline={cancelPendingCut(){},scheduleDraw(){}};
+      api=async()=>({project:{...state.project,revision:2,manual:{audio_mixer:{music_db:-6}}}});
+    `);
+    const result=await run(`applyManualEdit('${action}',{music_db:-6})`);
+    assert.equal(result?.revision,2);
+    assert.equal(run('state.preview.playing'),true);
+    assert.equal(run('state.manualEditBusy'),false);
+  }
+});
+
 test("late startup checks do not override a project opened from the welcome screen", async () => {
   const {run} = app();
   run(`
@@ -180,6 +200,8 @@ test("late startup checks do not override a project opened from the welcome scre
     initWelcome = () => ({});
     initLocalModels = () => null;
     initWorkspace = () => {};
+    globalThis.initNumericScrub = () => {};
+    initTrackProtection = () => null;
     initializeKeyboardProfile = () => {};
     TimelineView = class {};
     AudioThresholdView = class {};
@@ -223,6 +245,76 @@ test("frame rate is numeric, legacy-safe and synchronized in both export control
   run('state.project.settings.fps = 60; hydrateSettings();');
   assert.equal(run("elements.fpsSelect.value"), "60");
   assert.equal(run("selectedFrameRate('999')"), 30);
+});
+
+function aspectApp() {
+  const fixture = settingsApp();
+  fixture.run(`
+    globalThis.aspectButtons = ['16:9', '9:16'].map(aspect => ({dataset: {outputAspect: aspect},
+      setAttribute(key, value) { this[key] = value; }}));
+    elements.quickAspectChoices.querySelectorAll = () => aspectButtons;
+    state.project.manual = { crops: [{start: 1, end: 4, x: .3}] };
+    state.project.editor_sequence = { tracks: {A: [{id:'clip-1', start: 1, end: 4}]} };
+    state.framingDraft = { crop: {x:.3}, scope: {start:1,end:4} };
+    globalThis.beforeAspectEdit = JSON.stringify([state.project.manual, state.project.editor_sequence, state.framingDraft]);
+    foregroundBusy = () => false;
+    editorProject = () => state.project;
+    previewPlaybackTime = () => 3;
+    applyPreviewPipGeometry = () => {};
+    syncSecondaryPreview = time => { globalThis.aspectPreviewTime = time; };
+    renderSourceCompositionPreview = mixer => { if (!mixer) throw new Error('Missing source mixer'); };
+    applyFramingPreview = () => { throw new Error('Aspect must not stage a crop or seek'); };
+    globalThis.aspectRequests = [];
+    api = async (url, options) => {
+      const patch = JSON.parse(options.body);
+      aspectRequests.push(patch);
+      return {project: {...state.project, settings: {...state.project.settings, ...patch.settings}, revision: 1}};
+    };
+  `);
+  return fixture;
+}
+
+test("manual aspect buttons update immediately and save only output format, without AI or clip changes", async () => {
+  const {run} = aspectApp();
+  for (const aspect of ['16:9', '9:16']) {
+    run(`setOutputAspect('${aspect}')`);
+    assert.equal(run('elements.previewStage.dataset.aspect'), aspect);
+    assert.equal(run('aspectPreviewTime'), 3);
+    assert.equal(run(`aspectButtons.find(button => button.dataset.outputAspect === '${aspect}')['aria-pressed']`), 'true');
+    assert.equal(run('JSON.stringify([state.project.manual, state.project.editor_sequence, state.framingDraft])'), run('beforeAspectEdit'));
+    assert.equal(run('state.draftDirtyReasons.size'), 0);
+    assert.match(run('elements.studioDraftStatus.textContent'), new RegExp(aspect));
+    await run("flushProjectSaves('p')");
+    assert.equal(run('state.project.settings.aspect'), aspect);
+    assert.equal(run('JSON.stringify(aspectRequests.at(-1).settings)'), JSON.stringify({aspect}));
+    run('hydrateSettings()');
+    assert.equal(run('elements.aspectSelect.value'), aspect);
+  }
+});
+
+test("aspect dropdown uses the same no-rebuild output path", async () => {
+  const {run} = aspectApp();
+  run("bindEvents(); elements.aspectSelect.value = '1:1'; elements.aspectSelect.listeners.change();");
+  assert.equal(run('elements.previewStage.dataset.aspect'), '1:1');
+  assert.equal(run("aspectButtons.every(button => button['aria-pressed'] === 'false')"), true);
+  await run("flushProjectSaves('p')");
+  assert.equal(run('state.project.settings.aspect'), '1:1');
+});
+
+test("quick aspect changes reject invalid formats and cannot mutate a busy edit", () => {
+  const {run} = aspectApp();
+  run("setOutputAspect('invalid'); foregroundBusy = () => true; setOutputAspect('16:9');");
+  assert.equal(run('elements.aspectSelect.value'), '9:16');
+  assert.equal(run('state.saveQueues.size'), 0);
+});
+
+test("busy aspect dropdown restores the accepted pending format instead of leaking a rejected choice", async () => {
+  const {run} = aspectApp();
+  run("bindEvents(); setOutputAspect('16:9'); state.manualEditBusy = true; elements.aspectSelect.value = '9:16'; elements.aspectSelect.listeners.change();");
+  assert.equal(run('elements.aspectSelect.value'), '16:9');
+  assert.equal(run('elements.previewStage.dataset.aspect'), '16:9');
+  await run("flushProjectSaves('p')");
+  assert.equal(run('state.project.settings.aspect'), '16:9');
 });
 
 test("changing FPS in the export dialog persists without an AI rebuild", () => {
@@ -735,6 +827,64 @@ test('keyboard routing accepts only the chosen split binding and does not close 
   run("handleEditorShortcut(keyEvent('Escape'));");
   assert.equal(run('cleared'), true);
   assert.equal(run('state.studio.open'), true);
+});
+
+function mediaShortcutFixture() {
+  const h = app();
+  h.run(`state.studio.open=true;state.keyboardProfile='cutroom';elements.previewA.currentTime=3;
+    state.project.manual={media_clips:[{id:'layer',start:2,end:6}]};
+    state.manualSelection={start:0,end:5};
+    globalThis.mediaCommands=[];globalThis.baseCommands=[];globalThis.mediaDeselected=false;
+    applyManualEdit=(...args)=>baseCommands.push(args);runManualRangeEdit=(...args)=>baseCommands.push(args);
+    state.timeline={mediaSelection:'layer',onMediaAction:(action,payload)=>mediaCommands.push({action,...payload}),
+      cancelGesture:()=>false,scheduleDraw(){},clearSelection:()=>baseCommands.push('clear')};
+    state.mediaStudio={select:id=>{mediaDeselected=id===null;}};
+    globalThis.mediaKey=(key,extra={})=>({key,target:elements.timelineCanvas,
+      preventDefault(){this.defaultPrevented=true;},stopPropagation(){this.stopped=true;},...extra});`);
+  return h;
+}
+
+test('captured Delete targets focused added media without touching the stale base selection', () => {
+  const { run } = mediaShortcutFixture();
+  run(`globalThis.mediaDelete=mediaKey('Delete');handleEditorShortcut(mediaDelete);`);
+  assert.equal(run('JSON.stringify(mediaCommands)'), JSON.stringify([{ action:'media_remove', clip_id:'layer' }]));
+  assert.equal(run('JSON.stringify(baseCommands)'), '[]');
+  assert.equal(run('mediaDelete.defaultPrevented && mediaDelete.stopped'), true);
+  assert.equal(run('JSON.stringify(state.manualSelection)'), JSON.stringify({start:0,end:5}));
+});
+
+test('focused media split follows the selected keyboard profile and rejects out-of-clip playheads', () => {
+  const { run } = mediaShortcutFixture();
+  run(`state.keyboardProfile='premiere';handleEditorShortcut(mediaKey('k',{ctrlKey:true}));
+    handleEditorShortcut(mediaKey('b',{ctrlKey:true}));
+    elements.previewA.currentTime=2.01;handleEditorShortcut(mediaKey('k',{ctrlKey:true}));
+    elements.previewA.currentTime=8;handleEditorShortcut(mediaKey('k',{ctrlKey:true}));`);
+  assert.equal(run('JSON.stringify(mediaCommands)'), JSON.stringify([{action:'media_split',clip_id:'layer',time:3}]));
+  assert.equal(run('JSON.stringify(baseCommands)'), '[]');
+});
+
+test('media shortcuts respect busy, repeat and profile guards before canvas fallback', () => {
+  const { run } = mediaShortcutFixture();
+  run(`handleEditorShortcut(mediaKey('Delete',{repeat:true}));
+    state.manualEditBusy=true;handleEditorShortcut(mediaKey('Delete'));handleEditorShortcut(mediaKey('s'));
+    state.manualEditBusy=false;state.keyboardProfile='premiere';
+    globalThis.unboundMediaDelete=mediaKey('Delete');handleEditorShortcut(unboundMediaDelete);`);
+  assert.equal(run('JSON.stringify(mediaCommands)'), '[]');
+  assert.equal(run('JSON.stringify(baseCommands)'), '[]');
+  assert.equal(run('unboundMediaDelete.defaultPrevented && unboundMediaDelete.stopped'), true);
+});
+
+test('Escape clears focused media selection while protected inspector fields retain their keyboard input', () => {
+  const { run } = mediaShortcutFixture();
+  run(`const field={closest:()=>({})};handleEditorShortcut(mediaKey('Delete',{target:field}));
+    handleEditorShortcut(mediaKey('s',{target:field}));
+    globalThis.mediaEscape=mediaKey('Escape');handleEditorShortcut(mediaEscape);`);
+  assert.equal(run('state.timeline.mediaSelection'), null);
+  assert.equal(run('mediaDeselected'), true);
+  assert.equal(run('mediaEscape.stopped'), true);
+  assert.equal(run('JSON.stringify(mediaCommands)'), '[]');
+  assert.equal(run('JSON.stringify(baseCommands)'), '[]');
+  assert.equal(run('JSON.stringify(state.manualSelection)'), JSON.stringify({start:0,end:5}));
 });
 
 test('keyboard profile controls stay in sync and return focus to the timeline without escaping a dialog', () => {
@@ -1473,7 +1623,7 @@ test("a ready draft opens Studio by default and closing restores both overview d
   assert.equal(run('state.preview.mode'), 'source', 'reopening Studio also preserves Full source');
 });
 
-test("vertical tool-rail navigation leaves the persistent timeline and selection intact", () => {
+test("workspace navigation leaves the persistent timeline and selection intact", () => {
   const { run, selectors } = app();
   const tabs = ["timeline", "framing", "transcript", "settings"].map((tab) => {
     const button = node(); button.dataset.tab = tab; button.focus = () => {};
@@ -1491,6 +1641,7 @@ test("vertical tool-rail navigation leaves the persistent timeline and selection
     globalThis.resetCount = 0;
     state.timeline = { selection: { start: 12, end: 18 }, draw() {}, setProject() { resetCount++; } };
     document.getElementById("studioTimelineDock").hidden = false;
+    document.getElementById("editVideoEffects").hidden = true;
     globalThis.keyEvent = { key: "ArrowDown", currentTarget: document.querySelectorAll(".advanced-tabs button")[0], preventDefault() {} };
     handleStudioTabKeydown(keyEvent);
   `);

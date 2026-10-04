@@ -1,5 +1,117 @@
 # Changelog
 
+## 1.1 Beta - 2026-10-03 - Preview-first workspace
+
+- Reserved the upper workspace for the video and bounded contextual tools, with a full-width timeline and one ordered navigation row. Oversized legacy display preferences fall back without changing projects.
+- Put clip framing first in Layout, selected Media properties before the library, and caption import, AI style and transcript in separate disclosures. Verified landscape and portrait previews with tools and timeline open at desktop and narrow sizes.
+
+- Added vertical numeric scrubbing and focused-field wheel adjustment, with native steps/limits, Shift fine control, cancellation and one committed edit per gesture. Typing, keyboard input and normal panel scrolling remain available.
+
+- Ordered workspaces as Media, Edit, Layout, Audio, Captions and Output, with matching RTL and keyboard navigation.
+- Moved Green screen into Edit → Effects, separate from clip controls. Key color/defaults precede background; fine-tuning and exact-frame inspection expand when needed. Layout retains composition and framing.
+- Kept contextual tools independently scrollable beside the preview. Single-source camera setup stays folded unless a detected camera needs review.
+
+
+## 1.1 Beta - 2026-10-02 - Green-screen playback and layer order
+
+- Fixed Media green-screen overlays hiding the background with an opaque rectangle. **Video underneath** retains alpha through placement and motion until compositing over earlier layers.
+- Added saved-settings chroma preview in edited playback for A/B and Media video; original footage mode stays original. Exact native-size FFmpeg frame checks remain available and refresh after Apply.
+- Ordered the controls as foreground, removed color, background and Apply. Reopening prefers the keyed video; selected video clips carry into Edit Effects. Added green-screen starting settings and a warning for tolerance values that can erase the subject.
+- Preserved existing color/image settings, Undo/Redo, per-video persistence and source files. Verified an authorized local recording through browser playback, save/reopen/history and a real 1080p MP4 export; private media is excluded from source and packages.
+
+## 1.1 Beta - 2026-10-01 - Green screen for project videos
+
+- Made **Green screen / Chroma key** visible in Layout, with the selected video's name and preview. No AI/model setup is required.
+- Added ready project Media videos alongside main footage A/B. Settings remain independent per video and apply to all timeline uses of an imported video before placement; duplicate filenames do not share settings. Audio and images remain unsupported foreground targets, and preparing/missing video is reported rather than silently selecting another file.
+- Kept saved-settings single-frame preview, export, Undo/Redo and per-video Reset aligned. Main playback remains original/unkeyed; solid-color or image replacement remains the supported background.
+- Added an explicit length intent: a highlight sequence accumulates distinct eligible passages toward the requested duration; the style maximum preserves a single engagement when chosen. Shortfalls remain visible, with no duplicated footage or arbitrary filler. Older projects retain their style contract until changed.
+- Requested portable ASCII stabilization motion data to avoid inconsistent binary-format corrections seen on Windows FFmpeg7.1.1.
+- Publication requires current-source Windows/native macOS compatibility checks and exact final-package validation. This entry does not claim manual Mac/Linux installation or real-footage keying quality was tested.
+
+## 1.1 Beta - 2026-10-01 - Trustworthy continuity review
+
+- Empty, incomplete or contradictory Story AI reviews cannot report a continuity pass. Drafts remain editable and clearly require review.
+- Continuity repair requests are distinguished from changes actually kept after story-slot and duration safeguards. A no-op or restored passage is not reported as a completed repair.
+- An explicit AI rebuild checks older continuity reviews again while retaining reusable transcription and chapter context. Opening a project does not trigger AI or model downloads. These checks do not certify every preset's semantic quality.
+
+## 1.1 Beta - 2026-10-01 - Chroma Key and AI draft controls
+
+- Added per-source A/B **Chroma Key** in Studio's Layout panel. Local FFmpeg replaces the selected color with a solid color or ready image from the Media library before layout/export; images cover the source frame and can crop at the edges. Explicit current-frame PNG inspection uses saved settings; the main player remains Original playback. Background video, B-underlay and transparent MP4 output are not supported. [Guide](docs/CHROMA_KEY.md)
+- New AI results keep an existing manual timeline. **Apply new AI draft** asks for confirmation before replacing it; Undo restores the manual edit.
+- Single-moment Short/Reel styles respect the moment's duration budget. **Clean VOD** keeps natural, chronological cleanup rather than forcing energetic cuts; selections still need human review.
+- Local Story readiness reports requested and selected models, including an installed configured fallback (4B by default) when preferred 9B/2B is missing. This does not download models automatically or establish semantic editing quality.
+- Publication requires current-source automated/native macOS checks and exact-package validation. The release manifest identifies the downloadable revision; this entry does not claim those gates have passed or that the new ZIP is public.
+
+## 1.1 Beta - 2026-09-30 - Editor reliability and optional stabilization
+
+- Fixed sub-frame A/B availability boundaries rejecting valid sequence/media edits. Only redundant implicit availability pieces join; explicit cuts, source endpoints, gaps, timing and framing remain intact. Actual FFmpeg synthetic renders verified boundaries at 30/60 FPS.
+- Fixed source waveforms in manual projects and Original footage for the correct A/B source without AI analysis. Bounded decoded audio padding to source duration and decoded FFmpeg/FFprobe text as UTF-8 for Unicode media names.
+- Added a compact mixer with measured channel peaks/dBFS, pause/seek reset, the selected A/B Original source and saved volume/mute. Solo remains preview-only; export normalization can change final loudness.
+- Added opt-in **Media > Stabilize footage**: a separate local MP4 copy using available FFmpeg vidstab filters, with progress, cancellation, retry, download and reuse as extra footage. Originals and the edit stay untouched. It may zoom/crop edges and cannot repair every kind of shake, blur or rolling shutter; no AI or upload is used.
+- Local validation passed 1,816 Python regressions (3 Windows skips), 538 frontend checks, Chrome/Windows workflows and synthetic stabilization/boundary renders. Totals overlap because Python includes frontend wrappers. Publication requires current-source macOS 15 Apple Silicon/Intel checks; Finder/Gatekeeper, Safari, native Linux and real-footage/performance checks remain needed.
+- The version and filename stay **1.1 Beta** with a new manifest build ID/checksums. Existing users need the new download, extracted separately, with projects backed up before migration. Application behavior changes in both platform folders; earlier documentation-only refresh claims apply to their earlier payloads.
+
+## 1.1 Beta — 2026-09-30 — Mac packaging beta
+
+- Added a combined ZIP with exactly `windows` and `mac` folders. Every Windows file is preserved byte-for-byte from the previous approved download; existing Windows installations need no update.
+- Added a separate Mac launcher, explicit-consent dependency setup, native Python discovery, full FFmpeg/subtitle checks, local AI runtime discovery and an offline first-start guide. Shared application and Windows installer code are unchanged.
+- Added macOS 15 Apple Silicon and Intel CI for regression tests, fresh ZIP installation in a Unicode/space path, launcher/API checks, real portrait/landscape renders with audio and captions, and a small CPU transcription test.
+- Mac local transcription uses the CPU. This source beta is not a signed/notarized Mac app; Finder/Gatekeeper, Safari and real-user performance still need manual testing. No perfect cross-platform behavior or equivalent speed is claimed.
+- Updated the website and English/Hebrew guides to explain which folder to use. The legacy Windows-only packager remains available; maintainers use the new combined builder for this download.
+
+## 1.1 Beta — 2026-09-28
+
+- Added Open editor, Rename and confirmed permanent Delete to the lobby and Projects, plus project search and sorting. Renaming keeps the active edit in place; deletion refuses active work without cancelling it and explains that imported copies and CUTROOM exports are removed while original files stay untouched.
+- Added custom titles and captions with their own timeline layers, immediate preview and automatic saving after typing pauses. Move or trim them on the edited-video clock, choose Top/Center/Bottom, Clean/Bold/Boxed and size, or import UTF-8 SRT/VTT files up to 1 MiB and 2,000 cues. These tools require no AI account or model.
+- Custom text always appears in exported video independently of the AI-caption burn setting. Optional SRT output combines AI and custom captions, excluding titles. Imports do not replace the AI transcript; invalid imports and edits that would shorten the video past a text layer are rejected without losing saved work. Text does not automatically ripple with source edits.
+- Softened the app and website with quieter surfaces and controls, and removed decorative diagonal arrows. Existing Day/Night choices remain available.
+- Improved precision editing: visible Snap control, playhead/cross-track/media alignment, constrained trim snapping, a named alignment guide and output-frame time readouts. Alt bypasses snapping; existing free scrubbing and default Snap-off behavior remain intact.
+- Added persistent A/B locks under **Edit → Track protection**. Lock a finished source while editing the other; footage remains visible and audible in preview and export. Clip changes, Together edits and Undo/Redo that would alter a protected lane are rejected without consuming history.
+- Kept protection separate from Undo/Redo: lock choices survive reopening and history navigation. Unlock protected sources before rebuilding/refining the draft or replacing/removing source media. Shared layout, audio mixing and added-media edits remain available; protected clip framing, picture speed and source timing stay guarded.
+- Fixed late trim responses changing selection after switching projects or edit targets, and stale selection restoration after a revision conflict.
+- Undo/Redo now clears outdated clip selections while retaining the playhead, so the inspector cannot display the old trim range as the restored clip.
+- Added a six-round editor roadmap: precision, track control, trim modes, source organization, performance and release qualification. Delivered scope includes precision, A/B protection, project management and custom text; mixed-layer ripple and arbitrary user-created lanes remain planned work. Every completed, verified increment must reach GitHub, a matching downloadable ZIP and the Expo website before publication is considered complete.
+
+## 1.1 Beta — 2026-09-27
+
+- Gave the app and public website a shared editing-room identity: warm paper, charcoal, restrained color and editorial typography, without new fonts, trackers or animation libraries.
+- Replaced the lobby's oversized illustrated cards with direct, numbered project choices. Kept AI setup secondary and moved supporting workflow explanations into a keyboard-accessible guide disclosure.
+- Clarified the clip inspector and reduced decorative control styling without changing playback, source framing or timeline behavior.
+- Fixed low-contrast AI connection and local-model controls in day mode. Refreshed the real product screenshots and improved the website's Hebrew typography and product-tour labels.
+
+## 1.1 Beta — 2026-09-24
+
+- Made new two-source Reels default to a filled 30/70 camera-above-screen stack in upload setup, AI drafts, manual drafts, preview and export. Explicit source order, fit choices and nonvertical layouts remain intact; confirmed embedded-camera layouts use the same proportions.
+- Simplified Layout: three primary choices, source routing/fit/sync under Advanced, and optional reference monitors. The embedded camera picker starts folded once configured, with an automatic reopen if saving needs a retry.
+- Added a persistent Day/Night switch for the app, including the project lobby, editing controls and Guide. Preview imagery and captions retain their original colors.
+- Stabilized the header and working-status banner as a single measured stack. Wrapped navigation no longer overlaps progress or the editor, and starting analysis no longer triggers the old smooth scrolling jump.
+- Refreshed the application entrance with an ivory/violet palette, visual project choices and optional AI setup after the primary workflows. Kept the editing workspace dark with clearer selection and panel contrast.
+- Redesigned the English/Hebrew product website around a real editor preview, simpler workflow explanations and clearer download guidance, with responsive layouts and keyboard focus indicators.
+- This visual refresh does not change playback, timeline geometry, AI providers or saved projects.
+
+## 1.1 Beta — 2026-09-23
+
+- Recovered preview audio when a browser rejects an already-connected media element. Audio graph failures now retry with a fresh player, then use clearly labelled basic playback if needed, instead of breaking Play/Pause. Fixed double attenuation when the mixer starts after the first Play gesture.
+- Fixed preview playback conflicts between the audio mixer and hidden A/B videos. Deliberately stopping a loading player at a gap or held frame no longer stops the entire timeline; genuine playback errors are still reported.
+- Added a project media library for extra video, images, music and voiceover, with editable timeline layers, waveforms, image motion and audio fades. Added a mixer for original audio, voiceover, music, effects and master level; Solo is preview-only. These tools need no AI account, and added media fits within the current edit duration.
+- Added A/B picture-speed controls that preserve clip length and speech timing. Picture speed can lose lip sync or hold the last source frame; it does not retime the whole picture-and-sound edit.
+- Added QHD 1440p and 4K 2160p export options alongside 720p and 1080p. Higher output resolution does not restore missing source detail.
+- Added bounded local Hebrew/English recovery with timing and English-term safeguards, plus per-line low-confidence transcript review notes. Lite adds no recovery pass; this change makes no measured accuracy claim and adds no cloud requests.
+- Updated English/Hebrew guides and website help with API role requirements, provider compatibility, costs, privacy and current feature limits.
+- Simplified the public download name to `CUTROOM-1.1-Beta.zip`; internal manifests retain build provenance. Added scrollable media lanes, live mixer autosave and transactional protection against rebuilds that would discard added media.
+
+## 1.1 Beta — 2026-09-22
+
+- Added one-click 16:9 Landscape and 9:16 Vertical controls at the top of the editor, including manual projects. Format changes preview immediately and save for export without AI, rebuilding, seeking or changing clips.
+
+## 1.1 Beta — 2026-09-21
+
+- Kept explicitly selected embedded-camera layouts through AI drafting, refinement and rebuilds, including higher-quality analysis passes.
+- Added immediate camera-frame previews and automatic saving, with visible save status and retry on failure.
+- Simplified Layout: common compositions first, with extra layouts and precise camera coordinates in expandable sections.
+- Preserved independent clip framing and removed redundant camera-layout confirmation controls once active.
+- Replaced the README opening artwork with the maintainer's CUTROOM launch image.
+
 ## 1.1 Beta — 2026-09-20
 
 - Tidied the repository root: guides live in docs, community policies in .github, and development helpers beside their tools. Application launch commands and saved-project locations are unchanged.

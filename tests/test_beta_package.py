@@ -51,7 +51,8 @@ def test_beta_entry_documents_and_their_local_links_ship_together():
             local = posixpath.normpath(posixpath.join(posixpath.dirname(name), unquote(target.path)))
             assert local in payload, (name, local)
     assert "MIT" in payload["README.md"].decode()
-    assert "run_windows.bat" in payload["START_TESTING.txt"].decode()
+    assert "START CUTROOM.bat" in payload["START_TESTING.txt"].decode()
+    assert "packaging/windows/START CUTROOM.bat" in payload
     assert "README.md" in payload["START_TESTING.txt"].decode()
     for name in ("README.md", "docs/README_HE.md", "docs/START_HERE_HE.txt", "START_TESTING.txt"):
         text = payload[name].decode("utf-8").lower()

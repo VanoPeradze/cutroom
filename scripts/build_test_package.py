@@ -34,7 +34,8 @@ DOC_FILES = (
     "docs/CREATOR_EDITING_RESEARCH.md", "docs/TEST_ON_ANOTHER_PC.md",
     "docs/TRANSCRIPT_EVALUATION.md", "docs/QUALITY_AND_LIMITS.md", "docs/UIUX_SKILL_CSS.md",
     "docs/INDEPENDENT_TRACKS.md", "docs/BETA_FEEDBACK.md", "docs/BETA_STATUS.md", "docs/MODELS.md",
-    "docs/CONTRIBUTING.md", "docs/AI_CONNECTIONS.md", "docs/PUBLISHING.md",
+    "docs/CONTRIBUTING.md", "docs/AI_CONNECTIONS.md", "docs/PUBLISHING.md", "docs/PLATFORMS.md",
+    "docs/EDITOR_ROADMAP.md", "docs/STABILIZATION.md", "docs/CHROMA_KEY.md",
     "docs/USER_GUIDE_EN.md", "docs/USER_GUIDE_HE.md", "docs/SHOWCASE_EN.md", "docs/SHOWCASE_HE.md",
 )
 # Only reviewed, purpose-made app screenshots belong in the tester package.
@@ -42,6 +43,7 @@ DOC_FILES = (
 IMAGE_FILES = (
     "docs/images/welcome.png", "docs/images/editor.png", "docs/images/ai-options.png",
     "docs/images/readme-banner.svg",
+    "docs/images/readme-hero.png",
 )
 PACKAGING_FILES = (
     "packaging/windows/START CUTROOM.bat",
@@ -58,7 +60,8 @@ Free and open source (MIT). No subscription. No CUTROOM watermark.
 
 GET STARTED
 1. Extract the entire ZIP into a folder.
-2. Open it and double-click run_windows.bat.
+2. Open the launcher beside App: START CUTROOM.bat on Windows, or
+   START CUTROOM.command on Mac. In the combined ZIP, open windows/mac first.
 3. Follow the setup prompts. CUTROOM opens in your browser when ready.
 
 First setup needs internet. Some AI features need an additional download
@@ -251,8 +254,14 @@ def build_package(root: Path, output_dir: Path, *, build_id: str | None = None) 
         "files": {name: hashlib.sha256(data).hexdigest() for name, data in sorted(payload.items())},
     }
     payload[WINDOWS_SOURCE_DIRECTORY + "/TEST_BUILD.json"] = _bytes_json(manifest)
-    output_dir.mkdir(parents=True, exist_ok=True)
-    target = output_dir / (folder + ".zip")
+    # Keep build provenance internally and in the local archive directory, not
+    # in the name downloaded by a creator. Never overwrite an earlier build.
+    archive_dir = output_dir / folder
+    archive_dir.mkdir(parents=True, exist_ok=True)
+    public_name = "CUTROOM-" + version_label.replace(" ", "-") + ".zip"
+    if not re.fullmatch(r"CUTROOM-[A-Za-z0-9.-]+\.zip", public_name):
+        raise ValueError("Unsafe release filename")
+    target = archive_dir / public_name
     checksum = target.with_suffix(".zip.sha256")
     if target.exists() or checksum.exists():
         raise FileExistsError(f"Package already exists: {target.name}")

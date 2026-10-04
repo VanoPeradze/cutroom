@@ -27,6 +27,16 @@ function fixture() {
   return {review,nodes,dialog,context,requests,get current(){return current;},set current(p){current=p;},get paused(){return paused;}};
 }
 
+test('source protection permits review but disables changing protected scope',async()=>{
+  const f=fixture();f.current.manual={track_locks:{A:true}};
+  f.review.open('edit');f.review.select({start:0,end:5});
+  assert.equal(f.nodes.restore.disabled,true);assert.equal(f.nodes.remove.disabled,true);
+  assert.match(f.nodes.effect.textContent,/locked/);
+  await f.review.edit('sequence_source_remove');assert.equal(f.requests.length,0);
+  f.review.slot='B';f.nodes.scope.value='B';f.review.refresh(true);
+  assert.equal(f.review.protectedSlots().length,0);
+});
+
 test('original timeline unions current clips, including copies and moved clips, not stale draft keeps',()=>{
   const f=fixture(),p=project();
   p.draft={keep_ranges:[{start:0,end:12}]};
@@ -97,4 +107,40 @@ test('B transcript and waveform are mapped back from analysis clock to B origina
   assert.deepEqual(plain(f.review.timeline.project.analysis.audio.waveform),[{start:4,end:5,peak:.8}]);
   assert.deepEqual(plain(f.review.timeline.project.analysis.audio.ranges.silence),[{start:5,end:6}]);
   assert.equal(f.current.analysis.audio.waveform[0].start,6,'original analysis stays untouched');
+});
+
+test('manual original-source review draws uploaded A and B profiles in their native clocks',()=>{
+  const f=fixture();
+  f.current.pre_analysis={audio:{
+    A:{waveform:[{start:1,end:2,rms_dbfs:-24}]},
+    B:{waveform:[{start:4,end:5,rms_dbfs:-18}]},
+  }};
+  f.review.open('A');
+  assert.deepEqual(plain(f.review.timeline.project.analysis.audio?.waveform || []),[{start:1,end:2,rms_dbfs:-24}]);
+  f.review.open('B');
+  assert.deepEqual(plain(f.review.timeline.project.analysis.audio?.waveform || []),[{start:4,end:5,rms_dbfs:-18}]);
+  assert.equal(f.current.pre_analysis.audio.B.waveform[0].start,4,'uploaded measurement stays untouched');
+});
+
+test('uploaded B waveform wins over legacy shifted analysis without changing annotation clocks',()=>{
+  const f=fixture();
+  f.current.analysis={audio_source:'B',audio_timeline_offset:2,audio:{waveform:[{start:6,end:7,rms_dbfs:-30}],ranges:{silence:[{start:7,end:8}]}},transcript:{segments:[{start:6,end:8,text:'B speech'}]}};
+  f.current.pre_analysis={audio:{B:{available:true,waveform:[{start:4,end:5,rms_dbfs:-18}]}}};
+  f.review.open('B');f.nodes.video.listeners.loadedmetadata();
+  assert.deepEqual(plain(f.review.timeline.project.analysis.audio.waveform),[{start:4,end:5,rms_dbfs:-18}]);
+  assert.equal(f.nodes.quote.textContent,'B speech');
+  assert.equal(f.current.analysis.audio.waveform[0].start,6);
+});
+
+test('source review distinguishes no audio and unavailable preparation from measured silence',()=>{
+  const f=fixture();
+  f.current.pre_analysis={audio:{A:{available:true,waveform:[{start:0,end:1,rms_dbfs:-100,peak_dbfs:-100}]}}};
+  f.review.open('A');
+  assert.equal(f.review.timeline.project.analysis.audio.waveform.length,1,'measured silence retains its actual bins');
+  f.current.sources.A.has_audio=false;f.review.refresh();
+  assert.equal(f.review.timeline.project.analysis.audio,null);
+  f.current.sources.A.has_audio=true;f.current.pre_analysis.audio.A={available:false,waveform:[],warning:'decode failed'};
+  f.review.refresh();
+  assert.equal(f.review.timeline.project.analysis.audio.available,false);
+  assert.equal(f.review.timeline.project.analysis.audio.warning,'decode failed');
 });

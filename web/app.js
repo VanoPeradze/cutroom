@@ -1,18 +1,27 @@
-import { applyTranslations, dictionaries } from "./i18n.js?v=1.1-beta-1";
-import { TimelineView, formatTime, editableClips, timelineDuration, sequenceBlocks, sequenceGaps, rippleMoveStart } from "./timeline.js?v=1.1-beta-1";
-import { SourceReview } from "./source-review.js?v=1.1-beta-1";
-import { initWorkspace } from "./workspace.js?v=1.1-beta-1";
+import { applyTranslations, dictionaries } from "./i18n.js?v=1.1-beta-chroma-edit-2";
+import { TimelineView, formatTime, editableClips, timelineDuration, sequenceBlocks, sequenceGaps, rippleMoveStart } from "./timeline.js?v=1.1-beta-studio-1";
+import { MediaStudio } from "./media-studio.js?v=1.1-beta-chroma-edit-2";
+import { StabilizationStudio } from "./stabilization-studio.js?v=1.1-beta-1";
+import { ChromaStudio } from "./chroma-studio.js?v=1.1-beta-chroma-edit-2";
+import { ChromaPreview } from "./chroma-preview.js?v=1.1-beta-chroma-edit-2";
+import { SourceReview } from "./source-review.js?v=1.1-beta-8";
+import { initWorkspace } from "./workspace.js?v=1.1-beta-studio-1";
 import { KEYBOARD_PROFILES, resolveEditorShortcut, isEditorTransportSpace, shortcutRows } from "./keyboard.js?v=1.1-beta-2";
 import { AudioThresholdView } from "./audio-meter.js?v=1.1-beta-1";
 import { initWelcome, workflowSettings, cloudProviderName } from "./welcome.js?v=1.1-beta-1";
 import { initLocalModels } from "./local-models.js?v=1.1-beta-1";
 import { trackClips, trackAt, hasSourceTracks, SourceTimelineClock } from "./source-tracks.js?v=1.1-beta-1";
+import { initTrackProtection } from "./track-protection.js?v=1.1-beta-1";
+import { TextStudio } from "./text-studio.js?v=1.1-beta-2";
+import { initNumericScrub } from "./numeric-scrub.js?v=1.1-beta-1";
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 
 const state = {
   project: null,
+  aiDraftNotice: null,
+  aiDraftConfirmation: null,
   projects: [],
   locale: "en",
   dictionary: null,
@@ -105,7 +114,7 @@ function cacheElements() {
     "welcomeView", "workspaceView", "projectHead", "projectName", "saveState", "recentProjects", "recentList", "recentCount",
     "projectsButton", "projectsDialog", "dialogProjects", "dialogNewProject", "newProjectButton", "homeButton",
     "advancedButton", "advancedPanel", "closeAdvanced", "studioPreviewDock", "studioDirectorDock", "studioRenderButton", "studioDraftStatus", "studioPanelFraming", "renderButton", "resultRenderButton", "setupPanel", "setupSourceMixerDock", "analysisPanel", "resultPanel", "resultGrid", "previewColumn", "verdictColumn",
-    "sourceSlotA", "sourceSlotB", "sourceInputA", "sourceInputB", "cancelUploadA", "cancelUploadB", "audioCalibration", "audioMeterCanvas", "recommendedThreshold", "useRecommendedThreshold", "silenceThreshold", "silenceThresholdOut", "preSilenceMin", "preSilenceMinOut", "preSilenceKeep", "preSilenceKeepOut", "audioCutEstimate", "audioProfileSummary", "editStyleChoices", "editStyleNote", "goalChoices", "goalExplainer", "goalExplainerTitle", "goalExplainerText", "durationGroup", "targetDuration", "durationOutput", "paceChoices", "paceNote",
+    "sourceSlotA", "sourceSlotB", "sourceInputA", "sourceInputB", "cancelUploadA", "cancelUploadB", "audioCalibration", "audioMeterCanvas", "recommendedThreshold", "useRecommendedThreshold", "silenceThreshold", "silenceThresholdOut", "preSilenceMin", "preSilenceMinOut", "preSilenceKeep", "preSilenceKeepOut", "audioCutEstimate", "audioProfileSummary", "editStyleChoices", "editStyleNote", "goalChoices", "goalExplainer", "goalExplainerTitle", "goalExplainerText", "durationGroup", "targetDuration", "durationMode", "durationOutput", "paceChoices", "paceNote",
     "directorInstruction", "readiness", "generateButton", "jobMessage", "jobProgress", "cancelJobButton", "analysisError", "analysisErrorTitle", "analysisErrorMessage", "retryDirectorButton", "backFromErrorButton", "draftTitle", "draftSummary", "draftEngineBadge",
     "reelCandidates", "reelCandidatesTitle", "reelCandidateList", "draftWarning", "draftWarningText", "reviewSpeechSettings",
     "beforeDuration", "afterDuration", "decisionCount", "decisionList", "previewStage", "previewA", "previewB", "previewPaneA", "previewPaneB", "previewPlay", "playButton",
@@ -125,7 +134,7 @@ function cacheElements() {
     "layoutScopeBadge", "layoutScopeHelp", "layoutCurrentScene", "layoutWholeEdit", "manualRange", "manualLayout",
     "layoutRangeForm", "layoutRangeStart", "layoutRangeEnd", "layoutRangeSubmit", "layoutRangeStatus",
     "timelineRangeForm", "timelineRangeStart", "timelineRangeEnd", "timelineRangeSubmit", "timelineRangeStatus",
-    "cameraDetection", "useEmbeddedCamera", "transcriptSearch", "transcriptList", "transcriptLanguage", "aspectSelect", "resolutionSelect",
+    "cameraDetection", "useEmbeddedCamera", "transcriptSearch", "transcriptList", "transcriptLanguage", "aspectSelect", "quickAspectChoices", "resolutionSelect",
     "transcriptFilter", "transcriptResults", "transcriptRemove", "transcriptRestore", "transcriptEditForm", "transcriptEditText", "transcriptEditTime", "transcriptEditStatus", "transcriptSave", "transcriptDiscard", "transcriptPrevious", "transcriptNext", "transcriptSaveAll",
     "keyboardProfile", "keyboardHelpProfile", "keyboardHelp", "keyboardDialog", "keyboardDescription", "keyboardLimitations", "keyboardShortcutList", "clipTrimForm", "clipTrimIn", "clipTrimOut", "clipTrimTitle", "clipTrimApply", "clipTrimStatus", "timelineTarget", "timelineTargetField", "trackReset", "trackHelp", "clipSourceIn", "clipSourceField", "clipMove",
     "qualitySelect", "fpsSelect", "fpsHelp", "exportFpsSelect", "exportFpsHelp", "exportFrameRateField", "autoReframe", "effectsToggle", "captionsToggle", "burnCaptionsToggle", "studioBurnCaptionsToggle", "captionControlStatus", "captionLanguageStatus",
@@ -189,6 +198,151 @@ async function api(path, options = {}) {
     throw new ApiError(message || `HTTP ${response.status}`, response.status, code, payload);
   }
   return payload;
+}
+
+function initializeMediaStudio() {
+  if (typeof MediaStudio === "undefined") return;
+  const panel = document.getElementById("studioPanelMedia");
+  const tab = document.createElement("button");
+  tab.id = "studioTabMedia"; tab.type = "button"; tab.dataset.tab = "media";
+  tab.setAttribute("role", "tab"); tab.setAttribute("aria-selected", "false"); tab.setAttribute("aria-controls", "studioPanelMedia"); tab.tabIndex = -1;
+  tab.innerHTML = '<svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 4v16M17 4v16M3 9h4m10 0h4M3 15h4m10 0h4"/></svg><span>Media</span><small>Clips & images</small>';
+  elements.advancedPanel.querySelector(".advanced-tabs").prepend(tab);
+  // bindEvents already ran before this dynamically created tab.
+  tab.addEventListener("click", () => selectAdvancedTab("media"));
+  tab.addEventListener("keydown", handleStudioTabKeydown);
+  state.mediaStudio = new MediaStudio(panel, elements.previewStage, {
+    libraryRoot: document.getElementById("studioShelfMedia"),
+    reviewSource: slot => {
+      openSourceReview();
+      const dialog = document.getElementById("sourceReviewDialog");
+      const select = dialog?.querySelector('[data-review="slot"]');
+      if (dialog?.open && select && select.value !== slot) { select.value = slot; select.dispatchEvent(new Event("change", {bubbles:true})); }
+    },
+    chromaPreview: video => new ChromaPreview(video),
+    project: () => state.project, audioPanel: document.getElementById("studioPanelAudio"), audioSlot: () => sourceMixerSettings().audioSlot, api, edit: applyManualEdit, pause: pauseAllMedia,
+    time: previewTimelineTime, duration: editorDuration, flushSettings: flushProjectSaves,
+    busy: () => Boolean(state.activeJob || state.activeUploads.size || state.jobStartLocks.size || state.stabilizationStudio?.uploading
+      || state.sourceSyncPending || (state.manualEditBusy && !state.mediaStudio?.saving)),
+    preview: () => { updateMediaPreview(); state.timeline?.scheduleDraw(); },
+    busyChanged: () => { renderReadiness(); renderManualControls(); },
+    acceptUpload: async (result, projectId) => {
+      if (result.project && state.project?.id === projectId) { state.project = reconcileProjectSnapshot(result.project); rememberProjectRevision(state.project); state.mediaStudio.render(); }
+      try {
+        if (result.job) await pollJob(result.job.id, {projectId, silent:true});
+      } finally {
+        // Failed/cancelled preparations must also reveal their Retry action.
+        const latest = await api(`/api/projects/${encodeURIComponent(projectId)}`);
+        if (state.project?.id === projectId) { state.project = reconcileProjectSnapshot(latest.project); rememberProjectRevision(state.project); renderDraft(); }
+      }
+    },
+  });
+  state.stabilizationStudio = new StabilizationStudio(panel, {...state.mediaStudio.options, flush: () => state.mediaStudio.flush()});
+  state.stabilizationStudio.node.id = "stabilizationTool";
+  document.getElementById("openStabilizationStudio")?.addEventListener("click", openStabilizationTools);
+  initializeChromaStudio();
+  const speed = document.createElement("div"); speed.className = "picture-speed"; speed.dataset.editorShortcuts = "off";
+  speed.innerHTML = '<label>Picture speed <select aria-label="Picture speed"><option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="1">1×</option><option value="1.5">1.5×</option><option value="2">2×</option><option value="4">4×</option></select><span></span></label><p>Picture only: keeps clip length and speech timing. May lose lip sync or hold the last source frame. Select A or B to choose which picture changes.</p>';
+  elements.clipTrimForm.after(speed); state.pictureSpeed = speed;
+  speed.querySelector("select").addEventListener("change", async event => {
+    const clip = state.pictureSpeedClip; if (!clip || foregroundBusy()) return;
+    pauseAllMedia();
+    await runUiAction(() => applyManualEdit("sequence_speed", {slot:clip.slot,clip_id:clip.id,speed:Number(event.target.value)}), "Changing picture speed");
+  });
+}
+
+function initializeChromaStudio() {
+  if (typeof ChromaStudio === "undefined") return;
+  const root = document.getElementById("chromaStudio");
+  if (!root) return;
+  state.chromaStudio = new ChromaStudio(root, {
+    autoPreview: true,
+    project: () => state.project, edit: applyManualEdit, pause: pauseAllMedia,
+    busy: () => foregroundBusy() || state.manualEditBusy,
+    translate: (key, fallback) => state.dictionary?.[key] || fallback, api,
+    sourceTime: slot => elements[`preview${slot}`]?.currentTime || 0,
+    selectedTarget: () => state.project?.manual?.media_clips?.find(clip => clip.id === state.timeline?.mediaSelection)?.asset_id || state.trimClip?.slot,
+    openMedia: () => openStudioTab("media"),
+    frame: async ({projectId, slot, time, revision}, signal) => {
+      const query = new URLSearchParams({time:String(time), revision:String(revision)});
+      const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/chroma-preview/${slot}?${query}`, {signal});
+      if (!response.ok) {
+        let message = `Frame preview failed (HTTP ${response.status}).`;
+        try { const payload = await response.json(); message = payload.message || message; } catch (_error) {}
+        throw new Error(message);
+      }
+      if (!response.headers.get("content-type")?.includes("image/png")) throw new Error("The frame preview did not return a PNG image.");
+      return response.blob();
+    },
+  });
+}
+
+function updateMediaPreview() {
+  updateChromaPlayback();
+  updateTextPreview();
+  if (!state.mediaStudio || !state.project?.draft) return;
+  const project = playbackProject(), time = previewPlaybackTime(), sourceMode = previewUsesSourceTime();
+  const mixer = sourceMixerSettings(), slot = mixer.audioSlot || "A", source = project.sources?.[slot];
+  const point = previewUsesIndependentTracks() ? trackAt(project,slot,time,mixer.syncOffset)
+    : {sourceTime:time-(slot === "B" ? mixer.syncOffset : 0)};
+  state.mediaStudio.sync(sourceMode ? time : sourceToOutputTime(time),state.preview.playing,
+    {sourceMode,point,url:source ? sourceMediaUrl(source) : null,hasAudio:source?.has_audio});
+  if (!sourceMode) { elements.previewA.muted = true; elements.previewB.muted = true; }
+}
+
+function updateChromaPlayback() {
+  if (typeof ChromaPreview === "undefined") return;
+  state.chromaPlayers ||= new Map();
+  const project = playbackProject();
+  for (const slot of ["A", "B"]) {
+    const video=elements[`preview${slot}`]; if (!video?.parentElement) continue;
+    // Embedded camera B is a second view of A, not a separate source.
+    const target=slot === "B" && !project?.sources?.B ? "A" : slot;
+    const settings=previewUsesSourceTime() ? null : project?.manual?.chroma_key?.[target];
+    if (settings?.enabled || state.chromaPlayers.has(slot)) {
+      if (!state.chromaPlayers.has(slot)) state.chromaPlayers.set(slot,new ChromaPreview(video));
+      state.chromaPlayers.get(slot).update(settings,project?.assets?.[settings?.background_asset_id]?.url);
+    }
+  }
+}
+
+function initializeTextStudio() {
+  if (typeof TextStudio === "undefined") return;
+  const root = document.getElementById("textStudio");
+  if (!root) return;
+  state.textStudio = new TextStudio(root, elements.previewStage, {
+    libraryRoot: document.getElementById("studioShelfCaptions"),
+    project: () => state.project, edit: applyManualEdit, time: previewTimelineTime, duration: editorDuration,
+    busy: foregroundBusy, preview: updateTextPreview, dimensions: previewExportDimensions,
+    seek: time => { pauseAllMedia(); if (previewUsesSourceTime()) setPreviewMode("edit"); seekSourcePreview(time); },
+    selected: id => { if (state.timeline) { if (id) state.timeline.clearSelection(); state.timeline.mediaSelection = id; state.timeline.scheduleDraw(); if (id) state.timeline.revealMedia(id); } },
+    selectionRemoved: id => { if (state.timeline?.mediaSelection === id) { state.timeline.mediaSelection = null; state.timeline.clearSelection(); state.timeline.scheduleDraw(); } },
+  });
+}
+
+function updateTextPreview() {
+  if (!state.textStudio) return;
+  state.textStudio.sync(previewTimelineTime(), previewUsesSourceTime());
+  if (state.timeline && state.project) {
+    const project = editorProject();
+    state.timeline.project = { ...project, manual: { ...project.manual, text_clips: state.textStudio.clips() } };
+    state.timeline.scheduleDraw();
+  }
+}
+
+function editLayerAction(action, detail) {
+  if (String(detail.clip_id).startsWith("text_")) return state.textStudio?.action(action.replace("media_", "text_"), detail);
+  return runUiAction(() => applyManualEdit(action,detail), "Editing media");
+}
+
+function renderPictureSpeed() {
+  if (!state.pictureSpeed) return;
+  const slot = activeEditTarget() === "B" ? "B" : "A";
+  const start = state.manualSelection?.start;
+  const clip = start != null ? trackAt(editorProject(), slot, start + .0001)?.clip : null;
+  state.pictureSpeed.hidden = !clip;
+  state.pictureSpeedClip = clip ? {slot,id:clip.id} : null;
+  if (clip) { state.pictureSpeed.querySelector("select").value = String(clip.video_speed || 1); state.pictureSpeed.querySelector("span").textContent = `Source ${slot}`; }
 }
 
 function lastProjectStorageKey() {
@@ -307,6 +461,13 @@ async function boot() {
   cacheElements();
   state.dictionary = applyTranslations("en");
   bindEvents();
+  initNumericScrub({ document, window, canEdit: () => !foregroundBusy() && !state.manualEditBusy,
+    context: () => [state.project?.id, state.project?.revision, state.mediaStudio?.selected, state.textStudio?.selected, state.trimClip?.id].join('|'),
+    onCommit: field => {
+      if (field.dataset.media || field.dataset.mix) void state.mediaStudio?.flush();
+      else if (field.dataset.text) void state.textStudio?.flush();
+      else if (/^embedded(?:Camera[XYWH]|Content[XY])$/.test(field.id)) void flushEmbeddedCameraSave();
+    } });
   const localModels = initLocalModels({ document, api, busy: foregroundBusy,
     changed: async () => { state.runtimeGeneration += 1; await loadSystem(); },
   });
@@ -320,12 +481,24 @@ async function boot() {
       await loadSystem();
     },
   });
-  initWorkspace({ document, window, onResize: () => state.timeline?.scheduleDraw(), openShortcuts: () => { renderKeyboardHelp(); elements.keyboardDialog.showModal(); } });
+  initWorkspace({ document, window, translate: (key, fallback) => state.dictionary?.[key] ?? fallback, onResize: () => state.timeline?.scheduleDraw(), openShortcuts: () => { renderKeyboardHelp(); elements.keyboardDialog.showModal(); } });
+  initializeMediaStudio();
+  initializeTextStudio();
+  const outputShelf = document.getElementById("studioShelfOutput");
+  const aspectField = document.getElementById("outputAspectField");
+  if (outputShelf && aspectField) outputShelf.appendChild(aspectField);
+  state.trackProtection = initTrackProtection({ document, getProject: () => state.project,
+    busy: () => state.manualEditBusy || foregroundBusy(),
+    change: (slot, locked) => applyManualEdit("set_track_lock", { slot, locked }) });
   state.timeline = new TimelineView(elements.timelineCanvas, elements.timelineScroll,
     (time) => { pauseAllMedia(); seekSourcePreview(time); }, setManualSelection, handleTimelineEdit,
-    { onToolStateChange: renderTimelineToolStatus, canEdit: () => !foregroundBusy() && !state.transcriptSaving,
-      onLayoutSelect: openTimelineLayout, getTrackClips: trackClips,
-      onTargetChange: (target) => setEditTarget(target, true) });
+    { onToolStateChange: renderTimelineToolStatus, canEdit: () => !foregroundBusy() && !state.transcriptSaving && !state.manualEditBusy && !state.textStudio?.dirty(),
+      onLayoutSelect: openTimelineLayout, getTrackClips: trackClips, getAudioSlot: () => sourceMixerSettings().audioSlot,
+      onTargetChange: (target) => setEditTarget(target, true),
+      onMediaSelect: id => { pauseAllMedia(); state.timeline?.clearSelection(); if (id.startsWith("text_")) { void state.textStudio?.select(id); selectAdvancedTab("transcript"); } else { state.mediaStudio?.select(id); selectAdvancedTab("media"); } },
+      onMediaEdit: (id, patch) => { const studio = id.startsWith("text_") ? state.textStudio : state.mediaStudio; studio?.queueClip(id,patch); return studio?.flush(); },
+      onMediaPreview: (id, patch) => (id.startsWith("text_") ? state.textStudio : state.mediaStudio)?.previewClip(id,patch),
+      onMediaAction: editLayerAction });
   initializeKeyboardProfile();
   state.audioMeter = new AudioThresholdView(elements.audioMeterCanvas);
   elements.audioMeterCanvas.addEventListener("cutroom-audio-seek", (event) => {
@@ -370,6 +543,9 @@ async function boot() {
 }
 
 function bindEvents() {
+  document.getElementById("applyAiDraftButton")?.addEventListener("click", openAiDraftConfirmation);
+  document.getElementById("confirmApplyAiDraft")?.addEventListener("click", confirmAiDraftApply);
+  for (const id of ["cancelApplyAiDraft", "closeApplyAiDraft"]) document.getElementById(id)?.addEventListener("click", () => document.getElementById("aiDraftApplyDialog")?.close());
   elements.newProjectButton.addEventListener("click", () => state.welcome?.chooseService());
   elements.dialogNewProject.addEventListener("click", () => runUiAction(async () => { elements.projectsDialog.close(); await goHome(); state.welcome?.chooseService(); }));
   elements.homeButton.addEventListener("click", () => runUiAction(goHome));
@@ -466,6 +642,7 @@ function bindEvents() {
     renderAudioCalibration();
     scheduleSettingsPatch({ requiresRebuild: true, reason: "audio" });
   });
+  elements.durationMode.addEventListener("change", () => scheduleSettingsPatch({ requiresRebuild: true, reason: "duration intent" }));
   elements.targetDuration.addEventListener("input", () => updateDurationControl(Number(elements.targetDuration.value)));
   elements.targetDuration.addEventListener("change", () => scheduleSettingsPatch({ requiresRebuild: true, reason: "duration" }));
   $$(".quick-values button").forEach((button) => button.addEventListener("click", () => {
@@ -482,8 +659,12 @@ function bindEvents() {
   $$("[data-open-studio-tab]").forEach((button) => {
     button.addEventListener("click", () => openStudioTab(button.dataset.openStudioTab));
   });
-  elements.reviewSpeechSettings.addEventListener("click", () => {
-    if (openStudioTab("transcript")) elements.spokenLanguageSelect.focus();
+  elements.reviewSpeechSettings.addEventListener("click", openSpeechReviewSettings);
+  document.getElementById("reviewDurationSettings")?.addEventListener("click", () => {
+    if (foregroundBusy() || state.manualEditBusy) return;
+    showSetup();
+    elements.editStyleChoices?.querySelector('button[aria-checked="true"]')?.focus();
+    elements.durationGroup?.scrollIntoView({block:"nearest"});
   });
   $$(".refine-grid button").forEach((button) => button.addEventListener("click", () => refineDraft(button.dataset.command)));
   elements.reelCandidateList.addEventListener("click", async (event) => {
@@ -511,6 +692,7 @@ function bindEvents() {
 
   elements.advancedButton.addEventListener("click", toggleAdvanced);
   elements.closeAdvanced.addEventListener("click", () => setAdvanced(false));
+  $$('[data-edit-tool]').forEach(button => button.addEventListener('click', () => selectEditTool(button.dataset.editTool)));
   elements.studioRenderButton.addEventListener("click", openExportDialog);
   $$(".advanced-tabs button").forEach((button) => {
     button.addEventListener("click", () => selectAdvancedTab(button.dataset.tab));
@@ -521,7 +703,12 @@ function bindEvents() {
   elements.timelineZoomOut.addEventListener("click", () => { state.timeline.setZoom(state.timeline.zoom / 1.35); updateZoomLabel(); });
   elements.timelineZoomSelection.addEventListener("click", () => { state.timeline.zoomToSelection(); updateZoomLabel(); });
 
-  [elements.aspectSelect, elements.resolutionSelect, elements.qualitySelect, elements.fpsSelect, elements.autoReframe, elements.effectsToggle, elements.captionsToggle].forEach((control) => control.addEventListener("change", () => {
+  elements.quickAspectChoices.addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-output-aspect]");
+    if (button) setOutputAspect(button.dataset.outputAspect);
+  });
+  elements.aspectSelect.addEventListener("change", () => setOutputAspect(elements.aspectSelect.value));
+  [elements.resolutionSelect, elements.qualitySelect, elements.fpsSelect, elements.autoReframe, elements.effectsToggle, elements.captionsToggle].forEach((control) => control.addEventListener("change", () => {
     applyFramingPreview();
     if (control === elements.fpsSelect) updateFrameRateControls(elements.fpsSelect.value);
     const requiresRebuild = control === elements.autoReframe;
@@ -548,6 +735,7 @@ function bindEvents() {
   });
   elements.useEmbeddedCamera.addEventListener("click", () => {
     if (!embeddedCameraCandidate()) {
+      if (elements.embeddedCameraEditor) elements.embeddedCameraEditor.open = true;
       elements.embeddedCameraEditor?.scrollIntoView({ behavior: "smooth", block: "center" });
       return;
     }
@@ -573,6 +761,7 @@ function bindEvents() {
   elements.manualClear.addEventListener("click", () => { state.markIn = null; state.timeline?.clearSelection(); elements.timelineCanvas.focus(); });
   elements.manualRange.addEventListener("click", () => {
     openStudioTab("timeline");
+    selectEditTool("clip");
     elements.timelineRangeForm.hidden = !elements.timelineRangeForm.hidden;
     elements.manualRange.setAttribute("aria-expanded", String(!elements.timelineRangeForm.hidden));
     renderRangeEditors();
@@ -609,7 +798,7 @@ function bindEvents() {
   });
   bindKeyboardControls();
   window.addEventListener("beforeunload", (event) => {
-    if (state.transcriptBuffers.size) { event.preventDefault(); event.returnValue = ""; }
+    if (state.transcriptBuffers.size || liveEmbeddedCameraRequest() || state.mediaStudio?.pending.size || state.textStudio?.dirty()) { event.preventDefault(); event.returnValue = ""; }
   });
   elements.burnCaptionsToggle.addEventListener("change", () => {
     setCaptionBurnEnabled(elements.burnCaptionsToggle.checked, true);
@@ -630,6 +819,7 @@ function bindEvents() {
   elements.manualRestore.addEventListener("click", () => runManualRangeEdit("restore_range"));
   elements.editorMoreButton.addEventListener("click", () => {
     if (!openStudioTab("timeline")) return;
+    selectEditTool("clip");
     elements.editorMoreTools.open = true;
     elements.editorMoreTools.scrollIntoView({ block: "nearest" });
     elements.editorMoreTools.querySelector("summary").focus();
@@ -794,7 +984,9 @@ function updatePaceNote(pace) {
 }
 
 async function loadProjects() {
+  const request = ++projectLibrary.listRequest;
   const payload = await api("/api/projects");
+  if (request !== projectLibrary.listRequest) return;
   state.projects = payload.projects || [];
   state.projectsLoaded = true;
   renderRecentProjects();
@@ -842,6 +1034,7 @@ function showWelcome() {
   elements.projectHead.hidden = true;
   elements.renderButton.disabled = true;
   setAdvanced(false);
+  renderRecentProjects();
   window.scrollTo({ top: 0 });
 }
 
@@ -949,6 +1142,7 @@ function hydrateSettings() {
   setChoiceValue(elements.paceChoices, settings.pace || "balanced");
   updatePaceNote(settings.pace || "balanced");
   elements.targetDuration.max = Math.max(15, Math.ceil(Math.min(600, state.project.sources?.A?.duration || 180)));
+  elements.durationMode.value = settings.duration_mode || "style";
   updateDurationControl(Number(settings.target_duration || 60));
   elements.directorInstruction.value = settings.instruction || "";
   const embeddedOption = elements.layoutSelect.querySelector('option[value="embedded_stack"]');
@@ -962,6 +1156,7 @@ function hydrateSettings() {
     hydrateSourceMixerLayout();
   }
   elements.aspectSelect.value = optionExists(elements.aspectSelect, settings.aspect) ? settings.aspect : "9:16";
+  renderQuickAspectChoices();
   elements.resolutionSelect.value = settings.resolution || "1080";
   elements.qualitySelect.value = settings.quality || "balanced";
   updateFrameRateControls(settings.fps ?? 30);
@@ -1097,6 +1292,7 @@ function renderLanguageDetectionStatus() {
 
 function applyGoalMode(goal, applyDefaults = false) {
   const normalized = ["short", "youtube", "podcast", "clean"].includes(goal) ? goal : "short";
+  renderEditStyleNote(normalized);
   if (elements.durationGroup) elements.durationGroup.hidden = ["youtube", "clean"].includes(normalized);
   const explainer = {
     short: ["shortModeTitle", "shortModeText"],
@@ -1183,6 +1379,11 @@ function renderEditStyleChoices() {
     button.setAttribute("aria-checked", String(active));
     button.tabIndex = active ? 0 : -1;
   });
+  renderEditStyleNote();
+}
+
+function renderEditStyleNote(goal = elements.goalChoices?.querySelector("button.active")?.dataset.value || state.project?.settings?.goal || "short") {
+  const selected = state.selectedEditStyle || state.project?.settings?.edit_style || "smart";
   const style = editStyleById(selected);
   if (elements.editStyleNote) {
     const description = localizedStyleValue(style?.description);
@@ -1190,7 +1391,8 @@ function renderEditStyleChoices() {
       "כל סגנון משנה את בחירת הרגעים והקצב. היעד, פורמט הפלט והאורך שבחרתם נשמרים. פריסת מסך + מצלמה לעולם לא מופעלת בלי אישור מפורש.",
       "Each style changes moment selection and pacing. Your goal, output format and duration stay selected. Screen + camera layout is never enabled without explicit confirmation.",
     );
-    elements.editStyleNote.textContent = description ? `${description} ${evidence}` : evidence;
+    const goalNote = selected === "clean_vod" && goal === "short" ? t("cleanVodShortNote") : "";
+    elements.editStyleNote.textContent = [goalNote, description, evidence].filter(Boolean).join(" ");
   }
 }
 
@@ -1444,6 +1646,8 @@ function renderSources() {
 }
 
 function renderReadiness() {
+  state.chromaStudio?.render();
+  renderAiDraftNotice();
   if (!elements.readiness) return;
   const source = state.project?.sources?.A;
   const ready = Boolean(source);
@@ -1710,6 +1914,7 @@ function currentSettings() {
     goal,
     pace,
     target_duration: Number(elements.targetDuration.value),
+    duration_mode: elements.durationMode?.value || "style",
     instruction: elements.directorInstruction.value.trim(),
     aspect: elements.aspectSelect.value,
     layout: elements.layoutSelect.value,
@@ -1877,6 +2082,8 @@ function isRevisionConflict(error) {
 }
 
 async function flushCurrentProjectSaves() {
+  if (state.textStudio && !(await state.textStudio.flush())) return false;
+  if (state.mediaStudio && !(await state.mediaStudio.flush())) return false;
   const projectId = state.project?.id;
   if (!projectId) return true;
   try {
@@ -1884,6 +2091,7 @@ async function flushCurrentProjectSaves() {
     if (state.manualEditPromise) await state.manualEditPromise;
     if (state.sourceMixerSavePending) await state.sourceMixerSaveTail;
     await flushPendingSourceSync(projectId);
+    if (!(await flushEmbeddedCameraSave(projectId))) return false;
     await flushProjectSaves(projectId);
     return true;
   } catch (error) {
@@ -1893,7 +2101,7 @@ async function flushCurrentProjectSaves() {
 }
 
 function foregroundBusy() {
-  return Boolean(state.activeJob || state.activeUploads.size || state.manualEditBusy || state.sourceSyncPending || state.sourceMixerSavePending) || state.jobStartLocks.size > 0;
+  return Boolean(state.activeJob || state.activeUploads.size || state.mediaStudio?.uploading || state.stabilizationStudio?.uploading || state.manualEditBusy || state.sourceSyncPending || state.sourceMixerSavePending) || state.jobStartLocks.size > 0;
 }
 
 function projectHasForegroundWork(projectId) {
@@ -2024,6 +2232,8 @@ async function reconcileDirectorOutcome(projectId, message, { cancelled = false 
 }
 
 async function generateDraft() {
+  if (state.textStudio && !(await state.textStudio.flush())) return;
+  if (state.mediaStudio && !(await state.mediaStudio.flush())) return;
   if (!requireSavedTranscript()) return;
   if (!state.project?.sources?.A) {
     toast(t("waitingForVideo"));
@@ -2031,6 +2241,8 @@ async function generateDraft() {
   }
   const projectId = state.project.id;
   const viewToken = state.projectViewToken;
+  if (liveEmbeddedCameraRequest()
+    && (!(await flushEmbeddedCameraSave(projectId)) || state.project?.id !== projectId || state.projectViewToken !== viewToken)) return;
   const lock = acquireJobStartLock("director", projectId);
   if (!lock) {
     toast(t("directorBusy"));
@@ -2091,11 +2303,14 @@ async function ensureStoryAIReady(requestedGoal = null) {
 }
 
 async function refineDraft(command) {
+  if (state.textStudio && !(await state.textStudio.flush())) return;
+  if (state.mediaStudio && !(await state.mediaStudio.flush())) return;
   if (!requireSavedTranscript()) return;
   if (!state.project?.draft) return;
   if (state.draftDirtyReasons.size) { toast(t("rebuildBeforeRefine")); return; }
   if (command === "new_variation" && !canVaryDraft()) return;
   const projectId = state.project.id;
+  if (liveEmbeddedCameraRequest() && (!(await flushEmbeddedCameraSave(projectId)) || state.project?.id !== projectId)) return;
   const lock = acquireJobStartLock("director", projectId);
   if (!lock) { toast(t("directorBusy")); return; }
   pauseAllMedia();
@@ -2139,6 +2354,8 @@ function showSetup() {
 }
 
 function showAnalysis() {
+  const sourceContext = document.getElementById("analysisSources");
+  if (sourceContext) sourceContext.textContent = Object.entries(state.project?.sources || {}).filter(([, source]) => source).map(([slot, source]) => `${slot} · ${source.name || "Recording"}\n${formatTime(source.duration || 0)}`).join("\n\n");
   pauseAllMedia();
   if (state.studio.open) setAdvanced(false);
   setStep(2);
@@ -2157,7 +2374,9 @@ function showAnalysis() {
   $$(".analysis-checks li").forEach((item) => item.classList.remove("done", "active"));
   $(".analysis-checks li")?.classList.add("active");
   elements.generateButton.disabled = true;
-  window.scrollTo({ top: elements.analysisPanel.offsetTop - 100, behavior: "smooth" });
+  const chromeHeight = document.getElementById("appChrome")?.getBoundingClientRect().height || 64;
+  const panelTop = window.scrollY + elements.analysisPanel.getBoundingClientRect().top;
+  window.scrollTo({ top: Math.max(0, panelTop - chromeHeight - 16), behavior: "instant" });
 }
 
 function friendlyDirectorError(message) {
@@ -2311,6 +2530,77 @@ async function refreshProjectAfterDirector(projectId, attempts = 3) {
   throw lastError || new Error("Could not refresh the completed Draft");
 }
 
+function aiDraftStamp(draft) {
+  const sort = value => Array.isArray(value) ? value.map(sort) : value && typeof value === "object"
+    ? Object.fromEntries(Object.keys(value).sort().map(key => [key, sort(value[key])])) : value;
+  return JSON.stringify(sort(draft));
+}
+
+function rememberDirectorResult(job) {
+  const result = job?.result, project = state.project;
+  if (!project?.id || !result || job?.project_id !== project.id || result.project_id !== project.id) return false;
+  const preserved = result.applied_to_timeline === false && result.timeline_preserved === true && result.variation_changed !== false
+    && project?.manual?.sequence && result.draft && aiDraftStamp(result.draft) === aiDraftStamp(project.draft);
+  state.aiDraftNotice = preserved ? {projectId:project.id, draftStamp:aiDraftStamp(result.draft)} : null;
+  renderAiDraftNotice();
+  return Boolean(preserved);
+}
+
+function currentAiDraftNotice() {
+  const notice = state.aiDraftNotice;
+  return notice && notice.projectId === state.project?.id && state.project?.manual?.sequence
+    && notice.draftStamp === aiDraftStamp(state.project.draft) ? notice : null;
+}
+
+function directorCompletionNotice(job, preserved = false) {
+  const draft = state.project?.draft;
+  const current = Boolean(state.project?.id && job?.project_id === state.project.id
+    && job?.result?.project_id === state.project.id && job.result.draft
+    && aiDraftStamp(job.result.draft) === aiDraftStamp(draft));
+  const basicCleanup = current && (draft.engine === "deterministic_story_fallback"
+    || (draft.quality_review?.warnings || []).some(warning => warning?.type === "story_ai_fallback"));
+  const transcriptFallback = current && (state.project?.analysis?.warnings || []).some(warning => warning?.type === "transcript_fallback");
+  const warning = transcriptFallback ? t("speechStyleFallbackReady") : current && draft.engine === "audio_visual_highlights" ? t("audioHighlightsReady")
+    : basicCleanup ? t("basicCleanupReady") : "";
+  return {message:[preserved ? t("aiDraftKept") : warning ? "" : t("draftReady"), warning].filter(Boolean).join(" "),
+    kind:preserved || warning ? "info" : "success"};
+}
+
+function renderAiDraftNotice() {
+  renderDurationReview();
+  const notice = document.getElementById("aiDraftNotice"); if (!notice) return;
+  notice.hidden = !currentAiDraftNotice();
+  const text = notice.querySelector("p"); if (text) text.textContent = t("aiDraftKept");
+  const button = document.getElementById("applyAiDraftButton");
+  if (button) { button.textContent = t("aiDraftApply"); button.disabled = state.manualEditBusy || foregroundBusy() || state.draftDirtyReasons.size > 0; }
+  const host = state.studio.open ? elements.advancedPanel?.querySelector(".studio-header") : elements.resultPanel;
+  if (!notice.hidden && host && notice.parentElement !== host) {
+    if (state.studio.open) host.appendChild(notice); else host.insertBefore(notice, host.firstChild);
+  }
+}
+
+async function openAiDraftConfirmation() {
+  if (!currentAiDraftNotice() || foregroundBusy() || state.manualEditBusy || state.draftDirtyReasons.size) return;
+  const projectId = state.project.id;
+  if (!(await flushCurrentProjectSaves()) || state.project?.id !== projectId || !currentAiDraftNotice()) return;
+  state.aiDraftConfirmation = {projectId, revision:state.project.revision, draftStamp:aiDraftStamp(state.project.draft)};
+  const dialog = document.getElementById("aiDraftApplyDialog"); if (!dialog) return;
+  document.getElementById("confirmApplyAiDraft").disabled = false;
+  dialog.showModal();
+}
+
+async function confirmAiDraftApply() {
+  const intent = state.aiDraftConfirmation, dialog = document.getElementById("aiDraftApplyDialog");
+  const isCurrent = () => Boolean(intent && currentAiDraftNotice() && intent.projectId === state.project?.id
+    && intent.revision === state.project.revision && intent.draftStamp === aiDraftStamp(state.project.draft));
+  if (!dialog?.open || document.getElementById("confirmApplyAiDraft").disabled) return;
+  if (!isCurrent() || state.manualEditBusy || foregroundBusy()) { dialog?.close(); return; }
+  document.getElementById("confirmApplyAiDraft").disabled = true;
+  const updated = await applyManualEdit("sequence_reset", {}, {isCurrent});
+  dialog?.close(); state.aiDraftConfirmation = null;
+  if (updated && state.project?.id === intent.projectId) { state.aiDraftNotice = null; renderAiDraftNotice(); toast(t("aiDraftApplied"), "success"); }
+}
+
 async function recoverActiveJobs(projectId, viewToken) {
   if (!projectId || state.recoveringJobs.has(projectId)) return;
   state.recoveringJobs.add(projectId);
@@ -2358,10 +2648,13 @@ async function recoverActiveJobs(projectId, viewToken) {
       const latestDirector = recent
         .filter((job) => ["director", "refine"].includes(job?.kind))
         .sort((left, right) => Date.parse(right.created_at || 0) - Date.parse(left.created_at || 0))[0];
+      if (latestDirector?.status === "completed" && state.project?.draft) rememberDirectorResult(latestDirector);
       if (latestDirector?.status === "completed" && !state.project?.draft) {
         try {
           await refreshProjectAfterDirector(projectId);
-          if (options.announceReady !== false) toast(t("draftReady"), "success");
+          const preserved = rememberDirectorResult(latestDirector);
+          const notice = directorCompletionNotice(latestDirector, preserved);
+          toast(notice.message, notice.kind);
         } catch (error) {
           showAnalysisError(error.message);
         }
@@ -2458,7 +2751,11 @@ async function pollJob(jobId, options = {}) {
             reject(error);
             return true;
           }
-          toast(t("draftReady"), "success");
+          const preserved = rememberDirectorResult(job);
+          if (options.announceReady !== false) {
+            const notice = directorCompletionNotice(job, preserved);
+            toast(notice.message, notice.kind);
+          }
         } else if (job.project_id && job.kind === "prepare_source") {
           try {
             const projectPayload = await api(`/api/projects/${encodeURIComponent(job.project_id)}`);
@@ -2594,6 +2891,11 @@ async function cancelActiveJob() {
 }
 
 function renderDraft() {
+  state.mediaStudio?.render();
+  state.stabilizationStudio?.render();
+  state.chromaStudio?.render();
+  state.textStudio?.render();
+  renderAiDraftNotice();
   const draft = editorProject().draft;
   elements.draftTitle.textContent = draft.title || state.project.name;
   elements.draftSummary.textContent = draft.summary || "";
@@ -2688,20 +2990,46 @@ function canVaryDraft() {
   return state.project?.draft?.goal === "short" && (state.project.settings?.goal || "short") === "short";
 }
 
+function renderDurationReview() {
+  const node = document.getElementById("durationReview"); if (!node) return;
+  const draft = state.project?.draft, review = draft?.duration_review;
+  node.hidden = !review || !["style_moment_limit","limited_selection","source_shorter"].includes(review.reason);
+  if (node.hidden) return;
+  const number = value => Number.isFinite(Number(value)) ? Math.round(Number(value)*10)/10 : 0;
+  const replacements = {selected:number(review.selected_seconds), requested:number(review.requested_seconds),
+    available:number(review.available_source_seconds), limit:number(review.style_moment_limit)};
+  const key = review.reason === "style_moment_limit" ? "durationStyleLimit" : review.reason === "source_shorter" ? "durationSourceLimit" : "durationEvidenceLimit";
+  const message = t("durationDraftSummary") + " " + t(key);
+  const text = node.querySelector("p");
+  if (text) text.textContent = message.replace(/\{(selected|requested|available|limit)\}/g,(_match,key)=>String(replacements[key]));
+  const button = document.getElementById("reviewDurationSettings");
+  if (button) { button.textContent=t("reviewDurationSettings"); button.disabled=foregroundBusy() || state.manualEditBusy; }
+  const host = state.studio.open ? elements.advancedPanel?.querySelector(".studio-header") : elements.resultPanel;
+  if (host && node.parentElement !== host) host.insertBefore(node, host.firstChild);
+}
+
 function renderDraftWarning() {
   if (!elements.draftWarning) return;
   const engine = state.project?.draft?.engine;
   const audioHighlights = engine === "audio_visual_highlights";
   const fallback = engine === "deterministic_story_fallback";
   const limitedHighlights = (state.project?.analysis?.warnings || []).some((warning) => warning.type === "limited_highlight_evidence");
+  const transcriptFallback = (state.project?.analysis?.warnings || []).some((warning) => warning.type === "transcript_fallback");
   const reviewWarnings = (state.project?.draft?.quality_review?.warnings || [])
     .map((warning) => warning?.message).filter((message) => typeof message === "string" && message);
-  elements.draftWarning.hidden = !audioHighlights && !fallback && !limitedHighlights && !reviewWarnings.length;
+  elements.draftWarning.hidden = !audioHighlights && !fallback && !limitedHighlights && !transcriptFallback && !reviewWarnings.length;
   elements.draftWarningText.textContent = [
-    audioHighlights ? t("audioHighlightWarning") : fallback ? t("storyFallbackWarning") : "",
+    transcriptFallback ? t("transcriptFallbackActionable") : audioHighlights ? t("audioHighlightWarning") : fallback ? t("storyFallbackWarning") : "",
     limitedHighlights ? t("limitedHighlightWarning") : "",
     ...reviewWarnings,
   ].filter(Boolean).join(" ");
+}
+
+function openSpeechReviewSettings() {
+  if (!openStudioTab("transcript")) return;
+  const language = elements.spokenLanguageSelect;
+  const disclosure = language?.closest("details"); if (disclosure) disclosure.open = true;
+  language?.focus(); language?.scrollIntoView({block:"nearest"});
 }
 
 function sourceAspect() {
@@ -2739,7 +3067,7 @@ function renderDecisions() {
 
 function sourceMixerSettings() {
   const stored = state.project?.manual?.source_mixer || {};
-  const desired = state.sourceMixerDesired?.projectId === state.project?.id ? state.sourceMixerDesired.payload : null;
+  const desired = state.project && state.sourceMixerDesired?.projectId === state.project.id ? state.sourceMixerDesired.payload : null;
   const raw = desired ? { ...stored, ...desired } : stored;
   if (desired?.default_layout == null && Object.hasOwn(desired || {}, "default_layout")) delete raw.default_layout;
   if (desired?.sync_offset == null && Object.hasOwn(desired || {}, "sync_offset")) delete raw.sync_offset;
@@ -2748,7 +3076,8 @@ function sourceMixerSettings() {
   if (new Set([screenSlot, cameraSlot]).size !== 2 || ![screenSlot, cameraSlot].every((slot) => ["A", "B"].includes(slot))) {
     screenSlot = "A"; cameraSlot = "B";
   }
-  const firstSlot = ["A", "B"].includes(String(raw.first_slot || "").toUpperCase()) ? String(raw.first_slot).toUpperCase() : "A";
+  const vertical = (state.project?.settings?.aspect || "9:16") === "9:16";
+  const firstSlot = ["A", "B"].includes(String(raw.first_slot || "").toUpperCase()) ? String(raw.first_slot).toUpperCase() : vertical ? cameraSlot : "A";
   const primaryRole = ["screen", "camera"].includes(raw.primary_role) ? raw.primary_role : "screen";
   let audioSlot = ["A", "B"].includes(String(raw.audio_slot || "").toUpperCase()) ? String(raw.audio_slot).toUpperCase() : "A";
   if (!state.project?.sources?.[audioSlot]?.has_audio) {
@@ -2762,13 +3091,17 @@ function sourceMixerSettings() {
   const rawDefaultLayout = String(raw.default_layout || "").toLowerCase();
   const defaultLayoutExplicit = Object.hasOwn(raw, "default_layout") && allowedLayouts.includes(rawDefaultLayout);
   const defaultLayout = defaultLayoutExplicit ? rawDefaultLayout : "auto";
-  const stackFit = raw.stack_fit === "cover" ? "cover" : "contain";
+  const stackFit = ["cover", "contain"].includes(raw.stack_fit) ? raw.stack_fit : vertical ? "cover" : "contain";
   return { screenSlot, cameraSlot, firstSlot, primaryRole, audioSlot, syncOffset, hasManualSync, defaultLayout, defaultLayoutExplicit, stackFit };
 }
 
 function sourceMixerLayoutFromSetting(layout, mixer = sourceMixerSettings()) {
   if (layout === mixer.screenSlot) return "screen";
   if (layout === mixer.cameraSlot) return "camera";
+  const settings = state.project?.settings || {};
+  if ((!layout || layout === "auto") && !mixer.defaultLayoutExplicit && state.project?.sources?.B
+      && (settings.goal || "short") === "short" && (settings.aspect || "9:16") === "9:16"
+      && (settings.layout || "auto") === "auto") return "stacked";
   return ["auto", "screen", "camera", "stacked", "side_by_side", "pip"].includes(layout) ? layout : "auto";
 }
 
@@ -2867,16 +3200,16 @@ function previewExportDimensions() {
   const aspect = elements.aspectSelect?.value || state.project?.settings?.aspect || "9:16";
   const resolution = elements.resolutionSelect?.value || state.project?.settings?.resolution || "1080";
   const dimensions = {
-    "9:16": { "720": [720, 1280], "1080": [1080, 1920] },
-    "16:9": { "720": [1280, 720], "1080": [1920, 1080] },
-    "1:1": { "720": [720, 720], "1080": [1080, 1080] },
-    "4:5": { "720": [720, 900], "1080": [1080, 1350] },
+    "9:16": { "720": [720, 1280], "1080": [1080, 1920], "1440": [1440,2560], "2160": [2160,3840] },
+    "16:9": { "720": [1280, 720], "1080": [1920, 1080], "1440": [2560,1440], "2160": [3840,2160] },
+    "1:1": { "720": [720, 720], "1080": [1080, 1080], "1440": [1440,1440], "2160": [2160,2160] },
+    "4:5": { "720": [720, 900], "1080": [1080, 1350], "1440": [1440,1800], "2160": [2160,2700] },
   };
   if (aspect === "source") {
     const width = Math.trunc(Number(state.project?.sources?.A?.width));
     const height = Math.trunc(Number(state.project?.sources?.A?.height));
     if (Number.isFinite(width) && width > 0 && Number.isFinite(height) && height > 0) {
-      const scale = Math.min(1, (resolution === "1080" ? 1920 : 1280) / Math.max(width, height));
+      const scale = Math.min(1, ({"720":1280,"1080":1920,"1440":2560,"2160":3840}[resolution] || 1920) / Math.max(width, height));
       return [Math.max(2, Math.floor(width * scale / 2) * 2), Math.max(2, Math.floor(height * scale / 2) * 2)];
     }
   }
@@ -2959,9 +3292,9 @@ function renderSourceMixer() {
   const busy = sourceMixerControlBusy();
   renderSourceIdentity(mixer, busy);
   elements.sourceMixerTitle.textContent = hasTwoSources
-    ? uiCopy("שליטה במקורות A/B", "A/B source control")
+    ? uiCopy("שליטה במקורות A/B", "Screen + camera")
     : sourceA
-      ? uiCopy("שליטה במקור ובמצלמה", "Source and camera control")
+      ? uiCopy("שליטה במקור ובמצלמה", "Your recording")
       : uiCopy("שליטה במקורות", "Source control");
   elements.sourceMixerHelp.textContent = hasTwoSources && state.project.draft
     ? uiCopy("לחיצה על פריסה שומרת אותה מיד לטווח המסומן או לכל העריכה.", "Choosing a layout saves it immediately to the selection or the entire edit.")
@@ -3201,8 +3534,10 @@ function placeSourceMixer(hasSource) {
     elements.setupSourceMixerDock.hidden = false;
     return;
   }
-  if (elements.studioPanelFraming && elements.sourceMixer.parentElement !== elements.studioPanelFraming) {
-    elements.studioPanelFraming.insertBefore(elements.sourceMixer, $(".framing-layout", elements.studioPanelFraming));
+  const layoutHome = document.getElementById("studioShelfLayout") || elements.studioPanelFraming;
+  if (layoutHome && elements.sourceMixer.parentElement !== layoutHome) {
+    // The same controls return to the composition shelf after preparation.
+    layoutHome.appendChild(elements.sourceMixer);
   }
   if (elements.setupSourceMixerDock) elements.setupSourceMixerDock.hidden = true;
 }
@@ -3384,6 +3719,7 @@ async function applySourceLayout(scope, { immediate = false } = {}) {
   let committed = false;
   state.sourceMixerLayoutRequest = request;
   renderSourceMixer();
+  syncSecondaryPreview(previewPlaybackTime());
   try {
     // Fit/Fill and role saves are serialized separately. Await them rather
     // than silently dropping this click because applyManualEdit sees Busy.
@@ -3411,6 +3747,7 @@ async function applySourceLayout(scope, { immediate = false } = {}) {
       state.sourceMixerLayoutRequest = null;
       if (!committed && state.project?.id === request.projectId) hydrateSourceMixerLayout();
       renderSourceMixer();
+      if (state.project?.id === request.projectId) syncSecondaryPreview(previewPlaybackTime());
     }
   }
 }
@@ -3429,6 +3766,7 @@ async function applyCreatorFrame() {
 }
 
 function embeddedLayoutConfirmed() {
+  if (liveEmbeddedCameraRequest()) return true;
   const draft = state.project?.draft;
   return !state.project?.sources?.B && Boolean(embeddedCameraCandidate())
     && draft?.embedded_layout_confirmed === true && draft?.layout === "embedded_stack";
@@ -3504,6 +3842,7 @@ function embeddedCameraCandidate() {
 }
 
 function embeddedCameraIsActive() {
+  if (liveEmbeddedCameraRequest()) return true;
   if (!embeddedCameraCandidate()) return false;
   if (state.project?.draft) return embeddedLayoutConfirmed();
   return state.project?.settings?.layout === "embedded_stack";
@@ -3513,6 +3852,137 @@ function embeddedEditorCandidateKey(candidate) {
   if (!candidate) return "default";
   return [candidate.candidate_source || candidate.detector || "candidate", candidate.x, candidate.y, candidate.w, candidate.h,
     candidate.content_focus?.x, candidate.content_focus?.y].join(":");
+}
+
+function embeddedEditorSourceKey() {
+  const source = state.project?.sources?.A;
+  return source ? `${source.generation || ""}:${source.url || ""}` : null;
+}
+
+function embeddedCameraRequestIsCurrent(request) {
+  return Boolean(request && state.project?.sources?.A && !state.project.sources.B
+    && request.projectId === state.project.id && request.generation === embeddedEditorSourceKey()
+    && request.viewToken === state.projectViewToken);
+}
+
+function liveEmbeddedCameraRequest() {
+  const request = state.embeddedEditor.pending;
+  return embeddedCameraRequestIsCurrent(request) ? request : null;
+}
+
+function embeddedCameraPreviewCandidate() {
+  return liveEmbeddedCameraRequest()?.geometry || embeddedCameraCandidate();
+}
+
+function embeddedEditorBusy() {
+  // Keep dragging responsive while this editor's own save is in flight.
+  return Boolean(state.activeJob || state.activeUploads.size || state.jobStartLocks.size
+    || state.sourceSyncPending || state.sourceMixerSavePending
+    || (state.manualEditBusy && !state.embeddedEditor.applying));
+}
+
+function resetEmbeddedEditor() {
+  clearTimeout(state.embeddedEditor.saveTimer);
+  state.embeddedEditor = { projectId: state.project?.id, generation: embeddedEditorSourceKey(),
+    viewToken: state.projectViewToken, candidateKey: null, dirty: false, dragging: false };
+}
+
+function renderEmbeddedSaveState() {
+  const editor = state.embeddedEditor;
+  const active = embeddedCameraIsActive();
+  if (elements.embeddedCameraState) {
+    elements.embeddedCameraState.classList.toggle("active", active && !editor.dirty);
+    elements.embeddedCameraState.textContent = editor.error ? "Save failed — retry"
+      : editor.dirty ? "Saving…"
+      : active ? "Saved"
+      : embeddedCameraCandidate()?.candidate_source === "vision" ? "Review camera area" : "Mark your camera";
+  }
+  if (elements.saveEmbeddedCamera) {
+    elements.saveEmbeddedCamera.hidden = !editor.error && (active || editor.dirty);
+    elements.saveEmbeddedCamera.textContent = editor.error ? "Retry save" : "Use camera layout";
+    elements.saveEmbeddedCamera.disabled = embeddedEditorBusy() || Boolean(editor.saving);
+  }
+}
+
+function previewEmbeddedCameraSelection() {
+  if (!state.project?.sources?.A || !elements.previewA || !elements.previewB) return;
+  const sourceUrl = sourceMediaUrl(state.project.sources.A);
+  if (liveEmbeddedCameraRequest() && elements.previewB.dataset.url !== sourceUrl) {
+    elements.previewB.src = sourceUrl;
+    elements.previewB.dataset.url = sourceUrl;
+    elements.previewB.load();
+  }
+  syncSecondaryPreview(previewPlaybackTime());
+}
+
+function queueEmbeddedCameraSave({ immediate = false } = {}) {
+  if (!state.project?.sources?.A || state.project.sources.B || embeddedEditorBusy()) return null;
+  const editor = state.embeddedEditor;
+  const geometry = normalizedEmbeddedGeometry(embeddedEditorGeometryFromControls());
+  if (!geometry) return null;
+  clearTimeout(editor.saveTimer);
+  editor.pending = { projectId: state.project.id, generation: embeddedEditorSourceKey(),
+    viewToken: state.projectViewToken, geometry };
+  editor.dirty = true;
+  editor.error = false;
+  updateEmbeddedEditorPreview();
+  previewEmbeddedCameraSelection();
+  if (immediate) return flushEmbeddedCameraSave();
+  editor.saveTimer = setTimeout(() => { flushEmbeddedCameraSave(); }, 450);
+  return editor.pending;
+}
+
+async function flushEmbeddedCameraSave(projectId = state.project?.id) {
+  const editor = state.embeddedEditor;
+  if (editor.pending?.projectId !== projectId || !liveEmbeddedCameraRequest()) return true;
+  clearTimeout(editor.saveTimer);
+  editor.saveTimer = null;
+  if (editor.saveTask) return editor.saveTask;
+  editor.saving = true;
+  // Start in a microtask so saveTask exists before applyManualEdit renders.
+  editor.saveTask = Promise.resolve().then(async () => {
+    while (editor === state.embeddedEditor && liveEmbeddedCameraRequest()) {
+      if (state.manualEditPromise) await state.manualEditPromise;
+      if (state.sourceMixerSavePending) await state.sourceMixerSaveTail;
+      if (state.sourceSyncPending) await flushPendingSourceSync(projectId);
+      const request = editor.pending;
+      if (editor !== state.embeddedEditor || !embeddedCameraRequestIsCurrent(request)) return true;
+      if (foregroundBusy()) throw new Error("Camera layout could not be saved while another operation is running.");
+      const geometry = request.geometry;
+      editor.applying = true;
+      const updated = await applyManualEdit("set_embedded_camera", {
+        enabled: true, x: geometry.x, y: geometry.y, w: geometry.w, h: geometry.h,
+        content_x: geometry.content_focus.x, content_y: geometry.content_focus.y,
+      }, { isCurrent: () => embeddedCameraRequestIsCurrent(request) });
+      editor.applying = false;
+      if (editor !== state.embeddedEditor || !embeddedCameraRequestIsCurrent(request)) return true;
+      if (!updated) throw new Error("Camera layout was not saved.");
+      // The reply may represent an older drag position. Keep the newer overlay
+      // and controls intact until that exact position has also been saved.
+      if (editor.pending === request) {
+        editor.pending = null;
+        editor.dirty = false;
+        editor.candidateKey = embeddedEditorCandidateKey(embeddedCameraCandidate());
+      }
+    }
+    return true;
+  }).catch((error) => {
+    if (editor === state.embeddedEditor && liveEmbeddedCameraRequest()) {
+      editor.error = true;
+      toast(`${error.message} Retry save to keep this camera layout.`);
+    }
+    return false;
+  }).finally(() => {
+    editor.saving = false;
+    editor.applying = false;
+    editor.saveTask = null;
+    if (editor === state.embeddedEditor) {
+      renderEmbeddedCameraEditor();
+      previewEmbeddedCameraSelection();
+    }
+  });
+  renderEmbeddedSaveState();
+  return editor.saveTask;
 }
 
 function embeddedEditorGeometryFromControls() {
@@ -3564,10 +4034,7 @@ function updateEmbeddedEditorPreview() {
     ["embeddedCameraWOut", geometry.w], ["embeddedCameraHOut", geometry.h],
     ["embeddedContentXOut", geometry.content_focus.x], ["embeddedContentYOut", geometry.content_focus.y],
   ]) elements[key].textContent = `${Math.round(value * 100)}%`;
-  if (state.embeddedEditor.dirty && elements.embeddedCameraState) {
-    elements.embeddedCameraState.textContent = "UNSAVED — APPLY LAYOUT";
-    elements.embeddedCameraState.classList.toggle("active", false);
-  }
+  renderEmbeddedSaveState();
 }
 
 function renderEmbeddedCameraEditor() {
@@ -3575,12 +4042,20 @@ function renderEmbeddedCameraEditor() {
   const source = state.project?.sources?.A;
   const hasB = Boolean(state.project?.sources?.B);
   elements.embeddedCameraEditor.hidden = !source || hasB;
-  if (!source || hasB) return;
+  if (!source || hasB) { resetEmbeddedEditor(); return; }
 
   const candidate = embeddedCameraCandidate();
-  const generation = String(source.generation || source.url || "A");
+  const generation = embeddedEditorSourceKey();
   const candidateKey = embeddedEditorCandidateKey(candidate);
-  const changedSource = state.embeddedEditor.projectId !== state.project.id || state.embeddedEditor.generation !== generation;
+  const changedSource = state.embeddedEditor.projectId !== state.project.id || state.embeddedEditor.generation !== generation
+    || state.embeddedEditor.viewToken !== state.projectViewToken;
+  if (changedSource) {
+    resetEmbeddedEditor();
+    // Once marked, keep the large source picker out of the way. Do not reopen
+    // it on every autosave or playback update, or discard the user's choice.
+    elements.embeddedCameraEditor.open = candidate?.candidate_source === "vision" && !embeddedCameraIsActive();
+  }
+  if (state.embeddedEditor.error) elements.embeddedCameraEditor.open = true;
   const changedSuggestion = !state.embeddedEditor.dirty && state.embeddedEditor.candidateKey !== candidateKey;
   if (changedSource || changedSuggestion) {
     state.embeddedEditor.projectId = state.project.id;
@@ -3602,24 +4077,16 @@ function renderEmbeddedCameraEditor() {
   if (sourceWidth > 0 && sourceHeight > 0) elements.embeddedCameraCanvas.style.aspectRatio = `${sourceWidth} / ${sourceHeight}`;
 
   const active = embeddedCameraIsActive();
-  elements.embeddedCameraState.classList.toggle("active", active && !state.embeddedEditor.dirty);
-  elements.embeddedCameraState.textContent = state.embeddedEditor.dirty
-    ? "UNSAVED — APPLY LAYOUT"
-    : active
-    ? uiCopy("פעיל בעריכה", "ACTIVE IN EDIT")
-    : candidate?.candidate_source === "vision"
-      ? uiCopy("נמצאה הצעה — נדרש אישור", "SUGGESTION — CONFIRM")
-      : uiCopy("שליטה ידנית", "MANUAL CONTROL");
+  renderEmbeddedSaveState();
   elements.embeddedCameraHelp.textContent = candidate?.candidate_source === "vision"
-    ? uiCopy("ה־AI סימן אזור אפשרי. בדקו את המסגרת ושמרו רק אם היא באמת מקיפה את המצלמה.", "AI found a possible area. Check the frame and save only if it really contains the camera.")
-    : uiCopy("אם המצלמה כבר מופיעה בתוך ההקלטה, סמנו כאן את האזור שלה. אין צורך להעלות את אותו הסרטון שוב כמקור B.", "If the camera is baked into the recording, mark its area here. Do not upload the same file again as source B.");
-  const busy = state.manualEditBusy || foregroundBusy();
+    ? "Check that the suggested area contains your camera. Moving the frame previews and saves your camera layout automatically."
+    : "If your recording includes a camera, drag its frame here. The edited preview updates immediately and changes save automatically.";
+  const busy = embeddedEditorBusy();
   if (elements.embeddedCameraSeek) {
     elements.embeddedCameraSeek.disabled = busy || !(Number(source.duration) > 0);
     elements.embeddedCameraSeekOut.textContent = formatTime(Number(elements.embeddedCameraVideo.currentTime || 0), true);
   }
-  elements.saveEmbeddedCamera.disabled = busy;
-  elements.disableEmbeddedCamera.disabled = busy || !active;
+  elements.disableEmbeddedCamera.disabled = busy || Boolean(state.embeddedEditor.saving) || !active;
   elements.disableEmbeddedCamera.hidden = !active;
   for (const control of [elements.embeddedCameraX, elements.embeddedCameraY, elements.embeddedCameraW, elements.embeddedCameraH, elements.embeddedContentX, elements.embeddedContentY]) {
     control.disabled = busy;
@@ -3630,8 +4097,7 @@ function renderEmbeddedCameraEditor() {
 function bindEmbeddedCameraEditorEvents() {
   const geometryControls = [elements.embeddedCameraX, elements.embeddedCameraY, elements.embeddedCameraW, elements.embeddedCameraH, elements.embeddedContentX, elements.embeddedContentY];
   for (const control of geometryControls) control.addEventListener("input", () => {
-    state.embeddedEditor.dirty = true;
-    updateEmbeddedEditorPreview();
+    queueEmbeddedCameraSave();
   });
   elements.embeddedCameraPresets.addEventListener("click", (event) => {
     const button = event.target.closest("button[data-embedded-preset]");
@@ -3642,6 +4108,7 @@ function bindEmbeddedCameraEditorEvents() {
     current.x = Math.max(0, Math.min(1 - current.w, horizontal === "left" ? gap : 1 - current.w - gap));
     current.y = Math.max(0, Math.min(1 - current.h, vertical === "top" ? gap : 1 - current.h - gap));
     writeEmbeddedEditorGeometry(current, { dirty: true });
+    queueEmbeddedCameraSave();
   });
   elements.saveEmbeddedCamera.addEventListener("click", () => runUiAction(saveEmbeddedCameraSelection, uiCopy("שמירת אזור המצלמה", "Saving camera area")));
   elements.disableEmbeddedCamera.addEventListener("click", () => runUiAction(disableEmbeddedCameraSelection, uiCopy("ביטול המצלמה הפנימית", "Disabling embedded camera")));
@@ -3650,7 +4117,7 @@ function bindEmbeddedCameraEditorEvents() {
 
   const canvas = elements.embeddedCameraCanvas;
   canvas.addEventListener("pointerdown", (event) => {
-    if (state.manualEditBusy || foregroundBusy()) return;
+    if (embeddedEditorBusy()) return;
     const bounds = canvas.getBoundingClientRect();
     if (!bounds.width || !bounds.height) return;
     const geometry = embeddedEditorGeometryFromControls();
@@ -3707,26 +4174,18 @@ function moveEmbeddedCameraFromPointer(event) {
     geometry.y = Math.max(0, Math.min(1 - geometry.h, py - offset.y));
   }
   writeEmbeddedEditorGeometry(geometry, { dirty: true });
+  queueEmbeddedCameraSave();
 }
 
 async function saveEmbeddedCameraSelection() {
-  if (!state.project?.sources?.A || state.project?.sources?.B) return null;
-  const geometry = embeddedEditorGeometryFromControls();
-  const updated = await applyManualEdit("set_embedded_camera", {
-    enabled: true,
-    x: geometry.x, y: geometry.y, w: geometry.w, h: geometry.h,
-    content_x: geometry.content_focus.x, content_y: geometry.content_focus.y,
-  });
-  if (!updated) return null;
-  state.embeddedEditor.dirty = false;
-  state.embeddedEditor.candidateKey = embeddedEditorCandidateKey(embeddedCameraCandidate());
-  renderEmbeddedCameraEditor();
-  toast(uiCopy("אזור המצלמה נשמר והפריסה הוחלה", "Camera area saved and layout applied"), "success", 2800);
-  return updated;
+  return queueEmbeddedCameraSave({ immediate: true });
 }
 
 async function disableEmbeddedCameraSelection() {
   if (!state.project?.sources?.A || state.project?.sources?.B) return null;
+  if (embeddedEditorBusy() || state.embeddedEditor.saving) return null;
+  // An explicit disable supersedes any still-debounced camera position.
+  resetEmbeddedEditor();
   const updated = await applyManualEdit("set_embedded_camera", { enabled: false });
   if (!updated) return null;
   state.embeddedEditor.dirty = false;
@@ -3745,7 +4204,7 @@ function setupPreviewSources() {
   if (elements.previewA.dataset.url !== sourceAUrl) {
     elements.previewA.src = sourceAUrl; elements.previewA.dataset.url = sourceAUrl; elements.previewA.load();
   }
-  const embedded = embeddedCameraCandidate();
+  const embedded = embeddedCameraPreviewCandidate();
   if (embedded && embeddedLayoutConfirmed()) {
     if (elements.previewB.dataset.url !== sourceAUrl) {
       elements.previewB.src = sourceAUrl; elements.previewB.dataset.url = sourceAUrl; elements.previewB.load();
@@ -3773,6 +4232,7 @@ function togglePreview() {
 }
 
 async function playPreview() {
+  state.mediaStudio?.resumeAudio();
   const project = playbackProject();
   if (!project?.sources?.A || foregroundBusy() || elements.resultPanel.hidden) return;
   if (!previewUsesSourceTime() && !hasTimelineFootage()) return;
@@ -3821,6 +4281,7 @@ function stopPreviewPlayback() {
 }
 
 function pauseAllMedia() {
+  state.mediaStudio?.pause();
   state.preview.playRequest += 1;
   state.preview.clock?.pause();
   if (state.preview.frame != null) cancelAnimationFrame(state.preview.frame);
@@ -3832,6 +4293,8 @@ function pauseAllMedia() {
 }
 
 function releaseMediaHandles() {
+  state.chromaPlayers?.forEach(player => player.dispose()); state.chromaPlayers?.clear();
+  state.mediaStudio?.clearPlayers();
   pauseAllMedia();
   document.querySelectorAll("video, audio").forEach((media) => {
     try {
@@ -3850,6 +4313,7 @@ function setPreviewPlaying(playing) {
     return;
   }
   state.preview.playing = playing;
+  updateMediaPreview();
   elements.previewStage.classList.toggle("playing", playing);
   elements.playButton.textContent = playing ? "❚❚" : "▶";
   elements.previewPlay.querySelector("span").textContent = playing ? "❚❚" : "▶";
@@ -3960,13 +4424,26 @@ function syncIndependentMedia(slot, point, needed, forceSeek = false, sourceSlot
   const clipKey = `clip${slot}`;
   if (!active) {
     state.preview[clipKey] = null;
+    if (state.preview[pendingKey]) state.preview[pendingKey].cancelled = true;
     if (!video.paused) video.pause();
     return;
   }
   const changedClip = state.preview[clipKey] !== point.clip.id;
   state.preview[clipKey] = point.clip.id;
-  if (forceSeek || changedClip || Math.abs(video.currentTime - point.sourceTime) > .12) {
-    try { video.currentTime = point.sourceTime; } catch { /* loadedmetadata/timeupdate can retry. */ }
+  const speed = Number(point.clip.video_speed) || 1;
+  const rawPictureTime = Number(point.clip.video_source_start ?? point.clip.source_start) + (point.sourceTime-point.clip.source_start)*speed;
+  const source = playbackProject()?.sources?.[sourceSlot];
+  const limit = Number(source?.video_duration || source?.duration || video.duration);
+  const retimed = speed !== 1 || point.clip.video_source_start != null;
+  const pictureTime = retimed ? Math.max(0, Math.min(rawPictureTime, limit > 0 ? Math.max(0,limit-.04) : rawPictureTime)) : point.sourceTime;
+  video.playbackRate = speed;
+  if (forceSeek || changedClip || Math.abs(video.currentTime - pictureTime) > .12) {
+    try { video.currentTime = pictureTime; } catch { /* loadedmetadata/timeupdate can retry. */ }
+  }
+  if (retimed && limit > 0 && rawPictureTime >= limit-.035) {
+    if (state.preview[pendingKey]) state.preview[pendingKey].cancelled = true;
+    video.pause();
+    return;
   }
   if (!state.preview.playing) { if (!video.paused) video.pause(); return; }
   if (!video.paused || state.preview[pendingKey]) return;
@@ -3986,7 +4463,10 @@ function syncIndependentMedia(slot, point, needed, forceSeek = false, sourceSlot
       ? trackAt(playbackProject(), sourceSlot, previewPlaybackTime(), sourceMixerSettings().syncOffset) : null;
     if (request !== state.preview.playRequest || projectId !== state.project?.id || !state.preview.playing || !current || (video.hidden && video.muted)) video.pause();
   }).catch(error => {
-    if (request === state.preview.playRequest && state.preview.playing) {
+    // A gap or held picture can deliberately cancel a still-loading player.
+    // That cancellation must not stop the other track or the timeline clock.
+    if (error?.name === "AbortError" && pending.cancelled) return;
+    if (request === state.preview.playRequest && projectId === state.project?.id && state.preview.playing) {
       pauseAllMedia();
       toast(error.message || "Playback could not start. Press Play to retry.");
     }
@@ -4071,7 +4551,7 @@ function syncSecondaryPreview(globalTime) {
   elements.cameraBadge.textContent = camera === "gap" ? "GAP" : cameraLabels[camera] || singleSlot;
 
   if (camera === "embedded_stack") {
-    const candidate = embeddedCameraCandidate();
+    const candidate = embeddedCameraPreviewCandidate();
     if (candidate) {
       const liveCrop = state.framingDraft?.projectId === state.project.id && state.framingDraft.slot === "A"
         && globalTime >= state.framingDraft.scope.start && globalTime < state.framingDraft.scope.end ? state.framingDraft.crop : null;
@@ -4095,20 +4575,23 @@ function syncSecondaryPreview(globalTime) {
     }
   }
 
-  const audioFromB = mixer.audioSlot === "B" && Boolean(sourceB?.has_audio);
+  const mixerOwnsAudio = Boolean(state.mediaStudio && !previewUsesSourceTime());
+  const audioFromB = !mixerOwnsAudio && mixer.audioSlot === "B" && Boolean(sourceB?.has_audio);
   // Embedded B is only a second crop of A, never a second audio track. Refresh
   // mute state here too, since switching projects/layouts can leave stale media.
-  elements.previewA.muted = audioFromB;
-  elements.previewB.muted = !audioFromB;
+  elements.previewA.muted = mixerOwnsAudio || audioFromB;
+  elements.previewB.muted = mixerOwnsAudio || !audioFromB;
   if (independent) {
-    elements.previewA.muted = mixer.audioSlot !== "A" || !pointA || !sourceA?.has_audio;
-    elements.previewB.muted = mixer.audioSlot !== "B" || !pointB || !sourceB?.has_audio;
+    elements.previewA.muted = mixerOwnsAudio || mixer.audioSlot !== "A" || !pointA || !sourceA?.has_audio;
+    elements.previewB.muted = mixerOwnsAudio || mixer.audioSlot !== "B" || !pointB || !sourceB?.has_audio;
     syncIndependentMedia("A", pointA, showA || !elements.previewA.muted, state.preview.seeking);
     syncIndependentMedia("B", pointB, showB || !elements.previewB.muted, state.preview.seeking, embeddedB ? "A" : "B");
     state.preview.currentCamera = camera;
+    updateMediaPreview();
     return;
   }
   const needsBPlayback = (showB || audioFromB) && Boolean(elements.previewB.src);
+  elements.previewA.playbackRate = 1; elements.previewB.playbackRate = 1;
   if (needsBPlayback) {
     const desired = camera === "embedded_stack" ? globalTime : sourceB ? globalTime - offset : globalTime;
     const withinSource = camera === "embedded_stack" || sourceBAvailable;
@@ -4120,11 +4603,16 @@ function syncSecondaryPreview(globalTime) {
     elements.previewB.pause();
   }
   state.preview.currentCamera = camera;
+  updateMediaPreview();
 }
 
 function cameraAt(time) {
   const project = playbackProject();
-  const previewLayout = state.sourceMixerPreviewLayout;
+  if (liveEmbeddedCameraRequest()) return "embedded_stack";
+  const request = state.sourceMixerLayoutRequest;
+  const pendingLayout = request?.projectId === state.project?.id && time >= request.start && time < request.end
+    ? request.layout : null;
+  const previewLayout = pendingLayout || state.sourceMixerPreviewLayout;
   const plan = previewLayout === "auto" ? project?.draft?.ai_camera_plan : project?.draft?.camera_plan;
   const camera = previewLayout && previewLayout !== "auto"
     ? previewLayout
@@ -4252,6 +4740,9 @@ function updatePreviewUI(time) {
     ? state.preview.sourceUnmapped ? "Full source · no Source A clip at the selected edit position; original position unchanged"
       : inCut(time) ? "Full source · excluded footage is included in playback" : "Full source · plays the original recording"
     : inCut(time) ? "Edited cut · inspecting excluded footage; Play skips to a kept section" : "Edited cut · plays kept sections only; seeking does not change this mode";
+  if (elements.previewModeHint && Object.values(state.project?.manual?.chroma_key || {}).some(settings => settings?.enabled)) {
+    elements.previewModeHint.textContent += ` ${t(sourceMode ? "chromaOriginalPlayback" : "chromaLivePlayback")}`;
+  }
   updatePreviewCaption(time);
 }
 
@@ -4336,13 +4827,25 @@ function toggleAdvanced() {
 }
 
 function openStudioTab(tab) {
-  if (!["timeline", "framing", "transcript", "settings"].includes(tab)) return false;
+  if (!["timeline", "framing", "transcript", "audio", "media", "settings"].includes(tab)) return false;
   if (!state.project?.draft) { toast(t("studioNeedsDraft")); return false; }
   if (foregroundBusy()) { toast(t("directorBusy")); return false; }
   pauseAllMedia();
   setAdvanced(true);
   selectAdvancedTab(tab);
   $(`.advanced-tabs button[data-tab="${tab}"]`)?.focus();
+  return true;
+}
+
+function openStabilizationTools() {
+  const tool = state.stabilizationStudio;
+  if (!tool || !openStudioTab("media")) return false;
+  const slot = elements.cropSourceSelect?.value;
+  if (state.project?.sources?.[slot]) tool.source.value = slot;
+  tool.node.open = true;
+  tool.render();
+  tool.node.scrollIntoView({block:"nearest",inline:"nearest"});
+  tool.source.focus({preventScroll:true});
   return true;
 }
 
@@ -4369,6 +4872,7 @@ function setAdvanced(open) {
     }
     if (elements.resultPanel) elements.resultPanel.inert = true;
     state.studio.open = true;
+    renderAiDraftNotice();
     updatePreviewUI(previewPlaybackTime());
     dockRuntimeStatus();
     elements.advancedButton.setAttribute("aria-expanded", "true");
@@ -4389,6 +4893,7 @@ function setAdvanced(open) {
   document.body.classList.remove("studio-open");
   elements.advancedPanel.hidden = true;
   state.studio.open = false;
+  renderAiDraftNotice();
   updatePreviewUI(previewPlaybackTime());
   dockRuntimeStatus();
   state.sourceMixerPreviewLayout = null;
@@ -4444,17 +4949,77 @@ async function rebuildDraftFromStudio() {
   await generateDraft();
 }
 
+function renderQuickAspectChoices() {
+  if (!elements.quickAspectChoices) return;
+  const selected = elements.aspectSelect.value;
+  const aspect = selected === "source" ? sourceAspect() : selected;
+  $$('button[data-output-aspect]', elements.quickAspectChoices).forEach((button) => {
+    button.setAttribute("aria-pressed", String(button.dataset.outputAspect === aspect));
+  });
+}
+
+function setOutputAspect(aspect) {
+  if (!state.project) return;
+  if (foregroundBusy() || state.manualEditBusy) {
+    // The native select changes before its event fires; restore the latest
+    // accepted choice, including a queued save, if editing is currently locked.
+    elements.aspectSelect.value = reconcileProjectSnapshot(state.project).settings?.aspect || state.project.draft?.aspect || "9:16";
+    renderQuickAspectChoices();
+    return;
+  }
+  if (!["16:9", "9:16", "1:1", "4:5", "source"].includes(aspect)) return;
+  elements.aspectSelect.value = aspect;
+  const previewAspect = aspect === "source" ? sourceAspect() : aspect;
+  elements.previewStage.dataset.aspect = previewAspect;
+  if (elements.cropPreview) elements.cropPreview.style.aspectRatio = aspectCss(previewAspect);
+  // Output-only change: do not stage a crop, seek, rebuild or invoke AI.
+  schedulePatch({ settings: { aspect } });
+  applyPreviewPipGeometry(elements.previewStage);
+  syncSecondaryPreview(previewPlaybackTime());
+  renderSourceCompositionPreview(sourceMixerSettings());
+  renderQuickAspectChoices();
+  updateStudioStatus();
+}
+
 function updateStudioStatus() {
   if (!elements.studioDraftStatus) return;
   const draft = editorProject()?.draft;
   if (!draft) { elements.studioDraftStatus.textContent = ""; return; }
-  const aspect = draft.aspect === "source" ? sourceAspect() : (draft.aspect || "");
+  const selected = elements.aspectSelect?.value || state.project?.settings?.aspect || draft.aspect;
+  const aspect = selected === "source" ? sourceAspect() : (selected || "");
   const dirty = state.draftDirtyReasons.size ? ` · ${uiCopy("נדרש Rebuild", "Rebuild required")}` : "";
   elements.studioDraftStatus.textContent = `${formatTime(draft.output_duration || 0)} · ${aspect}${dirty}`;
 }
 
+function selectEditTool(tool) {
+  const effects = tool === "effects";
+  document.getElementById("editClipTools").hidden = effects;
+  document.getElementById("editVideoEffects").hidden = !effects;
+  $$('[data-edit-tool]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.editTool === tool)));
+  if (effects) followChromaSelection();
+  elements.advancedPanel?.workspaceController?.setEditEffects(effects);
+  document.getElementById('studioInspector').scrollTop = 0;
+  if (window.matchMedia?.("(max-width: 899px), (max-height: 600px)").matches) {
+    document.getElementById(effects ? 'editVideoEffects' : 'editClipTools').scrollIntoView({block:'start', inline:'nearest'});
+  }
+}
+
+function followChromaSelection() {
+  const tool = state.chromaStudio, selected = tool?.options.selectedTarget?.();
+  if (selected && tool.validSource(selected) && tool.source.value !== selected && !tool.saving) {
+    tool.source.value = selected; tool.source.onchange();
+  }
+}
+
 function selectAdvancedTab(tab) {
-  if (tab === "framing") loadCropControls(elements.cropSourceSelect?.value || "A", false);
+  document.querySelectorAll("[data-shelf]").forEach(shelf => { shelf.hidden = !shelf.dataset.shelf.split(" ").includes(tab); });
+  elements.advancedPanel?.workspaceController?.setWorkspace(tab);
+  elements.advancedPanel?.workspaceController?.showInspector();
+  if (tab === "audio") state.mediaStudio?.openMixer();
+  if (tab === "framing") {
+    loadCropControls(elements.cropSourceSelect?.value || "A", false);
+  }
+  if (tab === "timeline" && !document.getElementById("editVideoEffects")?.hidden) followChromaSelection();
   elements.advancedPanel.classList.toggle("studio-transcript", tab === "transcript");
   let activePanel = null;
   $$(".advanced-tabs button").forEach((button) => {
@@ -4471,11 +5036,12 @@ function selectAdvancedTab(tab) {
   });
   if (tab === "timeline") window.setTimeout(() => state.timeline.draw(), 20);
   if (tab === "transcript") renderTranscript();
+  $(`.advanced-tabs button[data-tab="${tab}"]`)?.scrollIntoView({block:"nearest", inline:"nearest"});
   requestAnimationFrame(() => state.timeline?.scheduleDraw?.());
   // Compact layouts have a single page scroller. Edit should reveal the
   // timeline; other tabs reveal their tools. Desktop keeps its player still.
-  if (window.matchMedia?.("(max-width: 960px), (max-height: 680px)").matches) {
-    const target = tab === "timeline" ? document.getElementById("studioTimelineDock") : activePanel;
+  if (window.matchMedia?.("(max-width: 899px), (max-height: 600px)").matches) {
+    const target = tab === "timeline" && document.getElementById("editVideoEffects")?.hidden ? document.getElementById("studioTimelineDock") : activePanel;
     target?.scrollIntoView({ block: "start", inline: "nearest", behavior: "instant" });
   } else if (activePanel?.parentElement) {
     activePanel.parentElement.scrollTop = 0;
@@ -4626,7 +5192,7 @@ function renderCameraDetection() {
   const candidate = embeddedCameraCandidate();
   const sourceA = state.project?.sources?.A;
   const hasB = Boolean(state.project?.sources?.B);
-  elements.cameraDetection.hidden = !sourceA || hasB;
+  elements.cameraDetection.hidden = !sourceA || hasB || embeddedCameraIsActive();
   if (!sourceA || hasB) return;
   const title = $("b", elements.cameraDetection);
   const help = $("p", elements.cameraDetection);
@@ -4680,6 +5246,7 @@ function openSourceReview() {
 function openSourceInsert() {
   if (!state.project?.editor_sequence || foregroundBusy() || state.manualEditBusy) return false;
   if (!openStudioTab("timeline")) return false;
+  selectEditTool("clip");
   const target = activeEditTarget();
   const slot = target === "edit" ? transcriptSourceSlot() : target;
   state.timeline?.clearSelection();
@@ -4796,6 +5363,7 @@ function renderRangeEditors() {
       : range ? `Changes only ${formatSourceTime(range.start)}–${formatSourceTime(range.end)} on the timeline.`
       : "Applies to the whole video.";
   }
+  if (elements.layoutWholeEdit) elements.layoutWholeEdit.hidden = !range;
 }
 
 function selectTypedRange(prefix) {
@@ -4836,6 +5404,7 @@ function openTimelineLayout(range) {
     seekSourcePreview(Number(range.start));
   }
   const target = state.project.sources?.B ? elements.layoutRangeForm : elements.embeddedCameraEditor;
+  if (target === elements.embeddedCameraEditor && target) target.open = true;
   (target?.closest?.(".layout-range-panel") || target)?.scrollIntoView({ block: "nearest", behavior: "auto" });
   return true;
 }
@@ -4934,15 +5503,22 @@ function renderTimelineToolStatus() {
 
 async function handleTimelineEdit(edit) {
   const target = edit.target || activeEditTarget();
+  const locked = state.trackProtection?.lockedNames(edit.slot || target) || [];
+  if (locked.length) { toast(`Track ${locked.join(" + ")} is locked. Unlock it in Edit → Track protection.`); return null; }
   if (edit.action === "sequence_trim_edge") {
     const projectId = state.project?.id;
     const {action,...detail} = edit;
     const updated = await applyManualEdit(action,detail);
-    if (updated && state.project?.id === projectId) {
+    if (state.project?.id !== projectId || activeEditTarget() !== target) return updated;
+    if (updated) {
       const start = edit.edge === "start" ? (!edit.slot && edit.time > edit.start ? edit.start : edit.time) : edit.start;
       const end = edit.edge === "end" ? edit.time : edit.end-(!edit.slot ? Math.max(0,edit.time-edit.start) : 0);
       state.timeline?.selectRange(start,end); seekSourcePreview(start);
-    } else state.timeline?.selectRange(edit.start,edit.end);
+    } else if (state.manualSelection) {
+      // A failed request leaves the saved selection available for a retry.
+      // A revision conflict clears it; never restore stale clip coordinates.
+      state.timeline?.selectRange(state.manualSelection.start,state.manualSelection.end);
+    } else state.timeline?.clearSelection();
     return updated;
   }
   if (edit.action === "split" && state.project?.editor_sequence) {
@@ -5015,6 +5591,42 @@ function handleEditorShortcut(event) {
     return;
   }
   const action = resolveEditorShortcut(event, state.keyboardProfile);
+  const selectedMedia = event.target === elements.timelineCanvas && state.timeline?.mediaSelection
+    ? [...(state.project.manual?.media_clips || []), ...(state.project.manual?.text_clips || [])].find(item => item.id === state.timeline.mediaSelection) : null;
+  if (event.target === elements.timelineCanvas && state.timeline?.mediaSelection && !selectedMedia
+    && (["delete_selection", "split", "clear_selection"].includes(action)
+      || [event.key, event.code].some(key => ["Delete", "Del", "Backspace"].includes(key)))) {
+    // A removed or replaced layer must never redirect its next shortcut to
+    // an older footage selection underneath it.
+    event.preventDefault();
+    event.stopPropagation?.();
+    state.timeline.mediaSelection = null;
+    state.timeline.clearSelection();
+    return;
+  }
+  if (selectedMedia && (["delete_selection", "split", "clear_selection"].includes(action)
+    || [event.key, event.code].some(key => ["Delete", "Del", "Backspace"].includes(key)))) {
+    // This capture listener runs before the canvas. Consume media commands here
+    // so neither stale base selections nor the canvas's generic Delete fallback run.
+    event.preventDefault();
+    event.stopPropagation?.();
+    if (!action || foregroundBusy() || state.transcriptSaving || event.repeat) return;
+    if (action === "clear_selection") {
+      state.timeline.cancelGesture?.();
+      state.timeline.mediaSelection = null;
+      state.mediaStudio?.select(null);
+      void state.textStudio?.select(null);
+      state.timeline.scheduleDraw?.();
+    } else if (action === "delete_selection") {
+      state.timeline.onMediaAction?.("media_remove", { clip_id: selectedMedia.id });
+    } else {
+      const mediaTime = previewTimelineTime();
+      if (mediaTime - selectedMedia.start >= .08 - 1e-9 && selectedMedia.end - mediaTime >= .08 - 1e-9) {
+        state.timeline.onMediaAction?.("media_split", { clip_id: selectedMedia.id, time: mediaTime });
+      }
+    }
+    return;
+  }
   if (!action || foregroundBusy() || state.transcriptSaving) return;
   const selection = state.manualSelection;
   const time = previewTimelineTime();
@@ -5101,6 +5713,7 @@ function handleEditorShortcut(event) {
 }
 
 function renderClipTrim() {
+  renderPictureSpeed();
   if (!elements.clipTrimForm) return;
   const range = state.manualSelection;
   const target = activeEditTarget();
@@ -5222,6 +5835,13 @@ function renderManualControls() {
   if (elements.emptyTimelineAdd) elements.emptyTimelineAdd.disabled = busy;
   if (elements.clipDuplicate) elements.clipDuplicate.disabled = !sequence || !selectedTimelineClip() || busy;
   renderClipTrim();
+  state.trackProtection?.render();
+  const locked = state.trackProtection?.lockedNames(target) || [];
+  if (locked.length) {
+    for (const control of [elements.manualDelete,elements.manualSplit,elements.clipDuplicate,elements.trackReset,gapButton,
+      elements.clipTrimIn,elements.clipTrimOut,elements.clipTrimApply,elements.clipSourceIn,elements.clipMove]) if (control) control.disabled = true;
+    elements.timelineSelectionHint.textContent = `${locked.join(" + ")} locked · Unlock in Edit → Track protection. Playback is unchanged.`;
+  }
   renderTranscriptDetail(false);
 }
 
@@ -5242,7 +5862,8 @@ function runManualRangeEdit(action, target = activeEditTarget()) {
   return applyManualEdit(target === "edit" ? (state.project?.editor_sequence && action === "delete_range" ? "sequence_ripple_delete" : action) : action === "delete_range" ? "track_remove_range" : "track_restore_range", { ...state.manualSelection, ...(target !== "edit" ? { slot: target } : {}) });
 }
 
-async function applyManualEdit(action, detail = {}) {
+async function applyManualEdit(action, detail = {}, { isCurrent = () => true } = {}) {
+  if (!action.startsWith("text_") && state.textStudio && !(await state.textStudio.flush())) return null;
   if (state.project?.editor_sequence) {
     action = ({ track_move: "sequence_move", track_split: "sequence_split", track_remove_range: "sequence_remove_range", track_trim: "sequence_trim", set_camera_layout: "sequence_layout", track_reset: "sequence_reset" })[action] || action;
     if (action === "sequence_reset") detail = {};
@@ -5252,21 +5873,25 @@ async function applyManualEdit(action, detail = {}) {
     return null;
   }
   const projectLevelAction = action === "set_source_mixer" || action === "set_embedded_camera";
-  if ((!state.project?.draft && !projectLevelAction) || state.manualEditBusy || foregroundBusy()) return null;
+  if ((!state.project?.draft && !projectLevelAction) || state.manualEditBusy || foregroundBusy() || !isCurrent()) return null;
   state.timeline?.cancelPendingCut?.();
   const projectId = state.project.id;
   const preservedSelection = state.manualSelection ? { ...state.manualSelection } : null;
   const preservedTime = previewTimelineTime();
+  // Mixer and layer adjustments do not change the main playback clock. Keep
+  // auditioning while their automatic saves run, without reloading the video.
+  const liveMediaAction = action === "media_update" || action === "set_audio_mixer" || action === "set_track_lock" || action.startsWith("text_");
   let finishManualEdit;
   const manualEditPromise = new Promise((resolve) => { finishManualEdit = resolve; });
   state.manualEditPromise = manualEditPromise;
   state.manualEditBusy = true;
-  pausePreview();
+  if (!liveMediaAction) pausePreview();
   renderReadiness();
   renderManualControls();
   renderSourceMixer();
   try {
     await flushProjectSaves(projectId);
+    if (state.project?.id !== projectId || !isCurrent()) return null;
     const expectedRevision = saveQueueFor(projectId, state.project?.revision).revision;
     const submit = (revision) => api(`/api/projects/${encodeURIComponent(projectId)}/manual/edit`, {
       method: "POST",
@@ -5281,7 +5906,8 @@ async function applyManualEdit(action, detail = {}) {
       if (!latest?.project || (!latest.project.draft && !projectLevelAction)) throw error;
       state.project = latest.project;
       rememberProjectRevision(state.project);
-      if (action.startsWith("sequence_")) {
+      if (!isCurrent()) return null;
+      if (action.startsWith("sequence_") || action.startsWith("text_")) {
         renderDraft();
         state.timeline?.clearSelection();
         throw new Error("The edit changed elsewhere. The latest version is loaded; select the clip again and retry.");
@@ -5290,8 +5916,23 @@ async function applyManualEdit(action, detail = {}) {
     }
     if (!payload?.project) throw new Error("Manual edit did not return an updated project");
     rememberProjectRevision(payload.project);
-    if (state.project?.id !== projectId) return payload.project;
+    if (state.project?.id !== projectId || !isCurrent()) return payload.project;
     state.project = payload.project;
+    if (action === "set_track_lock") {
+      state.chromaStudio?.render();
+      state.timeline?.cancelGesture?.();
+      if (state.timeline) { state.timeline.project = editorProject(); state.timeline.scheduleDraw(); }
+      state.trackProtection?.render();
+      return state.project;
+    }
+    if (liveMediaAction) {
+      state.mediaStudio?.render();
+      state.chromaStudio?.render();
+      state.textStudio?.render();
+      if (state.timeline) { state.timeline.project = editorProject(); state.timeline.scheduleDraw(); }
+      updateMediaPreview();
+      return state.project;
+    }
     elements.projectName.value = state.project.name || "";
     hydrateSettings();
     if (state.project.draft) renderDraft();
@@ -5303,6 +5944,12 @@ async function applyManualEdit(action, detail = {}) {
       state.timeline?.clearSelection();
       state.markIn = null;
       seekSourcePreview(Math.min(action === "sequence_close_gaps" ? preservedTime : Number(detail.start), editorDuration()));
+    } else if (action === "undo" || action === "redo") {
+      // History can restore different clip boundaries. Old selection bounds
+      // must not turn the restored clip into a stale movable range.
+      state.timeline?.clearSelection();
+      state.markIn = null;
+      seekSourcePreview(preservedTime);
     } else {
       if (preservedSelection) state.timeline.selectRange(preservedSelection.start, preservedSelection.end);
       else setManualSelection(null);
@@ -5315,6 +5962,7 @@ async function applyManualEdit(action, detail = {}) {
     return null;
   } finally {
     state.manualEditBusy = false;
+    state.textStudio?.render();
     finishManualEdit();
     if (state.manualEditPromise === manualEditPromise) state.manualEditPromise = null;
     renderReadiness();
@@ -5479,6 +6127,22 @@ function renderTranscriptDetail(replaceText = true) {
   if (replaceText) elements.transcriptEditText.value = buffer?.text ?? String(segment.text || "");
   elements.transcriptEditText.disabled = busy;
   elements.transcriptEditTime.textContent = transcriptMappingLabel(segment, transcriptTimelineMapping(segment.start, segment.end));
+  const quality = state.project?.analysis?.transcript_quality;
+  const flagged = Array.isArray(quality?.review_segments) && quality.review_segments.some(item =>
+    item && String(item.segment_id) === String(segment.id));
+  let reviewNote = elements.transcriptEditForm.querySelector(".transcript-line-review");
+  if (!reviewNote && flagged) {
+    reviewNote = document.createElement("p");
+    reviewNote.className = "transcript-line-review";
+    reviewNote.id = "transcriptLineReview";
+    elements.transcriptEditForm.insertBefore(reviewNote, elements.transcriptEditText);
+  }
+  if (reviewNote) {
+    reviewNote.hidden = !flagged;
+    reviewNote.textContent = flagged
+      ? "Original AI confidence was low for this line. Listen and check names or mixed-language words. Saving text does not recheck the audio."
+      : "";
+  }
   const count = pendingTranscriptBuffers().length;
   elements.transcriptEditStatus.textContent = state.transcriptSaving ? "Saving…" : buffer ? `Unsaved · ${count} changed line${count === 1 ? "" : "s"}` : count ? `Saved · ${count} other unsaved line${count === 1 ? "" : "s"}` : "Saved · captions updated without rebuilding";
   elements.transcriptSave.disabled = busy || !buffer || !buffer.text.trim();
@@ -5513,6 +6177,26 @@ function renderTranscript() {
   const query = elements.transcriptSearch.value.trim().toLowerCase();
   const transcript = state.project?.analysis?.transcript;
   const segments = transcript?.segments || [];
+  const quality = state.project?.analysis?.transcript_quality;
+  const reviewIds = new Set((Array.isArray(quality?.review_segments) ? quality.review_segments : [])
+    .filter(item => item && item.segment_id != null).map(item => String(item.segment_id)));
+  const markedCount = segments.filter(segment => reviewIds.has(String(segment.id))).length;
+  const reportedCount = Number(quality?.review_segment_count);
+  const reviewCount = Math.min(segments.length, Math.max(markedCount, Number.isFinite(reportedCount) ? Math.trunc(reportedCount) : 0));
+  const transcriptCard = elements.transcriptList.parentElement;
+  let qualityNote = transcriptCard?.querySelector(".transcript-quality-note");
+  if (!qualityNote && reviewCount > 0 && transcriptCard) {
+    qualityNote = document.createElement("p");
+    qualityNote.className = "transcript-quality-note";
+    qualityNote.setAttribute("role", "status");
+    transcriptCard.insertBefore(qualityNote, elements.transcriptList);
+  }
+  if (qualityNote) {
+    qualityNote.hidden = reviewCount === 0;
+    qualityNote.textContent = reviewCount > 0
+      ? `AI review: ${reviewCount} line${reviewCount === 1 ? " was" : "s were"} flagged. Listen before using captions; confidence is not measured accuracy.${reviewCount > markedCount ? ` Only ${markedCount} ${markedCount === 1 ? "flag has" : "flags have"} line markers; search and filters may hide them.` : ""}`
+      : "";
+  }
   const previousScroll = elements.transcriptList.scrollTop;
   renderLanguageDetectionStatus();
   elements.transcriptLanguage.textContent = transcript
@@ -5541,6 +6225,15 @@ function renderTranscript() {
     seek.title = transcriptMappingLabel(segment, mapping);
     $(".transcript-text", seek).textContent = segment.text;
     $(".transcript-text", seek).setAttribute("dir", "auto");
+    if (reviewIds.has(String(segment.id))) {
+      const badge = document.createElement("small");
+      badge.className = "transcript-review-badge";
+      badge.textContent = "Review";
+      badge.setAttribute("dir", "ltr");
+      badge.title = "Original AI confidence was low. Listen and review this line.";
+      $(".transcript-text", seek).append(badge);
+      seek.title += " · AI review: low confidence";
+    }
     $("b", seek).textContent = mapping.independent && !mapping.ranges.length
       ? mapping.reason === "audio_changed" ? "Audio changed" : "Not on track"
       : removed ? "Removed" : "In edit";
@@ -5566,90 +6259,271 @@ function rangeMostlyRemoved(start, end) {
   return duration > 0 && removed >= duration * .5;
 }
 
-function renderRecentProjects() {
-  elements.recentList.innerHTML = "";
-  const projects = state.projects.slice(0, 6);
-  elements.recentProjects.hidden = projects.length === 0;
-  elements.recentCount.textContent = String(projects.length);
-  for (const project of projects) {
-    const button = document.createElement("button");
-    button.className = "recent-project";
-    button.innerHTML = `<strong></strong><small></small>`;
-    $("strong", button).textContent = project.name;
-    $("small", button).textContent = `${project.has_draft ? "EDIT" : "RAW"} · ${formatDate(project.updated_at)}`;
-    button.addEventListener("click", () => runUiAction(() => openProject(project.id)));
-    elements.recentList.append(button);
+const projectLibrary = { initialized: false, listRequest: 0, rename: null, deletion: null };
+
+function initProjectLibrary() {
+  if (projectLibrary.initialized) return;
+  const ids = ["closeProjectsDialog", "projectSearch", "projectSort", "projectLibrarySummary",
+    "projectRenameDialog", "projectRenameForm", "projectRenameInput", "projectRenameError", "closeProjectRename", "cancelProjectRename", "saveProjectRename",
+    "projectDeleteDialog", "projectDeleteName", "projectDeleteError", "closeProjectDelete", "cancelProjectDelete", "confirmProjectDelete"];
+  for (const id of ids) elements[id] = document.getElementById(id);
+  if (!elements.projectRenameDialog || !elements.projectDeleteDialog) return;
+  projectLibrary.initialized = true;
+  elements.closeProjectsDialog.addEventListener("click", () => elements.projectsDialog.close());
+  elements.projectSearch.addEventListener("input", renderProjectDialog);
+  elements.projectSort.addEventListener("change", renderProjectDialog);
+  elements.projectRenameForm.addEventListener("submit", (event) => { event.preventDefault(); runUiAction(saveProjectName); });
+  elements.confirmProjectDelete.addEventListener("click", () => runUiAction(confirmProjectDeletion));
+  for (const [kind, dialog, closeIds] of [
+    ["rename", elements.projectRenameDialog, ["closeProjectRename", "cancelProjectRename"]],
+    ["deletion", elements.projectDeleteDialog, ["closeProjectDelete", "cancelProjectDelete"]],
+  ]) {
+    for (const id of closeIds) elements[id].addEventListener("click", () => { if (!projectLibrary[kind]?.pending) dialog.close(); });
+    dialog.addEventListener("cancel", (event) => { if (projectLibrary[kind]?.pending) event.preventDefault(); });
+    dialog.addEventListener("close", () => {
+      const action = projectLibrary[kind];
+      projectLibrary[kind] = null;
+      if (action) restoreProjectLibraryFocus(action.origin);
+    });
   }
 }
 
+function projectLibraryFocus() {
+  const focused = document.activeElement;
+  const row = focused?.closest?.("[data-project-id]");
+  if (!row) return null;
+  return { id: row.dataset.projectId, action: focused.dataset.projectAction || "open", inDialog: Boolean(row.closest("#dialogProjects")) };
+}
+
+function restoreProjectLibraryFocus(origin) {
+  if (!origin || elements.projectRenameDialog?.open || elements.projectDeleteDialog?.open) return;
+  const container = origin.inDialog ? elements.dialogProjects : elements.recentList;
+  if (origin.inDialog && !elements.projectsDialog.open) return;
+  if (!origin.inDialog && elements.welcomeView.hidden) return;
+  const row = [...container.children].find((item) => item.dataset.projectId === origin.id);
+  const control = row?.querySelector(`[data-project-action="${origin.action}"]`);
+  (control || container.querySelector('[data-project-action="open"]') || (origin.inDialog ? elements.projectSearch : elements.projectsButton))?.focus();
+}
+
+function projectLibraryBusy(projectId) {
+  return projectHasForegroundWork(projectId) || (state.project?.id === projectId && Boolean(state.mediaStudio?.uploading || state.stabilizationStudio?.uploading || state.manualEditBusy || state.transcriptSaving));
+}
+
+function projectLibraryRows(query = "", order = "recent") {
+  const needle = String(query).trim().toLocaleLowerCase("en");
+  const rows = state.projects.filter((project) => String(project.name || "").toLocaleLowerCase("en").includes(needle));
+  return rows.sort((a, b) => order === "name"
+    ? String(a.name || "").localeCompare(String(b.name || ""), "en", { numeric: true, sensitivity: "base" })
+    : String(order === "oldest" ? a.created_at || a.updated_at || "" : b.updated_at || "")
+      .localeCompare(String(order === "oldest" ? b.created_at || b.updated_at || "" : a.updated_at || "")));
+}
+
+function projectLibraryCard(project, inDialog = false) {
+  const row = document.createElement(inDialog ? "div" : "article");
+  row.className = inDialog ? "dialog-project-row" : "recent-project-card";
+  row.dataset.projectId = project.id;
+  row.classList.toggle("is-current", state.project?.id === project.id);
+  const button = document.createElement("button");
+  button.className = inDialog ? "dialog-project" : "recent-project";
+  button.type = "button";
+  button.dataset.projectAction = "open";
+  button.setAttribute("aria-label", `Open project: ${project.name}`);
+  button.innerHTML = `<span><strong dir="auto"></strong><small></small></span><b class="project-open-label">Open editor</b>`;
+  $("strong", button).textContent = project.name;
+  $("small", button).textContent = `${project.has_draft ? "Edit ready" : "In setup"} · ${formatDate(project.updated_at)}`;
+  if (state.project?.id === project.id) {
+    const current = document.createElement("small");
+    current.className = "project-current-label";
+    current.textContent = "Current project";
+    $("span", button).append(current);
+  }
+  if (inDialog) button.addEventListener("click", () => runUiAction(async () => {
+    // A save failure keeps the library available instead of dismissing it.
+    const opened = await openProject(project.id);
+    if (opened) elements.projectsDialog.close();
+  }));
+  else button.addEventListener("click", () => runUiAction(() => openProject(project.id)));
+  const actions = document.createElement("div");
+  actions.className = "project-card-actions";
+  const rename = document.createElement("button");
+  rename.className = "project-rename button ghost compact";
+  rename.type = "button";
+  rename.dataset.projectAction = "rename";
+  rename.textContent = "Rename";
+  rename.setAttribute("aria-label", `Rename project: ${project.name}`);
+  rename.addEventListener("click", () => openProjectRename(project));
+  const remove = document.createElement("button");
+  remove.className = "project-delete dialog-project-delete button ghost compact";
+  remove.type = "button";
+  remove.dataset.projectAction = "delete";
+  remove.textContent = "Delete";
+  remove.setAttribute("aria-label", `Delete project: ${project.name}`);
+  remove.addEventListener("click", () => runUiAction(() => deleteProject(project)));
+  actions.append(rename, remove);
+  row.append(button, actions);
+  return row;
+}
+
+function renderRecentProjects() {
+  initProjectLibrary();
+  const focus = projectLibraryFocus();
+  elements.recentList.innerHTML = "";
+  const projects = projectLibraryRows().slice(0, 6);
+  elements.recentProjects.hidden = projects.length === 0;
+  elements.recentCount.textContent = String(state.projects.length);
+  for (const project of projects) elements.recentList.append(projectLibraryCard(project));
+  if (focus && !focus.inDialog) restoreProjectLibraryFocus(focus);
+}
+
 function openProjectsDialog() {
+  initProjectLibrary();
   renderProjectDialog();
-  elements.projectsDialog.showModal();
+  if (!elements.projectsDialog.open) elements.projectsDialog.showModal();
+  loadProjects().catch((error) => toast(`Could not refresh projects: ${error.message}`));
 }
 
 function renderProjectDialog() {
   if (!elements.dialogProjects) return;
+  initProjectLibrary();
+  const focus = projectLibraryFocus();
   elements.dialogProjects.innerHTML = "";
-  if (!state.projects.length) {
-    const empty = document.createElement("p"); empty.textContent = t("noProjects"); elements.dialogProjects.append(empty); return;
+  const projects = projectLibraryRows(elements.projectSearch?.value, elements.projectSort?.value);
+  if (elements.projectLibrarySummary) elements.projectLibrarySummary.textContent = projects.length === state.projects.length
+    ? `${projects.length} project${projects.length === 1 ? "" : "s"}` : `${projects.length} of ${state.projects.length} projects`;
+  if (!projects.length) {
+    const empty = document.createElement("p");
+    empty.className = "project-library-empty";
+    empty.textContent = state.projects.length ? "No matching projects. Try another name or clear the search." : "Your projects will appear here. Create a project to get started.";
+    elements.dialogProjects.append(empty);
   }
-  for (const project of state.projects) {
-    const row = document.createElement("div");
-    row.className = "dialog-project-row";
-    const button = document.createElement("button");
-    button.className = "dialog-project";
-    button.type = "button";
-    button.innerHTML = `<span><strong></strong><small></small></span><b></b>`;
-    $("strong", button).textContent = project.name;
-    $("small", button).textContent = formatDate(project.updated_at);
-    $("b", button).textContent = project.has_draft ? "EDIT" : "RAW";
-    button.addEventListener("click", () => runUiAction(async () => { elements.projectsDialog.close(); await openProject(project.id); }));
-    const remove = document.createElement("button");
-    remove.className = "dialog-project-delete icon-button";
-    remove.type = "button";
-    remove.textContent = "×";
-    remove.setAttribute("aria-label", `${uiCopy("מחק פרויקט", "Delete project")}: ${project.name}`);
-    remove.addEventListener("click", () => runUiAction(() => deleteProject(project)));
-    row.append(button, remove);
-    elements.dialogProjects.append(row);
-  }
+  for (const project of projects) elements.dialogProjects.append(projectLibraryCard(project, true));
+  if (focus?.inDialog) restoreProjectLibraryFocus(focus);
+}
+
+function setProjectActionError(kind, message = "") {
+  const node = kind === "rename" ? elements.projectRenameError : elements.projectDeleteError;
+  node.textContent = message;
+  node.hidden = !message;
+}
+
+function setProjectActionPending(kind, pending) {
+  if (projectLibrary[kind]) projectLibrary[kind].pending = pending;
+  const controls = kind === "rename" ? ["projectRenameInput", "saveProjectRename", "cancelProjectRename", "closeProjectRename"]
+    : ["confirmProjectDelete", "cancelProjectDelete", "closeProjectDelete"];
+  for (const id of controls) elements[id].disabled = pending;
+  const button = kind === "rename" ? elements.saveProjectRename : elements.confirmProjectDelete;
+  button.textContent = kind === "rename" ? pending ? "Saving…" : "Save name" : pending ? "Deleting…" : "Delete project permanently";
+}
+
+function openProjectRename(project) {
+  if (!project?.id) return;
+  initProjectLibrary();
+  if (projectLibraryBusy(project.id)) { toast("Wait for this project's import or active job before renaming it."); return; }
+  projectLibrary.rename = { project, origin: projectLibraryFocus(), pending: false };
+  elements.projectRenameInput.value = state.project?.id === project.id ? state.project.name : project.name;
+  setProjectActionError("rename");
+  setProjectActionPending("rename", false);
+  elements.projectRenameDialog.showModal();
+  elements.projectRenameInput.focus();
+  elements.projectRenameInput.select();
+}
+
+async function saveProjectName() {
+  const action = projectLibrary.rename;
+  if (!action || action.pending) return;
+  const projectId = action.project.id;
+  const name = elements.projectRenameInput.value.trim();
+  if (!name || name.length > 120) { setProjectActionError("rename", "Enter a project name between 1 and 120 characters."); elements.projectRenameInput.focus(); return; }
+  setProjectActionError("rename");
+  setProjectActionPending("rename", true);
+  try {
+    if (projectLibraryBusy(projectId)) throw new Error("Wait for this project's import or active job, then try again.");
+    if (state.project?.id === projectId && !(await flushCurrentProjectSaves())) throw new Error("Your current edit could not be saved. Resolve the save error, then try again.");
+    await flushProjectSaves(projectId);
+    const [latest, work] = await Promise.all([
+      api(`/api/projects/${encodeURIComponent(projectId)}`),
+      api(`/api/projects/${encodeURIComponent(projectId)}/jobs/active`),
+    ]);
+    if (work.jobs?.length || projectLibraryBusy(projectId)) throw new Error("This project has active work. Wait for it to finish, then try again.");
+    const payload = await api(`/api/projects/${encodeURIComponent(projectId)}`, { method: "PATCH", body: JSON.stringify({ name, expected_revision: latest.project.revision }) });
+    const saved = payload.project;
+    rememberProjectRevision(saved);
+    if (state.project?.id === projectId) {
+      state.project = reconcileProjectSnapshot(saved);
+      elements.projectName.value = state.project.name;
+      setSaveState(projectId, t("saved"));
+    }
+    // Invalidate older list requests so a late response cannot undo this name.
+    projectLibrary.listRequest += 1;
+    state.projects = state.projects.map((project) => project.id === projectId ? { ...project, name: saved.name, updated_at: saved.updated_at } : project);
+    renderRecentProjects();
+    renderProjectDialog();
+    elements.projectRenameDialog.close();
+    toast("Project renamed", "success");
+  } catch (error) {
+    setProjectActionError("rename", isRevisionConflict(error)
+      ? "This project changed while you were renaming it. Your name is kept; select Save name to try again."
+      : error.message || "The project could not be renamed. Try again.");
+  } finally { setProjectActionPending("rename", false); }
 }
 
 async function deleteProject(project) {
   if (!project?.id) return;
-  if (projectHasForegroundWork(project.id)) {
-    toast(uiCopy("אי אפשר למחוק פרויקט בזמן שמתבצעת בו עבודה", "Wait for the active job before deleting this project"));
+  initProjectLibrary();
+  if (projectLibraryBusy(project.id)) {
+    toast("Wait for this project's import or active job before deleting it.");
     return;
   }
-  const confirmed = window.confirm(uiCopy(`למחוק את "${project.name}" ואת קובצי הפרויקט המקומיים?`, `Delete “${project.name}” and its local project files?`));
-  if (!confirmed) return;
-  const deletingCurrent = state.project?.id === project.id;
-  if (deletingCurrent && !(await flushCurrentProjectSaves())) return;
-  if (deletingCurrent) {
-    releaseMediaHandles();
-    await new Promise((resolve) => window.setTimeout(resolve, 150));
-  }
+  projectLibrary.deletion = { project, origin: projectLibraryFocus(), pending: false };
+  elements.projectDeleteName.textContent = state.project?.id === project.id ? state.project.name : project.name;
+  setProjectActionError("deletion");
+  setProjectActionPending("deletion", false);
+  elements.projectDeleteDialog.showModal();
+  elements.cancelProjectDelete.focus();
+}
+
+async function confirmProjectDeletion() {
+  const action = projectLibrary.deletion;
+  if (!action || action.pending) return;
+  const project = action.project;
+  let releasedMedia = false;
+  setProjectActionError("deletion");
+  setProjectActionPending("deletion", true);
   try {
+    if (projectLibraryBusy(project.id)) throw new Error("Wait for this project's import or active job, then try again.");
+    const deletingCurrent = state.project?.id === project.id;
+    if (deletingCurrent && !(await flushCurrentProjectSaves())) throw new Error("Your current edit could not be saved. Resolve the save error, then try again.");
+    await flushProjectSaves(project.id);
+    const work = await api(`/api/projects/${encodeURIComponent(project.id)}/jobs/active`);
+    if (work.jobs?.length || projectLibraryBusy(project.id)) throw new Error("This project still has active work. Wait for it to finish or stop it in the editor, then try again.");
+    if (deletingCurrent && state.project?.id === project.id) {
+      releaseMediaHandles();
+      releasedMedia = true;
+      await new Promise((resolve) => window.setTimeout(resolve, 150));
+    }
     await api(`/api/projects/${encodeURIComponent(project.id)}`, { method: "DELETE" });
+    const queue = state.saveQueues.get(project.id);
+    if (queue?.timer) clearTimeout(queue.timer);
+    state.saveQueues.delete(project.id);
+    localStorage.removeItem(`cutroom-draft-dirty:${project.id}`);
+    projectLibrary.listRequest += 1;
+    state.projects = state.projects.filter((item) => item.id !== project.id);
+    clearRememberedProject(project.id);
+    if (state.project?.id === project.id) {
+      state.project = null;
+      state.projectViewToken += 1;
+      action.origin = { id: project.id, action: "open", inDialog: false };
+      elements.projectsDialog.close();
+      showWelcome();
+    }
+    renderRecentProjects();
+    renderProjectDialog();
+    elements.projectDeleteDialog.close();
+    toast("Project deleted", "success");
   } catch (error) {
-    if (deletingCurrent && state.project?.id === project.id) renderDraft();
-    throw error;
-  }
-  const queue = state.saveQueues.get(project.id);
-  if (queue?.timer) clearTimeout(queue.timer);
-  state.saveQueues.delete(project.id);
-  localStorage.removeItem(`cutroom-draft-dirty:${project.id}`);
-  state.projects = state.projects.filter((item) => item.id !== project.id);
-  clearRememberedProject(project.id);
-  renderRecentProjects();
-  renderProjectDialog();
-  if (state.project?.id === project.id) {
-    state.project = null;
-    state.projectViewToken += 1;
-    elements.projectsDialog.close();
-    showWelcome();
-  }
-  toast(uiCopy("הפרויקט נמחק", "Project deleted"), "success");
+    if (releasedMedia && state.project?.id === project.id) renderDraft();
+    setProjectActionError("deletion", error.message || "The project could not be deleted. Try again.");
+  } finally { setProjectActionPending("deletion", false); }
 }
 
 function formatDate(value) {
@@ -5700,12 +6574,15 @@ function openExportDialog({ progress = false } = {}) {
 }
 
 async function startExport() {
+  if (state.textStudio && !(await state.textStudio.flush())) return;
+  if (state.mediaStudio && !(await state.mediaStudio.flush())) return;
   if (!requireSavedTranscript()) return;
   if (!state.project?.draft) return;
   if (!hasTimelineFootage()) { toast("Add footage to the timeline before exporting."); return; }
   if (state.draftDirtyReasons.size) { toast(t("rebuildBeforeRefine")); return; }
   pauseAllMedia();
   const projectId = state.project.id;
+  if (liveEmbeddedCameraRequest() && (!(await flushEmbeddedCameraSave(projectId)) || state.project?.id !== projectId)) return;
   const lock = acquireJobStartLock("render", projectId);
   if (!lock) { toast(uiCopy("כבר מתבצעת עבודה", "Another job is already running")); return; }
   elements.exportActions.hidden = true;
@@ -5891,26 +6768,32 @@ function renderModelStatus() {
   }
   const models = state.system?.models;
   const runtime = state.system?.runtime;
+  const selection = models?.story_ai_selection;
+  const fallback = selection?.using_fallback === true;
   const installed = Boolean(models?.story_ai_ready);
   const engineAvailable = runtime?.state !== "disabled" && (typeof models?.ollama?.available === "boolean" ? models.ollama.available : Boolean(runtime?.available));
   const ready = engineAvailable && installed;
   const preparing = Boolean(state.aiPreparePromise);
   const installing = Boolean(state.modelInstallPending || state.modelInstallJob);
   const starting = preparing || ["idle", "checking", "starting"].includes(runtime?.state);
-  let title = ready ? "Story AI ready" : engineAvailable ? "One-time AI setup" : "Local AI needs attention";
-  let detail = ready ? `${models.selected_story_model || models.editor_model || "Installed model"} · Runs on this computer`
+  let title = ready ? fallback ? "Story AI ready with a fallback model" : "Story AI ready" : engineAvailable ? "One-time AI setup" : "Local AI needs attention";
+  const actualModel = selection?.selected_model || models?.selected_story_model || "Installed model";
+  const fallbackDetail = selection?.message || (selection?.fallback_reason === "requested_model_missing"
+    ? `${selection.requested_model || "The requested model"} is not installed. Using the installed fallback; download the requested model only if you choose to.`
+    : `Using an installed fallback for ${selection?.requested_model || "the requested model"}.`);
+  let detail = ready ? `${actualModel} · ${fallback ? fallbackDetail : "Runs on this computer"}`
     : engineAvailable ? `${models?.recommended_story_model || "A Story AI model"} is needed. Download only with your confirmation; it can require several GB.`
       : (runtime?.available ? "The local AI engine is no longer responding. Use Retry AI to restart it." : runtime?.message) || state.system?.error || "Checking the local AI engine…";
   if (starting) { title = "Preparing local AI…"; detail = "Starting the local engine. Your footage stays on this computer."; }
   if (runtime?.state === "disabled" && !preparing) title = "Local AI is disabled";
   if (installing) { title = "Downloading Story AI…"; detail = "One-time model setup. You can stop this download using Stop process."; }
   if (starting && !preparing && state.runtimeRefreshAttempts >= 20) detail = "The engine is taking longer than expected. Use Retry AI to check again.";
-  elements.modelStatus.className = `model-status ${ready && !preparing && !installing ? "ready" : "partial"}`;
-  elements.modelStatus.dataset.state = installing ? "installing" : starting ? "starting" : ready ? "ready" : engineAvailable ? "missing-model" : "missing-engine";
+  elements.modelStatus.className = `model-status ${ready && !fallback && !preparing && !installing ? "ready" : "partial"}`;
+  elements.modelStatus.dataset.state = installing ? "installing" : starting ? "starting" : ready ? fallback ? "fallback-model" : "ready" : engineAvailable ? "missing-model" : "missing-engine";
   $("b", elements.modelStatus).textContent = title;
   $("small", elements.modelStatus).textContent = detail;
-  elements.modelButton.hidden = !engineAvailable || installed || preparing || installing;
-  elements.modelButton.textContent = "Download model…";
+  elements.modelButton.hidden = !engineAvailable || (installed && !(fallback && selection?.requested_model_installed === false)) || preparing || installing;
+  elements.modelButton.textContent = fallback ? "Download requested model" : "Download model…";
   elements.retryAIButton.hidden = runtime?.can_retry === false || (ready && !preparing && !installing);
   elements.retryAIButton.textContent = preparing ? "Preparing…" : "Retry AI";
   for (const button of [elements.modelButton, elements.retryAIButton]) button.disabled = preparing || installing || foregroundBusy();
@@ -5935,6 +6818,7 @@ function prepareLocalAI() {
           story_ai_ready: Boolean(payload.story_ai?.ready),
           selected_story_model: payload.story_ai?.selected_model || null,
           recommended_story_model: payload.story_ai?.recommended_model || null,
+          story_ai_selection: payload.story_ai || null,
         },
       };
       return payload;
