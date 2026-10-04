@@ -23,7 +23,7 @@ CUTROOM brings your camera recordings, screen captures and gameplay into an **ed
 
 The source is MIT-licensed, with no CUTROOM subscription or export watermark. Optional cloud AI uses your own provider account; its quotas and charges are separate.
 
-> **Current development preview:** the three screenshots below show a real local build captured on 4 October 2026. This interface is still being revised and **is not included in the published 1.1 Beta downloads**. All three use the same synthetic demo project and dark theme; they do not demonstrate AI editing quality.
+> **Current development preview:** the three screenshots below show a real local build captured on 4 October 2026. This interface is still being revised and **is not included in the published 1.1 Beta downloads**. All three show the same frame from a locally recorded gameplay project in the dark theme; they do not demonstrate AI editing quality.
 
 <p align="center">
   <a href="docs/images/readme/development-editor-20261004.png"><img src="docs/images/readme/development-editor-20261004.png" alt="Development preview: CUTROOM editor with project media, video preview, clip controls and a three-clip timeline" width="1200"></a>
