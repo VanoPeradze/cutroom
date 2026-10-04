@@ -151,7 +151,7 @@ function fixture({mediaReady = true} = {}) {
   return {run, nodes, tabs, panels, document};
 }
 
-test('Layout keeps framing before source controls after setup becomes a draft and on reopening existing drafts', () => {
+test('Layout returns the same source controls to the composition shelf after setup and on reopening drafts', () => {
   for (const direction of ['ltr', 'rtl']) {
     const {run, nodes, document} = fixture({mediaReady:false});
     document.documentElement.dir = direction;
@@ -163,13 +163,16 @@ test('Layout keeps framing before source controls after setup becomes a draft an
     panel.append(framing, mixer);
     const project = run('JSON.stringify(state.project)');
     run('placeSourceMixer(true)');
-    assert.deepEqual(panel.children, [framing, mixer]);
+    assert.deepEqual(panel.children, [framing]);
+    const shelf = nodes.get('studioShelfLayout');
+    assert.deepEqual(shelf.children, [mixer]);
     run('globalThis.existingDraft=state.project.draft;state.project.draft=null;placeSourceMixer(true)');
     assert.equal(mixer.parentElement, nodes.get('setupSourceMixerDock'));
     assert.equal(nodes.get('setupSourceMixerDock').hidden, false);
     let handled = 0; mixer.addEventListener('click', () => handled++);
     run('state.project.draft=existingDraft;placeSourceMixer(true);placeSourceMixer(true)');
-    assert.deepEqual(panel.children, [framing, mixer], direction + ': setup must return controls after clip framing');
+    assert.deepEqual(panel.children, [framing]);
+    assert.deepEqual(shelf.children, [mixer], direction + ': setup must return the same composition controls');
     assert.equal(nodes.get('setupSourceMixerDock').hidden, true);
     assert.equal(nodes.get('setupSourceMixerDock').children.length, 0);
     dispatch('click', mixer); assert.equal(handled, 1, 'Moving the existing controls retains their handlers');

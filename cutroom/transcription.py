@@ -469,7 +469,7 @@ def _split_oversized_segments(segments: list[dict[str, Any]], max_seconds: float
     return output
 
 
-def _cuda_has_capacity(settings: Settings, mode: str | None = None) -> bool:
+def _cuda_has_capacity(settings: Settings, mode: str | None = None, minimum_free_mb: float | None = None) -> bool:
     """Avoid taking CUDA when another application has consumed its safe headroom.
 
     CTranslate2 only reports whether a CUDA device exists. On a creator machine a
@@ -480,6 +480,8 @@ def _cuda_has_capacity(settings: Settings, mode: str | None = None) -> bool:
 
     thresholds = settings.ai.get("whisper_cuda_min_free_mb", {})
     defaults = {"lite": 2048.0, "balanced": 4096.0, "quality": 6144.0}
+    if minimum_free_mb is not None:
+        thresholds = minimum_free_mb
     if isinstance(thresholds, dict):
         try:
             minimum_free_mb = float(thresholds.get(str(mode or "balanced"), defaults.get(str(mode), 4096.0)))
@@ -559,6 +561,15 @@ def _load_model(settings: Settings, device: str | None = None, compute: str | No
                 raise RuntimeError("faster-whisper is not installed. Run setup again or install requirements-ai.txt") from exc
             _MODEL_CACHE[key] = WhisperModel(model_name, device=device, compute_type=compute)
     return _MODEL_CACHE[key], model_name, device, compute
+
+
+def _auto_quality_ready(settings: Settings, requested_language: str | None) -> bool:
+    """Auto uses Quality only when its model is already on disk and the GPU has
+    the configured headroom. It never starts a download."""
+    from .local_models import speech_installed
+
+    model = _model_for_request(settings, "quality", requested_language, "cuda")
+    return speech_installed(model) and _cuda_has_capacity(settings, "quality")
 
 
 def _model_for_request(settings: Settings, mode: str, requested_language: str | None, device: str) -> str:
@@ -1125,6 +1136,10 @@ def _transcribe_in_process(
         # Base/CPU solely because the source is long sacrifices both speed and the
         # transcript quality that semantic editing depends on.
         mode = "balanced" if has_cuda else "lite"
+        # Semantic editing depends on the transcript. A capable GPU with Turbo
+        # (or the Hebrew Turbo model) already installed uses it automatically.
+        if has_cuda and _auto_quality_ready(settings, requested_language):
+            mode = "quality"
 
     preferred_device, preferred_compute = _resolve_device(settings, mode)
     requested_model = _model_for_request(settings, mode, requested_language, preferred_device)

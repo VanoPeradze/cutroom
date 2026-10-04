@@ -286,7 +286,7 @@ test("focused workspaces keep independent widths, retain edit preference and nev
   const h = harness({inspector:true, savedWidth:"400"});
   h.controller.setWorkspace("audio");
   assert.equal(h.panel.dataset.workspace,"audio");
-  assert.equal(h.el("workspaceInspectorDivider").getAttribute("aria-valuenow"),"344");
+  assert.equal(h.el("workspaceInspectorDivider").getAttribute("aria-valuenow"),"400");
   h.controller.setInspectorWidth(720);
   h.controller.setWorkspace("framing");
   assert.equal(h.el("workspaceInspectorDivider").getAttribute("aria-valuenow"),"344");

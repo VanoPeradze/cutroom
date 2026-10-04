@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import contextlib
 import copy
+import functools
 import json
 import logging
 import queue
 import re
 import threading
+import time
 import urllib.error
 import urllib.request
 from collections import Counter
@@ -476,13 +479,38 @@ def _installed_models(settings: Settings) -> set[str]:
     return _ollama_inventory(settings)[1]
 
 
+_STORY_GPU_PROBE: dict[float, tuple[float, bool]] = {}
+
+
+def _auto_story_quality_ready(settings: Settings, model: str) -> bool:
+    """Auto prefers the larger Story model only when it is already installed and
+    the GPU has room for it, so drafts improve without a download or a slow
+    partially offloaded model."""
+    from .transcription import _cuda_has_capacity, cuda_available
+
+    if model.strip().removesuffix(":latest") not in _installed_models(settings):
+        return False
+    try:
+        minimum = float(settings.ai.get("editor_quality_min_free_mb", 9216))
+    except (TypeError, ValueError):
+        minimum = 9216.0
+    # Status is polled; probe the GPU at most every 30 seconds.
+    cached = _STORY_GPU_PROBE.get(minimum)
+    if cached and time.monotonic() - cached[0] < 30:
+        return cached[1]
+    ready = bool(cuda_available(settings) and _cuda_has_capacity(settings, minimum_free_mb=minimum))
+    _STORY_GPU_PROBE[minimum] = (time.monotonic(), ready)
+    return ready
+
+
 def _model_preferences(settings: Settings, brief: dict[str, Any]) -> list[str]:
     base = str(settings.ai.get("editor_model", "qwen3.5:4b"))
     fallbacks = [str(item) for item in settings.ai.get("editor_fallback_models", [])]
     mode = str(brief.get("performance_mode") or settings.ai.get("performance_mode", "auto"))
     preferred: list[str] = []
-    if mode == "quality":
-        preferred.append(str(settings.ai.get("editor_quality_model") or "qwen3.5:9b"))
+    quality_model = str(settings.ai.get("editor_quality_model") or "qwen3.5:9b")
+    if mode == "quality" or (mode == "auto" and _auto_story_quality_ready(settings, quality_model)):
+        preferred.append(quality_model)
     elif mode == "lite":
         preferred.append(str(settings.ai.get("editor_lite_model") or "qwen3.5:2b"))
     preferred.extend([base, *fallbacks])
@@ -685,6 +713,35 @@ def _read_ollama_chat_response(
             reader.join(timeout=0.5)
 
 
+# Ollama reloads the model whenever num_ctx changes. A story job sends many
+# passes with different prompt sizes, so contexts snap to a few sizes and,
+# within one job, never shrink below the largest one already loaded.
+_STORY_CONTEXT_TIERS = (8192, 16384, 32768)
+_story_context_floor = threading.local()
+
+
+def _context_tier(needed: int, cap: int) -> int:
+    return next((tier for tier in _STORY_CONTEXT_TIERS if needed <= tier <= cap), cap)
+
+
+@contextlib.contextmanager
+def _stable_story_context():
+    previous = getattr(_story_context_floor, "value", 0)
+    _story_context_floor.value = previous or 1
+    try:
+        yield
+    finally:
+        _story_context_floor.value = previous
+
+
+def _with_stable_story_context(function):
+    @functools.wraps(function)
+    def wrapper(*args, **kwargs):
+        with _stable_story_context():
+            return function(*args, **kwargs)
+    return wrapper
+
+
 def _fit_story_request_context(payload: dict[str, Any], mode: str) -> None:
     """Budget the request conservatively; the estimate is not a tokenizer proof.
 
@@ -699,11 +756,13 @@ def _fit_story_request_context(payload: dict[str, Any], mode: str) -> None:
         raise StoryPlanningError("Story AI needs a finite positive output budget to preserve its input context.")
     options["num_predict"] = output_budget
     reserve = max(2400, output_budget)
-    context = min(cap, max(1024, int(options.get("num_ctx") or 8192)))
     estimate = _story_prompt_tokens(payload)
     needed = estimate + reserve
-    if needed > context:
-        context = min(cap, ((needed + 1023) // 1024) * 1024)
+    context = _context_tier(max(1024, int(options.get("num_ctx") or 8192), needed), cap)
+    floor = getattr(_story_context_floor, "value", 0)
+    if floor:
+        context = max(context, min(cap, floor))
+        _story_context_floor.value = context
     options["num_ctx"] = context
     payload["options"] = options
     if needed <= context:
@@ -2145,6 +2204,7 @@ def _story_cache_is_reusable(
         return False
 
 
+@_with_stable_story_context
 def hierarchical_story_edit(
     beats: list[dict[str, Any]],
     segments: list[dict[str, Any]],

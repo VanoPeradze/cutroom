@@ -98,7 +98,7 @@ export function initWorkspace({ document: doc = document, window: win = window, 
   const applyInspector = () => {
     if (!inspector) return null;
     const bounds = widthBounds();
-    const defaultWidth = 344;
+    const defaultWidth = workspaceMode === "audio" ? 400 : 344;
     const width = Math.round(Math.min(bounds.maximum, Math.max(bounds.minimum, preferredWidth ?? defaultWidth)));
     panel.style.setProperty("--workspace-inspector-width", `${width}px`);
     panel.classList.toggle("inspector-collapsed", inspectorCollapsed);
@@ -379,7 +379,7 @@ export function initWorkspace({ document: doc = document, window: win = window, 
     ["Find your moment", "Click the ruler to seek. Space plays or pauses. Edited video shows your cut; Full source lets you inspect the original without changing the edit."],
     ["Remove the part you do not want", "Choose Range, drag over the section, then Remove from video. Together closes the gap on both tracks and keeps them in sync. Undo brings it back."],
     ["Arrange your story", "Cut: click to split. Drag the middle of a clip to reorder: its old position closes and destination footage shifts, without overwriting it. In Select / Move, select a clip and pull its white edges to reveal original footage into a gap. Edges stop at neighboring clips or the media limit. Together shortening closes the gap; A/B-only shortening affects just that source. Close gaps removes existing empty time. Undo restores changes."],
-    ["Line up your cuts", "Switch on Snap beside Undo to align with the yellow playhead, A/B cuts or added media and audio. A cyan guide names the target. Hold Alt to bypass; Escape cancels a drag. The timeline readout is hours:minutes:seconds:frames at your output FPS. A trim stops at the available source or its neighbor."],
+    ["Line up your cuts", "Switch on Snap beside Undo to align with the playhead, A/B cuts or added media and audio. A cyan guide names the target. Hold Alt to bypass; Escape cancels a drag. The timeline readout is hours:minutes:seconds:frames at your output FPS. A trim stops at the available source or its neighbor."],
     ["Protect finished work", "Edit → Track protection locks source A or B against changes. Locked footage still plays and exports. Choose the other source to keep editing; Together edits and history changes that would affect a locked source require unlocking first. Added media, layout and the audio mixer remain separate controls."],
     ["Bring footage back", "Original footage opens the complete recording with kept and removed sections: preview, drag a Range, then Restore to edit or Remove from edit. You can also extend a cut's white edges directly on the timeline. Zoom in if a clip is too small to grab its edges."],
     ["Change the look", "Select a section, open Layout and choose a composition: it saves immediately. Entire edit applies your next choice throughout. In Captions, select a line, edit its text and Save."],
@@ -435,6 +435,7 @@ export function initWorkspace({ document: doc = document, window: win = window, 
   applyTimelineHeight();
   applyInspector();
   renderFullscreen();
+  const chrome = initStudioChrome({ document: doc, panel, guideButton, fullscreenButton, inspectorToggle });
   const controller = {
     toggleFullscreen, openGuide, setTimelineHeight, setInspectorWidth, setInspectorCollapsed, setWorkspace, setEditEffects,
     showInspector: () => setInspectorCollapsed(false),
@@ -446,6 +447,7 @@ export function initWorkspace({ document: doc = document, window: win = window, 
       listeners.forEach((remove) => remove());
       observer?.disconnect();
       if (resizeFrame !== null) win.cancelAnimationFrame(resizeFrame);
+      chrome.restore();
       guideButton.remove();
       fullscreenButton.remove();
       status.remove();
@@ -465,4 +467,57 @@ export function initWorkspace({ document: doc = document, window: win = window, 
   };
   panel.workspaceController = controller;
   return controller;
+}
+
+// Arranges existing editor controls into the approved studio chrome: history and
+// guidance in the top bar, a monitor header, full screen in the transport row and
+// the timeline status inside its toolbar. Elements keep their ids and listeners;
+// restore() returns each one to its original place.
+function initStudioChrome({ document: doc, panel, guideButton, fullscreenButton, inspectorToggle }) {
+  if (typeof doc.querySelector !== "function" || typeof panel.querySelector !== "function") return { restore() {} };
+  const topActions = doc.querySelector(".topbar .top-actions");
+  const header = panel.querySelector(".studio-header");
+  const controls = doc.querySelector("#previewColumn .preview-controls");
+  const toolbar = panel.querySelector(".studio-timeline-dock .editor-toolbar-main");
+  if (!topActions || !header || !controls || !toolbar) return { restore() {} };
+  const moves = [];
+  const move = (element, parent, before = null, className = "") => {
+    if (!element || !parent) return;
+    moves.push({ element, parent: element.parentNode, next: element.nextSibling, className });
+    if (className) element.classList.add(className);
+    parent.insertBefore(element, before);
+  };
+  const exportButton = doc.getElementById("renderButton");
+  move(doc.getElementById("closeAdvanced"), topActions, topActions.firstChild, "studio-top-item");
+  move(panel.querySelector(".manual-history-actions"), topActions, exportButton, "studio-top-item");
+  move(guideButton, topActions, exportButton, "studio-top-item");
+  move(fullscreenButton, controls);
+  move(panel.querySelector(".studio-timeline-dock .timeline-context"), toolbar, toolbar.querySelector(".timeline-zoom-controls"));
+
+  const title = doc.createElement("span");
+  title.className = "monitor-title";
+  title.textContent = "Preview";
+  header.insertBefore(title, header.firstChild);
+
+  const titled = [];
+  const tooltip = (id, text) => {
+    const element = doc.getElementById(id);
+    if (element && !element.title) { element.title = text; titled.push(element); }
+  };
+  tooltip("manualDelete", "Remove the selection from the video");
+  tooltip("editorMoreButton", "More editing tools");
+  tooltip("restartPreview", "Restart from the first kept frame");
+  if (inspectorToggle && !inspectorToggle.title) { inspectorToggle.title = "Hide or show the tool panel"; titled.push(inspectorToggle); }
+
+  return {
+    restore() {
+      title.remove();
+      titled.forEach((element) => element.removeAttribute("title"));
+      for (const { element, parent, next, className } of moves.reverse()) {
+        if (className) element.classList.remove(className);
+        if (next?.parentNode === parent) parent.insertBefore(element, next);
+        else parent.appendChild(element);
+      }
+    },
+  };
 }
