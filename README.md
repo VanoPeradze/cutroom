@@ -21,7 +21,7 @@
   <a href="https://cutroom-studio.expo.app/downloads/CUTROOM-1.1-Beta-Windows.zip"><strong>Download for Windows</strong></a> ·
   <a href="https://cutroom-studio.expo.app/downloads/CUTROOM-1.1-Beta-Mac.zip"><strong>Download for Mac</strong></a> ·
   <a href="docs/USER_GUIDE_EN.md">User guide</a> ·
-  <a href="docs/README_HE.md">עברית</a>
+  <a href="docs/README_HE.md">Hebrew README</a>
 </p>
 
 <p align="center">
@@ -154,7 +154,7 @@ The editor has two main video sources plus media and text layers. Added layers s
 
 | Guide | Covers |
 | --- | --- |
-| [User guide](docs/USER_GUIDE_EN.md) · [מדריך בעברית](docs/USER_GUIDE_HE.md) | The complete editing workflow |
+| [User guide](docs/USER_GUIDE_EN.md) · [Hebrew user guide](docs/USER_GUIDE_HE.md) | The complete editing workflow |
 | [Platform setup](docs/PLATFORMS.md) | Windows, macOS and Linux installation and troubleshooting |
 | [AI connections](docs/AI_CONNECTIONS.md) · [Models](docs/MODELS.md) | Local and cloud AI, privacy, model sizes |
 | [Timeline controls](docs/INDEPENDENT_TRACKS.md) | Working with sources A and B |
