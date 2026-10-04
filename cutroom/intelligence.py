@@ -564,6 +564,7 @@ def story_ai_status(settings: Settings, brief: dict[str, Any] | None = None) -> 
     else:
         message = f"Using installed model {selected}."
     return {
+        "upgrade_model": _story_upgrade(settings, brief, available, installed, selected),
         "ready": bool(available and selected),
         "ollama_available": available,
         "installed_models": sorted(installed),
@@ -582,6 +583,27 @@ def story_ai_status(settings: Settings, brief: dict[str, Any] | None = None) -> 
             else "story_model_missing"
         ),
     }
+
+
+def _story_upgrade(settings: Settings, brief: dict[str, Any], available: bool, installed: set[str], selected: str | None) -> str | None:
+    """Suggest the larger Story model in Auto when this GPU can run it and it is
+    missing. A suggestion only: downloading still needs the user's confirmation."""
+    mode = str(brief.get("performance_mode") or settings.ai.get("performance_mode", "auto"))
+    quality = str(settings.ai.get("editor_quality_model") or "qwen3.5:9b").strip().removesuffix(":latest")
+    if mode != "auto" or not available or not selected or quality in installed or selected == quality:
+        return None
+    from .transcription import _cuda_has_capacity, cuda_available
+    try:
+        minimum = float(settings.ai.get("editor_quality_min_free_mb", 9216))
+    except (TypeError, ValueError):
+        minimum = 9216.0
+    cached = _STORY_GPU_PROBE.get(minimum)
+    if cached and time.monotonic() - cached[0] < 30:
+        room = cached[1]
+    else:
+        room = bool(cuda_available(settings) and _cuda_has_capacity(settings, minimum_free_mb=minimum))
+        _STORY_GPU_PROBE[minimum] = (time.monotonic(), room)
+    return quality if room else None
 
 
 def _ready_story_model_status(settings: Settings, brief: dict[str, Any]) -> dict[str, Any]:
