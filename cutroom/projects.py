@@ -154,6 +154,8 @@ class ProjectStore:
                         for slot, source in sources.items()
                     },
                     "has_draft": bool(project.get("draft")),
+                    "workflow": _summary_workflow(project),
+                    "thumbnail_name": _summary_thumbnail(sources),
                 })
             except (OSError, ValueError, KeyError, TypeError, AttributeError):
                 continue
@@ -337,3 +339,16 @@ class ProjectStore:
                 if candidate.parent.resolve() == root:
                     paths.add(candidate)
         return paths
+
+
+def _summary_workflow(project: dict[str, Any]) -> str | None:
+    settings = project.get("settings") if isinstance(project.get("settings"), dict) else {}
+    workflow = settings.get("workflow")
+    return workflow if workflow in {"manual", "youtube", "short"} else None
+
+
+def _summary_thumbnail(sources: dict[str, Any]) -> str | None:
+    """A representative library frame from source A, by file name only."""
+    source = sources.get("A") if isinstance(sources.get("A"), dict) else None
+    names = [name for name in (source or {}).get("thumbnail_names") or [] if isinstance(name, str) and re.fullmatch(r"[A-Za-z0-9_.-]+", name)]
+    return names[len(names) // 3] if names else None

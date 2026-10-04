@@ -547,6 +547,7 @@ function bindEvents() {
   document.getElementById("confirmApplyAiDraft")?.addEventListener("click", confirmAiDraftApply);
   for (const id of ["cancelApplyAiDraft", "closeApplyAiDraft"]) document.getElementById(id)?.addEventListener("click", () => document.getElementById("aiDraftApplyDialog")?.close());
   elements.newProjectButton.addEventListener("click", () => state.welcome?.chooseService());
+  document.getElementById("homeViewAllProjects")?.addEventListener("click", () => elements.projectsButton.click());
   elements.dialogNewProject.addEventListener("click", () => runUiAction(async () => { elements.projectsDialog.close(); await goHome(); state.welcome?.chooseService(); }));
   elements.homeButton.addEventListener("click", () => runUiAction(goHome));
   elements.projectsButton.addEventListener("click", openProjectsDialog);
@@ -6331,6 +6332,7 @@ function projectLibraryCard(project, inDialog = false) {
   button.innerHTML = `<span><strong dir="auto"></strong><small></small></span><b class="project-open-label">Open editor</b>`;
   $("strong", button).textContent = project.name;
   $("small", button).textContent = `${project.has_draft ? "Edit ready" : "In setup"} · ${formatDate(project.updated_at)}`;
+  if (!inDialog) decorateHomeProject(button, project);
   if (state.project?.id === project.id) {
     const current = document.createElement("small");
     current.className = "project-current-label";
@@ -6362,6 +6364,32 @@ function projectLibraryCard(project, inDialog = false) {
   actions.append(rename, remove);
   row.append(button, actions);
   return row;
+}
+
+// Home library rows follow the studio design: a source frame, the kind of edit
+// and its length. The whole row still opens the project.
+const PROJECT_KINDS = { manual: "Manual edit", youtube: "YouTube", short: "Short / Reel" };
+function decorateHomeProject(button, project) {
+  if (typeof button.prepend !== "function" || typeof button.insertBefore !== "function") return;
+  const thumb = document.createElement("span");
+  thumb.className = "project-thumb";
+  thumb.setAttribute("aria-hidden", "true");
+  if (project.thumbnail_url) {
+    const image = document.createElement("img");
+    image.src = project.thumbnail_url; image.alt = ""; image.loading = "lazy"; image.decoding = "async";
+    thumb.append(image);
+  }
+  const kind = document.createElement("span");
+  kind.className = "project-kind";
+  kind.dataset.kind = project.workflow || "manual";
+  kind.textContent = PROJECT_KINDS[project.workflow] || "Edit";
+  const length = document.createElement("span");
+  length.className = "project-length";
+  const duration = Number(project.sources?.A?.duration);
+  length.textContent = Number.isFinite(duration) && duration > 0 ? formatTime(duration) : "--:--";
+  button.prepend(thumb);
+  button.insertBefore(kind, $(".project-open-label", button));
+  button.insertBefore(length, $(".project-open-label", button));
 }
 
 function renderRecentProjects() {
