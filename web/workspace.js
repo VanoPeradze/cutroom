@@ -435,6 +435,7 @@ export function initWorkspace({ document: doc = document, window: win = window, 
   applyTimelineHeight();
   applyInspector();
   renderFullscreen();
+  const chrome = initStudioChrome({ document: doc, panel, guideButton, fullscreenButton, inspectorToggle });
   const controller = {
     toggleFullscreen, openGuide, setTimelineHeight, setInspectorWidth, setInspectorCollapsed, setWorkspace, setEditEffects,
     showInspector: () => setInspectorCollapsed(false),
@@ -446,6 +447,7 @@ export function initWorkspace({ document: doc = document, window: win = window, 
       listeners.forEach((remove) => remove());
       observer?.disconnect();
       if (resizeFrame !== null) win.cancelAnimationFrame(resizeFrame);
+      chrome.restore();
       guideButton.remove();
       fullscreenButton.remove();
       status.remove();
@@ -465,4 +467,57 @@ export function initWorkspace({ document: doc = document, window: win = window, 
   };
   panel.workspaceController = controller;
   return controller;
+}
+
+// Arranges existing editor controls into the approved studio chrome: history and
+// guidance in the top bar, a monitor header, full screen in the transport row and
+// the timeline status inside its toolbar. Elements keep their ids and listeners;
+// restore() returns each one to its original place.
+function initStudioChrome({ document: doc, panel, guideButton, fullscreenButton, inspectorToggle }) {
+  if (typeof doc.querySelector !== "function" || typeof panel.querySelector !== "function") return { restore() {} };
+  const topActions = doc.querySelector(".topbar .top-actions");
+  const header = panel.querySelector(".studio-header");
+  const controls = doc.querySelector("#previewColumn .preview-controls");
+  const toolbar = panel.querySelector(".studio-timeline-dock .editor-toolbar-main");
+  if (!topActions || !header || !controls || !toolbar) return { restore() {} };
+  const moves = [];
+  const move = (element, parent, before = null, className = "") => {
+    if (!element || !parent) return;
+    moves.push({ element, parent: element.parentNode, next: element.nextSibling, className });
+    if (className) element.classList.add(className);
+    parent.insertBefore(element, before);
+  };
+  const exportButton = doc.getElementById("renderButton");
+  move(doc.getElementById("closeAdvanced"), topActions, topActions.firstChild, "studio-top-item");
+  move(panel.querySelector(".manual-history-actions"), topActions, exportButton, "studio-top-item");
+  move(guideButton, topActions, exportButton, "studio-top-item");
+  move(fullscreenButton, controls);
+  move(panel.querySelector(".studio-timeline-dock .timeline-context"), toolbar, toolbar.querySelector(".timeline-zoom-controls"));
+
+  const title = doc.createElement("span");
+  title.className = "monitor-title";
+  title.textContent = "Preview";
+  header.insertBefore(title, header.firstChild);
+
+  const titled = [];
+  const tooltip = (id, text) => {
+    const element = doc.getElementById(id);
+    if (element && !element.title) { element.title = text; titled.push(element); }
+  };
+  tooltip("manualDelete", "Remove the selection from the video");
+  tooltip("editorMoreButton", "More editing tools");
+  tooltip("restartPreview", "Restart from the first kept frame");
+  if (inspectorToggle && !inspectorToggle.title) { inspectorToggle.title = "Hide or show the tool panel"; titled.push(inspectorToggle); }
+
+  return {
+    restore() {
+      title.remove();
+      titled.forEach((element) => element.removeAttribute("title"));
+      for (const { element, parent, next, className } of moves.reverse()) {
+        if (className) element.classList.remove(className);
+        if (next?.parentNode === parent) parent.insertBefore(element, next);
+        else parent.appendChild(element);
+      }
+    },
+  };
 }

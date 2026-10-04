@@ -175,7 +175,7 @@ test('mixed media rows share display, hit, reveal and caption geometry after zoo
   h.timeline.draw();
   assert.equal(h.canvas.style.height,'576px');
   assert.equal(h.timeline.mediaLayout().caption.top,546);
-  const caption = h.draws.find(draw => draw.fill === '#1c2630');
+  const caption = h.draws.find(draw => draw.fill === '#141d24');
   assert.equal(caption.y,546); assert.equal(caption.height,28);
   h.timeline.revealMedia('text_caption'); assert.equal(h.scroll.scrollTop,546-180+8);
   assert.equal(h.scroll.scrollLeft,150); assert.deepEqual(plain(h.timeline.geometry()),geometry);
@@ -448,7 +448,7 @@ for (const twoSources of [false, true]) {
     const caption = h.draws.find(draw => draw.text === 'Cc Speech');
     assert.ok(caption);
     assert.equal(caption.y, base + 60 + 17);
-    const captionBlock = h.draws.find(draw => draw.fill === '#384962');
+    const captionBlock = h.draws.find(draw => draw.fill === '#6b5722');
     assert.ok(Math.abs(captionBlock.x - (.5 * h.timeline.geometry().px + 1)) < 1e-8, 'captions follow original speech mapping');
     assert.ok(caption.x >= 70, 'caption text leaves room for its pinned row label');
     assert.equal(h.timeline.mediaAtEvent(h.point(.75, base + 60 + 12)), null, 'caption lane is not a media clip');

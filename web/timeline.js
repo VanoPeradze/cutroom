@@ -435,7 +435,7 @@ export class TimelineView {
         const clip=this.gesture?.media?.id === saved.id ? {...saved,...this.gesture.patch} : saved;
         const asset=clip.id?.startsWith('text_') ? {kind:'text',name:clip.text} : this.project.assets[clip.asset_id], x=clip.start*px, w=(clip.end-clip.start)*px;
         if (x+w<left || x>right) continue;
-        ctx.fillStyle=asset.kind==='text' ? (clip.kind==='caption' ? '#665127' : '#55436e') : asset.kind==='audio' ? (clip.role==='voice' ? '#55436e' : clip.role==='music' ? '#284a64' : '#264e44') : '#245553'; ctx.fillRect(x,row.top+1,w,row.height-6);
+        ctx.fillStyle=asset.kind==='text' ? (clip.kind==='caption' ? '#6b5722' : '#4a3fa0') : asset.kind==='audio' ? (clip.role==='voice' ? '#563c93' : clip.role==='music' ? '#25458c' : '#245a4b') : '#245553'; ctx.fillRect(x,row.top+1,w,row.height-6);
         const image=this.mediaImages?.get(asset.thumbnail_url);
         ctx.save(); ctx.beginPath(); ctx.rect(x+1,row.top+2,Math.max(0,w-2),row.height-8); ctx.clip();
         if(image) {
@@ -462,7 +462,7 @@ export class TimelineView {
         }
         ctx.fillStyle='rgba(0,0,0,.75)'; ctx.fillRect(Math.max(x,left),row.top+2,Math.min(w,300),14);
         ctx.fillStyle='#f0edf5'; ctx.font='10px ui-monospace, monospace';
-        const nameX=Math.max(x+5,left+ctx.measureText(row.label).width+22);
+        const nameX=Math.max(x+5,left+(this.headersActive ? 6 : ctx.measureText(row.label).width+22));
         ctx.fillText(`${asset.kind==='text' ? clip.kind==='title' ? 'Text' : 'Caption' : asset.kind==='audio' ? clip.role || 'music' : asset.kind} · ${asset.name}${Number.isFinite(clip.speed)&&clip.speed!==1 ? ` · ${clip.speed}×` : ''}`,nameX,row.top+12);
         ctx.strokeStyle='#d4c84f';ctx.beginPath();
         if(clip.fade_in>0){ctx.moveTo(x,row.bottom-6);ctx.lineTo(x+clip.fade_in*px,row.top+18);}
@@ -474,14 +474,103 @@ export class TimelineView {
     }
     if(layout.caption) {
       const {top,height}=layout.caption;
-      ctx.fillStyle='#1c2630';ctx.fillRect(0,top,width,height-2);
+      ctx.fillStyle='#141d24';ctx.fillRect(0,top,width,height-2);
       for(const caption of this.audioTimelineRanges(this.project.analysis.transcript.segments)) {
         const x=caption.start*px,w=(caption.end-caption.start)*px;
         if(x+w<left || x>right)continue;
-        ctx.fillStyle='#384962';ctx.fillRect(x+1,top+1,Math.max(1,w-2),height-4);
-        ctx.save();ctx.beginPath();ctx.rect(x+2,top,Math.max(0,w-4),height-2);ctx.clip();ctx.fillStyle='#eef3ff';ctx.font='10px sans-serif';ctx.fillText(`Cc ${caption.text}`,Math.max(x+4,left+70),top+17);ctx.restore();
+        ctx.fillStyle='#6b5722';ctx.fillRect(x+1,top+1,Math.max(1,w-2),height-4);ctx.strokeStyle='#c9a94a';ctx.strokeRect(x+1.5,top+1.5,Math.max(0,w-3),height-5);
+        ctx.save();ctx.beginPath();ctx.rect(x+2,top,Math.max(0,w-4),height-2);ctx.clip();ctx.fillStyle='#eef3ff';ctx.font='10px sans-serif';ctx.fillText(`Cc ${caption.text}`,Math.max(x+4,left+this.labelInset(70)),top+17);ctx.restore();
       }
     }
+  }
+
+  labelInset(width) { return this.headersActive ? 8 : width; }
+
+  // Studio track headers: an HTML column beside the scrolling canvas, aligned to
+  // the lane geometry drawn below. Lock and mute proxy the existing Edit and
+  // mixer controls, so each setting keeps one source of truth.
+  trackHeaderColumn() {
+    if (this.headerColumn !== undefined) return this.headerColumn;
+    this.headerColumn = null;
+    const element = typeof Element !== "undefined" && this.scroll instanceof Element ? this.scroll : null;
+    if (!element || this.sourceReview || !element.closest(".studio-timeline-dock") || !element.parentNode) return null;
+    const body = document.createElement("div"), column = document.createElement("div"), rows = document.createElement("div");
+    body.className = "timeline-body"; column.className = "timeline-track-headers"; rows.className = "timeline-track-rows";
+    column.setAttribute("role", "group"); column.setAttribute("aria-label", "Tracks");
+    column.append(rows); element.parentNode.insertBefore(body, element); body.append(column, element);
+    element.addEventListener("scroll", () => { rows.style.transform = `translateY(${-element.scrollTop}px)`; }, { passive: true });
+    column.addEventListener("click", (event) => {
+      const button = event.target.closest?.("button[data-proxy]");
+      const target = button && document.querySelector(button.dataset.proxy);
+      if (target && !target.disabled) { target.click(); this.scheduleDraw(); }
+    });
+    this.headerColumn = { rows, items: new Map() };
+    return this.headerColumn;
+  }
+
+  laneGuide(layout) {
+    const lanes = [], sequence = Boolean(this.project?.manual?.sequence), twoSources = Boolean(this.project?.sources?.B);
+    const video = (slot) => {
+      if (!this.project?.sources?.[slot]) return;
+      const { top, bottom } = this.trackLane(slot);
+      lanes.push({ key: `video-${slot}`, label: `Video ${slot}`, top, height: bottom - top, lock: slot, active: this.editTarget === slot || (sequence && this.editTarget === "edit") });
+    };
+    if (sequence) {
+      video("A"); video("B");
+      lanes.push({ key: "layout", label: "Layout", top: twoSources ? 152 : 96, height: 22 });
+      lanes.push({ key: "audio", label: "Original", top: twoSources ? 186 : 130, height: 26, mute: "source" });
+    } else {
+      const shift = this.hasTrackLanes() ? 68 : 0;
+      lanes.push({ key: "edit", label: "Edit", top: 72, height: 28, active: this.editTarget === "edit" });
+      if (this.hasTrackLanes()) { video("A"); video("B"); }
+      lanes.push({ key: "layout", label: "Layout", top: 104 + shift, height: 26 });
+      lanes.push({ key: "audio", label: "Original", top: 134 + shift, height: 38, mute: "source" });
+    }
+    const names = { music: "Music", voice: "Voiceover", effects: "Effects", title: "Text", caption: "Captions" };
+    layout.rows.forEach((row, index) => lanes.push({
+      key: `row-${index}-${row.group}`, label: row.type === "visual" ? (row.label === "IMAGE" ? "Images" : "Overlay") : names[row.group] || "Text",
+      top: row.top, height: row.height - 4, mute: row.type === "audio" && names[row.group] && row.group !== "title" && row.group !== "caption" ? row.group : null,
+    }));
+    if (layout.caption) lanes.push({ key: "captions", label: "Captions", top: layout.caption.top, height: layout.caption.height - 2 });
+    return lanes;
+  }
+
+  syncTrackHeaders(layout, height) {
+    const headers = this.trackHeaderColumn();
+    if (!headers) return false;
+    const seen = new Set();
+    headers.rows.style.height = `${height}px`;
+    for (const lane of this.laneGuide(layout)) {
+      seen.add(lane.key);
+      let item = headers.items.get(lane.key);
+      if (!item) {
+        item = document.createElement("div"); item.className = "track-header";
+        const name = document.createElement("span"), actions = document.createElement("span");
+        name.className = "track-name"; actions.className = "track-actions";
+        item.append(name, actions); headers.rows.append(item); headers.items.set(lane.key, item);
+      }
+      item.style.top = `${lane.top}px`; item.style.height = `${lane.height}px`;
+      item.classList.toggle("active", Boolean(lane.active));
+      item.dataset.lane = lane.key.replace(/-.*$/, "");
+      if (item.firstChild.textContent !== lane.label) item.firstChild.textContent = lane.label;
+      this.syncHeaderButton(item.lastChild, "lock", lane.lock ? `#trackLock${lane.lock}` : null, lane.label);
+      this.syncHeaderButton(item.lastChild, "mute", lane.mute ? `[data-mute="${lane.mute}"]` : null, lane.label);
+    }
+    for (const [key, item] of headers.items) if (!seen.has(key)) { item.remove(); headers.items.delete(key); }
+    return true;
+  }
+
+  syncHeaderButton(container, kind, selector, label) {
+    let button = container.querySelector(`[data-kind="${kind}"]`);
+    const target = selector ? document.querySelector(selector) : null;
+    if (!target || target.hidden) { button?.remove(); return; }
+    if (!button) { button = document.createElement("button"); button.type = "button"; button.dataset.kind = kind; container.append(button); }
+    const pressed = target.getAttribute("aria-pressed") === "true";
+    const name = `${kind === "lock" ? (pressed ? "Unlock" : "Lock") : (pressed ? "Unmute" : "Mute")} ${label}`;
+    button.dataset.proxy = selector;
+    button.setAttribute("aria-pressed", String(pressed));
+    button.disabled = Boolean(target.disabled);
+    if (button.getAttribute("aria-label") !== name) { button.setAttribute("aria-label", name); button.title = name; }
   }
 
   geometry() {
@@ -510,6 +599,7 @@ export class TimelineView {
     const sequence = Boolean(this.project?.manual?.sequence);
     const extra = !sequence && this.hasTrackLanes() ? 68 : 0;
     const mediaLayout = this.mediaLayout(), cssHeight = mediaLayout.height;
+    this.headersActive = this.syncTrackHeaders(mediaLayout, cssHeight);
     const dpr = Math.min(1.5, window.devicePixelRatio || 1, Math.sqrt(16000000/Math.max(1,width*cssHeight)));
     this.canvas.style.width = `${width}px`;
     this.canvas.style.height = `${cssHeight}px`;
@@ -524,7 +614,7 @@ export class TimelineView {
     }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, width, cssHeight);
-    ctx.fillStyle = "#081013";
+    ctx.fillStyle = "#10181e";
     ctx.fillRect(0, 0, width, cssHeight);
 
     this.drawRuler(ctx, duration, width, px);
@@ -541,14 +631,14 @@ export class TimelineView {
     this.drawMedia(ctx,px,width,mediaLayout);
     if (this.selection) this.drawSelection(ctx, this.selection, px, cssHeight);
     if (this.cutAnchor != null) this.drawPendingCut(ctx, px, cssHeight);
-    this.drawLabels(ctx,mediaLayout);
+    if (!this.headersActive) this.drawLabels(ctx,mediaLayout);
     if (this.hoverTime != null) this.drawHover(ctx, this.hoverTime, px, cssHeight);
     this.drawPlayhead(ctx, px, cssHeight);
     if (this.snapGuide) this.drawSnapGuide(ctx, px, cssHeight);
   }
 
   drawRuler(ctx, duration, width, px) {
-    ctx.fillStyle = "#0d181c";
+    ctx.fillStyle = "#151e25";
     ctx.fillRect(0, 0, width, 30);
     const ideal = 92 / px;
     const steps = [.25,.5,1,2,5,10,15,30,60,120,300,600];
@@ -630,7 +720,7 @@ export class TimelineView {
         const thumbUrls=this.project.sources?.[slot]?.thumbnail_urls || [];
         const frames=slot==='A' ? this.images : thumbUrls.map(url=>this.mediaImages?.get(url));
         if(frames?.some(Boolean)) {
-          ctx.save();ctx.beginPath();ctx.rect(x+1,top+2,Math.max(0,width-2),h-4);ctx.clip();ctx.globalAlpha=.5;
+          ctx.save();ctx.beginPath();ctx.rect(x+1,top+2,Math.max(0,width-2),h-4);ctx.clip();ctx.globalAlpha=.85;
           for(let ix=Math.max(x,viewportLeft);ix<x+width && ix<viewportLeft+this.scroll.clientWidth;ix+=64) {
             const sourceTime=clip.source_start+(ix/px-clip.start)*(clip.video_speed||1);
             const index=Math.min(frames.length-1,Math.max(0,Math.floor(sourceTime/Math.max(.001,this.project.sources[slot].duration)*frames.length)));
@@ -643,7 +733,7 @@ export class TimelineView {
           ctx.save(); ctx.beginPath(); ctx.rect(x + 3, top, width - 6, h); ctx.clip();
           ctx.fillStyle = "#eef5f7"; ctx.font = "10px ui-monospace, monospace";
           const clipNumber = clipIndex + 1;
-          ctx.fillText(`${slot}${clipNumber} · ${formatTime(clip.source_start, true)} · ${(clip.end - clip.start).toFixed(1)}s${clip.video_speed && clip.video_speed!==1 ? ` · ${clip.video_speed}× picture` : ''}`, Math.max(x + 8, viewportLeft + 64), top + (h > 40 ? 29 : 19));
+          ctx.fillText(`${slot}${clipNumber} · ${formatTime(clip.source_start, true)} · ${(clip.end - clip.start).toFixed(1)}s${clip.video_speed && clip.video_speed!==1 ? ` · ${clip.video_speed}× picture` : ''}`, Math.max(x + 8, viewportLeft + this.labelInset(64)), top + (h > 40 ? 29 : 19));
           ctx.restore();
         }
       }
@@ -770,7 +860,7 @@ export class TimelineView {
       ctx.fillStyle = ["A", "screen"].includes(camera) ? "#44b9c6" : ["B", "camera"].includes(camera) ? "#9676bd" : "#c9b62c";
       ctx.globalAlpha = .82; ctx.fillRect(x, y, width, 22); ctx.globalAlpha = 1;
       // Clip labels to their own scene, especially on long/zoomed-out sources.
-      const labelX = Math.max(x + 6, (this.scroll.scrollLeft || 0) + 70);
+      const labelX = Math.max(x + 6, (this.scroll.scrollLeft || 0) + this.labelInset(70));
       if (width > 38 && labelX < x + width - 12) {
         ctx.save(); ctx.beginPath(); ctx.rect(x + 2, y, Math.max(0, width - 4), 22); ctx.clip();
         ctx.fillStyle = "#081013"; ctx.font = "700 9px ui-monospace, monospace";
@@ -810,10 +900,12 @@ export class TimelineView {
     const profile = this.waveformProfile(), bins = this.waveformRanges(profile);
     const y = this.project?.manual?.sequence ? (this.project.sources?.B ? 186 : 130) : this.compact ? 140 : 230, height = this.compact || this.project?.manual?.sequence ? 26 : 54, mid = y + height / 2;
     const left = Math.max(0, this.scroll.scrollLeft || 0), right = Math.min(width, left + (this.scroll.clientWidth || width));
+    ctx.fillStyle = "rgba(47,176,138,.14)";
+    ctx.fillRect(0, y, Math.min(width, timelineDuration(this.project) * px), height);
     ctx.strokeStyle = "rgba(235,243,245,.22)";
     ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(left, mid); ctx.lineTo(right, mid); ctx.stroke();
-    ctx.strokeStyle = "#91d7c2";
+    ctx.strokeStyle = "#3fd09e";
     ctx.lineWidth = 1;
     ctx.beginPath();
     if (bins.length) {
@@ -840,7 +932,7 @@ export class TimelineView {
     } else {
       const message = profile.state === "no-audio" ? "Source has no audio" : profile.state === "pending" ? "Measuring source audio\u2026" : profile.state === "unavailable" ? "Source waveform unavailable" : profile.state === "ready" ? "No source audio in this edit" : "No waveform data";
       ctx.fillStyle = "#aebbc0"; ctx.font = "10px ui-monospace, monospace";
-      ctx.fillText(message, left + 74, mid + 3);
+      ctx.fillText(message, left + this.labelInset(74), mid + 3);
     }
     ctx.stroke();
   }
