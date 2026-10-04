@@ -1,10 +1,10 @@
 {
   "version": "1.1-beta",
-  "filename": "CUTROOM-1.1-Beta-windows-92b2261c-layout-20261003.zip",
-  "build_id": "CUTROOM-1.1-beta-20261003-100401",
-  "bytes": 3276552,
-  "sha256": "c00536f0d48df8c9998bad3a0d26fa427e074b2075e73acd3d31affe5dd73d99",
-  "manifest_sha256": "3d01bc82d837ed153a91c4eb3baacb0e35de7fe6449bba8b8aa7e77d5083787f",
-  "url": "https://cutroom-studio--qnepgvso6a.expo.app/downloads/CUTROOM-1.1-Beta-windows-92b2261c-layout-20261003.zip",
-  "note": "Immutable validation deployment of reviewed product source 92b2261c491b9cd3fea15dcce4ef10b808a5b302. Narrow Layout order correction after creating a draft. Preserves previous preview-first UI, chroma, duration and stabilization. No private data, runtime or models. Native Apple Silicon/Intel candidate CI required before production."
+  "filename": "CUTROOM-1.1-Beta-windows-f6037e12-studio-20261004.zip",
+  "build_id": "CUTROOM-1.1-beta-20261004-193437",
+  "bytes": 3298923,
+  "sha256": "c69d9873d1a3f885bc1af1b3c927aa3bf51c24d86a802d7652de4e3d43f0e7c7",
+  "manifest_sha256": "440f158eed0d447d0fbb7b86a299fb073a3404dfc3fe396367d13374eff87c2d",
+  "url": "https://cutroom-studio--id8dldzljo.expo.app/downloads/CUTROOM-1.1-Beta-windows-f6037e12-studio-20261004.zip",
+  "note": "Immutable validation deployment of reviewed product source f6037e12611fce6a3428ca7365319665aef7bdb1. Studio layout (top bar, monitor and transport, icon timeline toolbar, track headers) with Codex's studio design layer, stable local Story context and Auto quality models when ready. No private data, runtime or models. Native Apple Silicon/Intel candidate CI required before production."
 }
