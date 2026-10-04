@@ -2,6 +2,7 @@
 import copy
 import math
 
+from .composition import default_reels_stack
 from .editing import CAMERA_OVERRIDE_LAYOUTS, ManualEditError, apply_manual_edit
 from .utils import now_iso
 
@@ -31,10 +32,21 @@ def start_manual_draft(project):
                            "engine": "manual", "warnings": []}
     settings["captions"] = False
     mixer = copy.deepcopy((project.get("manual") or {}).get("source_mixer") or {})
-    if mixer and project.get("sources", {}).get("B"):
+    if project.get("sources", {}).get("B"):
+        if not mixer:
+            sources = project["sources"]
+            audio_slot = str(settings.get("audio_source") or "A").upper()
+            if audio_slot not in {"A", "B"} or not (sources.get(audio_slot) or {}).get("has_audio"):
+                audio_slot = next((slot for slot in ("A", "B") if (sources.get(slot) or {}).get("has_audio")), "A")
+            mixer = {"screen_slot": "A", "camera_slot": "B", "primary_role": "screen",
+                     "audio_slot": audio_slot}
         apply_manual_edit(project, {"action": "set_source_mixer", **mixer})
+        project["draft"]["audio_source"] = project["manual"]["source_mixer"]["audio_slot"]
         layout = project["manual"]["source_mixer"].get("default_layout", settings.get("layout", "auto"))
+        if default_reels_stack(project):
+            layout = "stacked"
         if layout in CAMERA_OVERRIDE_LAYOUTS:
+            project["draft"]["layout"] = layout
             apply_manual_edit(project, {"action": "set_camera_layout", "layout": layout,
                                         "start": 0, "end": duration})
     elif (project.get("manual") or {}).get("embedded_camera"):

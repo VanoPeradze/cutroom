@@ -123,10 +123,72 @@ def test_upload_slots_and_studio_tabs_have_keyboard_contracts():
     assert HTML.count('role="button" tabindex="0" aria-describedby=') == 2
     assert 'slotElement.addEventListener("keydown"' in APP
     assert '["Enter", " "].includes(event.key)' in APP
-    assert HTML.count('role="tab"') == 4
-    assert HTML.count('role="tabpanel"') == 4
-    assert "aria-selected" in HTML
-    assert "function handleStudioTabKeydown" in APP
+    static_tabs = {
+        "studioTabTimeline": ("timeline", "studioPanelTimeline"),
+        "studioTabFraming": ("framing", "studioPanelFraming"),
+        "studioTabTranscript": ("transcript", "studioPanelTranscript"),
+        "studioTabAudio": ("audio", "studioPanelAudio"),
+        "studioTabSettings": ("settings", "studioPanelSettings"),
+    }
+    expected_panels = {
+        panel_id: (name, tab_id)
+        for tab_id, (name, panel_id) in static_tabs.items()
+    }
+    # Media's tab is created at startup; its panel is part of the page.
+    expected_panels["studioPanelMedia"] = ("media", "studioTabMedia")
+
+    class StudioMarkup(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.tabs = []
+            self.panels = []
+
+        def handle_starttag(self, tag, attrs):
+            attributes = dict(attrs)
+            if attributes.get("role") == "tab":
+                self.tabs.append((tag, attributes))
+            elif attributes.get("role") == "tabpanel":
+                self.panels.append((tag, attributes))
+
+    markup = StudioMarkup()
+    markup.feed(HTML)
+    assert len(markup.tabs) == len(static_tabs)
+    assert {attrs.get("id") for _, attrs in markup.tabs} == set(static_tabs)
+    assert len(markup.panels) == len(expected_panels)
+    assert {attrs.get("id") for _, attrs in markup.panels} == set(expected_panels)
+    for tag, attrs in markup.tabs:
+        name, panel_id = static_tabs[attrs["id"]]
+        selected = name == "timeline"
+        assert tag == "button"
+        assert attrs.get("data-tab") == name
+        assert attrs.get("aria-controls") == panel_id
+        assert attrs.get("aria-selected") == str(selected).lower()
+        assert attrs.get("tabindex") == ("0" if selected else "-1")
+    for tag, attrs in markup.panels:
+        name, tab_id = expected_panels[attrs["id"]]
+        assert tag == "div"
+        assert attrs.get("data-panel") == name
+        assert attrs.get("aria-labelledby") == tab_id
+        assert attrs.get("tabindex") == "0"
+        assert ("active" in attrs.get("class", "").split()) == (name == "timeline")
+    media_tab = APP.split("function initializeMediaStudio()", 1)[1].split("\nfunction ", 1)[0]
+    assert 'tab.id = "studioTabMedia"' in media_tab
+    assert 'tab.setAttribute("role", "tab")' in media_tab
+    assert 'tab.setAttribute("aria-controls", "studioPanelMedia")' in media_tab
+    assert 'tab.addEventListener("keydown", handleStudioTabKeydown)' in media_tab
+    bindings = function_block(APP, "bindEvents", "installDropZone")
+    assert '$$(".advanced-tabs button").forEach' in bindings
+    assert 'button.addEventListener("keydown", handleStudioTabKeydown)' in bindings
+    selection = function_block(APP, "selectAdvancedTab", "handleStudioTabKeydown")
+    assert 'button.setAttribute("aria-selected", String(active))' in selection
+    assert "button.tabIndex = active ? 0 : -1" in selection
+    assert "panel.hidden = !active" in selection
+    keyboard = function_block(APP, "handleStudioTabKeydown", "updateZoomLabel")
+    assert '["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"]' in keyboard
+    assert '.advanced-tabs [role=\'tab\']' in keyboard
+    assert "event.preventDefault()" in keyboard
+    assert "selectAdvancedTab(tabs[next].dataset.tab)" in keyboard
+    assert "tabs[next].focus()" in keyboard
 
 
 def test_rebuild_required_settings_cannot_silently_export_old_draft():
@@ -199,7 +261,10 @@ def test_manual_corrections_are_discoverable_keyboard_safe_and_atomic():
 def test_project_delete_is_exposed_with_confirmation():
     assert "dialog-project-delete" in APP
     delete = function_block(APP, "deleteProject", "formatDate")
-    assert "window.confirm" in delete
+    assert "elements.projectDeleteDialog.showModal()" in delete
+    assert "async function confirmProjectDeletion()" in delete
+    assert "Delete project permanently" in HTML
+    assert "Your original files outside CUTROOM are not deleted" in HTML
     assert 'method: "DELETE"' in delete
     assert "flushCurrentProjectSaves" in delete
 
@@ -411,6 +476,8 @@ def test_single_combined_source_has_manual_embedded_camera_fallback():
     assert "sourceMediaUrl(source)" in editor
     assert "embeddedCameraIsActive()" in editor
     save = function_block(APP, "saveEmbeddedCameraSelection", "disableEmbeddedCameraSelection")
+    assert 'queueEmbeddedCameraSave({ immediate: true })' in save
+    save = function_block(APP, "flushEmbeddedCameraSave", "embeddedEditorGeometryFromControls")
     assert 'applyManualEdit("set_embedded_camera"' in save
     assert "enabled: true" in save
     assert "content_x" in save and "content_y" in save

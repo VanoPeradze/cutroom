@@ -7,6 +7,55 @@ const test = require("node:test");
 const source = fs.readFileSync(path.join(__dirname, "../web/timeline.js"), "utf8").replace(/^export /gm, "");
 const plain = (value) => JSON.parse(JSON.stringify(value));
 
+test('custom titles and captions occupy visible edit-clock lanes without media assets', () => {
+  const h=sequenceFixture();h.project.manual.text_clips=[
+    {id:'text_one',kind:'title',start:1,end:4,text:'Title'},
+    {id:'text_two',kind:'caption',start:2,end:5,text:'שלום'},
+  ];h.timeline.draw();
+  assert.equal(h.timeline.mediaRows().length,2);
+  assert.ok(h.draws.some(row=>row.text==='Text · Title'));
+  assert.ok(h.draws.some(row=>row.text==='Caption · שלום'));
+  h.timeline.sourceReview=true;assert.equal(h.timeline.mediaRows().length,0);
+});
+
+test('custom text trims do not introduce source offsets and are bounded by the edit', () => {
+  for(const edge of ['start','end']){
+    const h=sequenceFixture();h.project.manual.text_clips=[{id:'text_one',kind:'title',start:2,end:5,text:'Title'}];
+    let result;h.timeline.onMediaEdit=(id,patch)=>{result=patch;};
+    const top=h.timeline.mediaRows()[0].top+20;
+    h.timeline.pointerDown(h.point(edge==='start'?2.01:4.99,top));
+    h.timeline.pointerUp(h.point(edge==='start'?0:11,top));
+    assert.ok(result);assert.equal(Object.hasOwn(result,'source_start'),false);
+    assert.ok((result.start??2)>=0);assert.ok((result.end??5)<=12);
+  }
+});
+
+test('custom text gestures and delete address the layer even with locked A/B', () => {
+  const h=sequenceFixture();h.project.manual.track_locks={A:true,B:true};
+  h.project.manual.text_clips=[{id:'text_one',kind:'title',start:2,end:5,text:'Title'}];
+  const actions=[];h.timeline.onMediaAction=(action,detail)=>actions.push({action,detail});
+  let moved;h.timeline.onMediaEdit=(id,patch)=>{moved=patch;};const top=h.timeline.mediaRows()[0].top+20;
+  h.timeline.pointerDown(h.point(3,top));h.timeline.pointerUp(h.point(4,top));assert.ok(moved);
+  h.timeline.keyDown({key:'Delete',preventDefault(){},stopPropagation(){}});
+  assert.equal(actions[0].detail.clip_id,'text_one');assert.equal(h.edits.length,0);
+});
+
+test('custom caption edges are snap targets but the moving caption excludes itself', () => {
+  const h=sequenceFixture();h.project.manual.text_clips=[{id:'text_one',kind:'caption',start:1.7,end:2.7,text:'Hello'}];
+  assert.ok(h.timeline.snapPoints().some(p=>p.time===1.7&&p.label==='Caption edge'));
+  h.timeline.gesture={kind:'media',media:h.project.manual.text_clips[0],snapPlayhead:0};
+  assert.equal(h.timeline.snapPoints().some(p=>p.label==='Caption edge'),false);
+});
+
+test('selecting a text layer reveals its lane without shifting the time axis', () => {
+  const h=sequenceFixture();h.project.manual.text_clips=[{id:'text_one',kind:'caption',start:1,end:3,text:'Hello'}];
+  const scroll=h.timeline.scroll;scroll.clientHeight=180;scroll.scrollTop=0;scroll.scrollLeft=33;
+  const bottom=h.timeline.mediaRows()[0].bottom;h.timeline.revealMedia('text_one');
+  assert.equal(scroll.scrollTop,bottom-180+8);assert.equal(scroll.scrollLeft,33);
+  scroll.scrollTop=300;h.timeline.revealMedia('text_one');assert.equal(scroll.scrollTop,h.timeline.mediaRows()[0].top);
+  h.timeline.revealMedia('missing');assert.equal(scroll.scrollTop,h.timeline.mediaRows()[0].top);
+});
+
 function fixture({ compact = true, width = 600, duration = 12, tracks = false } = {}) {
   const listeners = {}, draws = [], notifications = [], seeks = [], edits = [], layouts = [], captures = new Set();
   const context = new Proxy({
@@ -76,6 +125,488 @@ function sequenceFixture({ twoSources = true, compact = true, fps = 60 } = {}) {
   h.point = (time, y = 80, extra = {}) => h.event(time, { clientX: 10 + time * h.timeline.geometry().px, clientY: 20 + y, ...extra });
   return h;
 }
+
+function mediaFixture(options = {}) {
+  const h = sequenceFixture(options);
+  h.project.assets = {
+    video: { kind: 'video', name: 'B-roll', duration: 20 },
+    image: { kind: 'image', name: 'Diagram', duration: 0 },
+    sound: { kind: 'audio', name: 'Sound', duration: 20, waveform: [.1, .5, 1] },
+  };
+  h.project.manual.media_clips = [{ id: 'visual', asset_id: 'video', start: 2, end: 6, source_start: 3, video_source_start: 5, speed: 2, role: 'effects' }];
+  h.mediaEdits = []; h.mediaPreviews = []; h.mediaSelections = []; h.mediaActions = [];
+  h.timeline.onMediaEdit = (id, patch) => h.mediaEdits.push({ id, patch: plain(patch) });
+  h.timeline.onMediaPreview = (id, patch) => h.mediaPreviews.push({ id, patch: plain(patch) });
+  h.timeline.onMediaSelect = id => h.mediaSelections.push(id);
+  h.timeline.onMediaAction = (action, payload) => h.mediaActions.push({ action, ...plain(payload) });
+  h.mediaPoint = (time, row = 0, extra = {}) => h.point(time, h.timeline.mediaRows()[row].top + 20, extra);
+  return h;
+}
+
+function mixedMediaFixture() {
+  const h = mediaFixture();
+  h.project.manual.media_clips.push(
+    {id:'image',asset_id:'image',start:6,end:8},
+    ...['music','voice','effects'].map(role => ({id:role,asset_id:'sound',role,start:1,end:10,source_start:0})),
+  );
+  h.project.manual.text_clips = [
+    {id:'text_title',kind:'title',start:2,end:9,text:'Title'},
+    {id:'text_caption',kind:'caption',start:2,end:9,text:'Caption'},
+  ];
+  h.project.analysis = {audio_source:'A',transcript:{segments:[{start:10.5,end:11,text:'Speech'}]}};
+  return h;
+}
+
+test('mixed media rows share display, hit, reveal and caption geometry after zoom and vertical scrolling', () => {
+  const h = mixedMediaFixture(), before = JSON.stringify(h.project);
+  h.timeline.zoom = 4; h.scroll.scrollLeft = 150; h.scroll.scrollTop = 200; h.scroll.clientHeight = 180;
+  const geometry = plain(h.timeline.geometry());
+  h.canvas.getBoundingClientRect = () => ({left:10-h.scroll.scrollLeft,top:20-h.scroll.scrollTop,width:h.timeline.geometry().width});
+  const rows = h.timeline.mediaRows();
+  assert.deepEqual(plain(rows.map(row => [row.label,row.height])), [
+    ['VIDEO / IMAGE',60],['MUSIC',56],['VOICEOVER',56],['EFFECTS',56],['TEXT',44],['CAPTIONS',44],
+  ]);
+  assert.equal(rows[0].top,230);
+  for (let index=1;index<rows.length;index++) assert.equal(rows[index].top,rows[index-1].bottom);
+  const point = y => ({clientX:h.canvas.getBoundingClientRect().left+4*geometry.px,clientY:h.canvas.getBoundingClientRect().top+y});
+  for (const row of rows) assert.equal(h.timeline.mediaAtEvent(point((row.top+row.bottom)/2)).row.group,row.group);
+  assert.equal(h.timeline.mediaAtEvent(point(rows[0].bottom)).clip.id,'music','shared vertical endpoint belongs to the following row');
+  assert.equal(h.timeline.mediaAtEvent(point(rows.at(-1).bottom)),null,'automatic captions remain outside selectable media rows');
+  h.timeline.draw();
+  assert.equal(h.canvas.style.height,'576px');
+  assert.equal(h.timeline.mediaLayout().caption.top,546);
+  const caption = h.draws.find(draw => draw.fill === '#141d24');
+  assert.equal(caption.y,546); assert.equal(caption.height,28);
+  h.timeline.revealMedia('text_caption'); assert.equal(h.scroll.scrollTop,546-180+8);
+  assert.equal(h.scroll.scrollLeft,150); assert.deepEqual(plain(h.timeline.geometry()),geometry);
+  assert.equal(JSON.stringify(h.project),before,'display operations leave A/B provenance and edit state unchanged');
+  h.project.manual.media_clips=[];h.project.manual.text_clips=[];
+  assert.equal(h.timeline.mediaLayout().caption.top,230,'caption-only projects use the base source-row boundary');
+});
+
+test('larger visual rows preserve thumbnail aspect ratio and keep clip outlines and handles inside the row', () => {
+  const h = mediaFixture(), ctx = h.canvas.getContext('2d'), images = [];
+  h.project.assets.video.thumbnail_url='/thumbnail';
+  h.timeline.mediaImages=new Map([['/thumbnail',{width:160,height:90}]]);
+  h.timeline.mediaSelection='visual';
+  ctx.drawImage=(image,x,y,width,height)=>images.push({x,y,width,height});
+  h.timeline.draw();
+  const row=h.timeline.mediaRows()[0];
+  assert.ok(images.length); assert.ok(images.every(image => Math.abs(image.width/image.height-16/9)<1e-8));
+  assert.ok(images.every(image => image.y>=row.top && image.y+image.height<=row.bottom));
+  const outline=h.draws.find(draw=>draw.outline && draw.y===row.top+1.5);
+  assert.ok(outline && outline.y+outline.height<row.bottom);
+  const handles=h.draws.filter(draw=>draw.fill==='#fff' && draw.width===3);
+  assert.equal(handles.length,2);assert.ok(handles.every(handle=>handle.y>=row.top+18 && handle.y+handle.height<row.bottom));
+});
+
+test('all row labels stay pinned over selection and offscreen clips while hover and playhead remain above them', () => {
+  const h=mixedMediaFixture(), before=JSON.stringify(h.project), ctx=h.canvas.getContext('2d');
+  h.timeline.zoom=4;h.scroll.scrollLeft=1500;h.project.manual.track_locks={A:true};
+  h.timeline.selection={start:0,end:12};h.timeline.hoverTime=1501/h.timeline.geometry().px;
+  h.timeline.playhead=h.timeline.hoverTime;
+  const original=h.timeline.drawPlayhead;
+  h.timeline.drawPlayhead=function(...args){h.draws.push({event:'playhead'});return original.apply(this,args);};
+  h.timeline.draw();
+  const selectionIndex=h.draws.findIndex(draw=>draw.fill==='rgba(68,185,198,.14)');
+  const hoverIndex=h.draws.findIndex(draw=>draw.fill==='#f4f7f7');
+  const playheadIndex=h.draws.findIndex(draw=>draw.event==='playhead');
+  const expected=['VIDEO A · LOCKED','VIDEO B','LAYOUT','AUDIO','VIDEO / IMAGE','MUSIC','VOICEOVER','EFFECTS','TEXT','CAPTIONS'];
+  for(const text of expected) {
+    const labels=h.draws.map((draw,index)=>({...draw,index})).filter(draw=>draw.text===text);
+    assert.ok(labels.length,`${text} remains identifiable even without a visible clip`);
+    assert.ok(labels.every(label=>label.index>selectionIndex && label.index<hoverIndex && label.index<playheadIndex));
+    assert.ok(labels.every(label=>label.x>=1509 && label.x<=1510));
+  }
+  assert.equal(ctx.strokeStyle,'#1bd9ce','playhead has the final functional marker paint');
+  delete h.project.manual.track_locks;
+  assert.equal(JSON.stringify(h.project),before);
+});
+
+test('hover operation labels stay inside both scrolled edges and clip long text in a narrow viewport', () => {
+  const h=sequenceFixture(),ctx=h.canvas.getContext('2d');h.timeline.zoom=4;h.scroll.scrollLeft=900;
+  const clips=[];ctx.rect=(x,y,width,height)=>clips.push({x,y,width,height});
+  for(const width of [600,45]) {
+    h.scroll.clientWidth=width;
+    const {px}=h.timeline.geometry();
+    for(const x of [901,900+width-1]) {
+      h.draws.length=0;clips.length=0;
+      h.timeline.gesture={kind:'move',target:'edit',moveStart:x/px};
+      h.timeline.drawHover(ctx,x/px,px,230);
+      const box=h.draws.find(draw=>draw.fill==='#f4f7f7');
+      assert.ok(box.x>=902 && box.x+box.width<=900+width-2);
+      assert.ok(clips.some(clip=>clip.x===box.x && clip.width===box.width),'operation text is clipped to its visible box');
+      if(width===45) assert.equal(box.width,41);
+    }
+  }
+});
+
+test('snap includes other source and added-media edges without changing the edit target', () => {
+  const h = mediaFixture(); h.timeline.setEditTarget('A'); h.timeline.setSnapping(true);
+  assert.equal(h.timeline.snappedTime(4.06, {}), 4);
+  assert.equal(h.timeline.snapGuide.label, 'B edit');
+  assert.equal(h.timeline.snappedTime(2.06, {}), 2);
+  assert.equal(h.timeline.snapGuide.label, 'Media edge');
+  h.project.assets.video.kind = 'audio';
+  h.timeline.snappedTime(2.06, {}); assert.equal(h.timeline.snapGuide.label, 'Audio edge');
+  assert.equal(h.timeline.editTarget, 'A');
+});
+
+for (const tool of ['select','move','blade','remove_between']) test(`locked A rejects ${tool} gestures but keeps seeking and selection`, () => {
+  const h=sequenceFixture(); h.project.manual.track_locks={A:true}; h.timeline.setEditTarget('A'); h.timeline.setTool(tool);
+  h.timeline.selectRange(0,3);
+  const original=JSON.stringify(h.project);
+  h.timeline.pointerDown(h.point(1,60)); h.timeline.pointerUp(h.point(5,60));
+  assert.deepEqual(h.edits,[]); assert.ok(h.seeks.length); assert.ok(h.timeline.selection);
+  assert.equal(h.timeline.canSplitAt(1),false); assert.equal(h.timeline.cutOutAt(1),false);
+  assert.equal(JSON.stringify(h.project),original);
+  h.timeline.draw(); assert.ok(h.draws.some(d=>d.text==='VIDEO A · LOCKED'));
+});
+
+test('Together never silently skips a locked track, while an unlocked B can split', () => {
+  const h=sequenceFixture(); h.project.manual.track_locks={A:true};
+  assert.equal(h.timeline.canSplitAt(1),false);
+  h.timeline.setEditTarget('B'); assert.equal(h.timeline.canSplitAt(1),true);
+  h.timeline.setTool('blade'); h.timeline.pointerDown(h.point(1,110)); h.timeline.pointerUp(h.point(1,110));
+  assert.equal(h.edits[0].target,'B');
+});
+
+test('source locks do not block dragging added media or ruler seeking', () => {
+  const h=mediaFixture(); h.project.manual.track_locks={A:true,B:true};
+  h.timeline.pointerDown(h.point(4,15)); h.timeline.pointerUp(h.point(5,15));
+  assert.equal(h.seeks.at(-1),5);
+  h.timeline.pointerDown(h.mediaPoint(4)); h.timeline.pointerUp(h.mediaPoint(5));
+  assert.equal(h.mediaEdits[0].patch.start,3);
+});
+
+test('display padding is not a snap destination, and Alt keeps free selection', () => {
+  const h = sequenceFixture(); h.timeline.setSnapping(true);
+  const tail = h.timeline.geometry().duration - .03;
+  assert.equal(h.timeline.snappedTime(tail, {}), tail);
+  assert.equal(h.timeline.snapGuide, null);
+  h.timeline.playhead = 6.5;
+  assert.equal(h.timeline.snappedTime(6.56, {}), 6.5);
+  assert.equal(h.timeline.snapGuide.label, 'Playhead');
+  assert.equal(h.timeline.snappedTime(6.56, {altKey:true}), 6.56);
+  assert.equal(h.timeline.snapGuide, null);
+});
+
+test('trim snaps to the pre-drag playhead and commits only on release', () => {
+  const h = sequenceFixture(); h.timeline.setEditTarget('A'); h.timeline.setSnapping(true);
+  h.timeline.playhead = 7; h.timeline.onSeek = time => h.timeline.setPlayhead(time);
+  h.timeline.selectRange(3, 6); const saved = JSON.stringify(h.project);
+  h.timeline.pointerDown(h.point(6, 60));
+  assert.equal(h.timeline.playhead, 6, 'preview seek still works');
+  h.timeline.pointerMove(h.point(7.08, 60));
+  assert.equal(h.timeline.gesture.trimTime, 7);
+  assert.equal(h.timeline.snapGuide.label, 'Playhead');
+  h.timeline.draw();
+  assert.ok(h.draws.some(d => d.text === 'Snap · Playhead'));
+  assert.ok(h.draws.some(d => d.text === 'Trim end · 00:00:07:00'));
+  assert.deepEqual(h.edits, []); assert.equal(JSON.stringify(h.project), saved);
+  h.timeline.pointerUp(h.point(7.08, 60));
+  assert.equal(h.edits[0].time, 7); assert.equal(h.edits[0].slot, 'A');
+  assert.equal(h.timeline.snapGuide, null);
+});
+
+test('source/neighbor limits override snap and trim feedback shows the allowed edge', () => {
+  const h = sequenceFixture(); h.timeline.setEditTarget('A'); h.timeline.setSnapping(true);
+  h.timeline.playhead = 9; h.timeline.selectRange(3, 6);
+  h.timeline.pointerDown(h.point(6, 60)); h.timeline.pointerMove(h.point(9.04, 60));
+  assert.equal(h.timeline.gesture.trimTime, 8);
+  assert.equal(h.timeline.snapGuide, null);
+  h.timeline.draw(); assert.ok(h.draws.some(d => d.text === 'Trim end · 00:00:08:00'));
+  h.timeline.keyDown({key:'Escape',preventDefault(){},stopPropagation(){}});
+  assert.deepEqual(plain(h.timeline.selection), {start:3,end:6}); assert.deepEqual(h.edits, []);
+});
+
+test('source handles cannot be extended by snapping beyond the original recording', () => {
+  const h = sequenceFixture(); h.timeline.setEditTarget('A'); h.timeline.setSnapping(true);
+  h.project.manual.source_tracks.A[1].source_start = 27;
+  h.timeline.playhead = 7; h.timeline.selectRange(3, 6);
+  h.timeline.pointerDown(h.point(6, 60)); h.timeline.pointerUp(h.point(7.04, 60));
+  assert.deepEqual(h.edits, []); assert.equal(h.timeline.snapGuide, null);
+});
+
+test('range handle minimum length cannot advertise a snap to its fixed opposite edge', () => {
+  const h = sequenceFixture(); h.timeline.setSnapping(true); h.timeline.setTool('range');
+  h.timeline.playhead = 7; h.timeline.selectRange(2, 7);
+  h.timeline.pointerDown(h.point(2, 60)); h.timeline.pointerMove(h.point(7, 60));
+  assert.equal(h.timeline.selection.start, 7-1/60);
+  assert.equal(h.timeline.snapGuide, null); assert.deepEqual(h.edits, []);
+});
+
+test('snap distance is screen-pixel based at multiple zooms and prefers the nearest target', () => {
+  const h = sequenceFixture(); h.timeline.setSnapping(true); h.timeline.playhead = 6.5;
+  for (const zoom of [1,4,16]) {
+    h.timeline.zoom = zoom; const px = h.timeline.geometry().px;
+    assert.equal(h.timeline.snappedTime(6.5+7/px, {}), 6.5);
+    assert.equal(h.timeline.snappedTime(6.5+9/px, {}), 6.5+9/px);
+  }
+  h.timeline.zoom = 1; h.timeline.playhead = 4;
+  h.timeline.snappedTime(4.02, {}); assert.equal(h.timeline.snapGuide.label, 'Playhead', 'playhead wins an identical-position tie');
+  h.timeline.setSnapping(false); assert.equal(h.timeline.snapGuide, null);
+});
+
+test('ripple reorder snap anchors use the remaining track clock, not removed footage', () => {
+  const h = sequenceFixture(); h.timeline.setEditTarget('A'); h.timeline.setSnapping(true);
+  h.timeline.pointerDown(h.point(1, 60));
+  const points = plain(h.timeline.snapPoints());
+  assert.ok(points.some(p => p.label === 'A edit' && p.time === 5), 'old A start 8 becomes 5 after removing 0..3');
+  assert.ok(points.some(p => p.label === 'B edit' && p.time === 4), 'B remains fixed in A-only mode');
+  h.timeline.pointerUp(h.point(6.08, 60));
+  assert.equal(h.edits[0].start, 5); assert.equal(h.edits[0].slot, 'A');
+});
+
+test('Together reorder does not remap independent added-media snap targets', () => {
+  const h = mediaFixture(); h.timeline.setSnapping(true);
+  h.timeline.pointerDown(h.point(1, 60));
+  const mediaPoints = plain(h.timeline.snapPoints()).filter(p => p.label === 'Media edge').map(p => p.time);
+  assert.deepEqual(mediaPoints, [2, 6]);
+});
+
+for (const edge of ['start', 'end', 'body']) {
+  test(`added media ${edge} snaps without changing source footage and clears on cancel`, () => {
+    const h = mediaFixture(); h.timeline.setSnapping(true); h.timeline.playhead = 7;
+    const saved = JSON.stringify(h.project);
+    const from = edge === 'start' ? 2 : edge === 'end' ? 5.99 : 4;
+    const to = edge === 'start' ? 3.06 : edge === 'end' ? 7.05 : 5.06;
+    h.timeline.pointerDown(h.mediaPoint(from)); h.timeline.pointerMove(h.mediaPoint(to));
+    assert.equal(h.timeline.gesture.patch[edge === 'start' ? 'start' : 'end'], edge === 'start' ? 3 : 7);
+    assert.ok(h.timeline.snapGuide);
+    assert.equal(JSON.stringify(h.project), saved); assert.deepEqual(h.mediaEdits, []);
+    h.timeline.pointerCancel({pointerId:1});
+    assert.equal(h.timeline.snapGuide, null); assert.deepEqual(h.mediaEdits, []);
+    assert.equal(h.mediaPreviews.at(-1).patch, null);
+  });
+}
+
+test('media body snap excludes its own edges and can align its trailing edge', () => {
+  const h = mediaFixture(); h.timeline.setSnapping(true); h.timeline.playhead = 7;
+  h.timeline.pointerDown(h.mediaPoint(4)); h.timeline.pointerUp(h.mediaPoint(5.06));
+  assert.equal(h.mediaEdits[0].patch.start, 3); assert.equal(h.mediaEdits[0].patch.end, 7);
+  assert.equal(h.timeline.snapGuide, null);
+});
+
+for (const offset of [0, .025]) for (const position of [3.06, 5, 7.05]) {
+  test(`Snap-on media selection at ${position} with ${offset} jitter is not an edit`, () => {
+    const h = mediaFixture(); h.timeline.setSnapping(true);
+    Object.assign(h.project.manual.media_clips[0], {start:3.06,end:7.06});
+    h.timeline.pointerDown(h.mediaPoint(position)); h.timeline.pointerUp(h.mediaPoint(position+offset));
+    assert.deepEqual(h.mediaEdits, []);
+    assert.equal(h.timeline.mediaSelection, 'visual'); assert.equal(h.timeline.snapGuide, null);
+  });
+}
+
+test('frame readout distinguishes neighboring frames at every supported output rate', () => {
+  const h = sequenceFixture();
+  for (const fps of [24,25,30,50,60]) {
+    const value = vm.runInContext(`formatFrameTime(${1/fps}, ${fps})`, h.scope);
+    assert.equal(value, '00:00:00:01');
+    assert.equal(vm.runInContext(`formatFrameTime(${60-1/fps}, ${fps})`, h.scope), `00:00:59:${fps-1}`);
+  }
+  assert.equal(vm.runInContext('formatFrameTime(3600, 60)', h.scope), '01:00:00:00');
+  assert.equal(vm.runInContext('formatFrameTime(NaN)', h.scope), '00:00:00:00');
+  h.timeline.setPlayhead(1/60);
+  assert.equal(h.canvas.attrs['aria-valuetext'], '00:00:00:01 at 60 FPS');
+  assert.equal(Number(h.canvas.attrs['aria-valuenow']), 1/60);
+});
+
+test('media rows pack nonoverlapping visuals and keep overlapping clips and audio groups distinct', () => {
+  const h = mediaFixture();
+  h.project.manual.media_clips = [
+    { id: 'v1', asset_id: 'video', start: 1, end: 4, speed: 1 },
+    { id: 'image', asset_id: 'image', start: 4, end: 6, speed: 1 },
+    { id: 'v2', asset_id: 'video', start: 3, end: 5, speed: 1 },
+    { id: 'music', asset_id: 'sound', start: 0, end: 6, role: 'music', speed: 1 },
+    { id: 'voice', asset_id: 'sound', start: 2, end: 3, role: 'voice', speed: 1 },
+    { id: 'missing', asset_id: 'unknown', start: 0, end: 12 },
+  ];
+  const before = JSON.stringify(h.project), rows = plain(h.timeline.mediaRows());
+  assert.deepEqual(rows.map(row => [row.group, row.clips.map(clip => clip.id)]), [
+    ['visual', ['v1', 'image']], ['visual', ['v2']], ['music', ['music']], ['voice', ['voice']],
+  ]);
+  assert.deepEqual(rows.map(row => [row.top, row.bottom]), [[230,290],[290,350],[350,406],[406,462]]);
+  assert.equal(h.timeline.mediaAtEvent(h.mediaPoint(4, 0)).clip.id, 'image', 'shared endpoint belongs to following clip');
+  assert.equal(h.timeline.mediaAtEvent(h.mediaPoint(3.5, 1)).clip.id, 'v2');
+  assert.equal(h.timeline.mediaAtEvent(h.mediaPoint(6, 0)), null);
+  assert.equal(h.timeline.mediaAtEvent(h.point(3, 229)), null, 'base track never hits added media');
+  assert.equal(JSON.stringify(h.project), before);
+  h.timeline.sourceReview = true;
+  assert.deepEqual(plain(h.timeline.mediaRows()), []);
+});
+
+for (const twoSources of [false, true]) {
+  test(`media rows and captions expand the canvas below ${twoSources ? 'both sources' : 'source A'}`, () => {
+    const h = mediaFixture({ twoSources });
+    h.project.settings.captions = true;
+    h.project.analysis = { audio_source: 'A', transcript: { segments: [{ start: 10.5, end: 11, text: 'Speech' }] } };
+    h.timeline.draw();
+    const base = twoSources ? 230 : 174;
+    assert.equal(h.canvas.style.height, `${base + 60 + 30}px`);
+    assert.equal(h.canvas.height, base + 60 + 30);
+    const caption = h.draws.find(draw => draw.text === 'Cc Speech');
+    assert.ok(caption);
+    assert.equal(caption.y, base + 60 + 17);
+    const captionBlock = h.draws.find(draw => draw.fill === '#6b5722');
+    assert.ok(Math.abs(captionBlock.x - (.5 * h.timeline.geometry().px + 1)) < 1e-8, 'captions follow original speech mapping');
+    assert.ok(caption.x >= 70, 'caption text leaves room for its pinned row label');
+    assert.equal(h.timeline.mediaAtEvent(h.point(.75, base + 60 + 12)), null, 'caption lane is not a media clip');
+    h.project.settings.captions = false;
+    h.timeline.draw();
+    assert.equal(h.canvas.height, base + 60 + 30, 'burned captions remain visible without SRT export');
+    h.project.settings.burn_captions = false;
+    h.timeline.draw();
+    assert.equal(h.canvas.height, base + 60);
+  });
+}
+
+test('media drag previews and commits only the added clip while preserving source lanes', () => {
+  const h = mediaFixture(), before = JSON.stringify(h.project);
+  h.timeline.pointerDown(h.mediaPoint(4));
+  assert.deepEqual(h.mediaSelections, ['visual']);
+  assert.equal(h.timeline.gesture.kind, 'media');
+  h.timeline.pointerMove(h.mediaPoint(7));
+  assert.equal(h.mediaPreviews.at(-1).id, 'visual');
+  assert.ok(Math.abs(h.mediaPreviews.at(-1).patch.start - 5) < 1e-8);
+  assert.equal(h.mediaPreviews.at(-1).patch.end, 9);
+  h.timeline.pointerUp(h.mediaPoint(7));
+  assert.equal(h.mediaEdits.length, 1);
+  assert.equal(h.mediaEdits[0].id, 'visual');
+  assert.ok(Math.abs(h.mediaEdits[0].patch.start - 5) < 1e-8);
+  assert.equal(h.mediaEdits[0].patch.end, 9);
+  assert.deepEqual(h.mediaPreviews.at(-1), { id: 'visual', patch: null });
+  assert.deepEqual(h.edits, []);
+  assert.equal(h.captures.size, 0);
+  assert.equal(JSON.stringify(h.project), before);
+});
+
+test('media edge trim keeps independent picture and audio in-points', () => {
+  const h = mediaFixture(), before = JSON.stringify(h.project);
+  h.timeline.pointerDown(h.mediaPoint(2.01));
+  assert.equal(h.timeline.gesture.edge, 'start');
+  h.timeline.pointerMove(h.mediaPoint(3.01));
+  assert.ok(Math.abs(h.mediaPreviews.at(-1).patch.video_source_start - 7) < 1e-8);
+  h.timeline.pointerUp(h.mediaPoint(3.01));
+  const patch = h.mediaEdits[0].patch;
+  assert.ok(Math.abs(patch.start - 3) < 1e-8);
+  assert.ok(Math.abs(patch.source_start - 4) < 1e-8);
+  assert.equal('video_source_start' in patch, false, 'the server derives picture time; public update must not send the private field');
+  assert.equal(JSON.stringify(h.project), before);
+  const tail = mediaFixture();
+  tail.timeline.pointerDown(tail.mediaPoint(5.99));
+  assert.equal(tail.timeline.gesture.edge, 'end');
+  tail.timeline.pointerMove(tail.mediaPoint(7.99));
+  tail.timeline.pointerUp(tail.mediaPoint(7.99));
+  assert.ok(Math.abs(tail.mediaEdits[0].patch.end - 8) < 1e-8);
+});
+
+test('media release uses its final position even when the browser coalesces pointer moves', () => {
+  const h = mediaFixture();
+  h.timeline.pointerDown(h.mediaPoint(4));
+  h.timeline.pointerUp(h.mediaPoint(7));
+  assert.equal(h.mediaEdits.length, 1);
+  assert.equal(h.mediaEdits[0].id, 'visual');
+  assert.ok(Math.abs(h.mediaEdits[0].patch.start - 5) < 1e-8);
+  assert.equal(h.mediaEdits[0].patch.end, 9);
+});
+
+test('foreign pointers cannot preview or commit a media gesture', () => {
+  const h = mediaFixture();
+  h.timeline.pointerDown(h.mediaPoint(4));
+  h.timeline.pointerMove(h.mediaPoint(7, 0, { pointerId: 2 }));
+  h.timeline.pointerUp(h.mediaPoint(7, 0, { pointerId: 2 }));
+  assert.ok(h.timeline.gesture);
+  assert.deepEqual(h.mediaPreviews, []);
+  assert.deepEqual(h.mediaEdits, []);
+  h.timeline.pointerCancel(h.mediaPoint(4));
+  assert.equal(h.captures.size, 0);
+});
+
+test('cancelled media drag clears the preview and preserves the existing edit selection', () => {
+  const h = mediaFixture();
+  h.timeline.setSelection({ start: 1, end: 2 }, false, true);
+  h.timeline.pointerDown(h.mediaPoint(4));
+  h.timeline.pointerMove(h.mediaPoint(7));
+  h.timeline.pointerCancel(h.mediaPoint(7));
+  assert.deepEqual(plain(h.timeline.selection), { start: 1, end: 2 });
+  assert.equal(h.timeline.selectionIsRange, true);
+  assert.deepEqual(h.mediaPreviews.at(-1), { id: 'visual', patch: null });
+  assert.deepEqual(h.mediaEdits, []);
+  assert.equal(h.timeline.gesture, null);
+});
+
+test('media split and delete target only the selected added clip and honor the busy guard', () => {
+  const h = mediaFixture();
+  h.timeline.setTool('blade');
+  h.timeline.pointerDown(h.mediaPoint(4));
+  h.timeline.pointerUp(h.mediaPoint(4));
+  assert.deepEqual(h.mediaActions, [{ action: 'media_split', clip_id: 'visual', time: 4 }]);
+  h.timeline.keyDown(h.event(0, { key: 'Delete' }));
+  assert.deepEqual(h.mediaActions.at(-1), { action: 'media_remove', clip_id: 'visual' });
+  h.timeline.canEdit = () => false;
+  h.timeline.pointerDown(h.mediaPoint(4));
+  h.timeline.keyDown(h.event(0, { key: 'Delete' }));
+  assert.equal(h.mediaActions.length, 2);
+  assert.deepEqual(h.edits, []);
+});
+
+test('media trims obey the backend minimum and cannot extend beyond original sound samples', () => {
+  const tail = mediaFixture();
+  tail.project.assets.video.duration = 7; // Source in 3 + existing span 4 already reaches EOF.
+  tail.timeline.pointerDown(tail.mediaPoint(5.99));
+  tail.timeline.pointerUp(tail.mediaPoint(10));
+  assert.deepEqual(tail.mediaEdits, [], 'a clamped unchanged edge needs no save');
+  const shortest = mediaFixture();
+  shortest.timeline.pointerDown(shortest.mediaPoint(5.99));
+  shortest.timeline.pointerUp(shortest.mediaPoint(0));
+  assert.ok(Math.abs(shortest.mediaEdits[0].patch.end - 2.08) < 1e-8);
+  const head = mediaFixture();
+  head.timeline.pointerDown(head.mediaPoint(2.01));
+  head.timeline.pointerUp(head.mediaPoint(10));
+  assert.ok(Math.abs(head.mediaEdits[0].patch.start - 5.92) < 1e-8);
+  assert.ok(Math.abs(head.mediaEdits[0].patch.source_start - 6.92) < 1e-8);
+});
+
+test('image trims can reveal earlier timeline time and shortening clips keeps fades inside the span', () => {
+  const image = mediaFixture();
+  image.project.manual.media_clips[0] = { id: 'visual', asset_id: 'image', start: 2, end: 6, source_start: 0, speed: 1 };
+  image.timeline.pointerDown(image.mediaPoint(2.01));
+  image.timeline.pointerUp(image.mediaPoint(0));
+  assert.deepEqual(image.mediaEdits, [{ id: 'visual', patch: { start: 0 } }]);
+  const sound = mediaFixture();
+  Object.assign(sound.project.manual.media_clips[0], { fade_in: 1, fade_out: 1 });
+  sound.timeline.pointerDown(sound.mediaPoint(5.99));
+  sound.timeline.pointerUp(sound.mediaPoint(2.99));
+  const patch = sound.mediaEdits[0].patch;
+  assert.ok(Math.abs(patch.end - 3) < 1e-8);
+  assert.ok(Math.abs(patch.fade_in - .5) < 1e-8);
+  assert.ok(Math.abs(patch.fade_out - .5) < 1e-8);
+});
+
+test('a plain media click does not save and protected keyboard events cannot remove the clip', () => {
+  const h = mediaFixture();
+  h.timeline.pointerDown(h.mediaPoint(4));
+  h.timeline.pointerUp(h.mediaPoint(4));
+  assert.deepEqual(h.mediaEdits, []);
+  for (const extra of [{ defaultPrevented: true }, { isComposing: true }, { repeat: true }, { ctrlKey: true }, { metaKey: true }, { altKey: true }]) {
+    h.timeline.keyDown(h.event(0, { key: 'Delete', ...extra }));
+  }
+  h.timeline.editPending = true;
+  h.timeline.keyDown(h.event(0, { key: 'Delete' }));
+  assert.deepEqual(h.mediaActions, []);
+});
+
+test('media blade rejects fragments shorter than .08 seconds and releases pointer capture', () => {
+  const h = mediaFixture();
+  h.timeline.setTool('blade');
+  for (const time of [2.02, 5.98]) {
+    h.timeline.pointerDown(h.mediaPoint(time));
+    h.timeline.pointerUp(h.mediaPoint(time));
+  }
+  assert.deepEqual(h.mediaActions, []);
+  assert.equal(h.captures.size, 0);
+});
 
 test('zoom in and out center the yellow playhead, including when it was scrolled offscreen',()=>{
   const h=sequenceFixture();h.timeline.setPlayhead(7);h.timeline.selectRange(1,2);
@@ -170,7 +701,7 @@ test("Together drag moves one atomic time block with a linked insertion preview"
     h.timeline.pointerMove(h.point(6.5, y)); h.timeline.draw();
     const ghosts = h.draws.filter((draw) => draw.fill === "rgba(185,244,213,.6)");
     assert.deepEqual(ghosts.map((draw) => draw.y), [36, 92]);
-    assert.ok(h.draws.some((draw) => draw.text === "Move together · 00:06.0"));
+    assert.ok(h.draws.some((draw) => draw.text === "Move together · 00:00:06:00"));
     h.timeline.pointerUp(h.point(6.5, y));
     assert.deepEqual(h.edits, [{ action: "sequence_move_range", start: 3, end: 4, to: 6 }]);
     assert.deepEqual(h.notifications, [{ start: 3, end: 4 }]);
@@ -578,6 +1109,114 @@ test("waveform follows analyzed source clips and never substitutes a different s
   assert.equal(h.timeline.audioTimelineRanges(bins), h.timeline.audioTimelineRanges(bins), "repaints reuse mapped bins");
   h.project.manual.source_mixer.audio_slot = "A";
   assert.deepEqual(plain(h.timeline.audioTimelineRanges(bins)), []);
+});
+
+function waveformStrokes(h) {
+  const segments = [];
+  let previous;
+  const ctx = h.canvas.getContext("2d");
+  ctx.moveTo = (x, y) => { previous = { x, y }; };
+  ctx.lineTo = (x, y) => { segments.push({ from: previous, to: { x, y } }); };
+  h.timeline.drawWaveform(ctx, 50, 600);
+  return segments.filter(line => line.from.x === line.to.x && line.from.y !== line.to.y);
+}
+
+test("manual source audio draws measured upload bins before any AI analysis", () => {
+  const h = fixture({ tracks: true });
+  h.project.pre_analysis = { audio: { A: { waveform: [{ start: 1, end: 2, rms_dbfs: -20, peak_dbfs: -12 }] } } };
+  assert.ok(waveformStrokes(h).some(line => line.from.x === 75), "audible upload must draw a real waveform");
+});
+
+test("switching to B draws its native bins through trimmed clips without applying analysis offset twice", () => {
+  const h = fixture({ tracks: true });
+  h.project.analysis = { audio_source: "A", audio_timeline_offset: 2, audio: { waveform: [{ start: 1, end: 2, rms_dbfs: -12 }] } };
+  h.project.pre_analysis = { audio: { B: { waveform: [{ start: 4, end: 5, rms_dbfs: -20, peak_dbfs: -12 }] } } };
+  h.project.manual.source_mixer = { audio_slot: "B" };
+  const lines = waveformStrokes(h);
+  assert.ok(lines.some(line => line.from.x === 25), "B source 4–5 belongs at edit 0–1");
+  assert.ok(!lines.some(line => line.from.x === 75), "A waveform must not leak into B");
+});
+
+test("source waveform follows moved copies and refreshes after an in-place trim", () => {
+  const h = fixture({ tracks: true });
+  h.project.pre_analysis = { audio: { A: { waveform: [{ start: 4, end: 5, rms_dbfs: -20 }] } } };
+  h.project.manual.source_tracks.A = [
+    { id: "first", start: 2, end: 4, source_start: 4 },
+    { id: "copy", start: 8, end: 10, source_start: 4 },
+  ];
+  let lines = waveformStrokes(h);
+  assert.ok(lines.some(line => line.from.x === 125));
+  assert.ok(lines.some(line => line.from.x === 425));
+  assert.ok(!lines.some(line => line.from.x === 225), "removed original time must stay empty");
+  h.project.manual.source_tracks.A[0].start = 3;
+  h.project.manual.source_tracks.A[0].source_start = 5;
+  lines = waveformStrokes(h);
+  assert.ok(!lines.some(line => line.from.x === 125), "trim cannot reuse stale cached bins");
+  assert.ok(lines.some(line => line.from.x === 425), "the untouched copy still has measured audio");
+});
+
+test("legacy B analysis remains a waveform fallback with its analysis-clock offset", () => {
+  const h = fixture({ tracks: true });
+  h.project.analysis = { audio_source: "B", audio_timeline_offset: 2, audio: { waveform: [{ start: 6, end: 7, rms_dbfs: -20 }] } };
+  h.project.manual.source_mixer = { audio_slot: "B" };
+  assert.ok(waveformStrokes(h).some(line => line.from.x === 25));
+  h.project.manual.source_mixer.audio_slot = "A";
+  assert.equal(waveformStrokes(h).length, 0, "analyzed B audio never decorates selected A");
+});
+
+test("measured digital silence and a source without audio never create peaks", () => {
+  const h = fixture({ tracks: true });
+  h.project.sources.A.has_audio = true;
+  h.project.pre_analysis = { audio: { A: { available: true, waveform: [{ start: 0, end: 1, rms_dbfs: -100, peak_dbfs: -100 }] } } };
+  assert.equal(waveformStrokes(h).length, 0, "silence is measured zero, not minimum decorative bars");
+  h.project.sources.A.has_audio = false;
+  h.project.sources.B.has_audio = false;
+  h.project.pre_analysis.audio.A.waveform[0].rms_dbfs = -6;
+  assert.equal(waveformStrokes(h).length, 0, "no-audio metadata takes precedence over stale data");
+});
+
+test("waveform uses the host's pending audio selection without changing stored settings", () => {
+  const h = fixture({ tracks: true });
+  h.project.pre_analysis = { audio: {
+    A: { waveform: [{ start: 1, end: 2, rms_dbfs: -20 }] },
+    B: { waveform: [{ start: 4, end: 5, rms_dbfs: -20 }] },
+  } };
+  h.timeline.getAudioSlot = () => "B";
+  assert.ok(waveformStrokes(h).some(line => line.from.x === 25));
+  assert.equal(h.project.manual.source_mixer, undefined);
+});
+
+test("zoomed and scrolled source waveforms occupy measured spans within the visible viewport", () => {
+  const h = fixture({ tracks: true, width: 100 });
+  h.project.pre_analysis = { audio: { A: { waveform: [{ start: 1, end: 2, rms_dbfs: -20 }] } } };
+  h.scroll.scrollLeft = 150;
+  const segments = [], ctx = h.canvas.getContext("2d"); let previous;
+  ctx.moveTo = (x, y) => { previous = { x, y }; };
+  ctx.lineTo = (x, y) => { segments.push({ from: previous, to: { x, y } }); };
+  h.timeline.drawWaveform(ctx, 200, 2400);
+  const vertical = segments.filter(line => line.from.x === line.to.x && line.from.y !== line.to.y);
+  assert.ok(vertical.length > 10, "zoomed measured bins cover their real duration");
+  assert.ok(vertical.every(line => line.from.x >= 200 && line.from.x <= 250));
+  h.scroll.clientWidth = 50;segments.length = 0;h.timeline.drawWaveform(ctx, 200, 2400);
+  assert.equal(segments.filter(line => line.from.x === line.to.x && line.from.y !== line.to.y).length, 0);
+});
+
+test("imported-audio waveform preserves brief measured peaks at low zoom", () => {
+  const h = mediaFixture();
+  h.project.assets.sound = { kind: "audio", name: "Impulse", duration: 1, waveform: Array(100).fill(0) };
+  h.project.assets.sound.waveform[1] = 1;
+  h.project.manual.media_clips = [{ id: "music", asset_id: "sound", role: "music", start: 0, end: 1, source_start: 0 }];
+  const segments = [], ctx = h.canvas.getContext("2d");let previous;
+  ctx.moveTo = (x, y) => { previous = { x, y }; };
+  ctx.lineTo = (x, y) => { if (ctx.strokeStyle === "#86dcc0") segments.push({ from: previous, to: { x, y } }); };
+  h.timeline.drawMedia(ctx, 20, 600);
+  const row = h.timeline.mediaRows()[0];
+  assert.ok(segments.some(line => line.to.y - line.from.y === 31), "pixel buckets retain the actual peak instead of skipping it");
+  assert.ok(segments.every(line => line.from.y >= row.top + 18 && line.to.y <= row.bottom - 7), "measured waves stay below the name and inside the audio row");
+  h.project.assets.sound.waveform[99] = .5;
+  h.project.manual.media_clips[0].source_start = 1;
+  segments.length = 0;h.timeline.drawMedia(ctx, 20, 600);
+  assert.ok(!segments.some(line => line.to.y !== line.from.y), "audio beyond the source cannot repeat its last sample");
 });
 
 test("time labels truncate tenths without floating-point underflow or second overflow", () => {

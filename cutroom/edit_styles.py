@@ -569,6 +569,12 @@ def enrich_brief_with_style(brief: Mapping[str, Any]) -> dict[str, Any]:
     output = copy.deepcopy(dict(brief))
     style = get_edit_style(output.get("edit_style"))
     output["edit_style"] = style["id"]
+    # Missing intent belongs to an older project: preserve its preset contract.
+    target_mode = output.get("duration_mode") == "target" and output.get("goal", "short") == "short"
+    policy = copy.deepcopy(style["selection_policy"])
+    policy["duration_mode"] = "target" if target_mode else "style"
+    if target_mode:
+        policy["max_moments"] = None
     guidance = style["guidance"]
     structure = style["selection_policy"].get("story_structure") or []
     if structure:
@@ -577,13 +583,19 @@ def enrich_brief_with_style(brief: Mapping[str, Any]) -> dict[str, Any]:
             " Select complete source passages with the required context. A shorter complete moment is better "
             "than filling the duration with unrelated clips. Do not invent missing action, dialogue or outcomes."
         )
-    max_moments = style["selection_policy"].get("max_moments")
+    if target_mode:
+        guidance += (
+            " Duration intent overrides the preset's single-moment count: assemble distinct relevant complete "
+            "passages toward the requested approximate length, in source chronology. Preserve each passage's "
+            "setup and payoff. Do not repeat footage or add irrelevant material to fill time; explain a shortfall."
+        )
+    max_moments = policy.get("max_moments")
     if max_moments:
         guidance += f" Keep at most {max_moments} distinct complete moment(s); the duration is a ceiling, not a quota."
     output["style_profile"] = {
         "id": style["id"],
         "features": list(style["features"]),
-        "selection_policy": copy.deepcopy(style["selection_policy"]),
+        "selection_policy": policy,
         "framing_policy": copy.deepcopy(style["framing_policy"]),
         "guidance": guidance,
     }

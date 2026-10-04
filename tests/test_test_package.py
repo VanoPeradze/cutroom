@@ -57,7 +57,9 @@ def test_only_source_is_packaged_and_configuration_is_fresh(source):
 def test_archive_hashes_inventory_and_first_run_files(source, tmp_path):
     target = builder.build_package(source, tmp_path / "out", build_id="unit")
     manifest = builder.verify_package(target)
-    assert target.name == "CUTROOM-1.1-beta-unit.zip"
+    assert target.name == "CUTROOM-1.1-Beta.zip"
+    assert target.parent.name == "CUTROOM-1.1-beta-unit"
+    assert manifest["build_id"] == "CUTROOM-1.1-beta-unit"
     assert manifest["app_version"] == "1.1-beta"
     assert manifest["app_version_label"] == "1.1 Beta"
     assert manifest["kind"] == "public-source-beta"

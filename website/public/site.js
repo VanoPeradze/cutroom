@@ -1,27 +1,11 @@
 (() => {
+  document.documentElement.classList.add('js');
   const translations = [...document.querySelectorAll('[data-he]')].map(node => ({node, en: node.innerHTML, he: node.dataset.he}));
-  const imageTranslations = [...document.querySelectorAll('[data-he-alt]')].map(node => ({node, en: node.alt, he: node.dataset.heAlt}));
+  const images = [...document.querySelectorAll('[data-he-alt]')].map(node => ({node, en: node.alt, he: node.dataset.heAlt}));
+  const labels = [...document.querySelectorAll('[data-he-aria]')].map(node => ({node, en: node.getAttribute('aria-label'), he: node.dataset.heAria}));
   const languageSwitch = document.getElementById('languageSwitch');
-  const tourImage = document.getElementById('tourImage');
-  const caption = document.getElementById('tourCaption');
   const dialog = document.getElementById('imageDialog');
-  const expanded = document.getElementById('expandedImage');
-  const tourButtons = [...document.querySelectorAll('[data-shot]')];
   let language = new URL(location.href).searchParams.get('lang') === 'he' ? 'he' : 'en';
-  let currentShot = 'editor';
-  const shots = {
-    editor: {en: 'Independent A/B tracks, editable layouts and a live preview. The image uses synthetic test footage, not an AI-generated result.', he: 'ערוצי A/B נפרדים, פריסות ניתנות לשינוי ותצוגה מקדימה. התמונה משתמשת בחומר בדיקה סינתטי, לא בתוצאה שנוצרה ב־AI.', alt: {en: 'CUTROOM editor with separate A/B timeline tracks and synthetic test footage', he: 'עורך CUTROOM עם ערוצי טיימליין A/B נפרדים וחומר בדיקה סינתטי'}},
-    welcome: {en: 'Choose a Short, a YouTube video or a manual edit. Local model setup is visible before your first AI edit.', he: 'בחרו Short, סרטון יוטיוב או עריכה ידנית. הכנת המודלים המקומיים מופיעה לפני העריכה הראשונה עם AI.', alt: {en: 'CUTROOM welcome screen with three workflows and local setup guidance', he: 'מסך הכניסה של CUTROOM עם שלושה מסלולי עריכה והכוונה להגדרת AI מקומי'}},
-    'ai-options': {en: 'Local model setup in an earlier beta. Downloads require confirmation. In 1.1 Beta, My own API also supports compatible provider endpoints, as explained below.', he: 'הגדרת מודלים מקומיים בבטא קודמת. הורדות דורשות אישור. בגרסת 1.1 Beta, האפשרות My own API תומכת גם בספקי API תואמים, כפי שמוסבר בהמשך.', alt: {en: 'CUTROOM local model setup example from an earlier beta', he: 'דוגמה להגדרת המודלים המקומיים של CUTROOM מבטא קודמת'}}
-  };
-  function renderShot() {
-    tourImage.src = '/assets/' + currentShot + '.png';
-    tourImage.alt = shots[currentShot].alt[language];
-    caption.textContent = shots[currentShot][language];
-    tourButtons.forEach(button => button.setAttribute('aria-pressed', String(button.dataset.shot === currentShot)));
-    expanded.src = tourImage.src;
-    expanded.alt = tourImage.alt;
-  }
   function renderLanguage() {
     document.documentElement.lang = language;
     document.documentElement.dir = language === 'he' ? 'rtl' : 'ltr';
@@ -29,19 +13,16 @@
       if (language === 'he') item.node.textContent = item.he;
       else item.node.innerHTML = item.en;
     }
-    imageTranslations.forEach(item => { item.node.alt = item[language]; });
+    images.forEach(item => { item.node.alt = item[language]; });
+    labels.forEach(item => { item.node.setAttribute('aria-label', item[language]); });
     languageSwitch.textContent = language === 'he' ? 'English' : 'עברית';
     languageSwitch.lang = language === 'he' ? 'en' : 'he';
     languageSwitch.setAttribute('aria-label', language === 'he' ? 'Read this website in English' : 'קריאת האתר בעברית');
-    languageSwitch.href = language === 'he' ? '?lang=en' + location.hash : '?lang=he' + location.hash;
-    document.title = language === 'he' ? 'CUTROOM 1.1 Beta — החומר שלכם. העריכה שלכם.' : 'CUTROOM 1.1 Beta — Your footage. Your edit.';
+    languageSwitch.href = (language === 'he' ? '?lang=en' : '?lang=he') + location.hash;
+    document.title = language === 'he' ? 'CUTROOM — כל פריים. בידיים שלכם.' : 'CUTROOM — Make the cut. Make it yours.';
     document.querySelector('meta[name="description"]').content = language === 'he'
-      ? 'עריכת וידאו חינמית בקוד פתוח ליוצרי תוכן. התחילו מטיוטה בעזרת AI או ערכו ידנית. הורידו את הבטא ל־Windows ולמדו איך מתחילים.'
-      : 'Free, open-source video editing for creators. Start with an AI-assisted draft or edit manually. Download the Windows beta and learn how to get started.';
-    document.querySelector('nav').setAttribute('aria-label', language === 'he' ? 'ניווט ראשי' : 'Main navigation');
-    document.getElementById('expandShot').setAttribute('aria-label', language === 'he' ? 'הגדלת תמונת המוצר' : 'Enlarge product screenshot');
-    dialog.setAttribute('aria-label', language === 'he' ? 'תמונת המוצר' : 'Product screenshot');
-    renderShot();
+      ? 'עורך וידאו חינמי ומקומי. חיתוכים, סאונד וכתוביות. בטא ל־Windows ול־Mac; Linux מהמקור. AI הוא אפשרות.'
+      : 'A free local video editor. Cut footage, mix sound and add captions. Windows/Mac beta; Linux from source. Optional AI drafts, editable by you.';
   }
   languageSwitch.addEventListener('click', event => {
     event.preventDefault();
@@ -51,13 +32,47 @@
     history.replaceState(null, '', url);
     renderLanguage();
   });
-  tourButtons.forEach(button => button.addEventListener('click', () => { currentShot = button.dataset.shot; renderShot(); }));
   document.getElementById('expandShot').addEventListener('click', () => dialog.showModal());
   document.getElementById('closeImage').addEventListener('click', () => dialog.close());
   dialog.addEventListener('click', event => { if (event.target === dialog) dialog.close(); });
+
+  // Workspace tour: without this script every panel stays visible in reading order.
+  const tabList = document.querySelector('.tour-tabs');
+  const tabs = [...tabList.querySelectorAll('.tour-tab')];
+  const panels = tabs.map(tab => document.getElementById(tab.getAttribute('aria-controls')));
+  tabList.setAttribute('role', 'tablist');
+  tabs.forEach(tab => tab.setAttribute('role', 'tab'));
+  panels.forEach(panel => { panel.setAttribute('role', 'tabpanel'); panel.tabIndex = 0; });
+  function selectTab(index, focus) {
+    tabs.forEach((tab, i) => {
+      const selected = i === index;
+      tab.setAttribute('aria-selected', String(selected));
+      tab.tabIndex = selected ? 0 : -1;
+      panels[i].hidden = !selected;
+    });
+    if (focus) tabs[index].focus();
+  }
+  tabs.forEach((tab, index) => tab.addEventListener('click', () => selectTab(index, false)));
+  tabList.addEventListener('keydown', event => {
+    const current = tabs.indexOf(document.activeElement);
+    if (current < 0) return;
+    const forward = document.documentElement.dir === 'rtl' ? 'ArrowLeft' : 'ArrowRight';
+    const backward = document.documentElement.dir === 'rtl' ? 'ArrowRight' : 'ArrowLeft';
+    let next = null;
+    if (event.key === forward) next = (current + 1) % tabs.length;
+    else if (event.key === backward) next = (current - 1 + tabs.length) % tabs.length;
+    else if (event.key === 'Home') next = 0;
+    else if (event.key === 'End') next = tabs.length - 1;
+    if (next === null) return;
+    event.preventDefault();
+    selectTab(next, true);
+  });
+  selectTab(0, false);
+
   function revealLinkedHelp() {
     const target = document.getElementById(location.hash.slice(1));
-    if (target?.tagName === 'DETAILS') { target.open = true; target.scrollIntoView({block:'start'}); }
+    const details = target?.closest('details');
+    if (details) { details.open = true; target.scrollIntoView({block:'start'}); }
   }
   window.addEventListener('hashchange', revealLinkedHelp);
   renderLanguage();

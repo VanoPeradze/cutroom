@@ -56,8 +56,11 @@ def run_command(
     cancelled job terminates FFmpeg instead of waiting for an entire transcode.
     """
 
+    # FFmpeg/ffprobe emit UTF-8 paths and metadata regardless of Windows' locale.
+    # Binary PCM/image callers must keep the exact byte stream.
+    decoding = {"encoding": "utf-8", "errors": "replace"} if text else {}
     if cancel_check is None:
-        return subprocess.run(args, capture_output=True, text=text, timeout=timeout, check=check)
+        return subprocess.run(args, capture_output=True, text=text, timeout=timeout, check=check, **decoding)
     cancel_check()
     creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
     process = subprocess.Popen(
@@ -66,6 +69,7 @@ def run_command(
         stderr=subprocess.PIPE,
         text=text,
         creationflags=creationflags,
+        **decoding,
     )
     started = time.monotonic()
     stdout: str | bytes | None = "" if text else b""
