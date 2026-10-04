@@ -960,6 +960,7 @@ function bindEvents() {
   elements.cancelExportJobButton.addEventListener("click", cancelActiveJob);
   elements.confirmExport.addEventListener("click", startExport);
   elements.modelButton.addEventListener("click", installModel);
+  document.getElementById?.("modelUpgradeButton")?.addEventListener("click", () => document.getElementById("homeModelsButton")?.click());
   elements.retryAIButton.addEventListener("click", retryLocalAI);
 
   document.addEventListener("keydown", handleEditorShortcut, true);
@@ -6822,6 +6823,18 @@ function renderModelStatus() {
   $("small", elements.modelStatus).textContent = detail;
   elements.modelButton.hidden = !engineAvailable || (installed && !(fallback && selection?.requested_model_installed === false)) || preparing || installing;
   elements.modelButton.textContent = fallback ? "Download requested model" : "Download model…";
+  // Auto mode can suggest a larger Story model that fits this GPU; the download
+  // itself still happens in AI connection with the usual confirmation.
+  const upgrade = document.getElementById?.("modelUpgradeButton");
+  if (upgrade) {
+    const suggested = ready && !fallback && !preparing && !installing ? selection?.upgrade_model : null;
+    upgrade.hidden = !suggested;
+    if (suggested) {
+      upgrade.textContent = `Better drafts: get ${suggested}`;
+      upgrade.title = `Your GPU can run ${suggested}. It writes stronger drafts than ${actualModel}. Opens AI connection; the download needs your confirmation.`;
+      $("small", elements.modelStatus).textContent = `${actualModel} · Runs on this computer · ${suggested} fits your GPU for stronger drafts`;
+    }
+  }
   elements.retryAIButton.hidden = runtime?.can_retry === false || (ready && !preparing && !installing);
   elements.retryAIButton.textContent = preparing ? "Preparing…" : "Retry AI";
   for (const button of [elements.modelButton, elements.retryAIButton]) button.disabled = preparing || installing || foregroundBusy();

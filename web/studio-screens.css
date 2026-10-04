@@ -371,3 +371,5 @@ body:not(.studio-open) .topbar .project-name:focus { border-color:var(--cyan) !i
 #analysisPanel .director-progress-head { display:flex; align-items:baseline; justify-content:space-between; gap:16px; margin:0 0 18px; }
 #analysisPanel .director-progress-head b { font-size:24px; font-weight:500; color:var(--paper); }
 #analysisPanel .director-progress-head strong { font-size:28px; font-weight:600; color:var(--cyan-text); font-variant-numeric:tabular-nums; }
+#analysisPanel .director-eta { display:block; min-height:18px; margin:-10px 0 14px; color:var(--paper-dim); font-size:13px; text-align:end; }
+.model-status .model-upgrade { border-color:var(--cyan); color:var(--cyan-text); }

@@ -336,13 +336,28 @@
     const subtitle = make("p", "director-subtitle", "Building an editable first draft from your recording.");
     message.after(subtitle);
     const head = make("div", "director-progress-head");
-    const stage = make("b"), percent = make("strong");
+    const stage = make("b"), percent = make("strong"), eta = make("small", "director-eta");
+    eta.setAttribute("aria-live", "polite");
     head.append(stage, percent);
     detail.prepend(head);
+    head.after(eta);
+    // Remaining-time estimate from the observed progress rate; shown only once
+    // the rate is meaningful, and cleared whenever progress restarts.
+    let first = null, lastText = "";
     const sync = () => {
       stage.textContent = message.textContent.trim();
       const value = Number(track.getAttribute("aria-valuenow"));
       percent.textContent = Number.isFinite(value) ? `${Math.round(value)}%` : "";
+      const now = performance.now();
+      if (panel.hidden || !Number.isFinite(value) || value <= 0 || (first && value < first.value)) first = null;
+      if (!first && Number.isFinite(value) && value > 0 && !panel.hidden) first = { time: now, value };
+      let text = "";
+      if (first && value < 99 && value - first.value >= 3 && now - first.time > 8000) {
+        const rate = (value - first.value) / (now - first.time);
+        const seconds = (100 - value) / rate / 1000;
+        text = seconds < 60 ? "Less than a minute left" : `About ${Math.round(seconds / 60)} min left`;
+      }
+      if (text !== lastText) { eta.textContent = text; lastText = text; }
     };
     observe(message, sync, { childList: true, characterData: true, subtree: true });
     observe(track, sync, { attributes: true });

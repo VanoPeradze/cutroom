@@ -120,3 +120,19 @@ def test_auto_never_presents_a_missing_quality_model_as_a_fallback(monkeypatch):
     status = intelligence.story_ai_status(Settings(), {"performance_mode": "auto"})
     assert status["selected_model"] == "qwen3.5:4b"
     assert status["using_fallback"] is False
+
+
+@pytest.mark.parametrize("gpu_room,installed,expected", [
+    (True, {"qwen3.5:4b"}, "qwen3.5:9b"),
+    (False, {"qwen3.5:4b"}, None),
+    (True, {"qwen3.5:4b", "qwen3.5:9b"}, None),
+])
+def test_auto_suggests_the_larger_story_model_only_when_it_would_run_and_is_missing(monkeypatch, gpu_room, installed, expected):
+    from cutroom import transcription
+    monkeypatch.setattr(intelligence, "_ollama_inventory", lambda _: (True, installed))
+    monkeypatch.setattr(transcription, "cuda_available", lambda _settings=None: True)
+    monkeypatch.setattr(transcription, "_cuda_has_capacity", lambda *_args, **_kwargs: gpu_room)
+    intelligence._STORY_GPU_PROBE.clear()
+    status = intelligence.story_ai_status(Settings(), {"performance_mode": "auto"})
+    assert status["upgrade_model"] == expected
+    assert status["ready"] is True
