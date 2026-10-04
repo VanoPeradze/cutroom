@@ -1,6 +1,6 @@
 import { applyTranslations, dictionaries } from "./i18n.js?v=1.1-beta-chroma-edit-2";
 import { TimelineView, formatTime, editableClips, timelineDuration, sequenceBlocks, sequenceGaps, rippleMoveStart } from "./timeline.js?v=1.1-beta-studio-1";
-import { MediaStudio } from "./media-studio.js?v=1.1-beta-chroma-edit-2";
+import { MediaStudio } from "./media-studio.js?v=1.1-beta-studio-2";
 import { StabilizationStudio } from "./stabilization-studio.js?v=1.1-beta-1";
 import { ChromaStudio } from "./chroma-studio.js?v=1.1-beta-chroma-edit-2";
 import { ChromaPreview } from "./chroma-preview.js?v=1.1-beta-chroma-edit-2";
