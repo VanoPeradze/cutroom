@@ -778,3 +778,16 @@ def test_optional_worker_progress_write_cannot_abort_completed_transcript(monkey
     envelope = json.loads(result_path.read_text(encoding="utf-8"))
     assert envelope["ok"] is True
     assert envelope["result"]["language"] == "he"
+
+
+@pytest.mark.parametrize("installed,room,expected", [(True, True, True), (False, True, False), (True, False, False)])
+def test_auto_quality_needs_the_model_on_disk_and_gpu_room(monkeypatch, installed, room, expected):
+    from cutroom import local_models
+    checked = []
+    monkeypatch.setattr(local_models, "speech_installed", lambda model: checked.append(model) or installed)
+    monkeypatch.setattr(transcription, "_cuda_has_capacity", lambda *_args, **_kwargs: room)
+    assert transcription._auto_quality_ready(DummySettings(), "he") is expected
+    assert checked == ["ivrit-ai/whisper-large-v3-turbo-ct2"]
+    checked.clear()
+    transcription._auto_quality_ready(DummySettings(), None)
+    assert checked == ["turbo"]

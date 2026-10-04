@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import contextlib
 import copy
+import functools
 import json
 import logging
 import queue
 import re
 import threading
+import time
 import urllib.error
 import urllib.request
 from collections import Counter
@@ -18,6 +21,7 @@ from .config import Settings
 from .utils import clamp, merge_ranges, normalize_text, range_duration
 
 STORY_CACHE_PIPELINE = "hierarchical-story-2026-09-06.full-chapter-input"
+CRITIC_REVIEW_CONTRACT = "critic-review-2026-10-01.effective-actions-v1"
 
 FILLERS: dict[str, set[str]] = {
     "en": {"um", "uh", "erm", "like", "basically", "actually", "literally", "you know", "i mean", "so"},
@@ -475,35 +479,51 @@ def _installed_models(settings: Settings) -> set[str]:
     return _ollama_inventory(settings)[1]
 
 
+_STORY_GPU_PROBE: dict[float, tuple[float, bool]] = {}
+
+
+def _auto_story_quality_ready(settings: Settings, model: str) -> bool:
+    """Auto prefers the larger Story model only when it is already installed and
+    the GPU has room for it, so drafts improve without a download or a slow
+    partially offloaded model."""
+    from .transcription import _cuda_has_capacity, cuda_available
+
+    if model.strip().removesuffix(":latest") not in _installed_models(settings):
+        return False
+    try:
+        minimum = float(settings.ai.get("editor_quality_min_free_mb", 9216))
+    except (TypeError, ValueError):
+        minimum = 9216.0
+    # Status is polled; probe the GPU at most every 30 seconds.
+    cached = _STORY_GPU_PROBE.get(minimum)
+    if cached and time.monotonic() - cached[0] < 30:
+        return cached[1]
+    ready = bool(cuda_available(settings) and _cuda_has_capacity(settings, minimum_free_mb=minimum))
+    _STORY_GPU_PROBE[minimum] = (time.monotonic(), ready)
+    return ready
+
+
 def _model_preferences(settings: Settings, brief: dict[str, Any]) -> list[str]:
     base = str(settings.ai.get("editor_model", "qwen3.5:4b"))
     fallbacks = [str(item) for item in settings.ai.get("editor_fallback_models", [])]
     mode = str(brief.get("performance_mode") or settings.ai.get("performance_mode", "auto"))
     preferred: list[str] = []
-    if mode == "quality":
-        preferred.append(str(settings.ai.get("editor_quality_model") or "qwen3.5:9b"))
+    quality_model = str(settings.ai.get("editor_quality_model") or "qwen3.5:9b")
+    if mode == "quality" or (mode == "auto" and _auto_story_quality_ready(settings, quality_model)):
+        preferred.append(quality_model)
     elif mode == "lite":
         preferred.append(str(settings.ai.get("editor_lite_model") or "qwen3.5:2b"))
     preferred.extend([base, *fallbacks])
     output: list[str] = []
     for model in preferred:
-        clean = model.removesuffix(":latest")
+        clean = model.strip().removesuffix(":latest")
         if clean and clean not in output:
             output.append(clean)
     return output
 
 
 def _select_editor_model(settings: Settings, brief: dict[str, Any]) -> str:
-    from .cloud_ai import enabled, connection
-    if enabled(settings):
-        return str(connection(settings)["model"])
-    installed = _installed_models(settings)
-    preferred = _model_preferences(settings, brief)
-    if installed:
-        for model in preferred:
-            if model in installed:
-                return model
-    return preferred[0] if preferred else "qwen3.5:4b"
+    return str(_ready_story_model_status(settings, brief)["selected_model"])
 
 
 def story_ai_status(settings: Settings, brief: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -516,23 +536,44 @@ def story_ai_status(settings: Settings, brief: dict[str, Any] | None = None) -> 
         provider_label = "Groq" if provider == "groq" else "OpenAI-compatible"
         return {"ready": bool(ready), "provider": provider, "provider_label": provider_label, "ollama_available": False,
                 "installed_models": [], "selected_model": selected["model"] if ready else None,
-                "recommended_model": selected["model"], "reason": None if ready else "cloud_key_required"}
+                "recommended_model": selected["model"], "reason": None if ready else "cloud_key_required",
+                "requested_model": selected["model"], "requested_model_installed": None,
+                "using_fallback": False, "fallback_reason": None,
+                "message": (f"Using configured {provider_label} model {selected['model']}." if ready
+                            else f"Connect {provider_label} in AI connection before creating a cloud edit.")}
+    preferred = _model_preferences(settings, brief)
+    requested = preferred[0] if preferred else "qwen3.5:4b"
     if not settings.ai.get("enabled", True):
         return {
             "ready": False, "ollama_available": False, "installed_models": [], "selected_model": None,
-            "recommended_model": str(settings.ai.get("editor_model", "qwen3.5:4b")).removesuffix(":latest"),
-            "reason": "ai_disabled",
+            "recommended_model": requested, "requested_model": requested, "requested_model_installed": None,
+            "using_fallback": False, "fallback_reason": None, "reason": "ai_disabled",
+            "message": "Story AI is disabled. Enable AI or continue with manual editing.",
         }
     available, installed = _ollama_inventory(settings)
-    preferred = _model_preferences(settings, brief)
-    selected = next((model for model in preferred if model in installed), None)
-    recommended = str(settings.ai.get("editor_model", "qwen3.5:4b")).removesuffix(":latest")
+    selected = next((model for model in preferred if model in installed), None) if available else None
+    using_fallback = bool(selected and selected != requested)
+    if not available:
+        message = "Story AI requires Ollama to be running. Start the local AI engine and retry."
+    elif not selected:
+        message = (f"Requested model {requested} is not installed. Install a configured model explicitly "
+                   "in AI connection, or continue manually.")
+    elif using_fallback:
+        message = (f"Requested model {requested} is not installed. Using installed {selected} for this edit. "
+                   "Review this draft; install the requested model explicitly in AI connection if needed.")
+    else:
+        message = f"Using installed model {selected}."
     return {
         "ready": bool(available and selected),
         "ollama_available": available,
         "installed_models": sorted(installed),
         "selected_model": selected,
-        "recommended_model": recommended,
+        "requested_model": requested,
+        "requested_model_installed": requested in installed if available else None,
+        "recommended_model": requested,
+        "using_fallback": using_fallback,
+        "fallback_reason": "requested_model_missing" if using_fallback else None,
+        "message": message,
         "reason": (
             None
             if available and selected
@@ -541,6 +582,20 @@ def story_ai_status(settings: Settings, brief: dict[str, Any] | None = None) -> 
             else "story_model_missing"
         ),
     }
+
+
+def _ready_story_model_status(settings: Settings, brief: dict[str, Any]) -> dict[str, Any]:
+    """Use the same checked selection for status and execution; never guess a model."""
+    status = story_ai_status(settings, brief)
+    if not status["ready"]:
+        raise StoryAIUnavailableError(str(status["message"]))
+    return status
+
+
+def _model_selection_details(status: dict[str, Any]) -> dict[str, Any]:
+    return {key: status.get(key) for key in (
+        "requested_model", "requested_model_installed", "selected_model", "using_fallback", "fallback_reason", "message",
+    )}
 
 
 def _call_ollama(settings: Settings, payload: dict[str, Any], timeout: int = 180) -> dict[str, Any] | None:
@@ -658,6 +713,35 @@ def _read_ollama_chat_response(
             reader.join(timeout=0.5)
 
 
+# Ollama reloads the model whenever num_ctx changes. A story job sends many
+# passes with different prompt sizes, so contexts snap to a few sizes and,
+# within one job, never shrink below the largest one already loaded.
+_STORY_CONTEXT_TIERS = (8192, 16384, 32768)
+_story_context_floor = threading.local()
+
+
+def _context_tier(needed: int, cap: int) -> int:
+    return next((tier for tier in _STORY_CONTEXT_TIERS if needed <= tier <= cap), cap)
+
+
+@contextlib.contextmanager
+def _stable_story_context():
+    previous = getattr(_story_context_floor, "value", 0)
+    _story_context_floor.value = previous or 1
+    try:
+        yield
+    finally:
+        _story_context_floor.value = previous
+
+
+def _with_stable_story_context(function):
+    @functools.wraps(function)
+    def wrapper(*args, **kwargs):
+        with _stable_story_context():
+            return function(*args, **kwargs)
+    return wrapper
+
+
 def _fit_story_request_context(payload: dict[str, Any], mode: str) -> None:
     """Budget the request conservatively; the estimate is not a tokenizer proof.
 
@@ -672,11 +756,13 @@ def _fit_story_request_context(payload: dict[str, Any], mode: str) -> None:
         raise StoryPlanningError("Story AI needs a finite positive output budget to preserve its input context.")
     options["num_predict"] = output_budget
     reserve = max(2400, output_budget)
-    context = min(cap, max(1024, int(options.get("num_ctx") or 8192)))
     estimate = _story_prompt_tokens(payload)
     needed = estimate + reserve
-    if needed > context:
-        context = min(cap, ((needed + 1023) // 1024) * 1024)
+    context = _context_tier(max(1024, int(options.get("num_ctx") or 8192), needed), cap)
+    floor = getattr(_story_context_floor, "value", 0)
+    if floor:
+        context = max(context, min(cap, floor))
+        _story_context_floor.value = context
     options["num_ctx"] = context
     payload["options"] = options
     if needed <= context:
@@ -1590,7 +1676,7 @@ def _fit_story_selection_to_budget(
         "after_duration": round(after, 3),
         "removed_beat_ids": [identifier for identifier in selected if identifier not in fitted],
     }
-    return output
+    return _reconcile_critic_actions(output)
 
 
 def _select_story_beats(
@@ -1786,6 +1872,30 @@ def _select_story_beats(
     return clean, candidates
 
 
+def _reconcile_critic_actions(selection: dict[str, Any]) -> dict[str, Any]:
+    """Record effective revisions after all slot and duration safeguards."""
+    critic = selection.get("critic") or {}
+    if "selection_before" not in critic:
+        return selection  # Older cached/plugin reviews have no action baseline.
+    before = set(critic["selection_before"])
+    final = set(selection.get("keep_beat_ids") or [])
+    added = [identifier for identifier in critic["requested_added"]
+             if identifier not in before and identifier in final]
+    removed = [identifier for identifier in critic["requested_removed"]
+               if identifier in before and identifier not in final]
+    unapplied = [
+        {"action": "add", "beat_id": identifier,
+         "reason": "already_selected" if identifier in before else "not_kept_in_final_selection"}
+        for identifier in critic["requested_added"] if identifier not in added
+    ] + [
+        {"action": "remove", "beat_id": identifier,
+         "reason": "not_selected" if identifier not in before else "retained_in_final_selection"}
+        for identifier in critic["requested_removed"] if identifier not in removed
+    ]
+    return {**selection, "critic": {**critic, "added": added, "removed": removed,
+                                   "unapplied_actions": unapplied}}
+
+
 def _critic_story_selection(
     settings: Settings,
     selection: dict[str, Any],
@@ -1828,8 +1938,23 @@ def _critic_story_selection(
         ],
     }
     result = _call_ollama_story_pass(settings, payload, 220, cancel_check)
-    additions = [str(value) for value in result.get("add_beat_ids", []) if str(value) in valid]
-    removals = {str(value) for value in result.get("remove_beat_ids", []) if str(value) in valid}
+    required = {"verdict", "add_beat_ids", "remove_beat_ids", "issues", "summary"}
+    if not isinstance(result, dict) or not required.issubset(result):
+        raise StoryPlanningError("Story critic returned an incomplete review; no continuity pass was verified.")
+    if (not isinstance(result["verdict"], str) or result["verdict"] not in {"pass", "revise"}
+            or not isinstance(result["summary"], str)):
+        raise StoryPlanningError("Story critic returned an invalid review verdict or summary.")
+    for key in ("add_beat_ids", "remove_beat_ids", "issues"):
+        if not isinstance(result[key], list) or any(not isinstance(value, str) for value in result[key]):
+            raise StoryPlanningError("Story critic returned invalid review lists.")
+    if any(identifier not in valid for key in ("add_beat_ids", "remove_beat_ids") for identifier in result[key]):
+        raise StoryPlanningError("Story critic requested a change to an unknown story beat.")
+    additions = list(dict.fromkeys(result["add_beat_ids"]))
+    removals = set(result["remove_beat_ids"])
+    if set(additions) & removals or (result["verdict"] == "pass" and (
+        additions or removals or any(issue.strip() for issue in result["issues"])
+    )):
+        raise StoryPlanningError("Story critic returned contradictory changes or unresolved issues with a pass.")
     final = [identifier for identifier in selected if identifier not in removals]
     for identifier in additions:
         if identifier not in final:
@@ -1848,13 +1973,14 @@ def _critic_story_selection(
     output["opening_beat_id"] = final[0]
     output["closing_beat_id"] = final[-1]
     output["critic"] = {
-        "verdict": str(result.get("verdict") or "pass")[:16],
+        "verdict": result["verdict"],
         "issues": [str(value)[:320] for value in result.get("issues", []) if str(value).strip()][:8],
         "summary": str(result.get("summary") or "")[:600],
-        "added": additions,
-        "removed": sorted(removals),
+        "selection_before": selected,
+        "requested_added": additions,
+        "requested_removed": sorted(removals),
     }
-    return output
+    return _reconcile_critic_actions(output)
 
 
 def _story_decision_from_beats(result: dict[str, Any] | None, beats: list[dict[str, Any]], segments: list[dict[str, Any]]) -> dict[str, Any] | None:
@@ -2078,6 +2204,7 @@ def _story_cache_is_reusable(
         return False
 
 
+@_with_stable_story_context
 def hierarchical_story_edit(
     beats: list[dict[str, Any]],
     segments: list[dict[str, Any]],
@@ -2088,15 +2215,9 @@ def hierarchical_story_edit(
     cancel_check: Callable[[], None] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     _check_cancelled(cancel_check)
-    status = story_ai_status(settings, brief)
-    if not status["ready"]:
-        recommended = status["recommended_model"]
-        if status["reason"] == "cloud_key_required":
-            provider_label = str(status.get("provider_label") or "cloud AI")
-            raise StoryAIUnavailableError(f"Connect {provider_label} in AI connection before creating a cloud edit.")
-        if status["reason"] == "ollama_unavailable":
-            raise StoryAIUnavailableError("Story AI requires Ollama to be running before a semantic edit can be created.")
-        raise StoryAIUnavailableError(f"Story AI model {recommended} must be installed before creating a semantic edit.")
+    status = _ready_story_model_status(settings, brief)
+    if status.get("using_fallback") and progress:
+        progress(0.01, status["message"])
     model = str(status["selected_model"])
     expected_cache_fingerprint = story_cache_fingerprint(segments, brief, model)
     mode = str(brief.get("performance_mode") or settings.ai.get("performance_mode", "auto"))
@@ -2230,6 +2351,7 @@ def hierarchical_story_edit(
         "cache_fingerprint": expected_cache_fingerprint,
         "cache_pipeline": STORY_CACHE_PIPELINE,
         "model": model,
+        "model_selection": _model_selection_details(status),
         "chapter_count": len(chapters),
         "chapters": [
             {"id": item["id"], "start": item["start"], "end": item["end"], "duration": item["duration"], "beat_ids": item["beat_ids"]}
@@ -2256,7 +2378,8 @@ def hierarchical_story_edit(
     return decision, hierarchy
 
 
-def _ollama_chat(settings: Settings, segments: list[dict[str, Any]], brief: dict[str, Any], cancel_check: Callable[[], None] | None = None) -> dict[str, Any] | None:
+def _ollama_chat(settings: Settings, segments: list[dict[str, Any]], brief: dict[str, Any], cancel_check: Callable[[], None] | None = None,
+                 *, model_status: dict[str, Any] | None = None) -> dict[str, Any] | None:
     if not settings.ai.get("enabled", True):
         return None
     max_segments = int(settings.ai.get("max_llm_segments", 180))
@@ -2283,7 +2406,7 @@ def _ollama_chat(settings: Settings, segments: list[dict[str, Any]], brief: dict
         "Remove clear retakes, false starts, filler-only lines, off-topic detours and redundant repetition when appropriate. "
         "Return JSON only with keys: keep_ids, remove_ids, highlight_ids, title, summary, opening_id, closing_id."
     )
-    model = _select_editor_model(settings, brief)
+    model = str((model_status or _ready_story_model_status(settings, brief))["selected_model"])
     payload = {
         "model": model, "stream": False, "format": "json",
         "options": {"temperature": 0.10, "num_ctx": 8192, "num_predict": 1100},
@@ -2299,7 +2422,7 @@ def _ollama_chat(settings: Settings, segments: list[dict[str, Any]], brief: dict
 
 
 def _validate_llm_result(result: dict[str, Any] | None, segments: list[dict[str, Any]]) -> dict[str, Any] | None:
-    if not result:
+    if not isinstance(result, dict) or not result:
         return None
     valid_ids = {item["id"] for item in segments}
 
@@ -2309,7 +2432,7 @@ def _validate_llm_result(result: dict[str, Any] | None, segments: list[dict[str,
             return []
         unique: list[str] = []
         for value in values:
-            if value in valid_ids and value not in unique:
+            if isinstance(value, str) and value in valid_ids and value not in unique:
                 unique.append(value)
             if limit and len(unique) >= limit:
                 break
@@ -2318,14 +2441,20 @@ def _validate_llm_result(result: dict[str, Any] | None, segments: list[dict[str,
     remove = valid_list("remove_ids")
     keep = [item for item in valid_list("keep_ids") if item not in remove]
     highlights = valid_list("highlight_ids", 8)
+    if not (keep or remove or highlights) or set(remove) == valid_ids:
+        # A title-only/foreign-ID response is not an edit. Removing everything
+        # would later restore the whole recording defensively, hiding a no-op.
+        return None
+    opening = result.get("opening_id")
+    closing = result.get("closing_id")
     return {
         "keep_ids": keep,
         "remove_ids": remove,
         "highlight_ids": highlights,
         "title": str(result.get("title") or "AI draft")[:120],
         "summary": str(result.get("summary") or "A coherent first edit based on the transcript.")[:500],
-        "opening_id": result.get("opening_id") if result.get("opening_id") in valid_ids else None,
-        "closing_id": result.get("closing_id") if result.get("closing_id") in valid_ids else None,
+        "opening_id": opening if isinstance(opening, str) and opening in valid_ids else None,
+        "closing_id": closing if isinstance(closing, str) and closing in valid_ids else None,
     }
 
 
@@ -2391,17 +2520,28 @@ def plan_edit(
         )
 
     _check_cancelled(cancel_check)
-    from .cloud_ai import enabled
-    response = _ollama_chat(settings, enriched, brief, cancel_check=cancel_check) if enabled(settings) else _ollama_chat(settings, enriched, brief)
+    status = story_ai_status(settings, brief)
+    if settings.ai.get("enabled", True) and not status["ready"]:
+        raise StoryAIUnavailableError(str(status["message"]))
+    if status.get("using_fallback") and progress:
+        progress(0.01, status["message"])
+    response = _ollama_chat(settings, enriched, brief, cancel_check=cancel_check, model_status=status)
     llm = _validate_llm_result(response, enriched)
     _check_cancelled(cancel_check)
     if llm:
-        return {"segments": enriched, "decision": llm, "story_beats": [], "story_hierarchy": None}, (
+        return {"segments": enriched, "decision": llm, "story_beats": [], "story_hierarchy": None,
+                "model_selection": _model_selection_details(status), "warnings": []}, (
             str(settings.ai.get("cloud_connection", {}).get("provider") or "groq").replace("-", "_")
             if settings.ai.get("cloud_connection", {}).get("mode", "local") != "local"
             else "ollama"
         )
-    return {"segments": enriched, "decision": deterministic_edit(enriched, brief), "story_beats": [], "story_hierarchy": None}, "deterministic"
+    warning = {
+        "type": "story_ai_fallback" if settings.ai.get("enabled", True) else "ai_disabled",
+        "message": ("Story AI did not return a valid edit; a basic transcript cleanup draft was created. Review it before exporting."
+                    if settings.ai.get("enabled", True) else "AI is disabled; this is a basic transcript cleanup draft."),
+    }
+    return {"segments": enriched, "decision": deterministic_edit(enriched, brief), "story_beats": [], "story_hierarchy": None,
+            "model_selection": _model_selection_details(status), "warnings": [warning]}, "deterministic"
 
 def language_from_text(text: str, fallback: str = "en") -> str:
     counts = Counter({

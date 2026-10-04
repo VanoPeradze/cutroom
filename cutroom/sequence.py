@@ -4,9 +4,11 @@ from __future__ import annotations
 import copy
 from typing import Any
 
+from .composition import default_reels_stack
+from .frame_rates import EXPORT_FPS_CHOICES
 from .source_tracks import (
     EPSILON, MAX_SEQUENCE_SECONDS, SourceTrackError, _duration, _finite, _new_id,
-    _number, _validated, has_sequence, minimum_clip_seconds,
+    _number, _validated, _shift_video_start, has_sequence, minimum_clip_seconds,
     source_track_clips, timeline_duration,
 )
 
@@ -25,6 +27,7 @@ SEQUENCE_ACTION_FIELDS = {
     "sequence_insert_linked": {"slot", "start", "source_start", "source_end"},
     "sequence_layout": {"start", "end", "layout"},
     "sequence_crop": {"slot", "start", "end", "x", "y", "zoom"},
+    "sequence_speed": {"slot", "clip_id", "speed"},
     "sequence_source_restore": {"slot", "source_start", "source_end", "scope"},
     "sequence_source_remove": {"slot", "source_start", "source_end", "scope"},
     "sequence_close_gaps": {"slot"},
@@ -82,11 +85,25 @@ def materialize_sequence(project: dict[str, Any]) -> tuple[dict[str, Any], float
     draft = value["draft"]
     camera_rows = sorted((row for row in draft.get("camera_plan") or [] if isinstance(row, dict)),
                          key=lambda row: (_finite(row.get("start")), _finite(row.get("end"))))
-    edges = [_finite(edge, -1) for edge in draft.get("edit_points") or []]
-    edges += [_finite(row.get(edge), -1) for row in camera_rows for edge in ("start", "end")]
-    edges += [clip[edge] for clips in slots.values() for clip in clips for edge in ("start", "end")]
+    explicit_edges = {_finite(edge, -1) for edge in draft.get("edit_points") or []}
+    explicit_edges.update(_finite(row.get(edge), -1) for row in camera_rows for edge in ("start", "end"))
+    stored_tracks = (value.get("manual") or {}).get("source_tracks")
+    stored_tracks = stored_tracks if isinstance(stored_tracks, dict) else {}
+    implicit_edges: dict[str, set[float]] = {"A": set(), "B": set()}
+    for slot, clips in slots.items():
+        target = explicit_edges if slot in stored_tracks else implicit_edges[slot]
+        target.update(clip[edge] for clip in clips for edge in ("start", "end"))
+    automatic_edges = (implicit_edges["A"] | implicit_edges["B"]) - explicit_edges
+    foreign_edges = {slot: implicit_edges[other] - explicit_edges for slot, other in (("A", "B"), ("B", "A"))}
+    edges = explicit_edges | implicit_edges["A"] | implicit_edges["B"]
     tracks: dict[str, list[dict[str, Any]]] = {"A": [], "B": []}
+    origins = {"A": None, "B": None}
     cameras = []
+    camera_keep = None
+    # Match the stored-clip read contract, including a later 60 -> 30 fps export.
+    # Only availability-generated pieces are joined; user cuts remain deliberate.
+    read_minimum = 1.0 / max(EXPORT_FPS_CHOICES)
+    camera_minimum = 1.0 / min(EXPORT_FPS_CHOICES)
     cursor = 0.0
     for keep_index, (start, end) in enumerate(keeps):
         boundaries = sorted({start, end, *(point for point in edges if start + EPSILON < point < end - EPSILON)})
@@ -96,15 +113,38 @@ def materialize_sequence(project: dict[str, Any]) -> tuple[dict[str, Any], float
             for slot, clips in slots.items():
                 clip = next((clip for clip in clips if clip["start"] <= midpoint < clip["end"]), None)
                 if clip is not None:
-                    tracks[slot].append({
+                    piece = {
+                        **clip, **_shift_video_start(clip, left - clip["start"]),
                         "id": f"{slot}:sequence:{keep_index}:{piece_index}",
                         "start": edit_start, "end": edit_end,
                         "source_start": round(clip["source_start"] + left - clip["start"], 9),
-                    })
+                    }
+                    previous = tracks[slot][-1] if tracks[slot] else None
+                    origin = (keep_index, clip["id"])
+                    if (previous is not None and origins[slot] == origin and left in foreign_edges[slot]
+                            and abs(previous["end"] - edit_start) <= EPSILON
+                            and min(previous["end"] - previous["start"], edit_end - edit_start) < read_minimum - EPSILON):
+                        # Same original clip and keep: audio/picture time, framing
+                        # and the leftmost selection ID stay continuous. Never
+                        # extend the other source across its actual EOF or gap.
+                        previous["end"] = edit_end
+                    else:
+                        tracks[slot].append(piece)
+                    origins[slot] = origin
             camera = next((str(row.get("camera") or "A") for row in reversed(camera_rows)
                            if _finite(row.get("start")) <= midpoint < _finite(row.get("end"))), "A")
             camera = camera if camera in SEQUENCE_LAYOUTS else "A"
-            cameras.append({"start": edit_start, "end": edit_end, "camera": camera})
+            previous_camera = cameras[-1] if cameras else None
+            if (previous_camera is not None and camera_keep == keep_index and left in automatic_edges
+                    and previous_camera["camera"] == camera
+                    and min(previous_camera["end"] - previous_camera["start"], edit_end - edit_start) < camera_minimum - EPSILON):
+                # Same automatic layout is not a user cut. Remove its redundant
+                # seam even for a later lower-FPS export; the renderer still
+                # resolves availability from the unchanged track endpoints.
+                previous_camera["end"] = edit_end
+            else:
+                cameras.append({"start": edit_start, "end": edit_end, "camera": camera})
+            camera_keep = keep_index
         cursor += end - start
     manual = value.setdefault("manual", {})
     manual["sequence"] = {
@@ -144,7 +184,7 @@ def _automatic_layout(project: dict[str, Any]) -> str:
 
     Once clips are rearranged, their edit-clock ranges no longer identify the
     original Storyline intervals. An explicit mixer default is authoritative;
-    otherwise show the primary semantic role (or the sole source).
+    otherwise use the Reels stack or primary semantic role (or the sole source).
     """
     if not (project.get("sources") or {}).get("B"):
         draft = project.get("draft") or {}
@@ -157,6 +197,8 @@ def _automatic_layout(project: dict[str, Any]) -> str:
     default = str(mixer.get("default_layout") or "auto")
     if default in SEQUENCE_LAYOUTS - {"embedded_stack"}:
         return default
+    if default_reels_stack(project):
+        return "stacked"
     return "camera" if mixer.get("primary_role") == "camera" else "screen"
 
 
@@ -171,7 +213,7 @@ def _insert_at(clips: list[dict[str, Any]], moving: dict[str, Any], slot: str) -
             updated.append({**clip, "start": clip["start"] + duration, "end": clip["end"] + duration})
         else:
             updated.append({**clip, "end": start})
-            updated.append({**clip, "id": _new_id(slot), "start": start + duration,
+            updated.append({**clip, **_shift_video_start(clip, start - clip["start"]), "id": _new_id(slot), "start": start + duration,
                             "end": clip["end"] + duration,
                             "source_start": clip["source_start"] + start - clip["start"]})
     return [*updated, moving]
@@ -193,6 +235,7 @@ def _slice_rows(rows: list[dict[str, Any]], start: float, end: float, *,
             continue
         piece = {**row, "start": round(at + left - start, 9), "end": round(at + right - start, 9)}
         if slot is not None:
+            piece.update(_shift_video_start(row, left - row["start"]))
             piece["source_start"] = round(row["source_start"] + left - row["start"], 9)
             if duplicate or left > row["start"] + EPSILON:
                 piece["id"] = _new_id(slot)
@@ -385,6 +428,7 @@ def _trim_sequence_edge(value: dict[str, Any], payload: dict[str, Any]) -> dict[
                 if abs(clip[edge] - boundary) > EPSILON:
                     continue
                 if edge == "start":
+                    clip.update(_shift_video_start(clip, time - start))
                     clip["source_start"] += time - start
                     clip["start"] = time
                 else:
@@ -536,7 +580,15 @@ def prepare_sequence_edit(project: dict[str, Any], payload: dict[str, Any]) -> d
         if clip is None:
             raise SourceTrackError("The clip changed; select it again")
         return _ripple_move(value, clip["start"], clip["end"], _placement_time(payload, "start"), slot)
-    if action == "sequence_crop":
+    if action == "sequence_speed":
+        speed = _number(payload.get("speed"), "speed")
+        if not 0.25 <= speed <= 4:
+            raise SourceTrackError("Picture speed must be between 0.25 and 4")
+        clip = next((clip for clip in clips if clip["id"] == payload.get("clip_id")), None)
+        if clip is None:
+            raise SourceTrackError("The clip changed; select it again")
+        clip.update(video_speed=speed, video_source_start=clip.get("video_source_start", clip["source_start"]))
+    elif action == "sequence_crop":
         start, end = _validate_range(value, payload)
         crop = {key: _number(payload.get(key), key) for key in ("x", "y", "zoom")}
         selected = _slice_rows(clips, start, end, at=start, slot=slot)
@@ -553,7 +605,7 @@ def prepare_sequence_edit(project: dict[str, Any], payload: dict[str, Any]) -> d
         clip = next((clip for clip in clips if clip["start"] < time < clip["end"]), None)
         if clip is None:
             raise SourceTrackError("There is no source clip at the playhead")
-        right = {**clip, "id": _new_id(slot), "start": time, "source_start": clip["source_start"] + time - clip["start"]}
+        right = {**clip, **_shift_video_start(clip, time - clip["start"]), "id": _new_id(slot), "start": time, "source_start": clip["source_start"] + time - clip["start"]}
         clip["end"] = time
         clips.append(right)
     elif action == "sequence_remove_range":
@@ -566,7 +618,7 @@ def prepare_sequence_edit(project: dict[str, Any], payload: dict[str, Any]) -> d
             if clip["start"] < start:
                 updated.append({**clip, "end": start})
             if clip["end"] > end:
-                updated.append({**clip, "id": _new_id(slot) if clip["start"] < start else clip["id"], "start": end,
+                updated.append({**clip, **_shift_video_start(clip, end - clip["start"]), "id": _new_id(slot) if clip["start"] < start else clip["id"], "start": end,
                                 "source_start": clip["source_start"] + end - clip["start"]})
         clips = updated
     else:
@@ -587,7 +639,8 @@ def prepare_sequence_edit(project: dict[str, Any], payload: dict[str, Any]) -> d
         if start < 0 or start > MAX_SEQUENCE_SECONDS:
             raise SourceTrackError("Place clips between zero and 24 hours")
         if action == "sequence_trim":
-            clip.update(start=start, end=_number(payload.get("end"), "end"), source_start=_number(payload.get("source_start"), "source_start"))
+            source_start = _number(payload.get("source_start"), "source_start")
+            clip.update(**_shift_video_start(clip, source_start - clip["source_start"]), start=start, end=_number(payload.get("end"), "end"), source_start=source_start)
             clips.append(clip)
         else:
             clip.update(end=start + clip["end"] - clip["start"], start=start)

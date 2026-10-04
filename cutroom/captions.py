@@ -93,12 +93,15 @@ def build_srt(
     target: Path,
     *,
     words_per_caption: int | None = None,
+    text_clips: list[dict[str, Any]] | None = None,
 ) -> Path:
     if words_per_caption is not None:
         if isinstance(words_per_caption, bool) or not isinstance(words_per_caption, int):
             words_per_caption = int(DEFAULT_CAPTION_SETTINGS["caption_words_per_line"])
         words_per_caption = max(CAPTION_WORDS_PER_LINE_RANGE[0], min(CAPTION_WORDS_PER_LINE_RANGE[1], words_per_caption))
     entries = _caption_entries(transcript, keep_ranges, words_per_caption)
+    entries.extend((float(row["start"]), float(row["end"]), str(row["text"])) for row in text_clips or [] if row.get("kind") == "caption")
+    entries.sort(key=lambda row: (row[0], row[1]))
     lines: list[str] = []
     for index, (start, end, text) in enumerate(entries, 1):
         lines.extend([str(index), f"{_timestamp(start)} --> {_timestamp(end)}", text, ""])
@@ -116,7 +119,7 @@ def _ass_timestamp(seconds: float) -> str:
 
 
 def _ass_escape(text: str) -> str:
-    return str(text).replace("\\", r"\\").replace("{", r"\{").replace("}", r"\}").replace("\n", r"\N")
+    return str(text).replace("\r\n", "\n").replace("\r", "\n").replace("\\", r"\\").replace("{", r"\{").replace("}", r"\}").replace("\n", r"\N")
 
 
 def _caption_entries(
@@ -286,6 +289,21 @@ def _layout_override(
     return f"{{\\an8\\pos({center_x},{top_y})}}"
 
 
+def _ass_style(name: str, width: int, height: int, caption_style: str, caption_position: str, caption_scale: int) -> tuple[str, int, int, int]:
+    base_font_size = max(28, min(72, round(height * (0.048 if height >= width else 0.042))))
+    font_size = max(20, min(108, round(base_font_size * caption_scale / 100)))
+    margin_v = max(32, round(height * 0.075))
+    style_values = {
+        "bold": {"bold": -1, "border_style": 1, "outline": max(2, round(font_size * 0.09)), "shadow": 0, "outline_color": "&HCC000000", "back_color": "&H66000000"},
+        "clean": {"bold": 0, "border_style": 1, "outline": max(1, round(font_size * 0.055)), "shadow": max(1, round(font_size * 0.025)), "outline_color": "&HD9000000", "back_color": "&H99000000"},
+        "boxed": {"bold": -1, "border_style": 3, "outline": max(3, round(font_size * 0.12)), "shadow": 0, "outline_color": "&H00131008", "back_color": "&H99131008"},
+    }[caption_style]
+    outline = int(style_values["outline"])
+    alignment = {"auto": 2, "bottom": 2, "center": 5, "top": 8}[caption_position]
+    line = f"Style: {name},Arial,{font_size},&H00FFFFFF,&H000000FF,{style_values['outline_color']},{style_values['back_color']},{style_values['bold']},0,0,0,100,100,0,0,{style_values['border_style']},{outline},{style_values['shadow']},{alignment},42,42,{margin_v},1\n"
+    return line, font_size, margin_v, outline
+
+
 def build_ass(
     transcript: dict[str, Any],
     keep_ranges: list[dict[str, Any]],
@@ -298,6 +316,7 @@ def build_ass(
     caption_position: str = "auto",
     caption_scale: int = 100,
     words_per_caption: int = 9,
+    text_clips: list[dict[str, Any]] | None = None,
 ) -> Path:
     """Build burn-in captions retimed to the edited sequence.
 
@@ -323,28 +342,17 @@ def build_ass(
     caption_scale = normalized["caption_scale"]
     words_per_caption = normalized["caption_words_per_line"]
     entries = _caption_entries(transcript, keep_ranges, words_per_caption)
-    base_font_size = max(28, min(72, round(height * (0.048 if height >= width else 0.042))))
-    font_size = max(20, min(108, round(base_font_size * caption_scale / 100)))
-    margin_v = max(32, round(height * 0.075))
-    style_values = {
-        "bold": {
-            "bold": -1, "border_style": 1, "outline": max(2, round(font_size * 0.09)),
-            "shadow": 0, "outline_color": "&HCC000000", "back_color": "&H66000000",
-        },
-        "clean": {
-            "bold": 0, "border_style": 1, "outline": max(1, round(font_size * 0.055)),
-            "shadow": max(1, round(font_size * 0.025)), "outline_color": "&HD9000000", "back_color": "&H99000000",
-        },
-        "boxed": {
-            "bold": -1, "border_style": 3, "outline": max(3, round(font_size * 0.12)),
-            "shadow": 0, "outline_color": "&H00131008", "back_color": "&H99131008",
-        },
-    }[caption_style]
-    outline = int(style_values["outline"])
-    alignment = {"auto": 2, "bottom": 2, "center": 5, "top": 8}[caption_position]
+    style_line, font_size, margin_v, outline = _ass_style("Default", width, height, caption_style, caption_position, caption_scale)
     projected_layouts = _project_layout_ranges(layout_ranges, keep_ranges) if caption_position == "auto" else []
     positioned_entries = _entries_with_layout(entries, projected_layouts)
-    header = f"""[Script Info]\nScriptType: v4.00+\nPlayResX: {width}\nPlayResY: {height}\nScaledBorderAndShadow: yes\nWrapStyle: 2\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Default,Arial,{font_size},&H00FFFFFF,&H000000FF,{style_values['outline_color']},{style_values['back_color']},{style_values['bold']},0,0,0,100,100,0,0,{style_values['border_style']},{outline},{style_values['shadow']},{alignment},42,42,{margin_v},1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"""
+    manual_styles: dict[tuple[str, str, int], str] = {}
+    for row in text_clips or []:
+        key = (row["style"], row["position"], row["scale"])
+        if key not in manual_styles:
+            name = f"Text{len(manual_styles)}"
+            manual_styles[key] = name
+            style_line += _ass_style(name, width, height, *key)[0]
+    header = f"""[Script Info]\nScriptType: v4.00+\nPlayResX: {width}\nPlayResY: {height}\nScaledBorderAndShadow: yes\nWrapStyle: 2\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n{style_line}\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"""
     lines = [header]
     for start, end, value, layout in positioned_entries:
         if not value:
@@ -354,6 +362,14 @@ def build_ass(
             f"Dialogue: 0,{_ass_timestamp(start)},{_ass_timestamp(end)},Default,,0,0,0,,"
             f"{override}{_ass_escape(value)}\n"
         )
+    for row in text_clips or []:
+        name = manual_styles[(row["style"], row["position"], row["scale"])]
+        # Explicit anchors keep simultaneous authored overlays at their chosen
+        # positions instead of letting ASS collision avoidance move them.
+        top = max(32, round(height * .075))
+        y = {"top": top, "center": round(height / 2), "bottom": height - top}[row["position"]]
+        override = f"{{\\q0\\pos({round(width / 2)},{y})}}"
+        lines.append(f"Dialogue: 1,{_ass_timestamp(row['start'])},{_ass_timestamp(row['end'])},{name},,0,0,0,,{override}{_ass_escape(row['text'])}\n")
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text("".join(lines), encoding="utf-8-sig")
     return target

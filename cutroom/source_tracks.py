@@ -119,6 +119,12 @@ def _validate_clip(project: dict[str, Any], slot: str, item: Any) -> dict[str, A
     if source_start < 0 or source_start + end - start > _duration(project, slot) + EPSILON:
         raise SourceTrackError(f"The clip extends beyond source {slot}'s media")
     result = {"id": clip_id, "start": start, "end": end, "source_start": source_start}
+    if "video_speed" in item or "video_source_start" in item:
+        speed = _number(item.get("video_speed", 1), "video speed")
+        video_start = _number(item.get("video_source_start", source_start), "video source start")
+        if not 0.25 <= speed <= 4 or video_start < 0:
+            raise SourceTrackError("Picture speed must be between 0.25 and 4 with a nonnegative source start")
+        result.update(video_speed=speed, video_source_start=video_start)
     if "crop" in item:
         raw = item["crop"]
         if not isinstance(raw, dict) or set(raw) != {"x", "y", "zoom"}:
@@ -128,6 +134,13 @@ def _validate_clip(project: dict[str, Any], slot: str, item: Any) -> dict[str, A
             raise SourceTrackError("Clip framing must stay within the supported focus and zoom range")
         result["crop"] = crop
     return result
+
+
+def _shift_video_start(clip: dict[str, Any], delta: float) -> dict[str, float]:
+    """Preserve the independent picture clock when slicing an audio-clock clip."""
+    if "video_speed" not in clip and "video_source_start" not in clip:
+        return {}
+    return {"video_source_start": round(max(0.0, clip.get("video_source_start", clip["source_start"]) + delta * clip.get("video_speed", 1)), 9)}
 
 
 def _validated(project: dict[str, Any], slot: str, clips: Any) -> list[dict[str, Any]]:
@@ -244,7 +257,7 @@ def prepare_source_track_edit(project: dict[str, Any], payload: dict[str, Any]) 
         clip = next((clip for clip in updated if clip["start"] < time < clip["end"]), None)
         if clip is None:
             raise SourceTrackError("There is no source clip at the playhead")
-        right = {**clip, "id": _new_id(slot), "start": time, "source_start": clip["source_start"] + time - clip["start"]}
+        right = {**clip, **_shift_video_start(clip, time - clip["start"]), "id": _new_id(slot), "start": time, "source_start": clip["source_start"] + time - clip["start"]}
         clip["end"] = time
         updated.append(right)
     elif action == "track_remove_range":
@@ -257,7 +270,7 @@ def prepare_source_track_edit(project: dict[str, Any], payload: dict[str, Any]) 
             if clip["start"] < start:
                 updated.append({**clip, "end": start})
             if clip["end"] > end:
-                updated.append({**clip, "id": _new_id(slot) if clip["start"] < start else clip["id"], "start": end, "source_start": clip["source_start"] + end - clip["start"]})
+                updated.append({**clip, **_shift_video_start(clip, end - clip["start"]), "id": _new_id(slot) if clip["start"] < start else clip["id"], "start": end, "source_start": clip["source_start"] + end - clip["start"]})
     elif action == "track_restore_range":
         start, end = _range(project, payload)
         for base in _implicit(project, slot):
@@ -280,7 +293,8 @@ def prepare_source_track_edit(project: dict[str, Any], payload: dict[str, Any]) 
             clip["end"] = start + clip["end"] - clip["start"]
             clip["start"] = start
         else:
-            clip.update(start=start, end=_number(payload.get("end"), "end"), source_start=_number(payload.get("source_start"), "source_start"))
+            source_start = _number(payload.get("source_start"), "source_start")
+            clip.update(**_shift_video_start(clip, source_start - clip["source_start"]), start=start, end=_number(payload.get("end"), "end"), source_start=source_start)
     normalized = _validated(project, slot, updated)
     if normalized == current:
         return None
