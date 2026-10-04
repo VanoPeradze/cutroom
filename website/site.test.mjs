@@ -129,6 +129,30 @@ test('keyboard focus, reduced motion and screenshot enlargement remain available
   assert.match(html, /<dialog\b[^>]*id="imageDialog"[^>]*aria-label="[^"]+"/);
   assert.match(html, /<button\b[^>]*id="closeImage"/);
 });
+
+test('the workspace tour follows the editor order and stays readable without script', () => {
+  const tabs = [...html.matchAll(/<button\b[^>]*class="tour-tab"[^>]*id="tab-([a-z]+)"[^>]*aria-controls="panel-\1"[^>]*>([\s\S]*?)<\/button>/g)];
+  assert.deepEqual(tabs.map(tab => tab[1]), ['media', 'edit', 'layout', 'audio', 'captions', 'output']);
+  for (const [, id, label] of tabs) {
+    assert.match(label, /<span\b[^>]*data-he="[^"]*[֐-׿]/, `${id} tab needs a Hebrew label`);
+    const panel = html.match(new RegExp(`<article\\b[^>]*id="panel-${id}"[^>]*>`))?.[0];
+    assert.ok(panel, `Missing ${id} panel`);
+    assert.match(panel, new RegExp(`aria-labelledby="tab-${id}"`));
+    assert.doesNotMatch(panel, /\bhidden\b/, 'Panels are hidden only by the script that makes tabs usable');
+  }
+  assert.doesNotMatch(html, /role="tab(?:list|panel)?"/, 'Tab roles are added by script, never promised in static HTML');
+  assert.match(css, /\.tour-tabs\{display:none\}/);
+  assert.match(script, /setAttribute\('role', 'tablist'\)/);
+  for (const key of ['ArrowLeft', 'ArrowRight', 'Home', 'End']) assert.match(script, new RegExp(`'${key}'`));
+});
+
+test('illustrations are decorative and inline styles stay out of the strict CSP', () => {
+  const illustrations = [...html.matchAll(/<div\b[^>]*class="(?:art|panel-art)\b[^"]*"[^>]*>/g)];
+  assert.equal(illustrations.length, 9);
+  illustrations.forEach(tag => assert.match(tag[0], /aria-hidden="true"/));
+  assert.doesNotMatch(html, /\sstyle\s*=/i, 'style-src blocks inline style attributes');
+  assert.doesNotMatch(html, /<style\b/i);
+});
 test('the footer links to a privacy notice with readable English and Hebrew sections', () => {
   const links = linksTo(region('footer'), '/privacy.html');
   assert.equal(links.length, 1);

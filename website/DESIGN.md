@@ -1,11 +1,13 @@
-# CUTROOM website — October 2026
+# CUTROOM website — studio design, October 2026
 
-Mode: Persuade. The supplied IMG_6366(1).png is the visual authority: a near-black surface, large white sans-serif typography, restrained gray copy, a clear cobalt action and a prominent authentic product preview. Its promotion, pricing and video player are not CUTROOM product claims.
+Mode: Persuade. The visual authority is the approved 12-screen CUTROOM studio concept set (Audio, Media, Edit/Effects, Layout, Captions, Output, Home, Preparation, Director, First Draft, Projects/AI and supporting dialogs). The website borrows its language, not its pixels: those screens are design concepts that are not implemented, so none of them is published or presented as the product.
 
-Replace the cream/serif/purple marketing presentation with a continuous dark world. Keep the existing CUTROOM mark, product truth, static stack, domain, bilingual URLs and download bytes. Use an asymmetric desktop introduction and a compact mobile introduction, followed immediately by a real dark editor capture. The preview opens a still-image enlargement; do not imply an available promotional video.
+The page shares the editor's dark room. Tokens match `web/studio-design.css`: background #11181d/#121a20, panels #1a242b and #1f2b33, lines #2b3740, text #edf2f5, secondary #bfcbd3, muted #8c9ca7, cyan action #1bd9ce (text on cyan #062522) and violet signal #a38bd0. The mark is the two slanted cyan/violet bars (`public/assets/mark.svg`); the favicon stays unchanged. System sans typography only; no remote fonts.
 
-One primary download action. Installation choices stay compact beside it, with detailed prerequisites in accessible help below. Features use three editorial rows, not generic cards. No testimonials, invented metrics, private footage, remote assets, tracking or app UI changes.
+Structure: a centered introduction (eyebrow, two-line display heading with a cyan-to-violet second line, one primary Windows action and a secondary Mac action), a framed real editor capture, three start cards (Short/Reel, YouTube, manual), the six-workspace tour in editor order with the concept's bottom workspace bar, the three AI modes, installation help and a closing call to action. Illustrations are CSS-only schematics marked `aria-hidden`, never fake screenshots; product claims stay limited to features documented in the user guide.
 
-Palette: background #090a0c, surface #121316, text #f6f6f8, secondary #aaadb8, lines #303238, cobalt #514dff. System sans typography, 44 px mobile/80 px desktop display. Logical spacing and mirrored copy for Hebrew; actual product imagery remains unaltered.
+The hero image remains `public/assets/editor-demo.png`, an unaltered capture of the released editor that must equal `docs/images/editor.png`. When the studio redesign ships in a validated release, replace that canonical capture; until then the page must not show the concept UI as the product.
 
-Verify once across desktop/mobile EN/HE, fix the collected issues together, then confirm once. Focus, contrast, reduced motion, keyboard screenshot dialog and linked installation disclosure are release gates. Preserve the existing public app ZIP/hash and protected-branch workflow.
+Without JavaScript every workspace panel stays visible in reading order; the script adds tab roles, arrow/Home/End keys and RTL-aware direction. The strict CSP forbids inline `style` attributes, so illustration geometry lives in `styles.css`.
+
+Release gates: desktop and mobile in English and Hebrew without horizontal scroll at 320 px, visible keyboard focus, contrast, reduced motion, the screenshot dialog, the linked installation disclosure, and the existing download bytes, checksums and protected-branch workflow.
