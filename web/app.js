@@ -212,6 +212,13 @@ function initializeMediaStudio() {
   tab.addEventListener("click", () => selectAdvancedTab("media"));
   tab.addEventListener("keydown", handleStudioTabKeydown);
   state.mediaStudio = new MediaStudio(panel, elements.previewStage, {
+    libraryRoot: document.getElementById("studioShelfMedia"),
+    reviewSource: slot => {
+      openSourceReview();
+      const dialog = document.getElementById("sourceReviewDialog");
+      const select = dialog?.querySelector('[data-review="slot"]');
+      if (dialog?.open && select && select.value !== slot) { select.value = slot; select.dispatchEvent(new Event("change", {bubbles:true})); }
+    },
     chromaPreview: video => new ChromaPreview(video),
     project: () => state.project, audioPanel: document.getElementById("studioPanelAudio"), audioSlot: () => sourceMixerSettings().audioSlot, api, edit: applyManualEdit, pause: pauseAllMedia,
     time: previewTimelineTime, duration: editorDuration, flushSettings: flushProjectSaves,
@@ -304,6 +311,7 @@ function initializeTextStudio() {
   const root = document.getElementById("textStudio");
   if (!root) return;
   state.textStudio = new TextStudio(root, elements.previewStage, {
+    libraryRoot: document.getElementById("studioShelfCaptions"),
     project: () => state.project, edit: applyManualEdit, time: previewTimelineTime, duration: editorDuration,
     busy: foregroundBusy, preview: updateTextPreview, dimensions: previewExportDimensions,
     seek: time => { pauseAllMedia(); if (previewUsesSourceTime()) setPreviewMode("edit"); seekSourcePreview(time); },
@@ -476,6 +484,9 @@ async function boot() {
   initWorkspace({ document, window, translate: (key, fallback) => state.dictionary?.[key] ?? fallback, onResize: () => state.timeline?.scheduleDraw(), openShortcuts: () => { renderKeyboardHelp(); elements.keyboardDialog.showModal(); } });
   initializeMediaStudio();
   initializeTextStudio();
+  const outputShelf = document.getElementById("studioShelfOutput");
+  const aspectField = document.getElementById("outputAspectField");
+  if (outputShelf && aspectField) outputShelf.appendChild(aspectField);
   state.trackProtection = initTrackProtection({ document, getProject: () => state.project,
     busy: () => state.manualEditBusy || foregroundBusy(),
     change: (slot, locked) => applyManualEdit("set_track_lock", { slot, locked }) });
@@ -2343,6 +2354,8 @@ function showSetup() {
 }
 
 function showAnalysis() {
+  const sourceContext = document.getElementById("analysisSources");
+  if (sourceContext) sourceContext.textContent = Object.entries(state.project?.sources || {}).filter(([, source]) => source).map(([slot, source]) => `${slot} · ${source.name || "Recording"}\n${formatTime(source.duration || 0)}`).join("\n\n");
   pauseAllMedia();
   if (state.studio.open) setAdvanced(false);
   setStep(2);
@@ -3521,9 +3534,10 @@ function placeSourceMixer(hasSource) {
     elements.setupSourceMixerDock.hidden = false;
     return;
   }
-  if (elements.studioPanelFraming && elements.sourceMixer.parentElement !== elements.studioPanelFraming) {
-    // Match the initial Layout order when these controls return from setup.
-    elements.studioPanelFraming.appendChild(elements.sourceMixer);
+  const layoutHome = document.getElementById("studioShelfLayout") || elements.studioPanelFraming;
+  if (layoutHome && elements.sourceMixer.parentElement !== layoutHome) {
+    // The same controls return to the composition shelf after preparation.
+    layoutHome.appendChild(elements.sourceMixer);
   }
   if (elements.setupSourceMixerDock) elements.setupSourceMixerDock.hidden = true;
 }
@@ -4998,6 +5012,7 @@ function followChromaSelection() {
 }
 
 function selectAdvancedTab(tab) {
+  document.querySelectorAll("[data-shelf]").forEach(shelf => { shelf.hidden = !shelf.dataset.shelf.split(" ").includes(tab); });
   elements.advancedPanel?.workspaceController?.setWorkspace(tab);
   elements.advancedPanel?.workspaceController?.showInspector();
   if (tab === "audio") state.mediaStudio?.openMixer();

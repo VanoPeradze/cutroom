@@ -33,17 +33,18 @@ export class TextStudio {
       </section>`;
     this.status=root.querySelector('.text-status'); this.inspector=root.querySelector('.text-inspector');
     this.layer=document.createElement('div'); this.layer.className='custom-text-layer'; this.layer.setAttribute('aria-hidden','true'); stage.append(this.layer);
-    root.addEventListener('click',event=>{
+    const onClick=event=>{
       const button=event.target.closest('button'); if(!button)return;
       if(button.dataset.add) void this.add(button.dataset.add);
-      else if(button.hasAttribute('data-import')) root.querySelector('input[type=file]').click();
+      else if(button.hasAttribute('data-import')) this.find('input[type=file]').click();
       else if(button.dataset.textId) void this.select(button.dataset.textId,true);
       else if(button.hasAttribute('data-retry')) void this.flush();
       else if(button.hasAttribute('data-discard')) { if(!this.saving){this.pending.clear();this.overrides.clear();this.render(true);this.options.preview();this.status.textContent='Unsaved text changes discarded.';} }
       else if(button.hasAttribute('data-remove')) void this.action('text_remove',{clip_id:this.selected});
       else if(button.hasAttribute('data-preview')) { const clip=this.clips().find(c=>c.id===this.selected);if(clip)this.options.seek(clip.start); }
       else if(button.hasAttribute('data-more')) {this.limit+=100;this.renderList();}
-    });
+    };
+    root.addEventListener('click',onClick);
     root.querySelector('input[type=file]').addEventListener('change',event=>{const file=event.target.files[0];event.target.value='';if(file)void this.importFile(file);});
     root.querySelector('[data-search]').addEventListener('input',()=>{this.limit=100;this.renderList();});
     root.addEventListener('input',event=>{
@@ -52,7 +53,13 @@ export class TextStudio {
       this.queueClip(this.selected,{[key]:value});
     });
     this.observer=new ResizeObserver(()=>this.options.preview()); this.observer.observe(stage);
+    this.libraryRoot=options.libraryRoot;
+    if(this.libraryRoot){
+      for(const node of [...root.children]) if(node!==this.inspector)this.libraryRoot.append(node);
+      this.libraryRoot.addEventListener('click',onClick);
+    }
   }
+  find(selector){return this.root.querySelector(selector)||this.libraryRoot?.querySelector(selector);}
   project(){return this.options.project();}
   clips(){return (this.project()?.manual?.text_clips||[]).map(c=>({...c,...this.overrides.get(c.id),...this.dragOverrides.get(c.id)}));}
   dirty(){return Boolean(this.pending.size||this.saving||this.importing);}
@@ -60,7 +67,7 @@ export class TextStudio {
     const p=this.project();
     const previousSelection=this.selected;
     if(this.projectId!==p?.id){clearTimeout(this.timer);this.pending.clear();this.overrides.clear();this.dragOverrides.clear();this.selected=null;this.projectId=p?.id;this.limit=100;force=true;}
-    for(const b of this.root.querySelectorAll('[data-add],[data-import]'))b.disabled=!p?.draft||this.importing||this.options.busy();
+    for(const host of [this.root,this.libraryRoot].filter(Boolean))for(const b of host.querySelectorAll('[data-add],[data-import]'))b.disabled=!p?.draft||this.importing||this.options.busy();
     const clip=this.clips().find(c=>c.id===this.selected);
     if(this.selected&&!clip)this.selected=null;
     if(previousSelection&&previousSelection!==this.selected)this.options.selectionRemoved?.(previousSelection);
@@ -69,12 +76,12 @@ export class TextStudio {
       if(force||document.activeElement!==input)input.value=clip[input.dataset.text] ?? '';
       input.disabled=this.importing;
     }
-    this.root.querySelector('.text-recovery').hidden=!this.pending.size;
-    this.root.querySelector('.text-search').hidden = !this.clips().length;
+    this.find('.text-recovery').hidden=!this.pending.size;
+    this.find('.text-search').hidden = !this.clips().length;
     this.renderList();
   }
   renderList(){
-    const list=this.root.querySelector('.text-clip-list'), query=this.root.querySelector('[data-search]').value.trim().toLocaleLowerCase();
+    const list=this.find('.text-clip-list'), query=this.find('[data-search]').value.trim().toLocaleLowerCase();
     const clips=this.clips().filter(c=>c.text.toLocaleLowerCase().includes(query)).sort((a,b)=>a.start-b.start);
     list.replaceChildren();
     for(const clip of clips.slice(0,this.limit)) {
@@ -83,7 +90,7 @@ export class TextStudio {
       const time=document.createElement('small');time.textContent=`${clip.kind==='title'?'Text':'Caption'} · ${clip.start.toFixed(2)}–${clip.end.toFixed(2)}s`;
       button.append(label,time);list.append(button);
     }
-    this.root.querySelector('[data-more]').hidden=clips.length<=this.limit;
+    this.find('[data-more]').hidden=clips.length<=this.limit;
   }
   async select(id,seek=false){
     if(this.selected!==id && !(await this.flush()))return false;
@@ -93,7 +100,7 @@ export class TextStudio {
   }
   queueClip(id,patch){
     this.overrides.set(id,{...this.overrides.get(id),...patch});this.pending.set(id,{...this.pending.get(id),...patch});
-    this.dragOverrides.delete(id);this.options.preview();this.renderList();this.root.querySelector('.text-recovery').hidden=false;
+    this.dragOverrides.delete(id);this.options.preview();this.renderList();this.find('.text-recovery').hidden=false;
     this.status.textContent='Unsaved changes…';clearTimeout(this.timer);this.timer=setTimeout(()=>void this.flush(),500);
   }
   previewClip(id,patch){if(patch)this.dragOverrides.set(id,patch);else this.dragOverrides.delete(id);this.options.preview();}
@@ -139,7 +146,7 @@ export class TextStudio {
     const projectId=this.project()?.id;if(!projectId||this.options.busy()||this.importing||!(await this.flush()))return;
     if(file.size>1024*1024){this.status.textContent='Choose an SRT or VTT file smaller than 1 MB.';return;}
     const format=file.name.split('.').at(-1).toLowerCase();if(!['srt','vtt'].includes(format)){this.status.textContent='Choose an .srt or .vtt file.';return;}
-    const replace=this.root.querySelector('[data-replace]').checked;
+    const replace=this.find('[data-replace]').checked;
     this.importing=true;this.render();this.status.textContent='Reading caption file…';
     try{
       const content=new TextDecoder('utf-8',{fatal:true}).decode(await file.arrayBuffer());

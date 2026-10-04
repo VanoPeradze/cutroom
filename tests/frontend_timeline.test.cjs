@@ -218,7 +218,7 @@ test('all row labels stay pinned over selection and offscreen clips while hover 
     assert.ok(labels.every(label=>label.index>selectionIndex && label.index<hoverIndex && label.index<playheadIndex));
     assert.ok(labels.every(label=>label.x>=1509 && label.x<=1510));
   }
-  assert.equal(ctx.strokeStyle,'#c9b62c','playhead has the final functional marker paint');
+  assert.equal(ctx.strokeStyle,'#1bd9ce','playhead has the final functional marker paint');
   delete h.project.manual.track_locks;
   assert.equal(JSON.stringify(h.project),before);
 });

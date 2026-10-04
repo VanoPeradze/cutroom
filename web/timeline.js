@@ -269,7 +269,7 @@ export class TimelineView {
     const oldZoom = this.zoom;
     this.zoom = Math.max(1, Math.min(16, Number(value) || 1));
     if (Math.abs(oldZoom - this.zoom) < .001) return;
-    // All zoom controls target the yellow playhead, not the mouse or the
+    // All zoom controls target the playhead, not the mouse or the
     // viewport's old left edge. Apply after canvas sizing, even if playback
     // or pointer events replace this scheduled frame before it is painted.
     this.zoomFocusPending = true;
@@ -435,7 +435,7 @@ export class TimelineView {
         const clip=this.gesture?.media?.id === saved.id ? {...saved,...this.gesture.patch} : saved;
         const asset=clip.id?.startsWith('text_') ? {kind:'text',name:clip.text} : this.project.assets[clip.asset_id], x=clip.start*px, w=(clip.end-clip.start)*px;
         if (x+w<left || x>right) continue;
-        ctx.fillStyle=asset.kind==='text' ? '#665127' : asset.kind==='audio' ? '#264e44' : '#51436b'; ctx.fillRect(x,row.top+1,w,row.height-6);
+        ctx.fillStyle=asset.kind==='text' ? (clip.kind==='caption' ? '#665127' : '#55436e') : asset.kind==='audio' ? (clip.role==='voice' ? '#55436e' : clip.role==='music' ? '#284a64' : '#264e44') : '#245553'; ctx.fillRect(x,row.top+1,w,row.height-6);
         const image=this.mediaImages?.get(asset.thumbnail_url);
         ctx.save(); ctx.beginPath(); ctx.rect(x+1,row.top+2,Math.max(0,w-2),row.height-8); ctx.clip();
         if(image) {
@@ -900,9 +900,9 @@ export class TimelineView {
 
   drawPlayhead(ctx, px, height) {
     const x = this.playhead * px;
-    ctx.strokeStyle = "#c9b62c"; ctx.lineWidth = 1.5;
+    ctx.strokeStyle = "#1bd9ce"; ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, height); ctx.stroke();
-    ctx.fillStyle = "#c9b62c";
+    ctx.fillStyle = "#1bd9ce";
     ctx.beginPath(); ctx.moveTo(x - 6, 0); ctx.lineTo(x + 6, 0); ctx.lineTo(x, 8); ctx.closePath(); ctx.fill();
   }
 

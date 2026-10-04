@@ -27,7 +27,8 @@ export class MediaStudio {
     this.root.innerHTML = `
       <header class="studio-tool-intro"><div><h3>Media</h3></div><span>Import a file, then add it at the playhead.</span></header>
       <button type="button" class="media-import button primary" data-import>Add media</button><input type="file" accept="video/*,audio/*,image/png,image/jpeg,image/webp" hidden>
-      <p class="media-status" role="status" aria-live="polite">Import a file, then add it at the yellow playhead.</p>
+      <p class="media-status" role="status" aria-live="polite">Import a file, then add it at the playhead.</p>
+      <p class="media-selection-empty">Select an added clip on the timeline to adjust its timing, position and sound.</p>
       <section class="media-inspector" hidden data-editor-shortcuts="off">
         <h4 class="media-selected-name"></h4>
         <div class="media-fields">
@@ -109,7 +110,12 @@ export class MediaStudio {
       if (button.dataset.solo) this.toggleSolo(button.dataset.solo);
       if (button.dataset.action) this.action(button.dataset.action);
     };
-    for (const eventRoot of options.audioPanel ? [root,this.audioRoot] : [root]) {
+    this.library = root.querySelector('.media-library');
+    this.sourceLibrary = options.libraryRoot?.querySelector('.source-library');
+    if (options.libraryRoot) {
+      for (const selector of ['.media-import','.media-status','.media-library-section']) options.libraryRoot.append(root.querySelector(selector));
+    }
+    for (const eventRoot of [root, ...(options.audioPanel ? [this.audioRoot] : []), ...(options.libraryRoot ? [options.libraryRoot] : [])]) {
       eventRoot.addEventListener('input',onInput);
       eventRoot.addEventListener('change',onChange);
       eventRoot.addEventListener('click',onClick);
@@ -132,7 +138,7 @@ export class MediaStudio {
       const result = await this.options.api(`/api/projects/${encodeURIComponent(projectId)}/assets`, {method:'POST',body:form});
       this.status.textContent = 'Preparing preview and waveform… Use Stop process to cancel.';
       await this.options.acceptUpload(result, projectId);
-      if (this.project()?.id === projectId) { this.render(); this.status.textContent = 'Ready. Add the file at the yellow playhead.'; }
+      if (this.project()?.id === projectId) { this.render(); this.status.textContent = 'Ready. Add the file at the playhead.'; }
     } catch (error) { if (this.project()?.id === projectId) this.status.textContent = error.message; }
     finally { this.uploading = false; this.options.busyChanged?.(); }
   }
@@ -149,7 +155,18 @@ export class MediaStudio {
   render() {
     const project = this.project();
     if (this.projectId !== project?.id) { this.pause(); this.clearPlayers(); this.pending.clear(); this.overrides.clear(); this.saving=null; this.mixerOverride = null; this.selected = null; this.solo = null; clearTimeout(this.timer); this.projectId = project?.id; }
-    const library = this.root.querySelector('.media-library'); library.replaceChildren();
+    const library = this.library; library.replaceChildren();
+    if (this.sourceLibrary) {
+      this.sourceLibrary.replaceChildren();
+      for (const [slot, source] of Object.entries(project?.sources || {})) {
+        if (!source) continue;
+        const card = document.createElement('button'); card.type = 'button'; card.className = 'source-library-card';
+        const badge = document.createElement('b'); badge.textContent = slot;
+        const copy = document.createElement('span'); copy.textContent = source.name || `Source ${slot}`;
+        const detail = document.createElement('small'); detail.textContent = `Original footage · ${Number(source.duration || 0).toFixed(1)}s`;
+        card.append(badge,copy,detail); card.addEventListener('click', () => this.options.reviewSource?.(slot)); this.sourceLibrary.append(card);
+      }
+    }
     for (const asset of Object.values(project?.assets || {})) {
       const card = document.createElement('div'); card.className = 'media-asset';
       if (asset.thumbnail_url) { const image = document.createElement('img'); image.src = asset.thumbnail_url; image.alt = ''; image.loading = 'lazy'; card.append(image); }
@@ -165,6 +182,7 @@ export class MediaStudio {
     if (!library.children.length) { const note = document.createElement('p'); note.className = 'media-help'; note.textContent = 'Video, PNG/JPG/WebP images, music and voiceover. Files are processed locally; no AI needed.'; library.append(note); }
     const clip = this.clips().find(item => item.id === this.selected), asset = project?.assets?.[clip?.asset_id];
     this.root.querySelector('.media-inspector').hidden = !clip;
+    this.root.querySelector('.media-selection-empty').hidden = Boolean(clip);
     if (clip && asset) {
       this.root.querySelector('.media-selected-name').textContent = asset.name;
       for (const input of this.root.querySelectorAll('[data-media]')) {

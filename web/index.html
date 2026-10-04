@@ -17,6 +17,7 @@
   <link rel="stylesheet" href="/assets/welcome.css?v=1.1-beta-2">
   <link rel="stylesheet" href="/assets/creator-ui.css?v=1.1-beta-12">
   <link rel="stylesheet" href="/assets/editor-panels.css?v=1.1-beta-focused-3">
+  <link rel="stylesheet" href="/assets/studio-design.css?v=1.1-beta-design-1">
 </head>
 <body class="welcome-mode">
   <a class="skip-link" href="#main" data-i18n="skip">Skip to content</a>
@@ -96,13 +97,14 @@
         <div class="section-label"><span data-i18n="recent">Recent projects</span><b id="recentCount">0</b></div>
         <div class="recent-list" id="recentList"></div>
       </div>
-      <aside class="home-setup" aria-labelledby="homeSetupTitle">
+      <details class="home-setup" aria-labelledby="homeSetupTitle">
+        <summary id="homeSetupSummary">Optional AI setup · Local models &amp; cloud connection</summary>
         <div class="home-setup-heading"><div><p class="eyebrow">OPTIONAL / AI ASSISTANCE</p><h2 id="homeSetupTitle">Set up once. Edit your way.</h2></div></div>
         <div class="setup-check"><span aria-hidden="true">01</span><div><strong id="homeConnectionStatus">Choose your AI connection</strong><p id="homeConnectionDetail">Local for privacy. Cloud for less AI processing on your computer.</p></div></div>
         <div class="setup-check"><span aria-hidden="true">02</span><div><strong id="homeLocalStatus">Local models are separate downloads</strong><p id="homeLocalDetail">Transcription understands speech. Story AI plans the draft. Check what you need before downloading.</p></div></div>
         <div class="home-setup-actions"><button type="button" class="button primary" id="homeModelsButton">Set up local models</button><button type="button" class="button ghost" id="homeConnectionButton">Compare AI options</button></div>
         <p class="setup-free-note">Manual editing needs no AI account or model. You can set up AI whenever you need it.</p>
-      </aside>
+      </details>
       <details class="home-guide">
       <summary><span>New to the editing room?</span><span>Workflow & AI options <i aria-hidden="true">+</i></span></summary>
       <section class="home-workflow" aria-labelledby="homeWorkflowTitle">
@@ -145,6 +147,7 @@
           </div>
         </div>
 
+        <div class="preparation-grid"><div class="preparation-sources">
         <div class="source-bay">
           <article class="source-slot primary-source" id="sourceSlotA" data-slot="A" role="button" tabindex="0" aria-describedby="sourceSlotAHelp">
             <input type="file" id="sourceInputA" accept="video/*,.mkv,.m4v,.mts,.m2ts" hidden>
@@ -184,6 +187,7 @@
         </div>
 
         <div class="setup-source-mixer-dock" id="setupSourceMixerDock" hidden></div>
+        </div><div class="preparation-brief">
 
 
 
@@ -238,6 +242,7 @@
           </label>
         </div>
 
+        </div></div>
         <details class="audio-calibration setup-audio-disclosure" id="audioCalibration" hidden>
           <summary><span><strong>Fine-tune silence detection</strong><small>Optional · automatic settings are already applied</small></span></summary>
           <div class="audio-calibration-head">
@@ -269,6 +274,7 @@
         <div class="analysis-orbit" aria-hidden="true"><i></i><i></i><i></i><b>✦</b></div>
         <p class="eyebrow" data-i18n="directorWorking">Director is working</p>
         <h2 id="jobMessage" data-i18n="directorPreparing">Preparing your edit</h2>
+        <div class="analysis-workspace"><div class="analysis-detail">
         <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="jobProgress"></span></div>
         <ol class="analysis-checks">
           <li data-threshold="0.10"><i></i><span data-i18n="taskListen">Transcription and chapters</span></li>
@@ -285,6 +291,7 @@
           </div>
         </div>
         <button class="button danger" id="cancelJobButton" data-i18n="stopProcess">Stop process</button>
+        </div><aside class="analysis-source-context"><h3>Source footage</h3><p id="analysisSources"></p><small>Your recordings stay available for manual editing.</small></aside></div>
       </section>
 
       <section class="result-panel" id="resultPanel" hidden>
@@ -367,6 +374,15 @@
             <button class="button ghost compact" id="closeAdvanced" data-i18n="backToDirector">Project overview</button>
           </div>
         </div>
+        <aside class="studio-shelf" id="studioShelf" aria-label="Workspace library">
+          <section id="studioShelfMedia" data-shelf="media timeline audio" aria-label="Project media">
+            <header class="shelf-heading"><h3>Project media</h3><span>Footage &amp; sound</span></header>
+            <div class="source-library" id="studioSourceLibrary"></div>
+          </section>
+          <section id="studioShelfLayout" data-shelf="framing" aria-label="Composition and source roles" hidden></section>
+          <section id="studioShelfCaptions" data-shelf="transcript" aria-label="Text and caption library" hidden><header class="shelf-heading"><h3>Text &amp; captions</h3><span>Your edit, in words</span></header></section>
+          <section id="studioShelfOutput" data-shelf="settings" aria-label="Output frame" hidden><header class="shelf-heading"><h3>Output frame</h3><span>Preview &amp; export</span></header><p class="shelf-help">Choose the shape of your finished video. Your edits stay in place.</p></section>
+        </aside>
         <aside class="studio-preview-dock" id="studioPreviewDock" aria-label="Live preview"></aside>
         <div class="advanced-tabs" role="tablist" aria-label="Editing workspaces" aria-orientation="horizontal">
           <button id="studioTabTimeline" class="active" role="tab" aria-selected="true" aria-controls="studioPanelTimeline" tabindex="0" data-tab="timeline"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="m8 8 13 13M8 16 21 3"/></svg><span>Edit</span><small>Director</small></button>
@@ -617,7 +633,7 @@
               <section class="studio-section output-format-section">
                 <div class="studio-section-head"><b>Output format</b><small>Changes here apply on export.</small></div>
                 <div class="output-control-grid">
-                  <label><span data-i18n="aspect">Aspect ratio</span><select id="aspectSelect"><option>9:16</option><option>16:9</option><option>1:1</option><option>4:5</option><option value="source" data-i18n="sourceRatio">Source</option></select></label>
+                  <label id="outputAspectField"><span data-i18n="aspect">Aspect ratio</span><select id="aspectSelect"><option>9:16</option><option>16:9</option><option>1:1</option><option>4:5</option><option value="source" data-i18n="sourceRatio">Source</option></select></label>
                   <label><span data-i18n="resolution">Resolution</span><select id="resolutionSelect"><option value="720">720p</option><option value="1080">1080p</option><option value="1440">1440p · QHD</option><option value="2160">2160p · 4K</option></select><small>QHD / 4K take more render time and disk space. Upscaling does not recover missing detail.</small></label>
                   <label class="fps-field"><span id="fpsLabel">Frame rate</span><select id="fpsSelect" aria-labelledby="fpsLabel" aria-describedby="fpsHelp"><option value="24">24 FPS</option><option value="25">25 FPS</option><option value="30" selected>30 FPS</option><option value="50">50 FPS</option><option value="60">60 FPS</option></select><small id="fpsHelp">30 FPS balances smooth playback and render time.</small></label>
                   <label><span data-i18n="quality">Export quality</span><select id="qualitySelect"><option value="fast" data-i18n="fast">Fast</option><option value="balanced" data-i18n="balanced">Balanced</option><option value="quality" data-i18n="highQuality">High</option></select></label>
@@ -679,7 +695,7 @@
             <button id="closeTimelineGaps" type="button" hidden>Close gaps</button>
             <span class="manual-history-actions"><button id="manualUndo" type="button" disabled aria-label="Undo manual correction" title="Undo">↶</button><button id="manualRedo" type="button" disabled aria-label="Redo manual correction" title="Redo">↷</button></span>
             <button id="timelineSnap" type="button" aria-pressed="false" title="Align trims and moves to the playhead, A/B cuts and added media. Hold Alt to bypass; Esc cancels a drag.">Snap: off</button>
-            <div class="timeline-zoom-controls"><button id="timelineZoomOut" aria-label="Zoom out" title="Zoom out around the yellow playhead">−</button><span id="timelineZoomLabel">100%</span><button id="timelineZoomIn" aria-label="Zoom in" title="Zoom in around the yellow playhead">＋</button><button id="timelineFit" data-i18n="fit">Fit</button></div>
+            <div class="timeline-zoom-controls"><button id="timelineZoomOut" aria-label="Zoom out" title="Zoom out around the playhead">−</button><span id="timelineZoomLabel">100%</span><button id="timelineZoomIn" aria-label="Zoom in" title="Zoom in around the playhead">＋</button><button id="timelineFit" data-i18n="fit">Fit</button></div>
             <button id="editorMoreButton" type="button" aria-controls="editorMoreTools">More tools</button>
           </div>
           <div id="timelineCutStatus" class="timeline-cut-status" hidden><span id="timelineCutHint" role="status" aria-live="polite"></span><button type="button" id="cancelTimelineCut" hidden>Cancel cut</button></div>
@@ -777,7 +793,7 @@
         <details data-help-topic><summary>Cloud AI: free accounts, compatible APIs and privacy</summary><p>Online — Free tier uses your own Groq Free account, free within Groq's quotas. My own API account supports Groq or a compatible public HTTPS API: JSON-object chat responses and verbose_json audio transcription with word timestamps, on the same base URL. A chat subscription alone is not compatible. Local/private-network URLs are not supported by this cloud connection.</p><p>A paid account may incur charges, even when you select “Free tier” here. CUTROOM does not upgrade accounts or switch plans. It sends selected audio, transcript and editing instructions to your chosen provider only when you start AI processing. Video frames are not sent.</p><p>Your pasted API key lives in the running CUTROOM session. Reconnect after restarting. Changing provider or endpoint requires a fresh key and consent. Choosing cloud AI reduces local AI work, but previews and video export still run on your computer. The app is not a hosted cloud renderer.</p></details>
         <details data-help-topic><summary>Sources A and B, camera layouts and synchronization</summary><p>A is your main recording and defines the starting timeline. B is an optional second recording. In Layout, assign which is the screen, which is the camera and which supplies the audio. Inspect sync and adjust its offset if the sources do not line up.</p><p>Stacked puts camera and screen into separate parts of the frame. Side by side, picture-in-picture and single-source options give different compositions. A camera embedded in a single file is cropped from that file; it is not a recovered independent source. Select a clip to adjust its framing only, or choose Entire edit to apply your next layout throughout.</p></details>
         <details data-help-topic><summary>Spoken language, transcript and captions</summary><p>Spoken language means the language actually spoken, not the language you want as an output. Automatic detection can be wrong on short or noisy audio. Set the exact language when you know it. Transcription is not automatic translation.</p><p>Review the transcript after AI analysis. Select a line, correct the text, and Save. Text correction changes captions; timeline tools change the video. Caption appearance and placement are in Captions. Burned captions are permanent pixels in the exported video. Manual starts do not create a transcript or captions automatically.</p></details>
-        <details data-help-topic><summary>Timeline: select, cut, remove, move and restore</summary><p><strong>Select / Move:</strong> select a clip and drag its middle to reorder it. <strong>Cut:</strong> click at the split point. <strong>Range:</strong> drag across a section, then remove it. These are different tools, so check the active tool before dragging.</p><p><strong>Together</strong> edits A and B as a pair. A only or B only changes that source and may leave gaps. Trim a clip's white edges to reveal available original footage; Close gaps removes existing empty timeline time. Undo reverses an edit.</p><p><strong>Original footage</strong> shows the complete source with included and removed areas, so you can preview a missing section and restore it. Full source preview does not switch your editing target. Zoom follows the yellow playhead. “How to edit” inside Studio has detailed controls.</p></details>
+        <details data-help-topic><summary>Timeline: select, cut, remove, move and restore</summary><p><strong>Select / Move:</strong> select a clip and drag its middle to reorder it. <strong>Cut:</strong> click at the split point. <strong>Range:</strong> drag across a section, then remove it. These are different tools, so check the active tool before dragging.</p><p><strong>Together</strong> edits A and B as a pair. A only or B only changes that source and may leave gaps. Trim a clip's white edges to reveal available original footage; Close gaps removes existing empty timeline time. Undo reverses an edit.</p><p><strong>Original footage</strong> shows the complete source with included and removed areas, so you can preview a missing section and restore it. Full source preview does not switch your editing target. Zoom follows the playhead. “How to edit” inside Studio has detailed controls.</p></details>
         <details data-help-topic><summary>Keyboard shortcuts and the editing workspace</summary><p>Space plays and pauses when you are not typing. Shortcut profiles adapt CUTROOM's supported actions to familiar editing habits; they are not a complete copy of another program. Open Keyboard shortcuts to choose a profile and see its exact commands.</p><p>Use the video/timeline divider to change the space each gets. Full screen shows just the composed video. Escape returns to the editor. Tool explanations stay available in Help & guide.</p></details>
         <details data-help-topic><summary>Output format, resolution, frame rate and export</summary><p>Short / Reel starts at 9:16. YouTube starts at 16:9. Output settings control the actual export format, resolution and frame rate. Selecting a style does not replace those choices.</p><p>60 FPS is supported. It does not invent new motion detail when your original footage is lower-frame-rate. Larger resolutions and frame rates need more processing and produce larger files. Watch the full preview, then Export and check the exported file before sharing.</p></details>
         <details data-help-topic><summary>Saving, rebuilds, cancellation and recovery</summary><p>Project edits save automatically; check the Saved indicator before closing. Original recordings are not overwritten. A draft rebuild runs AI again and may replace its earlier choices, so review the confirmation and preserve work you care about.</p><p>Stop process cancels an edit or export. Model downloads have their own Cancel button in local setup. Closing a model panel does not cancel its download. Cloud cancellation cannot reverse provider usage already accepted.</p><p>If AI fails, read the stage and error, check the selected connection, language, available model and account quota. Do not keep retrying a paid request blindly. You can still choose a manual project. This is beta software: keep copies of important footage.</p></details>

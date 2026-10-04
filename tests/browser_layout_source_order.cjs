@@ -55,11 +55,12 @@ async function checkLayout(row, stage) {
   const geometry=await cdp.call(()=>{
     const panel=document.getElementById('studioPanelFraming'), frame=panel.querySelector('.framing-layout'), mixer=document.getElementById('sourceMixer');
     const rect=el=>{const r=el.getBoundingClientRect();return{x:r.x,y:r.y,w:r.width,h:r.height};};
-    return {children:[...panel.children].map(el=>el.id||el.className), frame:rect(frame),mixer:rect(mixer),preview:rect(document.getElementById('previewStage')),timeline:rect(document.getElementById('studioTimelineDock')),inspector:rect(document.getElementById('studioInspector')),inPanel:mixer.parentElement===panel,count:document.querySelectorAll('#sourceMixer').length,dockHidden:document.getElementById('setupSourceMixerDock').hidden,sameControls:!globalThis.originalLayoutMixer||globalThis.originalLayoutMixer===mixer,dir:document.documentElement.dir,pageWidth:document.documentElement.scrollWidth,viewport:innerWidth};
+    return {children:[...panel.children].map(el=>el.id||el.className), frame:rect(frame),mixer:rect(mixer),preview:rect(document.getElementById('previewStage')),timeline:rect(document.getElementById('studioTimelineDock')),inspector:rect(document.getElementById('studioInspector')),inPanel:mixer.parentElement.id==='studioShelfLayout',count:document.querySelectorAll('#sourceMixer').length,dockHidden:document.getElementById('setupSourceMixerDock').hidden,sameControls:!globalThis.originalLayoutMixer||globalThis.originalLayoutMixer===mixer,dir:document.documentElement.dir,pageWidth:document.documentElement.scrollWidth,viewport:innerWidth};
   });
   assert.ok(geometry.inPanel); assert.equal(geometry.count,1); assert.ok(geometry.dockHidden); assert.ok(geometry.sameControls);
   assert.ok(geometry.frame.h>0 && geometry.mixer.h>0);
-  assert.ok(geometry.mixer.y>=geometry.frame.y+geometry.frame.h-1,'Source controls visually follow clip framing');
+  assert.ok(geometry.mixer.x+geometry.mixer.w<=geometry.preview.x,'Composition controls occupy the left shelf');
+  assert.ok(geometry.frame.x>=geometry.preview.x+geometry.preview.w,'Clip framing occupies the right inspector');
   assert.equal(geometry.dir,row.direction); assert.ok(geometry.pageWidth<=geometry.viewport+1);
   assert.ok(geometry.preview.h>=300,'Retain preview-first layout'); assert.equal(geometry.timeline.w,1366); assert.ok(geometry.inspector.w<=420);
   // Disclosure controls remain interactive after their sibling is reparented.
@@ -86,7 +87,7 @@ async function checkLayout(row, stage) {
       await cdp.call(()=>{globalThis.originalLayoutMixer=document.getElementById('sourceMixer');});
       await click('generateButton');
       await wait(async()=>Boolean((await project(row.id)).draft));
-      await wait(()=>cdp.call(()=>document.getElementById('sourceMixer').parentElement.id==='studioPanelFraming'));
+      await wait(()=>cdp.call(()=>document.getElementById('sourceMixer').parentElement.id==='studioShelfLayout'));
       await checkLayout(row,'fresh-to-draft');
       const drafted=await project(row.id);assert.ok(drafted.draft);assert.deepEqual(drafted.sources,before.sources);
       await click('homeButton');
