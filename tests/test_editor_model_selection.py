@@ -100,3 +100,23 @@ def test_valid_response_records_exact_model_sent_to_transport(monkeypatch):
     assert engine == "ollama"
     assert called_models == [editorial["model_selection"]["selected_model"]] == ["qwen3.5:4b"]
     assert editorial["warnings"] == []
+
+
+@pytest.mark.parametrize("gpu_room,expected", [(True, "qwen3.5:9b"), (False, "qwen3.5:4b")])
+def test_auto_uses_an_installed_quality_model_only_when_the_gpu_has_room(monkeypatch, gpu_room, expected):
+    from cutroom import transcription
+    monkeypatch.setattr(intelligence, "_ollama_inventory", lambda _: (True, {"qwen3.5:4b", "qwen3.5:9b"}))
+    monkeypatch.setattr(transcription, "cuda_available", lambda _settings=None: True)
+    monkeypatch.setattr(transcription, "_cuda_has_capacity", lambda *_args, **_kwargs: gpu_room)
+    intelligence._STORY_GPU_PROBE.clear()
+    status = intelligence.story_ai_status(Settings(), {"performance_mode": "auto"})
+    assert status["selected_model"] == expected
+    assert status["using_fallback"] is False
+
+
+def test_auto_never_presents_a_missing_quality_model_as_a_fallback(monkeypatch):
+    monkeypatch.setattr(intelligence, "_ollama_inventory", lambda _: (True, {"qwen3.5:4b"}))
+    intelligence._STORY_GPU_PROBE.clear()
+    status = intelligence.story_ai_status(Settings(), {"performance_mode": "auto"})
+    assert status["selected_model"] == "qwen3.5:4b"
+    assert status["using_fallback"] is False
