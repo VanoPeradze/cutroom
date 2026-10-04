@@ -39,8 +39,11 @@ async function wait(check,timeout=25000) {const start=Date.now();while(Date.now(
 let cdp;
 async function screenshot(name) {await cdp.send('Input.dispatchMouseEvent',{type:'mouseMoved',x:850,y:75});await pause(120);const result=await cdp.send('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});const file=path.join(output,`${name}.png`);fs.writeFileSync(file,Buffer.from(result.data,'base64'));evidence.screenshots.push(file);}
 async function project() {return (await (await fetch(`${origin}/api/projects/${projectId}`)).json()).project;}
-async function click(selector) {await cdp.eval(`document.querySelector(${JSON.stringify(selector)}).click()`);}
-async function field(selector,value) {await cdp.eval(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});e.value=${JSON.stringify(value)};e.dispatchEvent(new Event('input',{bubbles:true}));})()`);}
+// Values embedded in evaluated code are JSON literals with script-breaking characters escaped.
+const UNSAFE_IN_SCRIPT = new RegExp(`[<>/${String.fromCharCode(0x2028, 0x2029)}]`, 'g');
+const literal = value => JSON.stringify(value).replace(UNSAFE_IN_SCRIPT, character => String.fromCharCode(92) + 'u' + character.charCodeAt(0).toString(16).padStart(4,'0'));
+async function click(selector) {await cdp.eval(`document.querySelector(${literal(selector)}).click()`);}
+async function field(selector,value) {await cdp.eval(`(()=>{const e=document.querySelector(${literal(selector)});e.value=${literal(value)};e.dispatchEvent(new Event('input',{bubbles:true}));})()`);}
 async function keyedFrame() {
   return cdp.eval(`(()=>{const c=document.querySelector('.media-overlay .chroma-live:not([hidden])');if(!c)return null;const p=c.getContext('2d').getImageData(0,0,c.width,c.height).data;return{width:c.width,height:c.height,corner:[...p.slice((16*c.width+16)*4,(16*c.width+16)*4+4)],center:[...p.slice((Math.floor(c.height/2)*c.width+Math.floor(c.width/2))*4,(Math.floor(c.height/2)*c.width+Math.floor(c.width/2))*4+4)]};})()`);
 }
@@ -55,7 +58,7 @@ try {
 
  await cdp.send('Emulation.setDeviceMetricsOverride',{width:1600,height:900,deviceScaleFactor:1,mobile:false});
  await cdp.send('Page.navigate',{url:origin});
- await wait(()=>cdp.eval('!!document.querySelector(\'[data-project-id="'+projectId+'"] [data-project-action="open"]\')'));
+ await wait(()=>cdp.eval(`!!document.querySelector(${literal(`[data-project-id="${projectId}"] [data-project-action="open"]`)})`));
  await click('[data-project-id="'+projectId+'"] [data-project-action="open"]');
  await wait(()=>cdp.eval("!document.getElementById('advancedPanel').hidden"));
  await wait(()=>cdp.eval("document.querySelector('#previewStage video')?.readyState>=2"));
@@ -152,7 +155,7 @@ try {
  await click('#dialogProjects [data-project-id="'+projectId+'"] [data-project-action=delete]');await screenshot('dialog-delete');await cdp.eval("document.querySelector('#projectDeleteDialog').close()");await click('#closeProjectsDialog');
  // Reopen, assert persistence, and export through the visible dialog.
  await cdp.send('Page.navigate',{url:'about:blank'});await pause(150);await cdp.send('Page.navigate',{url:origin});
- await wait(()=>cdp.eval('!!document.querySelector(\'[data-project-id="'+projectId+'"] [data-project-action="open"]\')'));
+ await wait(()=>cdp.eval(`!!document.querySelector(${literal(`[data-project-id="${projectId}"] [data-project-action="open"]`)})`));
  await click('[data-project-id="'+projectId+'"] [data-project-action="open"]');await wait(()=>cdp.eval("!document.getElementById('advancedPanel').hidden"));
  await tab('audio');assert.equal(await cdp.eval("document.querySelector('[data-mix=music_db]').value"),'-11');assert.equal(await cdp.eval("document.querySelector('[data-mute=music]').getAttribute('aria-pressed')"),'true');
  assert.equal(await cdp.eval("document.querySelector('[data-solo=source]').getAttribute('aria-pressed')"),'false');
