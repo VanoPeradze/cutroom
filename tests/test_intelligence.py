@@ -458,7 +458,7 @@ def test_quality_mode_prefers_9b_only_when_already_installed(monkeypatch):
             "editor_fallback_models":["qwen3:8b"],
             "performance_mode":"auto",
         }
-    monkeypatch.setattr(intelligence, "_installed_models", lambda _settings: {"qwen3.5:4b", "qwen3.5:9b"})
+    monkeypatch.setattr(intelligence, "_ollama_inventory", lambda _settings: (True, {"qwen3.5:4b", "qwen3.5:9b"}))
     assert intelligence._select_editor_model(Dummy(), {"performance_mode":"quality"}) == "qwen3.5:9b"
     assert intelligence._select_editor_model(Dummy(), {"performance_mode":"balanced"}) == "qwen3.5:4b"
 

@@ -10,6 +10,8 @@ import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
 DOCUMENTS = ("README.md", ".github/CONTRIBUTING.md", ".github/SECURITY.md")
+OVERVIEW_DOCUMENTS = frozenset(DOCUMENTS[1:])
+REPOSITORY_BLOB_PATH = "/VanoPeradze/cutroom/blob/"
 
 
 class Resources(HTMLParser):
@@ -29,9 +31,20 @@ def check_document(name: str) -> None:
     links = parser.links + re.findall(r"\]\(([^\s)]+)\)", text)
     for link in links:
         target = urlsplit(link)
-        if target.scheme or target.netloc or not target.path:
+        if not target.path:
             continue
-        local = (source.parent / unquote(target.path)).resolve()
+        if target.netloc == "github.com" and target.path.startswith(REPOSITORY_BLOB_PATH):
+            revision, separator, path = target.path[len(REPOSITORY_BLOB_PATH):].partition("/")
+            if not separator or revision not in {"HEAD", "master"}:
+                raise ValueError(f"{name}: repository file link must use HEAD or master: {link!r}")
+            local = (ROOT / unquote(path)).resolve()
+        elif target.scheme or target.netloc:
+            continue
+        else:
+            # GitHub overview tabs resolve these from the repo root, not .github/.
+            if name in OVERVIEW_DOCUMENTS:
+                raise ValueError(f"{name}: use an absolute GitHub file URL for overview-safe links: {link!r}")
+            local = (source.parent / unquote(target.path)).resolve()
         if not local.is_relative_to(ROOT) or not local.is_file():
             raise ValueError(f"{name}: missing or unsafe local resource {link!r}")
     if name == "README.md":
@@ -61,7 +74,7 @@ def main() -> None:
     for name in ("bug_report.yml", "feature_request.yml"):
         if not (ROOT / ".github/ISSUE_TEMPLATE" / name).is_file():
             raise ValueError(f"Missing issue template: {name}")
-    print("PASS: English README, version, local assets/links, brand SVG, license and community files.")
+    print("PASS: English README, version, local/GitHub file links, overview-safe community links, brand SVG and license.")
 
 
 if __name__ == "__main__":

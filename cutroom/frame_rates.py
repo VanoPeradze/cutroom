@@ -22,11 +22,22 @@ def project_export_fps(project: dict[str, Any]) -> int:
 
 
 def with_export_options(project: dict[str, Any], options: dict[str, Any] | None) -> dict[str, Any]:
-    """Apply an export-only frame rate without mutating the saved project."""
+    """Apply export-only frame rate and resolution without changing the project."""
 
-    if options is None or "fps" not in options:
+    if options is None or not ({"fps", "resolution"} & options.keys()):
         return project
+    overrides = {}
+    if "fps" in options:
+        overrides["fps"] = validate_export_fps(options["fps"])
+    if "resolution" in options:
+        overrides["resolution"] = validate_export_resolution(options["resolution"])
     return {
         **project,
-        "settings": {**(project.get("settings") or {}), "fps": validate_export_fps(options["fps"])},
+        "settings": {**(project.get("settings") or {}), **overrides},
     }
+
+
+def validate_export_resolution(value: Any) -> str:
+    if not isinstance(value, str) or value not in {"720", "1080", "1440", "2160"}:
+        raise ValueError("resolution must be 720, 1080, 1440 or 2160.")
+    return value

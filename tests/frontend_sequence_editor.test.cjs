@@ -70,6 +70,23 @@ test('per-cut focus follows playback time and source instead of global framing',
   assert.equal(run(`previewCropForLayout('A','A',sourceMixerSettings(),null,4).x`),.5);
 });
 
+test('protection toggle preserves playback, selection and preview without reloading the draft',async()=>{
+  const {run}=app();
+  run(`state.preview.playing=true;state.manualSelection={start:0,end:3};state.timeline.scheduleDraw=()=>{};
+    state.timeline.cancelGesture=()=>{};state.trackProtection={render(){},lockedNames(){return [];}};`);
+  await run(`applyManualEdit('set_track_lock',{slot:'A',locked:true})`);
+  assert.equal(run('state.preview.playing'),true);
+  assert.equal(run('renderCount'),0);assert.deepEqual(plain(run('seeks')),[]);
+  assert.deepEqual(plain(run('state.manualSelection')),{start:0,end:3});
+  assert.deepEqual(plain(run('requests[0].body')),{action:'set_track_lock',slot:'A',locked:true,expected_revision:7});
+});
+
+test('timeline commands explain protection before issuing a source edit',async()=>{
+  const {run}=app();run(`state.trackProtection={lockedNames:()=>['A']};`);
+  await run(`handleTimelineEdit({action:'split',target:'edit',time:1})`);
+  assert.deepEqual(plain(run('requests')),[]);assert.match(run('messages.at(-1)'),/Track A is locked/);
+});
+
 test('framing saves only the selected range on the chosen source and never patches global crop',async()=>{
   const {run}=app();
   run(`state.manualSelection={start:1,end:2};elements.cropSourceSelect.value='A';
@@ -242,13 +259,14 @@ test('transcript source target uses canonical analyzed audio provenance, not an 
   assert.equal(run('transcriptSourceSlot()'),'B');
 });
 
-for(const operation of ['duplicate','move','insert']) test(`${operation} completion cannot select, seek or retarget a newly opened project`,async()=>{
+for(const operation of ['duplicate','move','insert','trim']) test(`${operation} completion cannot select, seek or retarget a newly opened project`,async()=>{
   const {run} = app();
   run(`bindEvents();state.manualSelection={start:0,end:3};
     globalThis.originalProject=state.project;
     applyManualEdit=()=>new Promise(resolve=>{globalThis.finish=resolve;});`);
   if(operation==='duplicate')run('globalThis.pending=elements.clipDuplicate.listeners.click();');
   if(operation==='move')run(`globalThis.pending=handleTimelineEdit({action:'track_move',slot:'A',clip_id:'a1',start:4});`);
+  if(operation==='trim')run(`globalThis.pending=handleTimelineEdit({action:'sequence_trim_edge',start:0,end:3,edge:'end',time:2});`);
   if(operation==='insert')run(`openSourceInsert();globalThis.pending=insertSourceFootage({preventDefault(){}});`);
   run(`state.project={...originalProject,id:'another-project'};state.editTarget='B';
     state.manualSelection={start:10,end:11};selections=[];seeks=[];finish(originalProject);`);
@@ -258,4 +276,72 @@ for(const operation of ['duplicate','move','insert']) test(`${operation} complet
   assert.deepEqual(plain(run('state.manualSelection')),{start:10,end:11});
   assert.deepEqual(plain(run('selections')),[]);
   assert.deepEqual(plain(run('seeks')),[]);
+});
+
+for(const outcome of ['success','failure']) test(`trim ${outcome} preserves a different edit target selected while saving`,async()=>{
+  const {run}=app();
+  run(`state.manualSelection={start:0,end:3};globalThis.originalProject=state.project;
+    applyManualEdit=()=>new Promise(resolve=>{globalThis.finish=resolve;});
+    globalThis.pending=handleTimelineEdit({action:'sequence_trim_edge',start:0,end:3,edge:'end',time:2});
+    state.editTarget='B';state.manualSelection={start:4,end:5};selections=[];seeks=[];
+    finish(${outcome==='success'?'originalProject':'null'});`);
+  await run('pending');
+  assert.deepEqual(plain(run('state.manualSelection')),{start:4,end:5});
+  assert.deepEqual(plain(run('selections')),[]);
+  assert.deepEqual(plain(run('seeks')),[]);
+});
+
+test('failed trim cannot restore its range in a newly opened project',async()=>{
+  const {run}=app();
+  run(`state.manualSelection={start:0,end:3};
+    applyManualEdit=()=>new Promise(resolve=>{globalThis.finish=resolve;});
+    globalThis.pending=handleTimelineEdit({action:'sequence_trim_edge',start:0,end:3,edge:'end',time:2});
+    state.project={...state.project,id:'another-project'};state.manualSelection={start:4,end:5};selections=[];seeks=[];finish(null);`);
+  await run('pending');
+  assert.deepEqual(plain(run('state.manualSelection')),{start:4,end:5});
+  assert.deepEqual(plain(run('selections')),[]);
+  assert.deepEqual(plain(run('seeks')),[]);
+});
+
+test('trim revision conflict keeps the refreshed sequence selection cleared',async()=>{
+  const {run}=app();
+  run(`state.manualSelection={start:0,end:3};api=async(url,options)=>{
+    requests.push({url,method:options?.method||'GET'});
+    if(options?.method==='POST')throw Object.assign(new Error('conflict'),{status:409,code:'revision_conflict'});
+    return {project:{...state.project,revision:10}};};`);
+  assert.equal(await run(`handleTimelineEdit({action:'sequence_trim_edge',start:0,end:3,edge:'end',time:2})`),null);
+  assert.equal(run('state.project.revision'),10);
+  assert.equal(run('state.manualSelection'),null);
+  assert.deepEqual(plain(run('selections')),[]);
+  assert.deepEqual(plain(run('seeks')),[]);
+  assert.match(run('messages.at(-1)'),/select the clip again and retry/);
+});
+
+test('ordinary trim failure restores the saved selection for a retry without seeking',async()=>{
+  const {run}=app();
+  run(`state.manualSelection={start:0,end:3};api=async()=>{throw new Error('Connection interrupted');};`);
+  assert.equal(await run(`handleTimelineEdit({action:'sequence_trim_edge',start:0,end:3,edge:'end',time:2})`),null);
+  assert.deepEqual(plain(run('selections')),[{start:0,end:3}]);
+  assert.deepEqual(plain(run('seeks')),[]);
+  assert.match(run('messages.at(-1)'),/Connection interrupted/);
+});
+
+for(const action of ['undo','redo']) test(`${action} clears a stale trimmed selection and mark-in while retaining the playhead`,async()=>{
+  const {run}=app();
+  run(`state.editTarget='A';state.manualSelection={start:0,end:3};
+    state.markIn={projectId:'p',time:.5};state.timeline.playhead=1.5;
+    api=async(url,options)=>{
+      requests.push({url,body:JSON.parse(options.body)});
+      const restored=JSON.parse(JSON.stringify(state.project));
+      restored.revision++;restored.editor_sequence.source_tracks.A[0].end=2;
+      return {project:restored};};`);
+  assert.ok(await run(`applyManualEdit('${action}')`));
+  assert.equal(run('requests[0].body.action'),action);
+  assert.equal(run('targetEditableClips()[0].end'),2);
+  assert.equal(run('state.manualSelection'),null);
+  assert.equal(run('state.markIn'),null);
+  assert.deepEqual(plain(run('selections')),[]);
+  assert.deepEqual(plain(run('seeks')),[1.5]);
+  assert.equal(run('state.timeline.playhead'),1.5);
+  assert.equal(run('activeEditTarget()'),'A');
 });

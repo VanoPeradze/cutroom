@@ -1,11 +1,12 @@
 # CUTROOM guides
 
-**New to CUTROOM?** Start with the [user guide](USER_GUIDE_EN.md). Looking for the app itself? [Download the Windows beta](https://cutroom-studio.expo.app/#download).
+**New to CUTROOM?** Start with the [user guide](USER_GUIDE_EN.md). Looking for the app itself? [Download the Windows + Mac beta](https://cutroom-studio.expo.app/#download), or use the [Linux source setup](PLATFORMS.md#linux-source-based-development-path).
 
 ## Create your first video
 
 - [User guide — English](USER_GUIDE_EN.md): from importing footage to checking your export.
 - [User guide — Hebrew](USER_GUIDE_HE.md) and [Hebrew introduction](README_HE.md).
+- [Windows, macOS and Linux installation paths](PLATFORMS.md): platform prerequisites and current validation limits.
 - [Setup and troubleshooting](TEST_ON_ANOTHER_PC.md): installation and trying CUTROOM on another computer.
 - [AI connections](AI_CONNECTIONS.md): manual editing, local models, optional cloud accounts and privacy.
 - [Models and download sizes](MODELS.md): what each AI option needs.

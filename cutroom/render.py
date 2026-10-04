@@ -14,21 +14,24 @@ from typing import Any
 
 from .config import Settings
 from .captions import build_ass, build_srt, normalize_caption_settings
-from .composition import select_embedded_candidate
-from .effects import compile_automatic_effects
+from .composition import chroma_background_asset, chroma_source, chroma_video_targets, select_embedded_candidate, source_chroma_key
+from .effects import build_chroma_key_nodes, chroma_key_capability, compile_automatic_effects
 from .frame_rates import project_export_fps, with_export_options
 from .cache_keys import stable_fingerprint
 from .jobs import JobCancelled, JobContext
 from .media import probe_media
+from .media_library import safe_asset_path
+from .media_render import append_media_graph, library_input_args, library_clips, library_has_audio, master_gain_db
 from .projects import ProjectStore
 from .source_tracks import has_sequence, has_source_tracks, source_track_clips, timeline_duration
+from .text_clips import validated_text_clips
 from .utils import new_id, now_iso, sanitize_filename
 
 ASPECT_DIMENSIONS = {
-    "9:16": {"720": (720, 1280), "1080": (1080, 1920)},
-    "16:9": {"720": (1280, 720), "1080": (1920, 1080)},
-    "1:1": {"720": (720, 720), "1080": (1080, 1080)},
-    "4:5": {"720": (720, 900), "1080": (1080, 1350)},
+    "9:16": {"720": (720, 1280), "1080": (1080, 1920), "1440": (1440, 2560), "2160": (2160, 3840)},
+    "16:9": {"720": (1280, 720), "1080": (1920, 1080), "1440": (2560, 1440), "2160": (3840, 2160)},
+    "1:1": {"720": (720, 720), "1080": (1080, 1080), "1440": (1440, 1440), "2160": (2160, 2160)},
+    "4:5": {"720": (720, 900), "1080": (1080, 1350), "1440": (1440, 1800), "2160": (2160, 2700)},
 }
 
 CAMERA_LAYOUTS = {"A", "B", "screen", "camera", "stacked", "side_by_side", "pip", "embedded_stack"}
@@ -177,6 +180,8 @@ def _render_plan(project: dict[str, Any]) -> list[dict[str, Any]]:
             for clip in source_track_clips(project, slot):
                 start = math.floor(float(clip["start"]) * fps + 0.5) / fps
                 real_end = min(float(clip["end"]), float(clip["start"]) + video_duration - float(clip["source_start"]))
+                if "video_speed" in clip:
+                    real_end = float(clip["end"])
                 end = math.floor(real_end * fps + 0.5) / fps
                 if end > start:
                     track_boundaries.update((start, end))
@@ -374,12 +379,14 @@ def _dimensions(project: dict[str, Any]) -> tuple[int, int]:
     settings = project.get("settings", {})
     aspect = str(settings.get("aspect", "9:16"))
     resolution = str(settings.get("resolution", "1080"))
+    if resolution not in {"720", "1080", "1440", "2160"}:
+        raise ValueError("Choose 720, 1080, 1440 or 2160 resolution")
     if aspect == "source":
         source = project["sources"]["A"]
         width, height = int(_finite_float(source.get("width"))), int(_finite_float(source.get("height")))
         if width <= 0 or height <= 0:
             raise ValueError("Source A has invalid video dimensions")
-        max_edge = 1920 if resolution == "1080" else 1280
+        max_edge = {"720": 1280, "1080": 1920, "1440": 2560, "2160": 3840}[resolution]
         scale = min(1.0, max_edge / max(width, height))
         return max(2, int(width * scale) // 2 * 2), max(2, int(height * scale) // 2 * 2)
     return ASPECT_DIMENSIONS.get(aspect, ASPECT_DIMENSIONS["9:16"]).get(resolution, ASPECT_DIMENSIONS["9:16"]["1080"])
@@ -434,9 +441,14 @@ def _source_mixer(project: dict[str, Any]) -> dict[str, str]:
     primary_role = str(raw.get("primary_role") or "screen").lower()
     if primary_role not in {"screen", "camera"}:
         primary_role = "screen"
-    first_slot = str(raw.get("first_slot") or "A").upper()
+    vertical = str((project.get("settings") or {}).get("aspect") or "9:16") == "9:16"
+    default_first_slot = camera_slot if vertical else "A"
+    first_slot = str(raw.get("first_slot") or default_first_slot).upper()
     if first_slot not in {"A", "B"}:
-        first_slot = "A"
+        first_slot = default_first_slot
+    stack_fit = raw.get("stack_fit")
+    if stack_fit not in ("cover", "contain"):
+        stack_fit = "cover" if vertical else "contain"
     audio_slot = str(raw.get("audio_slot") or project.get("settings", {}).get("audio_source") or "A").upper()
     sources = project.get("sources", {})
     if audio_slot not in {"A", "B"} or not (sources.get(audio_slot) or {}).get("has_audio"):
@@ -447,7 +459,7 @@ def _source_mixer(project: dict[str, Any]) -> dict[str, str]:
         "primary_role": primary_role,
         "audio_slot": audio_slot,
         "first_slot": first_slot,
-        "stack_fit": "cover" if raw.get("stack_fit") == "cover" else "contain",
+        "stack_fit": stack_fit,
     }
 
 
@@ -742,7 +754,7 @@ def _caption_transcript(project: dict[str, Any]) -> dict[str, Any]:
     return {**transcript, "segments": segments}
 
 
-def _source_track_master(project: dict[str, Any], slot: str, *, audio: bool, output: str) -> list[str]:
+def _source_track_master(project: dict[str, Any], slot: str, *, audio: bool, output: str, video_input: str | None = None) -> list[str]:
     """Assemble one track on the full A clock; gaps are generated, not frozen.
 
     Bound every piece by output frames (or matching 48 kHz samples) before
@@ -753,23 +765,29 @@ def _source_track_master(project: dict[str, Any], slot: str, *, audio: bool, out
     total_frames = int(math.floor(duration * fps + 0.5))
     source = (project.get("sources") or {}).get(slot) or {}
     source_duration = _finite_float(source.get("duration")) if audio else _source_video_duration(source)
-    pieces: list[tuple[int, int, float | None]] = []
+    pieces: list[tuple[int, int, float | None, float]] = []
     cursor = 0
     for clip in source_track_clips(project, slot):
         raw_start = float(clip["start"])
         real_end = min(float(clip["end"]), raw_start + source_duration - float(clip["source_start"]))
+        speed = float(clip.get("video_speed", 1)) if not audio else 1.0
+        picture_clock = not audio and "video_speed" in clip
+        if picture_clock:
+            real_end = float(clip["end"])
         start = max(cursor, min(total_frames, int(math.floor(raw_start * fps + 0.5))))
         end = min(total_frames, int(math.floor(real_end * fps + 0.5)))
         if end <= start:
             continue
         if start > cursor:
-            pieces.append((cursor, start, None))
+            pieces.append((cursor, start, None, 1.0))
         source_start = max(0.0, float(clip["source_start"]) + start / fps - raw_start)
-        pieces.append((start, end, source_start))
+        if picture_clock:
+            source_start = min(max(0.0, source_duration - 1 / fps), max(0.0, float(clip.get("video_source_start", clip["source_start"])) + (start / fps - raw_start) * speed))
+        pieces.append((start, end, source_start, speed))
         cursor = end
     if cursor < total_frames:
-        pieces.append((cursor, total_frames, None))
-    real_count = sum(source_start is not None for _, _, source_start in pieces)
+        pieces.append((cursor, total_frames, None, 1.0))
+    real_count = sum(source_start is not None for _, _, source_start, _ in pieces)
     prefix = f"track{slot}{'a' if audio else 'v'}"
     media = "a" if audio else "v"
     index = 0 if slot == "A" else 1
@@ -777,11 +795,12 @@ def _source_track_master(project: dict[str, Any], slot: str, *, audio: bool, out
     if real_count:
         labels = "".join(f"[{prefix}in{i}]" for i in range(real_count))
         split = f"{'asplit' if audio else 'split'}={real_count}" if real_count > 1 else ("anull" if audio else "null")
-        filters.append(f"[{index}:{media}]{split}{labels}")
+        source_input = video_input if not audio and video_input is not None else f"[{index}:{media}]"
+        filters.append(f"{source_input}{split}{labels}")
     width = max(2, int(_finite_float(source.get("width"), 2)) // 2 * 2)
     height = max(2, int(_finite_float(source.get("height"), 2)) // 2 * 2)
     real_index = 0
-    for piece_index, (start, end, source_start) in enumerate(pieces):
+    for piece_index, (start, end, source_start, speed) in enumerate(pieces):
         frames = end - start
         length = frames / fps
         label = f"{prefix}piece{piece_index}"
@@ -797,9 +816,9 @@ def _source_track_master(project: dict[str, Any], slot: str, *, audio: bool, out
             if source_start is None:
                 chain = f"color=c=black:s={width}x{height}:r={fps}"
             else:
-                chain = (f"[{prefix}in{real_index}]trim=start={source_start:.9f}:end={source_start + length + 1/fps:.9f},"
-                         f"setpts=PTS-STARTPTS,fps={fps},scale={width}:{height},setsar=1,"
-                         f"tpad=stop_mode=clone:stop_duration={2/fps:.9f}")
+                chain = (f"[{prefix}in{real_index}]trim=start={source_start:.9f}:end={source_start + length * speed + 1/fps:.9f},"
+                         f"setpts=(PTS-STARTPTS)/{speed:.9f},fps={fps},scale={width}:{height},setsar=1,"
+                         f"tpad=stop_mode=clone:stop_duration={length + 2/fps:.9f}")
             filters.append(f"{chain},trim=end_frame={frames},setpts=N/{fps}/TB,format=yuv420p[{label}]")
         if source_start is not None:
             real_index += 1
@@ -816,7 +835,11 @@ def _final_audio_filter(project: dict[str, Any]) -> str:
         target = max(-24.0, min(-10.0, float(policy.get("target_lufs", -16.0))))
     except (TypeError, ValueError):
         target = -16.0
-    return f"loudnorm=I={target:.1f}:LRA=11:TP=-1.5"
+    result = f"loudnorm=I={target:.1f}:LRA=11:TP=-1.5"
+    gain_db = master_gain_db(project)
+    if gain_db:
+        result += f",volume={gain_db:.6f}dB,alimiter=limit=0.98:level=0:latency=1"
+    return result
 
 
 def _render_effects_payload(project: dict[str, Any]) -> dict[str, Any]:
@@ -825,6 +848,25 @@ def _render_effects_payload(project: dict[str, Any]) -> dict[str, Any]:
     if has_sequence(project) or (project.get("settings") or {}).get("editorial_effects", True) is False:
         return {"effects": [], "filter_expression": None}
     return compile_automatic_effects(project)
+
+def _chroma_background_slots(project: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
+    return [(slot, asset) for slot in chroma_video_targets(project, used_only=True)
+            if (asset := chroma_background_asset(project, slot)) is not None]
+
+
+def chroma_background_input_args(project: dict[str, Any], project_dir: Path) -> list[str]:
+    """Append guarded ready-image inputs after the existing library inventory."""
+    result = []
+    fps = project_export_fps(project)
+    for slot, asset in _chroma_background_slots(project):
+        path = safe_asset_path(project_dir, asset["path"])
+        if not path.is_file():
+            raise FileNotFoundError("The chosen Chroma Key background image is missing. Choose another image or reset Chroma Key.")
+        duration = _source_video_duration(chroma_source(project, slot) or {}) + 2 / fps
+        result.extend(["-loop", "1", "-framerate", str(fps), "-t", f"{duration:.9f}",
+                       "-protocol_whitelist", "file,pipe", "-i", str(path)])
+    return result
+
 
 def build_filter_graph(project: dict[str, Any], width: int, height: int, caption_ass: Path | None = None) -> tuple[str, list[str], bool]:
     fps = project_export_fps(project)
@@ -877,16 +919,37 @@ def build_filter_graph(project: dict[str, Any], width: int, height: int, caption
         f"fps={fps},trim=end_frame={output_frames},setpts=N/{fps}/TB"
     )
     filters: list[str] = []
+    video_inputs = {"A": "[0:v]", "B": "[1:v]"}
+    background_base = (2 if source_b else 1) + len(library_clips(project))
+    image_inputs = {slot: f"[{background_base + index}:v]"
+                    for index, (slot, _) in enumerate(_chroma_background_slots(project))}
+    # Key genuine decoded media once, before independent clip trims or generated
+    # black gaps. All framing/layout/effects then consume the same opaque picture
+    # used by the current-frame Chroma Key preview. Audio inputs stay untouched.
+    for slot, consumed in (("A", bool(a_indices)), ("B", has_b)):
+        config = source_chroma_key(project, slot)
+        if not consumed or not config["enabled"]:
+            continue
+        source = project["sources"][slot]
+        source_width = max(2, int(source["width"]) // 2 * 2)
+        source_height = max(2, int(source["height"]) // 2 * 2)
+        output_label = f"[chroma{slot}source]"
+        filters.extend(build_chroma_key_nodes(
+            video_inputs[slot], output_label, config, source_width, source_height,
+            fps, _source_video_duration(source), prefix=f"chroma{slot}",
+            background_label=image_inputs.get(slot),
+        ))
+        video_inputs[slot] = output_label
     if independent:
         if a_indices:
-            filters.extend(_source_track_master(project, "A", audio=False, output="amasterv"))
+            filters.extend(_source_track_master(project, "A", audio=False, output="amasterv", video_input=video_inputs["A"]))
         if has_b:
-            filters.extend(_source_track_master(project, "B", audio=False, output="bmaster"))
+            filters.extend(_source_track_master(project, "B", audio=False, output="bmaster", video_input=video_inputs["B"]))
         if has_audio:
             filters.extend(_source_track_master(project, audio_slot, audio=True, output="amaster"))
     else:
         filters.append(
-            f"[0:v]setpts=PTS-STARTPTS,fps={fps},"
+            f"{video_inputs['A']}setpts=PTS-STARTPTS,fps={fps},"
             f"tpad=stop_mode=clone:stop_duration={source_duration:.6f},"
             f"trim=duration={source_duration:.6f},setpts=N/{fps}/TB,setsar=1[amasterv]"
         )
@@ -898,14 +961,14 @@ def build_filter_graph(project: dict[str, Any], width: int, height: int, caption
         )
         if offset > 0.0:
             filters.append(
-                f"[1:v]setpts=PTS-STARTPTS+{offset:.6f}/TB,setsar=1[bshifted]"
+                f"{video_inputs['B']}setpts=PTS-STARTPTS+{offset:.6f}/TB,setsar=1[bshifted]"
             )
         elif offset < 0.0:
             filters.append(
-                f"[1:v]trim=start={abs(offset):.6f},setpts=PTS-STARTPTS,setsar=1[bshifted]"
+                f"{video_inputs['B']}trim=start={abs(offset):.6f},setpts=PTS-STARTPTS,setsar=1[bshifted]"
             )
         else:
-            filters.append("[1:v]setpts=PTS-STARTPTS,setsar=1[bshifted]")
+            filters.append(f"{video_inputs['B']}setpts=PTS-STARTPTS,setsar=1[bshifted]")
         filters.append(
             f"[bcanvas][bshifted]overlay=x=0:y=0:eof_action=pass:shortest=0,"
             f"trim=duration={source_duration:.6f},fps={fps},"
@@ -1002,13 +1065,19 @@ def build_filter_graph(project: dict[str, Any], width: int, height: int, caption
         filters.append(f"[vbase]{effect_expression}[vout]")
 
     video_map = "[vout]"
+    media_filters, video_map, audio_map = append_media_graph(
+        project, width, height, output_frames / fps, video_map, "[aout]" if has_audio else None,
+        chroma_background_labels=image_inputs,
+    )
+    filters.extend(media_filters)
+    has_audio = audio_map is not None
     if caption_ass is not None:
         value = caption_ass.resolve().as_posix().replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'")
-        filters.append(f"[vout]ass=filename='{value}'[vfinal]")
+        filters.append(f"{video_map}ass=filename='{value}'[vfinal]")
         video_map = "[vfinal]"
     maps = ["-map", video_map]
     if has_audio:
-        maps += ["-map", "[aout]"]
+        maps += ["-map", audio_map]
     return ";\n".join(filters), maps, has_audio
 
 
@@ -1112,7 +1181,7 @@ def _estimate_render_storage(
     fps = project_export_fps(project)
     video_bitrate = max(1_000_000.0, float(width) * float(height) * fps * bits_per_pixel)
     render_config = getattr(settings, "render", {}) or {}
-    has_audio = _effective_audio_slot(project) is not None
+    has_audio = _effective_audio_slot(project) is not None or library_has_audio(project)
     audio_bitrate = _parse_bitrate_bps(render_config.get("audio_bitrate", "192k")) if has_audio else 0
     video_bytes_float = duration * video_bitrate / 8.0
     audio_bytes_float = duration * audio_bitrate / 8.0
@@ -1127,13 +1196,16 @@ def _estimate_render_storage(
     transcript = _caption_transcript(project)
     segments = transcript.get("segments") if isinstance(transcript.get("segments"), list) else []
     transcript_bytes = _serialized_size(transcript, fallback=len(segments) * 256)
+    text_clips = validated_text_clips(project)
+    text_bytes = _serialized_size(text_clips, fallback=len(text_clips) * 4096)
+    manual_captions = [row for row in text_clips if row["kind"] == "caption"]
     project_settings = project.get("settings") or {}
     ass_bytes = 0
-    if project_settings.get("burn_captions") and segments:
-        ass_bytes = max(256 * 1024, transcript_bytes * 3 + len(segments) * 256)
+    if project_settings.get("burn_captions") and segments or text_clips:
+        ass_bytes = max(256 * 1024, transcript_bytes * 3 + len(segments) * 256 + text_bytes * 3 + len(text_clips) * 512)
     srt_bytes = 0
-    if project_settings.get("captions") and segments:
-        srt_bytes = max(128 * 1024, transcript_bytes * 2 + len(segments) * 128)
+    if project_settings.get("captions") and (segments or manual_captions):
+        srt_bytes = max(128 * 1024, transcript_bytes * 2 + len(segments) * 128 + text_bytes * 2)
 
     # Complex layouts generate several filter clauses per fragment. The real
     # files are normally much smaller; this upper allowance also covers filesystem
@@ -1262,6 +1334,7 @@ def _render_input_fingerprint(project: dict[str, Any]) -> str:
         "render-input-2026-09-05.fps",
         {
             "sources": project.get("sources"),
+            "assets": project.get("assets"),
             "draft": project.get("draft"),
             "settings": {
                 key: settings.get(key)
@@ -1271,11 +1344,17 @@ def _render_input_fingerprint(project: dict[str, Any]) -> str:
                 )
             },
             "manual": {
+                **({"chroma_key": {slot: source_chroma_key(project, slot) for slot in chroma_video_targets(project)
+                                    if source_chroma_key(project, slot)["enabled"]}}
+                   if any(source_chroma_key(project, slot)["enabled"] for slot in chroma_video_targets(project)) else {}),
                 "crop": manual.get("crop"),
                 "source_mixer": manual.get("source_mixer"),
                 "source_tracks": manual.get("source_tracks"),
                 "sequence": manual.get("sequence"),
                 "camera_overrides": manual.get("camera_overrides"),
+                "media_clips": manual.get("media_clips"),
+                "text_clips": manual.get("text_clips"),
+                "audio_mixer": manual.get("audio_mixer"),
             },
             "transcript": analysis.get("transcript") if settings.get("captions") or settings.get("burn_captions") else None,
             "caption_provenance": {
@@ -1417,6 +1496,12 @@ def render_project(context: JobContext, project_id: str, store: ProjectStore, se
     source_b = store.project_dir(project_id) / source_b_info["relative_path"] if source_b_info else None
     if source_b is not None and not source_b.is_file():
         raise FileNotFoundError(f"Source B media is missing: {source_b.name}")
+    media_inputs = library_input_args(project, store.project_dir(project_id))
+    chroma_inputs = chroma_background_input_args(project, store.project_dir(project_id))
+    if any(source_chroma_key(project, slot)["enabled"] for slot in chroma_video_targets(project, used_only=True)):
+        capability = chroma_key_capability(settings)
+        if not capability["available"]:
+            raise ValueError(capability["message"])
     width, height = _dimensions(project)
     quality = str(options.get("quality") or project.get("settings", {}).get("quality", "balanced"))
     context.check_cancelled()
@@ -1427,11 +1512,13 @@ def render_project(context: JobContext, project_id: str, store: ProjectStore, se
     transcript = _caption_transcript(project)
     caption_ranges = _caption_ranges(project)
     caption_settings = normalize_caption_settings(project.get("settings"))
+    text_clips = validated_text_clips(project)
     try:
-        if project.get("settings", {}).get("burn_captions") and transcript and transcript.get("segments"):
+        burn_transcript = bool(project.get("settings", {}).get("burn_captions") and transcript and transcript.get("segments"))
+        if burn_transcript or text_clips:
             caption_ass = store.project_dir(project_id) / "cache" / f"captions-{export_id}.ass"
             build_ass(
-                transcript,
+                transcript if burn_transcript else {},
                 caption_ranges,
                 caption_ass,
                 width,
@@ -1441,6 +1528,7 @@ def render_project(context: JobContext, project_id: str, store: ProjectStore, se
                 caption_position=caption_settings["caption_position"],
                 caption_scale=caption_settings["caption_scale"],
                 words_per_caption=caption_settings["caption_words_per_line"],
+                text_clips=text_clips,
             )
         graph, maps, has_audio = build_filter_graph(project, width, height, caption_ass)
     except BaseException:
@@ -1467,9 +1555,11 @@ def render_project(context: JobContext, project_id: str, store: ProjectStore, se
     normalize_audio = has_audio and normalization_filter != "anull"
     render_target = normalization_stage if normalize_audio else partial
     command = [settings.ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-i", str(source_a)]
-    needs_source_b_input = "[1:v]" in graph or "[1:a]" in graph
+    needs_source_b_input = "[1:v]" in graph or "[1:a]" in graph or bool(library_clips(project)) or bool(chroma_inputs)
     if source_b and needs_source_b_input:
         command += ["-i", str(source_b)]
+    command += media_inputs
+    command += chroma_inputs
     command += [
         "-filter_complex_script", str(graph_path), *maps,
         "-c:v", encoder, *encoder_args,
@@ -1549,19 +1639,21 @@ def render_project(context: JobContext, project_id: str, store: ProjectStore, se
             "encoder": encoder,
             "quality": quality,
             "captions_burned": bool(caption_ass),
+            "manual_text_count": len(text_clips),
             "editorial_effects": _render_effects_payload(project).get("effects", []),
             "input_fingerprint": render_input_fingerprint,
         }
         if caption_ass is not None or project.get("settings", {}).get("captions"):
             record["caption_settings"] = caption_settings
         caption_transcript = transcript or {}
-        if project.get("settings", {}).get("captions") and caption_transcript.get("segments"):
+        if project.get("settings", {}).get("captions") and (caption_transcript.get("segments") or any(row["kind"] == "caption" for row in text_clips)):
             caption_path = output.with_suffix(".srt")
             build_srt(
                 caption_transcript,
                 caption_ranges,
                 caption_path,
                 words_per_caption=caption_settings["caption_words_per_line"],
+                text_clips=text_clips,
             )
             record["captions_name"] = caption_path.name
             record["captions_url"] = f"/api/exports/{caption_path.name}"

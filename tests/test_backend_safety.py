@@ -313,3 +313,23 @@ def test_delete_removes_only_explicitly_referenced_exports(app):
     assert not video.exists()
     assert not captions.exists()
     assert unrelated.read_bytes() == b"keep"
+
+
+def test_delete_removes_imported_copy_but_keeps_original_recording(app, tmp_path):
+    client = app.test_client()
+    store = app.extensions["cutroom_store"]
+    original = tmp_path / "original-recording.mp4"
+    original.write_bytes(b"synthetic original recording")
+    project = store.create("Synthetic imported copy")
+    project_dir = store.project_dir(project["id"])
+    imported_copy = project_dir / "media" / "source-A.mp4"
+    imported_copy.write_bytes(original.read_bytes())
+    project["sources"]["A"] = _source_record("media/source-A.mp4", original.name)
+    store.save(project)
+
+    response = client.delete(f"/api/projects/{project['id']}")
+
+    assert response.status_code == 200
+    assert not imported_copy.exists()
+    assert not project_dir.exists()
+    assert original.read_bytes() == b"synthetic original recording"

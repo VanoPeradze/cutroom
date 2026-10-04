@@ -1,0 +1,2 @@
+# PyAV 19 removed av.open(metadata_errors), used by the packaged faster-whisper.
+av>=18.1.0,<19

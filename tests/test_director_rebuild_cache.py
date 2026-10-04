@@ -30,7 +30,7 @@ def semantic_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
             "has_audio": True, "size": source.stat().st_size,
         }
         current["settings"].update({
-            "goal": "short", "edit_style": "smart", "target_duration": 60.0,
+            "goal": "short", "edit_style": "smart", "target_duration": 60.0, "duration_mode": "style",
             "spoken_language": "auto", "auto_reframe": False,
         })
 
@@ -111,6 +111,49 @@ def test_new_editorial_instruction_replans_without_retranscription(semantic_proj
     assert calls == {"transcribe": 1, "plan": 2}
 
 
+def test_saved_commentary_keeps_planned_anchors_with_truthful_review(semantic_project, monkeypatch):
+    store, settings, project_id, _calls, context = semantic_project
+    segments = [
+        {"id": "s0001", "start": 1.73, "end": 8.63},
+        {"id": "s0002", "start": 9.76, "end": 12.39},
+        {"id": "s0003", "start": 12.93, "end": 14.03},
+        {"id": "s0004", "start": 14.57, "end": 16.03},
+        {"id": "s0005", "start": 20.19, "end": 21.47},
+        {"id": "s0006", "start": 40.08, "end": 43.26},
+    ]
+    decision = {
+        "keep_ids": ["s0001", "s0002", "s0003", "s0004", "s0006"],
+        "remove_ids": ["s0005"], "highlight_ids": ["s0001"],
+        "opening_id": "s0001", "closing_id": "s0006",
+        "story_beat_ids": ["b0001", "b0003"],
+        "story_ranges": [{"start": 1.73, "end": 16.03, "beat_id": "b0001"},
+                         {"start": 40.08, "end": 43.26, "beat_id": "b0003"}],
+    }
+    monkeypatch.setattr(director, "_plan_edit_with_cancel", lambda *_args, **_kwargs: ({
+        "segments": copy.deepcopy(segments), "decision": copy.deepcopy(decision),
+        "story_beats": [], "story_hierarchy": {"critic": {"verdict": "pass"}},
+    }, "fixture_story"))
+    store.update(project_id, lambda current: current["settings"].update({
+        "edit_style": "stream_commentary", "target_duration": 30.0,
+    }))
+
+    director.analyze_project(context(), project_id, store, settings)
+    saved = store.load(project_id)
+    assert saved["draft"]["keep_ranges"] == [
+        {"start": 1.73, "end": 16.03}, {"start": 40.08, "end": 43.26},
+    ]
+    assert saved["draft"]["output_duration"] == pytest.approx(17.48)
+    assert saved["draft"]["partial_ai"] is True
+    assert saved["draft"]["quality_review"]["needs_review"] is True
+    assert [row["type"] for row in saved["draft"]["quality_review"]["warnings"]] == ["style_moment_constraint"]
+
+    store.update(project_id, lambda current: current["settings"].update({"target_duration": 15.0}))
+    director.analyze_project(context(), project_id, store, settings)
+    saved = store.load(project_id)
+    assert saved["draft"]["partial_ai"] is True
+    assert "story_anchor_missing" in [row["type"] for row in saved["draft"]["quality_review"]["warnings"]]
+
+
 def test_corrected_transcript_invalidates_editorial_cache(semantic_project):
     store, settings, project_id, calls, context = semantic_project
 
@@ -125,6 +168,39 @@ def test_corrected_transcript_invalidates_editorial_cache(semantic_project):
     assert calls == {"transcribe": 1, "plan": 2}
     saved = store.load(project_id)
     assert "corrected explanation" in saved["analysis"]["segments"][3]["text"]
+
+
+@pytest.mark.parametrize("stale_contract", [None, "legacy-unvalidated-critic"])
+def test_legacy_critic_pass_cannot_bypass_review_on_explicit_rebuild(semantic_project, stale_contract):
+    store, settings, project_id, calls, context = semantic_project
+
+    def legacy(current):
+        current["analysis"]["story_hierarchy"]["critic"] = {"verdict": "pass", "issues": []}
+        current["analysis"]["editorial_cache"].pop("review_contract", None)
+        if stale_contract:
+            current["analysis"]["editorial_cache"]["review_contract"] = stale_contract
+
+    store.update(project_id, legacy)
+    before = store.load(project_id)
+    assert before["analysis"]["story_hierarchy"]["critic"]["verdict"] == "pass"
+    assert calls == {"transcribe": 1, "plan": 1}  # Opening/loading never starts AI.
+    director.analyze_project(context(), project_id, store, settings)
+    assert calls == {"transcribe": 1, "plan": 2}  # Rebuild retains ASR, reruns editorial review.
+    from cutroom.intelligence import CRITIC_REVIEW_CONTRACT
+    assert store.load(project_id)["analysis"]["editorial_cache"]["review_contract"] == CRITIC_REVIEW_CONTRACT
+
+
+def test_legacy_basic_cleanup_cache_does_not_require_a_story_model(semantic_project):
+    store, settings, project_id, calls, context = semantic_project
+
+    def basic_cleanup(current):
+        current["analysis"]["story_hierarchy"] = None
+        current["analysis"]["engine"] = "deterministic"
+        current["analysis"]["editorial_cache"].pop("review_contract", None)
+
+    store.update(project_id, basic_cleanup)
+    director.analyze_project(context(), project_id, store, settings)
+    assert calls == {"transcribe": 1, "plan": 1}
 
 
 def test_rebuild_preserves_explicit_restore_after_target_enforcement(semantic_project):
@@ -204,3 +280,300 @@ def test_rebuild_preserves_reordered_edit_sequence_beyond_original_source_durati
     assert after["manual"]["sequence"] == before["manual"]["sequence"]
     assert after["manual"]["source_tracks"] == before["manual"]["source_tracks"]
     assert editor_sequence_snapshot(after)["active"] is True
+
+
+def test_preset_rebuild_reports_preserved_manual_timeline_and_keeps_undo(semantic_project):
+    from cutroom.editing import apply_manual_edit
+    from cutroom.sequence import editor_sequence_snapshot
+
+    store, settings, project_id, _calls, context = semantic_project
+    store.update(project_id, lambda current: apply_manual_edit(
+        current, {"action": "sequence_split_all", "time": 10.0},
+    ))
+    before = store.load(project_id)
+    before_timeline = editor_sequence_snapshot(before)
+    job_context = context()
+    result = director.analyze_project(
+        job_context, project_id, store, settings, {"edit_style": "competitive_clutch"},
+    )
+    after = store.load(project_id)
+    assert after["draft"]["edit_style"] == "competitive_clutch"
+    assert editor_sequence_snapshot(after) == before_timeline
+    assert result["applied_to_timeline"] is False
+    assert result["timeline_preserved"] is True
+    assert "manual timeline was kept" in result["message"]
+    assert job_context.job.message == result["message"]
+    assert after["manual"]["_history"] == before["manual"]["_history"]
+    assert after["manual"]["history"] == before["manual"]["history"]
+    # The explicit application changes the actual editor projection. Undo/redo
+    # restore the user's clip boundaries, rather than merely toggling a badge.
+    store.update(project_id, lambda current: apply_manual_edit(current, {"action": "sequence_reset"}))
+    applied = editor_sequence_snapshot(store.load(project_id))
+    assert applied["active"] is False
+    assert applied["duration"] == 30.0
+    assert applied["duration"] != before_timeline["duration"]
+    store.update(project_id, lambda current: apply_manual_edit(current, {"action": "undo"}))
+    assert editor_sequence_snapshot(store.load(project_id)) == before_timeline
+    store.update(project_id, lambda current: apply_manual_edit(current, {"action": "redo"}))
+    assert editor_sequence_snapshot(store.load(project_id)) == applied
+
+
+def test_preset_without_manual_sequence_is_applied_to_editor_timeline(semantic_project):
+    from cutroom.sequence import editor_sequence_snapshot
+
+    store, settings, project_id, _calls, context = semantic_project
+    result = director.analyze_project(
+        context(), project_id, store, settings, {"edit_style": "competitive_clutch"},
+    )
+    saved = store.load(project_id)
+    assert result["applied_to_timeline"] is True
+    assert result["timeline_preserved"] is False
+    assert editor_sequence_snapshot(saved)["duration"] == saved["draft"]["output_duration"]
+    assert result["message"] == "Your first edit is ready"
+
+
+def test_clean_vod_keeps_natural_cleanup_controls_and_full_recording(semantic_project, monkeypatch):
+    from cutroom.edit_styles import get_edit_style
+
+    store, settings, project_id, _calls, context = semantic_project
+    monkeypatch.setattr(director, "analyze_audio", lambda *_args, **_kwargs: {
+        "available": True, "duration": 300.0,
+        "ranges": {"silence": [{"start": 40.0, "end": 41.0}, {"start": 100.0, "end": 170.0}]},
+        "summary": {"silence_threshold_dbfs": -42.0}, "waveform": [],
+    })
+    style = get_edit_style("clean_vod")
+    result = director.analyze_project(
+        context(), project_id, store, settings,
+        {**style["defaults"], "edit_style": "clean_vod"},
+    )
+    draft = result["draft"]
+    assert draft["audio_policy"]["silence_min_seconds"] == 1.20
+    assert draft["audio_policy"]["silence_keep_seconds"] == 0.48
+    assert draft["audio_policy"]["max_remove_ratio"] == 0.16
+    assert draft["audio_policy"]["normalize"] is False
+    assert draft["output_duration"] >= 300.0 * 0.84
+    assert any(row["start"] <= 40.0 and row["end"] >= 41.0 for row in draft["keep_ranges"])
+
+
+def test_unusable_ai_response_warning_and_actual_model_survive_saved_draft_and_cache(semantic_project, monkeypatch):
+    from cutroom import intelligence
+
+    store, settings, project_id, _calls, context = semantic_project
+    calls = []
+    monkeypatch.setattr(intelligence, "_ollama_inventory", lambda _: (True, {"qwen3.5:4b"}))
+    monkeypatch.setattr(intelligence, "_call_ollama", lambda _settings, payload:
+                        calls.append(payload["model"]) or {"title": "Done"})
+
+    def plan(job_context, segments, current_settings, brief, **kwargs):
+        return intelligence.plan_edit(segments, current_settings, brief, **kwargs,
+                                      cancel_check=job_context.check_cancelled)
+
+    monkeypatch.setattr(director, "_plan_edit_with_cancel", plan)
+    job_context = context()
+    result = director.analyze_project(job_context, project_id, store, settings, {
+        "goal": "youtube", "instruction": "Preserve the explanations.", "captions": True,
+        "performance_mode": "quality",
+    })
+    saved = store.load(project_id)
+    assert calls == ["qwen3.5:4b"]
+    assert result["engine"] == "deterministic"
+    assert result["model_selection"]["selected_model"] == "qwen3.5:4b"
+    assert result["model_selection"]["requested_model"] == "qwen3.5:9b"
+    assert result["model_selection"]["using_fallback"] is True
+    assert result["warnings"][0]["type"] == "story_ai_fallback"
+    assert saved["draft"]["model_selection"] == result["model_selection"]
+    assert saved["analysis"]["model_selection"] == result["model_selection"]
+    assert saved["draft"]["partial_ai"] is True
+    assert result["warnings"][0] in saved["draft"]["quality_review"]["warnings"]
+    assert "Basic cleanup draft ready" in job_context.job.message
+    cached = director.analyze_project(context(), project_id, store, settings)
+    assert calls == ["qwen3.5:4b"]
+    assert cached["warnings"] == result["warnings"]
+    assert cached["model_selection"] == result["model_selection"]
+
+
+def _add_media_layers(store, project_id, *, start=40, end=60, sequence=False, second_source=False):
+    from cutroom.editing import apply_manual_edit
+    from cutroom.sequence import editor_sequence_snapshot
+
+    def attach(current):
+        if second_source:
+            current["sources"]["B"] = {**current["sources"]["A"], "slot": "B"}
+            current["manual"]["source_mixer"]["default_layout"] = "stacked"
+        if sequence:
+            clip = editor_sequence_snapshot(current)["source_tracks"]["A"][0]
+            apply_manual_edit(current, {"action": "sequence_move", "slot": "A", "clip_id": clip["id"], "start": 320})
+        asset_id = "asset_" + "b" * 32
+        current["assets"] = {asset_id: {"id": asset_id, "name": "voice.wav", "kind": "audio", "duration": 300,
+                                        "has_audio": True, "status": "ready"}}
+        apply_manual_edit(current, {"action": "media_add", "asset_id": asset_id, "start": start, "end": end})
+        apply_manual_edit(current, {"action": "set_audio_mixer", "music_db": -9, "voice_db": -3, "ducking": True})
+    store.update(project_id, attach)
+
+
+@pytest.mark.parametrize("command", [None, "shorter", "new_variation", "focus_speaker"])
+def test_ai_rebuild_rejects_media_overhang_without_changing_any_project_state(semantic_project, monkeypatch, command):
+    from cutroom.media_library import MediaLibraryError
+
+    store, settings, project_id, _calls, context = semantic_project
+    _add_media_layers(store, project_id, second_source=command == "focus_speaker")
+    monkeypatch.setattr(director, "synchronize_sources", lambda *_args, **_kwargs: {"offset": 0, "confidence": 1, "method": "fixture"})
+    monkeypatch.setattr(director, "_enforce_short_target", lambda *_args, **_kwargs: ([{"start": 20, "end": 300}], 0))
+    before = store.load(project_id)
+    job_context = context()
+    with pytest.raises(MediaLibraryError, match="Trim, move, or remove"):
+        if command:
+            director.refine_project(job_context, project_id, store, settings, command)
+        else:
+            director.analyze_project(job_context, project_id, store, settings)
+    assert store.load(project_id) == before
+    assert not job_context.committed
+
+
+@pytest.mark.parametrize("sequence", [False, True])
+def test_compatible_refinement_preserves_media_and_mixer_on_effective_edit_clock(semantic_project, monkeypatch, sequence):
+    store, settings, project_id, _calls, context = semantic_project
+    _add_media_layers(store, project_id, start=325 if sequence else 2, end=330 if sequence else 4, sequence=sequence)
+    monkeypatch.setattr(director, "_enforce_short_target", lambda *_args, **_kwargs: ([{"start": 20, "end": 300}], 0))
+    before = store.load(project_id)
+    director.refine_project(context(), project_id, store, settings, "shorter")
+    after = store.load(project_id)
+    assert after["manual"]["media_clips"] == before["manual"]["media_clips"]
+    assert after["manual"]["audio_mixer"] == before["manual"]["audio_mixer"]
+    assert after["assets"] == before["assets"]
+    assert after["settings"]["pace"] == "dynamic"
+    assert after["draft"]["output_duration"] == 20
+
+
+def test_compatible_focus_refinement_commits_staged_routing_with_media(semantic_project, monkeypatch):
+    store, settings, project_id, _calls, context = semantic_project
+    _add_media_layers(store, project_id, start=2, end=4, second_source=True)
+    monkeypatch.setattr(director, "synchronize_sources", lambda *_args, **_kwargs: {"offset": 0, "confidence": 1, "method": "fixture"})
+    monkeypatch.setattr(director, "_enforce_short_target", lambda *_args, **_kwargs: ([{"start": 20, "end": 300}], 0))
+    before = store.load(project_id)
+    director.refine_project(context(), project_id, store, settings, "focus_speaker")
+    after = store.load(project_id)
+    assert after["manual"]["source_mixer"]["default_layout"] == "camera"
+    assert after["manual"]["media_clips"] == before["manual"]["media_clips"]
+    assert after["manual"]["audio_mixer"] == before["manual"]["audio_mixer"]
+
+
+@pytest.mark.parametrize("command", [None, "shorter", "focus_speaker"])
+def test_rebuild_rejects_custom_text_overhang_atomically_without_media(semantic_project, monkeypatch, command):
+    from cutroom.editing import apply_manual_edit
+    from cutroom.text_clips import TextClipError
+
+    store, settings, project_id, _calls, context = semantic_project
+    def attach(current):
+        if command == "focus_speaker":
+            current["sources"]["B"] = {**current["sources"]["A"], "slot": "B"}
+            current["manual"]["source_mixer"]["default_layout"] = "stacked"
+        apply_manual_edit(current, {"action": "text_add", "kind": "caption", "start": 30, "end": 40, "text": "Keep this manual caption"})
+    store.update(project_id, attach)
+    monkeypatch.setattr(director, "synchronize_sources", lambda *_args, **_kwargs: {"offset": 0, "confidence": 1, "method": "fixture"})
+    monkeypatch.setattr(director, "_enforce_short_target", lambda *_args, **_kwargs: ([{"start": 20, "end": 300}], 0))
+    before = store.load(project_id)
+    job_context = context()
+    with pytest.raises(TextClipError, match="Trim, move, or remove"):
+        if command:
+            director.refine_project(job_context, project_id, store, settings, command)
+        else:
+            director.analyze_project(job_context, project_id, store, settings)
+    assert store.load(project_id) == before
+    assert not job_context.committed
+
+
+@pytest.mark.parametrize("candidate_source", ["manual", "prepared"])
+def test_prepared_embedded_layout_survives_generation_refinement_and_rebuild(semantic_project, candidate_source):
+    from cutroom.editing import apply_manual_edit
+
+    store, settings, project_id, _calls, context = semantic_project
+    geometry = {"x": .72, "y": .06, "w": .24, "h": .25}
+
+    def prepare(current):
+        current["analysis"] = None
+        current["draft"] = None
+        current["sources"]["A"]["generation"] = "combined-recording"
+        current["settings"].update({"layout": "embedded_stack", "performance_mode": "quality"})
+        current["pre_analysis"]["vision"]["A"] = {
+            "version": VISION_ANALYSIS_VERSION,
+            "source_generation": "combined-recording", "sample_count": 6,
+            "embedded_camera": {**geometry, "detector": VISION_ANALYSIS_VERSION},
+        }
+        if candidate_source == "manual":
+            # A stale two-source preference cannot defeat the newer selection.
+            current["manual"]["source_mixer"]["default_layout"] = "auto"
+            apply_manual_edit(current, {
+                "action": "set_embedded_camera", "enabled": True,
+                **geometry, "content_x": .31, "content_y": .58,
+            })
+
+    store.update(project_id, prepare)
+    director.analyze_project(context(), project_id, store, settings)
+    first = store.load(project_id)
+    assert first["draft"]["layout"] == "embedded_stack"
+    assert first["draft"]["embedded_layout_confirmed"] is True
+    assert {row["camera"] for row in first["draft"]["camera_plan"]} == {"embedded_stack"}
+    assert director._effective_embedded_candidate(first, first["analysis"]["vision"])["x"] == geometry["x"]
+
+    def frame_one_clip(current):
+        first_range = current["draft"]["keep_ranges"][0]
+        apply_manual_edit(current, {
+            "action": "sequence_crop", "slot": "A",
+            "start": first_range["start"], "end": first_range["end"],
+            "x": .2, "y": .7, "zoom": 1.3,
+        })
+
+    store.update(project_id, frame_one_clip)
+    framed = copy.deepcopy(store.load(project_id)["manual"]["source_tracks"])
+    for command in ("shorter", "new_variation", None):
+        if command:
+            director.refine_project(context(), project_id, store, settings, command)
+        else:
+            director.analyze_project(context(), project_id, store, settings)
+        saved = store.load(project_id)
+        assert saved["settings"]["layout"] == "embedded_stack"
+        assert saved["draft"]["layout"] == "embedded_stack"
+        assert saved["draft"]["embedded_layout_confirmed"] is True
+        assert {row["camera"] for row in saved["draft"]["camera_plan"]} == {"embedded_stack"}
+        assert saved["manual"]["source_tracks"] == framed
+
+
+@pytest.mark.parametrize("case", ["not_selected", "old_generation", "missing_generation", "old_detector", "invalid_geometry"])
+def test_preparation_cannot_enable_unselected_or_stale_embedded_layout(semantic_project, case):
+    store, settings, project_id, _calls, context = semantic_project
+
+    def prepare(current):
+        current["analysis"] = None
+        current["draft"] = None
+        current["sources"]["A"]["generation"] = "combined-recording"
+        current["settings"]["layout"] = "auto" if case == "not_selected" else "embedded_stack"
+        current["settings"]["performance_mode"] = "quality"
+        profile = {
+            "version": VISION_ANALYSIS_VERSION,
+            "source_generation": "combined-recording", "sample_count": 6,
+            "embedded_camera": {"x": .72, "y": .06, "w": .24, "h": .25},
+        }
+        if case in {"old_generation", "missing_generation"}:
+            profile["source_generation"] = "old-recording" if case == "old_generation" else ""
+        elif case == "old_detector":
+            profile["version"] = "legacy-detector"
+        elif case == "invalid_geometry":
+            profile["embedded_camera"]["x"] = .99
+        current["pre_analysis"]["vision"]["A"] = profile
+
+    store.update(project_id, prepare)
+    director.analyze_project(context(), project_id, store, settings)
+    saved = store.load(project_id)
+    assert saved["draft"]["embedded_layout_confirmed"] is False
+    assert {row["camera"] for row in saved["draft"]["camera_plan"]} == {"A"}
+
+
+def test_duration_intent_replans_from_cached_context_without_retranscription(semantic_project):
+    store, settings, project_id, calls, context = semantic_project
+    store.update(project_id,lambda current:current["settings"].update({"duration_mode":"target"}))
+    director.analyze_project(context(),project_id,store,settings)
+    assert calls == {"transcribe":1,"plan":2}
+    assert store.load(project_id)["draft"]["duration_review"]["duration_mode"]=="target"
+    director.analyze_project(context(),project_id,store,settings)
+    assert calls == {"transcribe":1,"plan":2}

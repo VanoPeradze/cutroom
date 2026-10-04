@@ -11,6 +11,7 @@ from typing import Any, Callable
 from .captions import DEFAULT_CAPTION_SETTINGS
 from .config import Settings
 from .frame_rates import DEFAULT_EXPORT_FPS
+from .track_locks import validate_locked_track_changes
 from .utils import atomic_write_json, new_id, now_iso
 
 
@@ -70,12 +71,14 @@ class ProjectStore:
             "updated_at": created,
             "language": "auto",
             "sources": {"A": None, "B": None},
+            "assets": {},
             "settings": {
                 "edit_style": "smart",
                 "goal": "short",
                 "aspect": "9:16",
                 "pace": "balanced",
                 "target_duration": 60,
+                "duration_mode": "target",
                 "layout": "auto",
                 "audio_source": "A",
                 "quality": "balanced",
@@ -173,7 +176,7 @@ class ProjectStore:
         revision = project.get("revision")
         if revision is not None and (isinstance(revision, bool) or not isinstance(revision, int) or revision < 1):
             raise ProjectStateError(f"Project {project_id} has an invalid revision")
-        for key in ("sources", "settings", "pre_analysis", "manual"):
+        for key in ("sources", "settings", "pre_analysis", "manual", "assets"):
             if key in project and not isinstance(project.get(key), dict):
                 raise ProjectStateError(f"Project {project_id} has invalid {key}")
         # Old projects predate subtitle appearance controls. Supplying defaults
@@ -189,6 +192,16 @@ class ProjectStore:
         if "exports" in project and not isinstance(project.get("exports"), list):
             raise ProjectStateError(f"Project {project_id} has invalid exports")
         project_root = self.project_dir(project_id).resolve()
+        from .media_library import ASSET_ID_RE, safe_asset_path
+        for asset_id, asset in project.setdefault("assets", {}).items():
+            if not ASSET_ID_RE.fullmatch(asset_id) or not isinstance(asset, dict) or asset.get("id") != asset_id:
+                raise ProjectStateError(f"Project {project_id} has invalid asset metadata")
+            for key in ("path", "preview_path", "thumbnail_path"):
+                if key in asset:
+                    try:
+                        safe_asset_path(project_root, asset[key])
+                    except FileNotFoundError as exc:
+                        raise ProjectStateError(f"Project {project_id} has unsafe asset path") from exc
         sources = project.get("sources") or {}
         for slot, source in sources.items():
             if source is None:
@@ -228,6 +241,7 @@ class ProjectStore:
             current_revision = int(current.get("revision", 0))
             if expected_revision is not None and current_revision != int(expected_revision):
                 raise RuntimeError("revision_conflict")
+            validate_locked_track_changes(current, project)
         candidate = copy.deepcopy(project)
         candidate["updated_at"] = now_iso()
         candidate["revision"] = current_revision + 1 if path.exists() else max(1, int(candidate.get("revision", 1)))
