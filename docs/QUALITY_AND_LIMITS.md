@@ -1,10 +1,34 @@
 # Editing quality: current safeguards and remaining work
 
-Historical engineering notes. For CUTROOM 1.1 Beta's readiness and limitations, start with [Beta status](BETA_STATUS.md) and the [current editing guide](INDEPENDENT_TRACKS.md).
+For CUTROOM 1.1 Beta's readiness and editing controls, see [Beta status](BETA_STATUS.md) and the [user guide](USER_GUIDE_EN.md).
 
 This development pass fixes specific correctness and evidence-handling failures. It is not a claim of equal transcription accuracy across languages, professional editorial judgment, or release readiness. No new model was downloaded or benchmarked during implementation.
 
-## What changed
+## Editor reliability and optional stabilization - 2026-09-30
+
+The sub-frame A/B duration rejection is fixed at sequence materialization: redundant pieces created only by implicit source-availability edges can join while explicit cuts, real source ends and gaps stay intact. Actual FFmpeg synthetic-media checks cover 30/60 FPS and timing boundaries. This does not guarantee frame-exact browser decoding or eliminate review of source synchronization.
+
+Prepared A/B waveforms now work in manual projects and Original footage without prior AI analysis. Decoder padding is bounded by source duration, and media-command output is read as UTF-8. The compact mixer displays live browser sample peaks before the preview limiter; levels reset on pause/seek and are unavailable in basic-audio fallback. Original follows the chosen A/B audio, Solo is preview-only, and export normalization/limiting can change final loudness. Meters are not calibrated LUFS or true-peak analysis.
+
+Optional [local stabilization](STABILIZATION.md) creates a **separate MP4 copy**, preserving originals and the edit. It uses two local FFmpeg passes only when the configured executable has `vidstabdetect` and `vidstabtransform`; missing filters leave the action unavailable rather than installing software. It can zoom/crop edges and cannot reliably repair blur, rolling shutter or every movement. Review the full copy before use. Compatible audio is copied; other supported audio is converted to AAC.
+
+Local Windows regression/browser checks and synthetic stabilization/boundary renders passed. Publication requires current-source macOS 15 Apple Silicon/Intel checks; [GitHub Actions](https://github.com/VanoPeradze/cutroom/actions/workflows/macos.yml) identifies tested commits. Finder/Gatekeeper, Safari, native Linux, representative real footage and long-session performance remain separate acceptance checks; no paid AI calls or accuracy benchmark were added in this revision.
+
+## Hebrew/English transcription and local recovery
+
+The speech decoder explicitly transcribes rather than translates. Selected Hebrew uses short Hebrew/English context; automatic language selection adds this context only to a retry after Hebrew script appears in the actual transcript. It does not force every automatic recording into Hebrew. Yiddish detection is protected, and low confidence remains a review signal rather than proof of an error.
+
+Balanced and Quality reuse the loaded local speech model to retry at most two weak units, each no longer than 30 seconds, with a combined 48-second audio budget per local pass. Lite adds no retry. A candidate replaces the whole unit only when confidence improves and checks preserve timing, speech coverage and trusted English terms. Failed or unsafe retries keep the completed original. This adds no cloud request or model download and does not ask Story AI to rewrite speech. Review warnings identify weak segments even when the overall transcript is usable; confidence is not an accuracy percentage.
+
+The budget is shared with the existing auto-Hebrew Quality refinement. Existing full-model refinement, GPU quality upgrade and device-failure fallback remain separate paths; a device fallback starts another bounded pass. The 48 seconds is audio rechecked, not a wall-clock timeout or a cap on all transcription work. There is no glossary interface or guarantee of correct mixed-language recognition. Mocked regression tests cover recovery limits, cancellation, timing, English-term preservation and cloud routing. No real-audio accuracy improvement has been measured.
+
+## Media, sound and output limits
+
+The project library accepts additional video, images and audio. These form layers inside an existing edit; they do not extend its duration automatically or replace the two main A/B sources. Audio waveforms help placement; the mixer controls original sound, music, voiceover, effects and master level. Listen to the exported mix as well as the preview. Adding media and mixing audio require no API or AI model.
+
+A/B **Picture speed** changes picture playback while keeping clip duration and speech timing. Faster picture playback can exhaust the source and hold its last frame; any speed change can break lip sync. This is different from speeding up the entire picture-and-sound edit. QHD 1440p and 4K 2160p exports are available alongside 720p and 1080p; larger frames consume more rendering resources and do not recover detail absent from the original.
+
+## Earlier safeguards
 
 - Changing a style preserves the chosen goal, aspect, duration, resolution and export quality. Creator Frame changes composition without silently turning YouTube into a vertical export. Upload/preparation refreshes preserve pending settings, and generation checks the goal it actually submits.
 - The automatic long-form cut budget applies to the first candidate too. Overlapping cuts are measured by their union. Explicit user cuts may still exceed that budget.
@@ -18,7 +42,7 @@ This development pass fixes specific correctness and evidence-handling failures.
 
 Existing saved drafts are not rewritten. Rebuild to use the new analysis rules; changed transcript/story fingerprints invalidate incompatible cached analysis without deleting footage. Save pending text changes before rebuilding.
 
-## Validation in this pass
+## Earlier validation record
 
 - Full Python suite: 755 tests passed. The separately executed frontend workflow suite passed all 61 checks.
 - Four real FFmpeg smoke checks passed: two-source export, chronological YouTube cleanup at 1280×720, stacked layout with captions/effects, and embedded-camera output with separately verified top/bottom regions.

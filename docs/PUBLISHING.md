@@ -20,6 +20,117 @@ Run maintainer commands from the repository root in a Git checkout. In the downl
 
 ### 1. Make a tester ZIP
 
+**Combined Windows/Mac download:** use `python scripts/build_universal_package.py --download-baseline`.
+This separate builder preserves the currently pinned Windows release byte-for-byte under `windows/`
+and adds the Mac launcher and identical shared application under `mac/`. Application
+changes require a new approved Windows baseline; see **Approved product releases**
+below. Do not use an older pinned payload to package new editor code. Run the
+[Mac validation workflow](https://github.com/VanoPeradze/cutroom/actions/workflows/macos.yml)
+before publishing. Use `--windows-zip PATH` for an offline build and `--verify PATH`
+for archive verification. [Mac setup and test limits](https://github.com/VanoPeradze/cutroom/blob/master/docs/MAC_BETA.md).
+
+**Documentation-only revision:** to refresh the internal platform README and Mac
+guide without rebuilding application or launcher files, provide the exact combined
+ZIP approved by the current `website/release.json`:
+
+```sh
+python scripts/build_universal_package.py --refresh-docs PATH/TO/CUTROOM-1.1-Beta.zip --output-dir dist
+python scripts/build_universal_package.py --verify PATH/TO/NEW/CUTROOM-1.1-Beta.zip
+```
+
+This explicit action reads `packaging/common/README.md` into both `App/README.md`
+files and `docs/MAC_BETA.md` into the existing Mac guide. Only those three documents
+and the two build manifests may change. It preserves every other payload byte and
+ZIP entry metadata from the approved input, including all Windows/Mac executable
+and setup files. The pinned original Windows and combined manifests independently
+reject changes outside that allowlist. Windows metadata reports documentation
+changes rather than claiming every Windows file is unchanged. The legacy builder
+and older ZIP verification remain unchanged; this is not a new product version or
+new platform-validation result.
+
+The new ZIP has a new build ID, size and checksum. Review its exact entry diff and
+README links, then update the website release metadata and checksum together before
+publishing. Keep `packaging/windows/release-baseline.json` and the historical Mac
+validation baseline pinned; do not replace them for a documentation refresh.
+
+When the current Windows baseline has advanced to a product release, select the
+explicit historical pin to verify an earlier combined archive:
+
+```sh
+python scripts/build_universal_package.py --verify PATH_TO_PREVIOUS_ZIP --windows-baseline packaging/windows/validation-baseline.json
+```
+
+The previous published-release downloader supports the same `--windows-baseline`
+flag. A supported pre-editor documentation refresh also uses that historical pin.
+The flag is restricted to historical verification/refresh; current candidate
+builds and their CI downloads continue to use the current baseline by default.
+
+### Approved product releases
+
+An application change is a product release, even if the user-facing version stays
+`1.1 Beta`. Freeze the reviewed application, launchers, tests and guides; run the
+relevant regression and synthetic-media checks on that source. Build and verify a
+fresh Windows archive:
+
+```sh
+python scripts/build_test_package.py --output-dir dist
+python scripts/build_test_package.py --verify PATH_TO_NEW_WINDOWS_ZIP
+```
+
+Record the tested commit, new build ID, archive size/SHA-256 and the hash of
+`App/TEST_BUILD.json`. Its file inventory must include the actual new application
+bytes. Exclude personal data and generated runtime files as usual. This product
+path deliberately replaces the **current** Windows baseline; it is not the
+documentation-only path and must not weaken or overwrite historical validation pins.
+
+Mac CI needs a downloadable, immutable copy of this new Windows baseline before
+the PR's combined-package check can pass. With explicit release authorization,
+stage the archive in the existing Expo website project under a distinct filename
+such as `downloads/CUTROOM-1.1-Beta-windows-editor-20260930.zip`, retaining the
+existing landing page and production combined ZIP. Publish a non-production
+deployment from `website/` with the official CLI's
+`deploy --export-dir public --non-interactive` command, **without `--prod`**.
+`npm run deploy` is the production command and is not the staging command.
+
+Download the archive from the returned immutable deployment URL and verify its
+exact bytes and manifest. Then update `packaging/windows/release-baseline.json`
+with that URL, byte count, archive SHA-256 and Windows manifest SHA-256. Preserve
+the older release validation baseline and its expected metadata. The source PR
+must include the reviewed baseline update so CI verifies the new application,
+not the previous download.
+
+Build and verify the combined Windows/Mac candidate from that same Windows ZIP:
+
+```sh
+python scripts/build_universal_package.py --windows-zip PATH_TO_NEW_WINDOWS_ZIP --output-dir dist
+python scripts/build_universal_package.py --verify PATH_TO_NEW_COMBINED_ZIP
+```
+
+Check that representative changed application files match the reviewed source in
+both `windows/App/` and `mac/App/`; retain each platform's launch/setup files and
+executable permissions. `windows_files_unchanged` in the combined manifest means
+unchanged **from the newly selected Windows baseline**, not unchanged from the
+previous public product. The required macOS 15 Intel and Apple Silicon checks,
+repository checks, audit and CodeQL must pass before merging the release PR.
+Automated Mac validation does not establish Finder/Gatekeeper or Safari manual QA.
+
+After approval and merge, use the verified combined archive for the website
+release. Update `website/release.json`, the checksum sidecar and any applicable
+release facts together; record the exact build ID and truthful product revision.
+Refresh generated guides and supply the matching new ZIP locally before the first
+production deployment. The live site still holds the previous bytes at this point.
+Run the website checks and publish with its normal production workflow. Download
+the final public ZIP again and verify its size, checksum, build ID, platform
+launchers and new application bytes. Source merge, immutable staging and production
+download publication are separate operations with separate evidence.
+
+The result remains a Windows/Mac source-based beta, not bundled native runtimes or
+a signed/notarized Mac application. Linux remains a separate source installation
+path. See [platform support](PLATFORMS.md) and [Mac beta limitations](https://github.com/VanoPeradze/cutroom/blob/master/docs/MAC_BETA.md).
+
+The commands below remain the **legacy Windows-only** packaging workflow and are
+not the builder for the new combined download.
+
 ```bat
 PUBLISH.bat package
 ```
@@ -27,6 +138,8 @@ PUBLISH.bat package
 The existing allowlist builder includes application source, user guides, tests and fresh default configuration. It excludes your recordings, projects, transcripts, exports, logs, API connection settings, installed runtimes, model weights and Git metadata. It never ZIPs the entire folder. The finished archive is checked again before it is copied into `dist`.
 
 The ZIP contains your **current source files**, including intentional uncommitted changes. A ZIP and a Git push are different operations: the Git workflow only accepts a clean, committed checkout. Review the displayed inventory before sharing either one.
+
+The download is named `CUTROOM-1.1-Beta.zip`. Each build is stored under its own timestamped folder inside `dist`, so older packages are preserved. The internal `App/TEST_BUILD.json` records the build ID and file checksums.
 
 Send the ZIP together with its `.sha256` file. Ask the tester to use **Extract All** and double-click **START CUTROOM.bat**. The extracted folder has three top-level entries: **START CUTROOM.bat**, **START HERE.html** (offline help), and **App** (source, technical files and saved work). Keep them together. The launcher runs the existing `App/run_windows.bat` setup/startup flow; Git source checkouts and older flat packages still use `run_windows.bat` directly.
 

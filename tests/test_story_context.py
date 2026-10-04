@@ -194,3 +194,17 @@ def test_retry_fails_before_a_second_request_if_fixed_input_and_output_reserve_c
     with pytest.raises(intelligence.StoryPlanningError, match="estimated local context budget"):
         intelligence._call_ollama_strict(Settings(), payload)
     assert len(bodies) == 1
+
+
+def test_one_story_job_keeps_its_largest_context_so_the_model_is_not_reloaded(monkeypatch):
+    bodies = _capture_requests(monkeypatch)
+    large = _payload({"brief": {"instruction": "a" * 38000}})
+    small = _payload({"brief": {}})
+    with intelligence._stable_story_context():
+        intelligence._call_ollama_strict(Settings(), small)
+        intelligence._call_ollama_strict(Settings(), large)
+        intelligence._call_ollama_strict(Settings(), small)
+    intelligence._call_ollama_strict(Settings(), small)
+    sizes = [body["options"]["num_ctx"] for body in bodies]
+    assert sizes == [8192, 32768, 32768, 8192]
+    assert set(sizes) <= set(intelligence._STORY_CONTEXT_TIERS)

@@ -6,16 +6,19 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .cache_keys import build_analysis_cache_fingerprints, cache_fingerprints_match, stable_fingerprint
-from .composition import select_embedded_candidate
+from .composition import default_reels_stack, select_embedded_candidate
 from .config import Settings
 from .edit_styles import enrich_brief_with_style
 from .editing import SOURCE_MIXER_DEFAULT_LAYOUTS, apply_camera_overrides, apply_timeline_overrides
 from .audio import analyze_audio, audio_policy, build_audio_actions, constrain_gain_ranges_to_speech, protect_silence_ranges_from_speech
-from .intelligence import PACE_LIMITS, StoryPlanningError, build_story_beats, language_from_text, plan_edit
+from .intelligence import CRITIC_REVIEW_CONTRACT, PACE_LIMITS, StoryPlanningError, build_story_beats, language_from_text, plan_edit
 from .jobs import JobCancelled, JobContext
 from .media import detect_scenes
+from .media_library import validate_media_bounds
+from .text_clips import validate_text_bounds
 from .projects import ProjectStore
-from .source_tracks import source_sync_offset
+from .source_tracks import has_sequence, source_sync_offset
+from .track_locks import require_tracks_unlocked
 from .sync import MIN_AUTOMATIC_SYNC_CONFIDENCE, synchronize_sources
 from .transcription import cuda_available, transcribe, transcript_quality_report
 from .cloud_ai import CloudAIError, enabled as cloud_enabled
@@ -347,9 +350,24 @@ def _assert_transcript_complete(quality: dict[str, Any]) -> None:
         )
 
 
+def _planned_story_anchors(
+    segments: list[dict[str, Any]], decision: dict[str, Any],
+    semantic: list[dict[str, float]],
+) -> list[dict[str, Any]]:
+    """Find explicit planned endpoints inside the model's selected passages."""
+    anchor_ids = {str(decision.get(key)) for key in ("opening_id", "closing_id")
+                  if decision.get(key)}
+    return [row for row in segments if str(row.get("id")) in anchor_ids and any(
+        passage["start"] <= float(row["start"]) + 0.0005
+        and passage["end"] >= float(row["end"]) - 0.0005 for passage in semantic
+    )]
+
+
 def _edit_quality_review(
     quality: dict[str, Any], hierarchy: dict[str, Any] | None,
     segments: list[dict[str, Any]], keep_ranges: list[dict[str, float]], duration: float,
+    *, decision: dict[str, Any] | None = None,
+    selection_policy: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Expose evidence limitations, never equate a completed job with a good edit."""
     warnings: list[dict[str, str]] = []
@@ -366,6 +384,32 @@ def _edit_quality_review(
         if critic.get("verdict") != "pass":
             warnings.append({"type": "story_review", "message":
                 "The automatic continuity check did not give this edit a clear pass. Review it before exporting."})
+        if critic.get("unapplied_actions"):
+            warnings.append({"type": "story_review", "message":
+                "Some continuity-check changes were not applied to the final selection. "
+                "Review the draft; those requests were not treated as completed repairs."})
+
+    semantic = merge_ranges((decision or {}).get("story_ranges") or [], gap=0.75)
+    anchors = _planned_story_anchors(segments, decision or {}, semantic)
+    kept = merge_ranges(keep_ranges, gap=0.0)
+    missing_anchor = any(sum(
+        max(0.0, min(float(anchor["end"]), passage["end"])
+            - max(float(anchor["start"]), passage["start"])) for passage in kept
+    ) < float(anchor["end"]) - float(anchor["start"]) - 0.001 for anchor in anchors)
+    if missing_anchor:
+        warnings.append({"type": "story_anchor_missing", "message":
+            "The final draft does not fully include the planned beginning or ending. "
+            "Review context and the ending before exporting."})
+    else:
+        moment_limit = (selection_policy or {}).get("max_moments")
+        anchor_passages = [passage for passage in semantic if any(
+            passage["start"] <= float(anchor["start"]) + 0.0005
+            and passage["end"] >= float(anchor["end"]) - 0.0005 for anchor in anchors
+        )]
+        if moment_limit and len(anchor_passages) > int(moment_limit) and len(merge_ranges(kept, gap=0.75)) > int(moment_limit):
+            warnings.append({"type": "style_moment_constraint", "message":
+                "The planned beginning and ending use separate source passages. They were kept to preserve the story; "
+                "review whether this is one complete moment for the selected style."})
 
     def bins(ranges):
         if duration <= 0:
@@ -740,7 +784,7 @@ def _short_segment_value(segment: dict[str, Any], decision: dict[str, Any]) -> f
     return score
 
 
-SELECTION_STRATEGY_VERSION = "complete-style-moments-v3"
+SELECTION_STRATEGY_VERSION = "explicit-duration-intent-v6"
 
 
 def _selection_unit(selection_seed: Any, *parts: Any) -> float:
@@ -847,13 +891,16 @@ def _select_audio_highlight_ranges(
     avoids claiming that Story AI understood words that were never present.
     """
     target = min(float(duration), max(8.0, float(target_duration)))
-    if duration <= target + 0.05:
+    target_mode = (selection_policy or {}).get("duration_mode") == "target"
+    if duration <= target + 0.05 and not target_mode:
         return [{"start": 0.0, "end": round(duration, 3)}]
     waveform = [
         item for item in (profile.get("waveform") or [])
         if isinstance(item, dict) and float(item.get("end", 0.0)) > float(item.get("start", 0.0))
     ]
     waveform.sort(key=lambda item: (float(item.get("start", 0.0)), float(item.get("end", 0.0))))
+    if not waveform and target_mode:
+        return []  # No measured evidence: never substitute arbitrary source windows.
     if not waveform:
         return _fallback_short_story_ranges(
             duration, target, scene_points, selection_seed=selection_seed,
@@ -876,7 +923,7 @@ def _select_audio_highlight_ranges(
         return rms * 0.72 + peak * 0.28
 
     style_limit = (selection_policy or {}).get("max_moments")
-    if style_limit:
+    if style_limit or target_mode:
         before = max(0.0, _finite_number(selection_policy.get("pre_roll_seconds")))
         after = max(0.0, _finite_number(selection_policy.get("post_roll_seconds")))
         threshold = max(0.35, max(frame_energy(row) for row in waveform) * 0.55)
@@ -895,15 +942,58 @@ def _select_audio_highlight_ranges(
                 end = start + target
             energies = [frame_energy(row) for row in frames]
             score = max(energies) * 0.4 + sum(energies) / len(energies) * 0.6
-            event_candidates.append({"start": start, "end": end, "score": score})
+            # A three-second transient must not outrank a sustained engagement
+            # merely by being louder. Reward measured active time, never quiet
+            # padding; keep the explicit moment-count/chronology constraints.
+            if (selection_policy or {}).get("protect_action_span"):
+                active_seconds = sum(max(0.0, min(end, row["end"]) - max(start, row["start"])) for row in frames)
+                score *= 0.35 + 0.65 * min(1.0, active_seconds / target)
+            peak = max(frames, key=frame_energy)
+            event_candidates.append({"start": start, "end": end, "score": score,
+                                     "active_start": event["start"], "active_end": event["end"],
+                                     "center": (peak["start"] + peak["end"]) / 2})
+        ranked_events = sorted(event_candidates, key=lambda row: (-row["score"], row["start"]))
+        if target_mode:
+            # Spread equally credible events over the recording rather than
+            # silently using chronological order as an early-footage bias.
+            # Diversity cannot promote an event more than5% below the best left.
+            pending, ranked_events = ranked_events, []
+            while pending:
+                best = max(row["score"] for row in pending)
+                peers = [row for row in pending if row["score"] >= best * .95]
+                chosen = min(peers, key=lambda row: (
+                    -min((abs(row["center"] - selected["center"]) for selected in ranked_events), default=0),
+                    -row["score"], row["start"],
+                ))
+                ranked_events.append(chosen)
+                pending.remove(chosen)
         event_keep: list[dict[str, float]] = []
-        for event in sorted(event_candidates, key=lambda row: (-row["score"], row["start"])):
+        for event in ranked_events:
             candidate = merge_ranges([*event_keep, event], gap=0.0)
             if range_duration(candidate) > target + 0.05:
                 continue
             event_keep = candidate
-            if len(event_keep) >= max(1, int(style_limit)):
+            if not target_mode and len(event_keep) >= max(1, int(style_limit)):
                 break
+        if target_mode:
+            # Fit a remaining audio-backed window only within an unused event.
+            # Unlike speech passages, these are measured activity windows, not
+            # assertions that a whole fight/story has been identified.
+            for event in ranked_events:
+                remaining = target - range_duration(event_keep)
+                if remaining < 8.0:
+                    break
+                for free in invert_ranges(event_keep, duration):
+                    left, right = max(free["start"], event["start"]), min(free["end"], event["end"])
+                    if right - left < remaining or right <= event["active_start"] or left >= event["active_end"]:
+                        continue
+                    start = max(left, min(right - remaining, event["center"] - remaining / 2))
+                    end = start + remaining
+                    if end <= event["active_start"] or start >= event["active_end"]:
+                        continue
+                    event_keep = merge_ranges([*event_keep, {"start": start, "end": end}], gap=0.0)
+                    break
+            return event_keep
         if event_keep:
             return event_keep
 
@@ -1076,19 +1166,54 @@ def _select_style_story_ranges(
     speech boundaries and existing cue hints as bounded context evidence; it does
     not claim to identify a kill, joke or causal relationship from audio energy.
     """
-    moment_limit = selection_policy.get("max_moments")
+    target_mode = selection_policy.get("duration_mode") == "target"
+    moment_limit = (max(1, len(segments), len(decision.get("story_ranges") or []))
+                    if target_mode else selection_policy.get("max_moments"))
     if not moment_limit:
         return None
     moment_limit = max(1, int(moment_limit))
     semantic = merge_ranges(decision.get("story_ranges") or [], gap=0.75)
-    if semantic and range_duration(semantic) <= target + 0.05:
+    if semantic:
         if moment_limit == 1 and semantic[-1]["end"] - semantic[0]["start"] <= target + 0.05:
             # Preserve the pauses and action between setup and payoff when one
             # continuous story fits. Never bridge distant chapters blindly.
             return [{"start": semantic[0]["start"], "end": semantic[-1]["end"]}]
-        return semantic
-    if semantic:
-        # Let the existing semantic budget handling resolve an oversized plan.
+        model_beat_ids = {str(value) for value in decision.get("story_beat_ids") or []}
+        model_passages = merge_ranges([
+            row for row in decision.get("story_ranges") or []
+            if row.get("beat_id") and str(row["beat_id"]) in model_beat_ids
+        ], gap=0.75)
+        anchors = _planned_story_anchors(segments, decision, model_passages)
+        anchor_passages = [passage for passage in semantic if any(
+            passage["start"] <= float(anchor["start"]) + 0.0005
+            and passage["end"] >= float(anchor["end"]) - 0.0005 for anchor in anchors
+        )]
+        if moment_limit == 1 and len(anchor_passages) > 1 and range_duration(semantic) <= target + 0.05:
+            # A single story can use source passages separated by material the
+            # planner omitted. Do not erase its explicit ending to satisfy a
+            # range-count limit. Final review exposes the style constraint.
+            return semantic
+        if len(semantic) <= moment_limit and range_duration(semantic) <= target + 0.05:
+            return semantic
+        # A valid model selection can still exceed the preset's moment count.
+        # Rank its existing complete passages; never fill the unused budget with
+        # another story or split a setup/payoff just to hit the requested length.
+        def passage_score(passage: dict[str, float]) -> float:
+            values = [_short_segment_value(row, decision) for row in segments
+                      if float(row["start"]) < passage["end"] and float(row["end"]) > passage["start"]]
+            return max(values) * 0.65 + sum(values) / len(values) * 0.35 if values else 0.0
+
+        selected_semantic: list[dict[str, float]] = []
+        for passage in sorted(semantic, key=lambda row: (-round(passage_score(row), 4), row["start"])):
+            if range_duration(selected_semantic) + passage["end"] - passage["start"] > target + 0.05:
+                continue
+            selected_semantic.append(passage)
+            if len(selected_semantic) >= moment_limit:
+                break
+        if selected_semantic:
+            return sorted(selected_semantic, key=lambda row: row["start"])
+        # A single over-budget passage still needs the existing speech-boundary
+        # budget handling. Do not invent a shorter complete moment here.
         return None
 
     ordered = sorted(segments, key=lambda row: (float(row["start"]), float(row["end"])))
@@ -1667,6 +1792,26 @@ def _explicit_source_layout(project: dict[str, Any]) -> str | None:
     return layout
 
 
+def _duration_review(brief: dict[str, Any], source_duration: float, output_duration: float,
+                     *, nonverbal: bool = False) -> dict[str, Any] | None:
+    """Explain a Short's real budget without claiming all footage was assessed."""
+    if brief.get("goal", "short") != "short":
+        return None
+    requested = max(8.0, _finite_number(brief.get("target_duration"), 60.0))
+    effective = min(requested, source_duration)
+    limit = ((brief.get("style_profile") or {}).get("selection_policy") or {}).get("max_moments")
+    shortfall = output_duration + .05 < effective * .9
+    reason = ("style_moment_limit" if shortfall and limit else
+              "limited_selection" if shortfall else
+              "source_shorter" if source_duration + .05 < requested else "near_target")
+    return {"requested_seconds": round(requested, 3), "available_source_seconds": round(source_duration, 3),
+            "effective_target_seconds": round(effective, 3), "selected_seconds": round(output_duration, 3),
+            "duration_is_ceiling": brief.get("duration_mode") != "target", "duration_mode": brief.get("duration_mode", "style"),
+            "shortfall": shortfall, "reason": reason,
+            "style_moment_limit": int(limit) if limit else None,
+            "nonverbal": nonverbal, "can_try_more_moments": bool(shortfall and limit)}
+
+
 def _effective_brief(project: dict[str, Any]) -> dict[str, Any]:
     brief = enrich_brief_with_style(copy.deepcopy(project.get("settings", {})))
     # Frame rate is an encoder preference, not a story instruction. Changing it
@@ -1676,7 +1821,7 @@ def _effective_brief(project: dict[str, Any]) -> dict[str, Any]:
     # Product intent supplies safe defaults. An explicit Source Mixer choice is
     # applied last, so changing an edit style can never erase the user's framing.
     if goal == "short":
-        brief["aspect"] = "9:16"
+        brief.setdefault("aspect", "9:16")
     elif goal == "youtube":
         brief["aspect"] = "16:9"
         brief["layout"] = "A"
@@ -1694,6 +1839,8 @@ def _effective_brief(project: dict[str, Any]) -> dict[str, Any]:
     explicit_layout = _explicit_source_layout(project)
     if explicit_layout is not None:
         brief["layout"] = explicit_layout
+    elif default_reels_stack(project):
+        brief["layout"] = "stacked"
     elif (project.get("sources") or {}).get("B"):
         # Streamer presets historically carried physical ``A`` defaults, which
         # silently hid a valid second source. Resolve those defaults through the
@@ -1721,16 +1868,39 @@ def analyze_project(
     brief_patch: dict[str, Any] | None = None,
     *,
     selection_variant: int = 0,
+    source_mixer_patch: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     context.checkpoint()
     project = store.load(project_id)
+    require_tracks_unlocked(project)
+    # Rebuilding a project with independent media must be all-or-nothing: a
+    # rejected shorter draft must not leave the refinement's settings applied.
+    staged_brief = brief_patch if any((project.get("manual") or {}).get(key) for key in ("media_clips", "text_clips")) else None
+    original_settings = copy.deepcopy(project.get("settings") or {})
     if brief_patch:
         context.checkpoint()
-        project = store.update(
-            project_id,
-            lambda current: current.setdefault("settings", {}).update(brief_patch),
-        )
+        if staged_brief:
+            project.setdefault("settings", {}).update(staged_brief)
+        else:
+            project = store.update(
+                project_id,
+                lambda current: current.setdefault("settings", {}).update(brief_patch),
+            )
     manual_input_fingerprint = stable_fingerprint("director-manual-input", project.get("manual") or {})
+    if source_mixer_patch:
+        project.setdefault("manual", {}).setdefault("source_mixer", {}).update(source_mixer_patch)
+
+    def proposed_inputs(latest: dict[str, Any]) -> dict[str, Any]:
+        if not staged_brief and not source_mixer_patch:
+            return latest
+        current_settings = latest.get("settings") or {}
+        if any(current_settings.get(key) != original_settings.get(key) for key in staged_brief or {}):
+            raise RuntimeError("project_changed_during_analysis")
+        candidate = copy.deepcopy(latest)
+        candidate.setdefault("settings", {}).update(staged_brief or {})
+        if source_mixer_patch:
+            candidate.setdefault("manual", {}).setdefault("source_mixer", {}).update(source_mixer_patch)
+        return candidate
     source_a = _source_path(store, project, "A")
     source_b = _source_path(store, project, "B") if project.get("sources", {}).get("B") else None
     duration = float(project["sources"]["A"]["duration"])
@@ -1747,7 +1917,7 @@ def analyze_project(
     performance_mode = str(brief.get("performance_mode") or settings.ai.get("performance_mode", "auto"))
     spoken_language = str(brief.get("spoken_language") or project.get("language") or "auto")
     policy = audio_policy(brief.get("audio_cleanup"))
-    if goal == "youtube":
+    if goal == "youtube" and brief.get("edit_style") != "clean_vod":
         # YouTube should preserve content but be decisive about measured dead air.
         # Per-range gain automation is disabled without speech evidence; final
         # normalization remains safe and lightweight.
@@ -1786,6 +1956,16 @@ def analyze_project(
         prepared_vision,
         source_generation,
         vision_samples,
+    )
+    # Selecting the embedded layout accepts the displayed preparation crop. A
+    # higher-sample Director pass may refine detection, but must not erase that
+    # choice. Only current-source geometry from the trusted detector qualifies.
+    accepted_prepared_embedded = (
+        select_embedded_candidate(None, prepared_vision)
+        if not source_b
+        and str(brief.get("layout")) == "embedded_stack"
+        and _prepared_vision_is_reusable(prepared_vision, source_generation, 0)
+        else None
     )
 
     def resolve_source_vision() -> dict[str, Any]:
@@ -2004,6 +2184,8 @@ def analyze_project(
     if reusable_context and need_vision and not reusable_vision:
         context.update(max(0.45, float(context.job.progress)), "Refreshing speaker and framing detection")
         vision = resolve_source_vision()
+    if accepted_prepared_embedded is not None:
+        vision = {**vision, "embedded_camera": accepted_prepared_embedded}
 
     transcript_quality = transcript_quality_report(transcript)
     edit_style = str(brief.get("edit_style") or "smart")
@@ -2186,17 +2368,28 @@ def analyze_project(
     context.update(0.58, "Understanding the story")
     story_beats: list[dict[str, Any]] = []
     story_hierarchy: dict[str, Any] | None = None
+    model_selection: dict[str, Any] | None = None
+    planner_warnings: list[dict[str, str]] = []
     normalized_editorial_transcript, _ = _normalize_transcript(transcript, spoken_language, duration)
     editorial_transcript_fingerprint = stable_fingerprint(
         "director-editorial-transcript", normalized_editorial_transcript["segments"],
     )
     cached_editorial = (cached_analysis or {}).get("editorial_cache")
+    # A full decision cache also reuses its critic. Old reviews must be checked
+    # again on an explicit rebuild, without invalidating ASR/chapter context.
     reusable_editorial = bool(
         reusable_context
         and not transcript_upgraded
         and isinstance(cached_editorial, dict)
         and isinstance(cached_editorial.get("decision"), dict)
         and isinstance((cached_analysis or {}).get("segments"), list)
+        and (
+            cached_editorial.get("review_contract") == CRITIC_REVIEW_CONTRACT
+            or (
+                not (cached_analysis or {}).get("story_hierarchy")
+                and not str((cached_analysis or {}).get("engine") or "").endswith("_hierarchical_story")
+            )
+        )
         and cached_editorial.get("transcript_fingerprint") == editorial_transcript_fingerprint
         and cache_fingerprints_match(cached_fingerprints, cache_fingerprints, ("story",))
     )
@@ -2249,6 +2442,8 @@ def analyze_project(
         decision = copy.deepcopy(cached_editorial["decision"])
         story_beats = copy.deepcopy(cached_analysis.get("story_beats") or [])
         story_hierarchy = copy.deepcopy(cached_analysis.get("story_hierarchy"))
+        model_selection = copy.deepcopy(cached_analysis.get("model_selection") or (story_hierarchy or {}).get("model_selection"))
+        planner_warnings = copy.deepcopy(cached_analysis.get("planner_warnings") or [])
         engine = str(cached_analysis.get("engine") or "deterministic")
     else:
         editorial, engine = _plan_edit_with_cancel(
@@ -2259,6 +2454,8 @@ def analyze_project(
             progress=lambda value, message: context.update(0.58 + value * 0.18, message),
             story_cache=(cached_analysis.get("story_hierarchy") if reusable_story and cached_analysis else None),
         )
+        model_selection = copy.deepcopy(editorial.get("model_selection") or (editorial.get("story_hierarchy") or {}).get("model_selection"))
+        planner_warnings = copy.deepcopy(editorial.get("warnings") or [])
         segments = editorial["segments"]
         decision = editorial["decision"]
         story_beats = editorial.get("story_beats", [])
@@ -2312,7 +2509,7 @@ def analyze_project(
     # Shorts are selections from the entire recording, not "the first N seconds".
     # Build a story-shaped set of source passages first, then apply measured audio
     # cleanup and defensible transcript cleanup inside those passages.
-    if goal == "short" and duration > target_duration:
+    if goal == "short" and (duration > target_duration or brief.get("duration_mode") == "target"):
         selection_policy = ((brief.get("style_profile") or {}).get("selection_policy") or {})
         story_keep = (
             _select_audio_highlight_ranges(
@@ -2338,6 +2535,8 @@ def analyze_project(
             )
         )
         story_cuts = invert_ranges(story_keep, duration)
+        if not story_keep and brief.get("duration_mode") == "target":
+            raise ValueError("No reliable highlight passages were found. Select a manual range or review the footage; no arbitrary filler was added.")
         cuts, counts = _short_cleanup_cuts_with_floor(
             story_cuts,
             _style_cleanup_candidates(candidates, story_keep, selection_policy),
@@ -2392,7 +2591,15 @@ def analyze_project(
             has_b=bool(source_b),
         )
     output_duration = range_duration(keep_ranges)
-    quality_review = _edit_quality_review(transcript_quality, story_hierarchy, segments, keep_ranges, duration)
+    duration_review = _duration_review(brief, duration, output_duration, nonverbal=nonverbal_highlights)
+    quality_review = _edit_quality_review(
+        transcript_quality, story_hierarchy, segments, keep_ranges, duration,
+        decision=decision,
+        selection_policy=((brief.get("style_profile") or {}).get("selection_policy") or {}),
+    )
+    if planner_warnings:
+        quality_review["warnings"].extend(planner_warnings)
+        quality_review["needs_review"] = True
     old_keep_ranges = (project.get("draft") or {}).get("keep_ranges") or []
     variation_changed = keep_ranges != old_keep_ranges
     decisions = _aggregate_decisions(counts, duration, output_duration, bool(source_b), sync)
@@ -2410,6 +2617,7 @@ def analyze_project(
         "layout": requested_layout,
         "embedded_layout_confirmed": embedded_layout_confirmed,
         "target_duration": target_duration,
+        "duration_review": duration_review,
         "source_duration": duration,
         "output_duration": output_duration,
         "removed_duration": round(max(0.0, duration - output_duration), 3),
@@ -2423,6 +2631,7 @@ def analyze_project(
         "audio_policy": policy,
         "audio_source": analysis_audio_slot,
         "audio_profile": sound_profile.get("summary", {}),
+        "model_selection": model_selection,
         "status": "ready",
         "partial_ai": bool(transcription_warning or nonverbal_highlights or transcript_fallback or quality_review["needs_review"]),
         "quality_review": quality_review,
@@ -2456,7 +2665,10 @@ def analyze_project(
         "segments": segments,
         "story_beats": story_beats,
         "story_hierarchy": story_hierarchy,
+        "model_selection": model_selection,
+        "planner_warnings": planner_warnings,
         "editorial_cache": {
+            "review_contract": CRITIC_REVIEW_CONTRACT,
             "transcript_fingerprint": editorial_transcript_fingerprint,
             "decision": copy.deepcopy(decision),
         },
@@ -2479,8 +2691,12 @@ def analyze_project(
             + ([{
                 "type": "limited_highlight_evidence",
                 "message": (
-                    f"Found {output_duration:.0f} seconds of distinct audio-backed highlights for a "
-                    f"{target_duration:.0f}-second target. Kept a shorter edit to avoid padding it with quiet footage."
+                    f"Selected {output_duration:.1f}s for a {target_duration:.0f}s requested length. "
+                    + (f"This style keeps at most {duration_review['style_moment_limit']} complete moment(s). "
+                       "Choose a multi-moment style or a manual range to include other footage."
+                       if duration_review and duration_review.get("style_moment_limit") else
+                       "The selected evidence supports a shorter draft. Review the selection or choose a manual range; "
+                       "CUTROOM did not add quiet footage just to fill the duration.")
                 ),
             }] if nonverbal_highlights and output_duration < target_duration * 0.80 else [])
             + ([{"type": "source_b", "message": source_b_warning}] if source_b_warning else [])
@@ -2493,7 +2709,8 @@ def analyze_project(
     context.checkpoint()
 
     def commit_analysis(latest: dict[str, Any]) -> None:
-        latest_brief = _effective_brief(latest)
+        proposed = proposed_inputs(latest)
+        latest_brief = _effective_brief(proposed)
         latest_paths: dict[str, Path | None] = {}
         for slot in ("A", "B"):
             latest_source = latest.get("sources", {}).get(slot)
@@ -2503,7 +2720,7 @@ def analyze_project(
                 else None
             )
         latest_fingerprints = build_analysis_cache_fingerprints(
-            latest,
+            proposed,
             settings,
             latest_brief,
             latest_paths,
@@ -2515,20 +2732,31 @@ def analyze_project(
             ("pipeline", "source", "transcript", "scenes", "vision", "story"),
         ):
             raise RuntimeError("project_changed_during_analysis")
+        unchanged_variation = normalized_selection_variant > 0 and not variation_changed
+        if not unchanged_variation:
+            validate_media_bounds({**proposed, "draft": draft})
+            validate_text_bounds({**proposed, "draft": draft})
+        context.commit()
+        latest.setdefault("settings", {}).update(staged_brief or {})
+        if source_mixer_patch:
+            latest.setdefault("manual", {}).setdefault("source_mixer", {}).update(source_mixer_patch)
         latest.setdefault("settings", {})["aspect"] = brief.get("aspect", latest.get("settings", {}).get("aspect", "9:16"))
         if goal == "youtube" and explicit_source_layout is None and not embedded_layout_confirmed:
             latest["settings"]["layout"] = "A"
         latest["analysis"] = analysis
-        if normalized_selection_variant > 0 and not variation_changed:
+        if unchanged_variation:
             # Keep the user's timeline, export state and Undo history when an
             # alternate request yields exactly the same source selection.
             return
         latest["draft"] = draft
-        # A rebuilt Draft supersedes timeline snapshots from the old Draft. Keep
-        # durable manual intent, but never let Undo restore an incompatible cut.
+        # A new Draft cannot replace an active manual sequence implicitly. Its
+        # current timeline and Undo history still belong to the user's edit; the
+        # explicit sequence_reset action applies the new Draft and is undoable.
+        # Legacy draft-clock histories are incompatible with a replaced Draft.
         latest_manual = latest.setdefault("manual", {})
-        latest_manual.pop("_history", None)
-        latest_manual["history"] = {"undo_count": 0, "redo_count": 0}
+        if not has_sequence(latest):
+            latest_manual.pop("_history", None)
+            latest_manual["history"] = {"undo_count": 0, "redo_count": 0}
         if (
             vision.get("focus_safe") is True
             and vision.get("focus")
@@ -2542,13 +2770,20 @@ def analyze_project(
 
     # After this boundary a late cancellation must not hide a Draft that was
     # successfully saved. The UI will receive a completed authoritative job.
-    context.commit()
     saved_project = store.update(project_id, commit_analysis)
+    timeline_preserved = has_sequence(saved_project)
     message = "Your first edit is ready"
     if normalized_selection_variant > 0 and not variation_changed:
         message = "No different cut found; your edit was kept"
+    elif timeline_preserved:
+        message = "New draft ready; your manual timeline was kept. Reset to AI draft to use this edit."
+    elif planner_warnings:
+        message = "Basic cleanup draft ready; Story AI did not produce a valid edit. Review the warning before exporting."
     context.update(1.0, message)
-    result = {"project_id": project_id, "draft": saved_project["draft"], "engine": engine}
+    result = {"project_id": project_id, "draft": saved_project["draft"], "engine": engine,
+              "applied_to_timeline": not timeline_preserved, "timeline_preserved": timeline_preserved,
+              "message": message, "model_selection": saved_project["draft"].get("model_selection"),
+              "warnings": planner_warnings}
     if normalized_selection_variant > 0:
         result["variation_changed"] = variation_changed
     return result
@@ -2588,12 +2823,14 @@ def _plan_edit_with_cancel(
 def refine_project(context: JobContext, project_id: str, store: ProjectStore, settings: Settings, command: str) -> dict[str, Any]:
     context.checkpoint()
     project = store.load(project_id)
+    require_tracks_unlocked(project)
     current = project.get("settings", {})
     patch: dict[str, Any] = {}
     selection_variant = 0
     restore_focus_layout = False
     previous_layout_present = False
     previous_layout: Any = None
+    staged_mixer: dict[str, Any] | None = None
     if command == "shorter":
         patch["target_duration"] = max(8, round(float(current.get("target_duration", 60)) * 0.78))
         patch["pace"] = "dynamic"
@@ -2616,8 +2853,11 @@ def refine_project(context: JobContext, project_id: str, store: ProjectStore, se
                 current_mixer = current_project.setdefault("manual", {}).setdefault("source_mixer", {})
                 current_mixer["default_layout"] = "camera"
 
-            store.update(project_id, focus_camera)
-            restore_focus_layout = True
+            if any((project.get("manual") or {}).get(key) for key in ("media_clips", "text_clips")):
+                staged_mixer = {"default_layout": "camera"}
+            else:
+                store.update(project_id, focus_camera)
+                restore_focus_layout = True
         else:
             patch["layout"] = "A"
     elif command == "new_variation":
@@ -2638,6 +2878,8 @@ def refine_project(context: JobContext, project_id: str, store: ProjectStore, se
                 patch,
                 selection_variant=selection_variant,
             )
+        if staged_mixer:
+            return analyze_project(context, project_id, store, settings, patch, source_mixer_patch=staged_mixer)
         return analyze_project(context, project_id, store, settings, patch)
     except Exception:
         if restore_focus_layout:

@@ -48,7 +48,8 @@ def test_render_button_is_in_topbar():
 def test_director_is_primary_and_advanced_is_hidden():
     html = (ROOT / "web/index.html").read_text(encoding="utf-8")
     assert 'id="generateButton"' in html
-    assert 'id="advancedPanel" hidden' in html
+    panel = re.search(r'<section\b[^>]*\bid="advancedPanel"[^>]*>', html)
+    assert panel and re.search(r'\bhidden(?:\s|>)', panel.group())
     assert "One main edit plus ranked Reel options from the same analysis" in html
 
 
@@ -328,8 +329,10 @@ def test_story_model_is_required_before_semantic_director_runs():
 
 
 def test_job_manager_separates_background_and_foreground_work():
+    from cutroom.jobs import JobManager
+
     jobs = (ROOT / "cutroom" / "jobs.py").read_text(encoding="utf-8")
-    assert 'BACKGROUND_KINDS = {"prepare_source", "model_install"}' in jobs
+    assert {"prepare_source", "prepare_asset", "model_install"} <= JobManager.BACKGROUND_KINDS
     assert 'self.background_executor' in jobs
     assert 'executor = self.background_executor if kind in self.BACKGROUND_KINDS else self.executor' in jobs
 
@@ -406,7 +409,10 @@ def test_v52_outcome_first_ui_and_timeline_contract():
     assert 'elements.durationGroup.hidden = ["youtube", "clean"].includes(normalized)' in app
     assert 'youtube: { aspect: "16:9", layout: "A"' in app
     assert 'short: { aspect: "9:16", layout: "auto"' in app
-    assert 'analysis?.audio?.waveform' in timeline
+    # Manual edits use upload-time source measurements; Director analysis remains
+    # a fallback. Behavioral tests verify the selected source and clock mapping.
+    assert 'project?.pre_analysis?.audio?.[slot]' in timeline
+    assert 'project?.analysis?.audio' in timeline
     assert 'handleWheel(event)' in timeline and 'followPlayhead()' in timeline
     assert 'this.scrubbing = true' in timeline
 

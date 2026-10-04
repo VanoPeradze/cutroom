@@ -153,6 +153,73 @@ test('late media play promise cannot restart a paused timeline or another projec
   assert.equal(h.run('state.preview.playing'), false);
 });
 
+test('a loading player cancelled at a track gap does not stop the remaining track', async () => {
+  const h = harness();
+  h.run(`seekPreview(1.9);
+    elements.previewA.play=function() {
+      this.paused=false;
+      return new Promise((resolve,reject)=>{globalThis.rejectPlay=reject;});
+    };
+    elements.previewA.pause=function() {
+      this.paused=true;
+      const error=new Error('The play() request was interrupted by a call to pause().');
+      error.name='AbortError'; rejectPlay?.(error);
+    };`);
+  await h.run('playPreview()');
+  await h.advance(200);
+  assert.equal(h.run('state.preview.playing'), true);
+  assert.equal(h.run('elements.previewB.paused'), false);
+  assert.equal(h.run('messages.length'), 0);
+  await h.advance(200);
+  assert.ok(h.run('previewPlaybackTime()') > 2.2);
+});
+
+test('an unexpected player failure still stops playback and reports the error', async () => {
+  const h = harness();
+  h.run(`elements.previewA.play=()=>Promise.reject(new Error('Decoder failed'));`);
+  await h.run('playPreview()');
+  await h.advance(0);
+  assert.equal(h.run('state.preview.playing'), false);
+  assert.deepEqual(plain(h.run('messages')), ['Decoder failed']);
+});
+
+test('the edit mixer owns audio without repeatedly starting hidden source videos', async () => {
+  for (const audioSlot of ['A', 'B']) {
+    const h = harness();
+    const camera = audioSlot === 'A' ? 'B' : 'A';
+    h.run(`state.preview.mode='edit'; mixer.audioSlot='${audioSlot}';
+      state.mediaStudio={resumeAudio(){},sync(){},pause(){}};
+      state.project.manual.source_tracks.B=[{id:'b',start:0,end:12,source_start:0}];
+      state.project.draft.camera_plan=[{start:0,end:12,camera:'${camera}'}];
+      globalThis.starts={A:0,B:0};
+      for(const slot of ['A','B']) elements['preview'+slot].play=function(){
+        starts[slot]++; this.paused=false; return Promise.resolve();
+      };`);
+    await h.run('playPreview()');
+    for (let frame = 0; frame < 3; frame++) await h.advance(16);
+    assert.equal(h.run(`starts.${audioSlot}`), 0, 'the hidden audio source is played by the mixer only');
+    assert.equal(h.run(`starts.${camera}`), 1, 'visible picture keeps playing without restart');
+    assert.equal(h.run('elements.previewA.muted && elements.previewB.muted'), true);
+    assert.equal(h.run('state.preview.playing'), true);
+  }
+});
+
+test('the edit mixer also prevents hidden B audio playback with the original media clock', () => {
+  const h = harness();
+  h.run(`delete state.project.manual.source_tracks; state.preview.mode='edit'; mixer.audioSlot='B';
+    state.mediaStudio={sync(){},pause(){}};
+    state.project.draft.camera_plan=[{start:0,end:12,camera:'A'}];
+    state.preview.playing=true; elements.previewA.paused=false;
+    globalThis.bStarts=0;
+    elements.previewB.play=function(){bStarts++;this.paused=false;return Promise.resolve();};
+    syncSecondaryPreview(1);`);
+  assert.equal(h.run('bStarts'), 0);
+  assert.equal(h.run('elements.previewA.muted && elements.previewB.muted'), true);
+  h.run(`state.preview.mode='source'; syncSecondaryPreview(1);`);
+  assert.equal(h.run('bStarts'), 1, 'Full source retains native source audio playback');
+  assert.equal(h.run('elements.previewB.muted'), false);
+});
+
 test('audio tail does not show frozen video and does not choose another audio source', () => {
   const h = harness();
   h.run(`state.project.sources.B.video_duration=9; mixer.audioSlot='B'; seekPreview(4);`);

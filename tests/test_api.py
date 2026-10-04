@@ -52,6 +52,47 @@ def test_favicon_is_explicit_and_legacy_path_is_supported(app):
         assert response.mimetype == "image/svg+xml"
 
 
+def test_deleting_a_busy_project_does_not_cancel_its_work(app):
+    client = app.test_client()
+    project = client.post("/api/projects", json={"name": "Synthetic busy project"}).get_json()["project"]
+    manager = app.extensions["cutroom_jobs"]
+    started = threading.Event()
+    release = threading.Event()
+
+    def working(context):
+        started.set()
+        while not release.wait(0.01):
+            context.checkpoint()
+        return {"ok": True}
+
+    try:
+        job = manager.submit("director", project["id"], working)
+        assert started.wait(1.0)
+        response = client.delete(f"/api/projects/{project['id']}")
+        assert response.status_code == 409
+        assert response.get_json()["error"] == "project_busy"
+        assert manager.get(job.id).status == "running"
+        assert manager.get(job.id).public()["cancel_requested"] is False
+        assert client.get(f"/api/projects/{project['id']}").status_code == 200
+    finally:
+        release.set()
+        manager.shutdown(wait=True, cancel_pending=True)
+
+
+def test_project_rename_rejects_stale_revisions_and_preserves_edit(app):
+    client = app.test_client()
+    project = client.post("/api/projects", json={"name": "Synthetic rename"}).get_json()["project"]
+    url = f"/api/projects/{project['id']}"
+    edited = client.patch(url, json={"settings": {"aspect": "1:1"}, "expected_revision": project["revision"]}).get_json()["project"]
+    conflict = client.patch(url, json={"name": "Stale name", "expected_revision": project["revision"]})
+    assert conflict.status_code == 409
+    assert conflict.get_json()["error"] == "revision_conflict"
+    renamed = client.patch(url, json={"name": "  Clear name  ", "expected_revision": edited["revision"]}).get_json()["project"]
+    assert renamed["name"] == "Clear name"
+    assert renamed["settings"]["aspect"] == "1:1"
+    assert renamed["revision"] == edited["revision"] + 1
+
+
 def test_cancel_job_api_is_idempotent_and_returns_authoritative_job(app):
     client = app.test_client()
     manager = app.extensions["cutroom_jobs"]

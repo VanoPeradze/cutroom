@@ -24,6 +24,6 @@ Exclude API keys, credentials, private footage, transcripts, client data, and fu
 
 This repository contains the local editor, its setup and packaging scripts, and the static website source. Reports about those components are welcome. Vulnerabilities in third-party tools, models, or AI services should also be reported through the affected project's own security process.
 
-CUTROOM is intended to run on the local computer. Keep its server on the default loopback interface; do not expose it through public hosting, tunnels, or port forwarding. Use copies of source media and review exported files. Optional online AI sends selected audio and editing context to the chosen provider; see [AI connections](../docs/AI_CONNECTIONS.md) before processing sensitive material.
+CUTROOM is intended to run on the local computer. Keep its server on the default loopback interface; do not expose it through public hosting, tunnels, or port forwarding. Use copies of source media and review exported files. Optional online AI sends selected audio and editing context to the chosen provider; see [AI connections](https://github.com/VanoPeradze/cutroom/blob/HEAD/docs/AI_CONNECTIONS.md) before processing sensitive material.
 
-For ordinary bugs and feature requests, use the [issue forms](https://github.com/VanoPeradze/cutroom/issues/new/choose). See [beta status](../docs/BETA_STATUS.md) for current validation limits.
+For ordinary bugs and feature requests, use the [issue forms](https://github.com/VanoPeradze/cutroom/issues/new/choose). See [beta status](https://github.com/VanoPeradze/cutroom/blob/HEAD/docs/BETA_STATUS.md) for current validation limits.

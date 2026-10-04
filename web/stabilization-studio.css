@@ -1,0 +1,14 @@
+.stabilization-tool {
+  border-top: 1px solid var(--line);
+  margin-top: 16px;
+  padding-top: 12px;
+}
+.stabilization-tool summary { cursor: pointer; font-weight: 650; }
+.stabilization-tool summary span { font-weight: 400; font-size: 11px; margin-inline-start: 8px; color: var(--muted); }
+.stabilization-tool .media-help { margin-block: 10px; }
+.stabilization-controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; }
+.stabilization-controls label { flex: 1 1 160px; min-width: 0; display: grid; gap: 4px; }
+.stabilization-controls select { width: 100%; min-width: 0; }
+.stabilization-controls button { flex: 1 0 auto; }
+.stabilization-download { display: inline-flex; margin-block: 4px 10px; font-weight: 600; }
+.stabilization-tool [hidden] { display: none; }

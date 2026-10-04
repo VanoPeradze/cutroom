@@ -102,13 +102,19 @@ export class TimelineView {
     this.onLayoutSelect = options.onLayoutSelect;
     this.onToolStateChange = options.onToolStateChange;
     this.onTargetChange = options.onTargetChange;
+    this.onMediaSelect = options.onMediaSelect;
+    this.onMediaEdit = options.onMediaEdit;
+    this.onMediaPreview = options.onMediaPreview;
+    this.onMediaAction = options.onMediaAction;
     this.getTrackClips = options.getTrackClips;
+    this.getAudioSlot = options.getAudioSlot;
     this.sourceReview = Boolean(options.sourceReview);
     this.editTarget = "edit";
     this.canEdit = options.canEdit || (() => true);
     this.cutAnchor = null;
     this.editPending = false;
     this.snapping = false;
+    this.snapGuide = null;
     this.project = null;
     this.zoom = 1;
     this.zoomFocusPending = false;
@@ -130,7 +136,7 @@ export class TimelineView {
     canvas.addEventListener("pointerup", (event) => this.pointerUp(event));
     canvas.addEventListener("pointercancel", (event) => this.pointerCancel(event));
     canvas.addEventListener("lostpointercapture", (event) => this.pointerCancel(event));
-    canvas.addEventListener("pointerleave", () => { if (!this.gesture) { this.hoverTime = null; this.scheduleDraw(); } });
+    canvas.addEventListener("pointerleave", () => { if (!this.gesture) { this.hoverTime = null; this.snapGuide = null; this.scheduleDraw(); } });
     canvas.addEventListener("keydown", (event) => this.keyDown(event));
     scroll.addEventListener("wheel", (event) => this.handleWheel(event), { passive: false });
     scroll.addEventListener("scroll", () => this.scheduleDraw(), { passive: true });
@@ -138,6 +144,7 @@ export class TimelineView {
   }
 
   setProject(project) {
+    this.snapGuide = null;
     this.zoomFocusPending = false;
     this.cancelGesture(false);
     this.cancelPendingCut();
@@ -155,6 +162,7 @@ export class TimelineView {
     if (!["select", "range", "blade", "remove_between", "move"].includes(tool)) return false;
     this.cancelGesture();
     this.cancelPendingCut();
+    this.snapGuide = null;
     this.tool = tool;
     this.canvas.style.cursor = tool === "select" ? "default" : "crosshair";
     this.scheduleDraw();
@@ -183,6 +191,11 @@ export class TimelineView {
       : (this.getTrackClips?.(this.project, this.editTarget) || []);
   }
 
+  lockedTargets(target = this.editTarget) {
+    return ["A", "B"].filter(slot => this.project?.sources?.[slot]
+      && this.project?.manual?.track_locks?.[slot] === true && (target === "edit" || target === slot));
+  }
+
   trackLane(slot) {
     if (this.project?.manual?.sequence) { const top = slot === "B" ? 92 : 36; return { top, bottom: top + 48 }; }
     const compact = Boolean(this.scroll.closest?.(".studio-timeline-dock"));
@@ -208,6 +221,8 @@ export class TimelineView {
 
   setSnapping(enabled) {
     this.snapping = Boolean(enabled);
+    this.snapGuide = null;
+    this.scheduleDraw();
     this.onToolStateChange?.();
   }
 
@@ -221,7 +236,7 @@ export class TimelineView {
 
   cutOutAt(time) {
     const duration = timelineDuration(this.project);
-    if (this.tool !== "remove_between" || !this.project?.draft || !this.onEdit || this.editPending || !this.canEdit()
+    if (this.tool !== "remove_between" || !this.project?.draft || !this.onEdit || this.editPending || !this.canEdit() || this.lockedTargets().length
       || !Number.isFinite(time) || time < 0 || time > duration) return false;
     if (this.cutAnchor == null) {
       this.clearSelection();
@@ -254,7 +269,7 @@ export class TimelineView {
     const oldZoom = this.zoom;
     this.zoom = Math.max(1, Math.min(16, Number(value) || 1));
     if (Math.abs(oldZoom - this.zoom) < .001) return;
-    // All zoom controls target the yellow playhead, not the mouse or the
+    // All zoom controls target the playhead, not the mouse or the
     // viewport's old left edge. Apply after canvas sizing, even if playback
     // or pointer events replace this scheduled frame before it is painted.
     this.zoomFocusPending = true;
@@ -295,8 +310,9 @@ export class TimelineView {
   }
 
   updateAccessiblePlayhead() {
-    this.canvas.setAttribute("aria-valuenow", String(Math.round(this.playhead * 10) / 10));
-    this.canvas.setAttribute("aria-valuetext", formatTime(this.playhead, true));
+    const precise = this.project?.manual?.sequence || this.sourceReview;
+    this.canvas.setAttribute("aria-valuenow", String(precise ? this.playhead : Math.round(this.playhead * 10) / 10));
+    this.canvas.setAttribute("aria-valuetext", precise ? `${formatFrameTime(this.playhead, 1 / sequenceFrame(this.project))} at ${Math.round(1 / sequenceFrame(this.project))} FPS` : formatTime(this.playhead, true));
   }
 
   setSelection(selection, notify = true, asRange = false) {
@@ -350,6 +366,211 @@ export class TimelineView {
       this.images = images;
       this.scheduleDraw();
     }
+    this.mediaImages ||= new Map();
+    const extraUrls = [...(this.project?.sources?.B?.thumbnail_urls || []),
+      ...Object.values(this.project?.assets || {}).map(asset => asset.thumbnail_url).filter(Boolean)];
+    for (const url of extraUrls) if (!this.mediaImages.has(url)) {
+      this.mediaImages.set(url, null);
+      const image = new Image(); image.onload = () => { this.mediaImages.set(url,image); this.scheduleDraw(); }; image.src = url;
+    }
+  }
+
+  baseHeight() {
+    if (this.project?.manual?.sequence) return this.project.sources?.B ? 230 : 174;
+    return (this.sourceReview || this.scroll.closest?.('.studio-timeline-dock') ? 180 : 310) + (this.hasTrackLanes() ? 68 : 0);
+  }
+
+  mediaRows() {
+    if (this.sourceReview) return [];
+    const rows = [];
+    for (const clip of [...(this.project?.manual?.media_clips || []), ...(this.project?.manual?.text_clips || [])]) {
+      const text = clip.id?.startsWith('text_');
+      const asset = this.project.assets?.[clip.asset_id]; if (!asset && !text) continue;
+      if (!Number.isFinite(clip.start) || !Number.isFinite(clip.end) || clip.end <= clip.start) continue;
+      const group = text ? clip.kind : asset.kind === 'audio' ? (clip.role || 'music') : 'visual';
+      let row = rows.find(row => row.group === group && row.clips.every(item => item.end <= clip.start || item.start >= clip.end));
+      if (!row) { row = {group,type:text ? 'text' : asset.kind === 'audio' ? 'audio' : 'visual',clips:[]}; rows.push(row); }
+      row.clips.push(clip);
+    }
+    let top = this.baseHeight();
+    return rows.map(row => {
+      const height = row.type === 'visual' ? 60 : row.type === 'audio' ? 56 : 44;
+      const kinds = row.type === 'visual' ? new Set(row.clips.map(clip => this.project.assets[clip.asset_id].kind)) : null;
+      const label = row.type === 'visual' ? kinds.size === 1 ? [...kinds][0].toUpperCase() : 'VIDEO / IMAGE'
+        : ({music:'MUSIC',voice:'VOICEOVER',effects:'EFFECTS',title:'TEXT',caption:'CAPTIONS'}[row.group] || 'TEXT');
+      const lane = {...row,label,height,top,bottom:top+height};
+      top = lane.bottom;
+      return lane;
+    });
+  }
+
+  mediaLayout() {
+    const rows = this.mediaRows();
+    const top = rows.at(-1)?.bottom ?? this.baseHeight();
+    const caption = (this.project?.settings?.burn_captions !== false || this.project?.settings?.captions)
+      && this.project?.analysis?.transcript?.segments?.length ? {top,bottom:top+30,height:30,label:'CAPTIONS'} : null;
+    return {rows,caption,height:caption?.bottom ?? top};
+  }
+
+  mediaAtEvent(event) {
+    const y = event.clientY-this.canvas.getBoundingClientRect().top, time=this.timeFromEvent(event);
+    const row = this.mediaRows().find(row=>y>=row.top && y<row.bottom);
+    const clip = row?.clips.find(clip=>time>=clip.start && time<clip.end);
+    return clip ? {clip,row} : null;
+  }
+
+  revealMedia(id) {
+    const row = this.mediaRows().find(row => row.clips.some(clip => clip.id === id));
+    if (!row) return;
+    if (row.top < this.scroll.scrollTop) this.scroll.scrollTop = row.top;
+    else if (row.bottom > this.scroll.scrollTop + this.scroll.clientHeight)
+      this.scroll.scrollTop = Math.max(0, row.bottom - this.scroll.clientHeight + 8);
+  }
+
+  drawMedia(ctx, px, width, layout = this.mediaLayout()) {
+    const left = this.scroll.scrollLeft || 0, right=left+this.scroll.clientWidth;
+    for (const row of layout.rows) {
+      ctx.fillStyle='#102027'; ctx.fillRect(0,row.top,width,row.height-4);
+      for (const saved of row.clips) {
+        const clip=this.gesture?.media?.id === saved.id ? {...saved,...this.gesture.patch} : saved;
+        const asset=clip.id?.startsWith('text_') ? {kind:'text',name:clip.text} : this.project.assets[clip.asset_id], x=clip.start*px, w=(clip.end-clip.start)*px;
+        if (x+w<left || x>right) continue;
+        ctx.fillStyle=asset.kind==='text' ? (clip.kind==='caption' ? '#6b5722' : '#4a3fa0') : asset.kind==='audio' ? (clip.role==='voice' ? '#563c93' : clip.role==='music' ? '#25458c' : '#245a4b') : '#245553'; ctx.fillRect(x,row.top+1,w,row.height-6);
+        const image=this.mediaImages?.get(asset.thumbnail_url);
+        ctx.save(); ctx.beginPath(); ctx.rect(x+1,row.top+2,Math.max(0,w-2),row.height-8); ctx.clip();
+        if(image) {
+          const imageHeight=row.height-8,imageWidth=imageHeight*(Number(image.width)||60)/Math.max(1,Number(image.height)||38);
+          ctx.globalAlpha=.7;
+          for(let ix=Math.max(x,left); ix<x+w && ix<right;ix+=imageWidth+2) ctx.drawImage(image,ix,row.top+2,imageWidth,imageHeight);
+          ctx.globalAlpha=1;
+        }
+        const waveform=asset.waveform || [];
+        if(waveform.length && asset.kind==='audio') {
+          const waveTop=row.top+18,waveBottom=row.bottom-7,mid=(waveTop+waveBottom)/2,maxAmp=(waveBottom-waveTop)/2;
+          ctx.strokeStyle='#86dcc0'; ctx.beginPath();
+          for(let ix=Math.max(x,left);ix<Math.min(x+w,right);ix+=3) {
+            const source=Number(clip.source_start||0)+(ix/px-clip.start);
+            const sourceEnd=Number(clip.source_start||0)+(Math.min(ix+3,x+w,right)/px-clip.start);
+            const binDuration=Math.max(.001,Number(asset.duration)||0)/waveform.length;
+            const first=Math.max(0,Math.floor(source/binDuration)),last=Math.min(waveform.length-1,Math.ceil(sourceEnd/binDuration)-1);
+            // Keep the strongest real sample covered by this pixel bucket;
+            // point sampling can hide short transients at Fit/low zoom.
+            let value=0;
+            for(let bin=first;bin<=last;bin++) value=Math.max(value,Math.abs(Number(waveform[bin])||0));
+            const amp=Math.min(maxAmp,value*maxAmp); ctx.moveTo(ix,mid-amp); ctx.lineTo(ix,mid+amp);
+          } ctx.stroke();
+        }
+        ctx.fillStyle='rgba(0,0,0,.75)'; ctx.fillRect(Math.max(x,left),row.top+2,Math.min(w,300),14);
+        ctx.fillStyle='#f0edf5'; ctx.font='10px ui-monospace, monospace';
+        const nameX=Math.max(x+5,left+(this.headersActive ? 6 : ctx.measureText(row.label).width+22));
+        ctx.fillText(`${asset.kind==='text' ? clip.kind==='title' ? 'Text' : 'Caption' : asset.kind==='audio' ? clip.role || 'music' : asset.kind} · ${asset.name}${Number.isFinite(clip.speed)&&clip.speed!==1 ? ` · ${clip.speed}×` : ''}`,nameX,row.top+12);
+        ctx.strokeStyle='#d4c84f';ctx.beginPath();
+        if(clip.fade_in>0){ctx.moveTo(x,row.bottom-6);ctx.lineTo(x+clip.fade_in*px,row.top+18);}
+        if(clip.fade_out>0){ctx.moveTo(x+w-clip.fade_out*px,row.top+18);ctx.lineTo(x+w,row.bottom-6);}ctx.stroke();
+        ctx.restore();
+        ctx.strokeStyle=this.mediaSelection===clip.id ? '#ffe174':'#b8a4d1'; ctx.lineWidth=this.mediaSelection===clip.id ? 2:1; ctx.strokeRect(x+.5,row.top+1.5,Math.max(0,w-1),row.height-7);
+        if(this.mediaSelection===clip.id){ctx.fillStyle='#fff';ctx.fillRect(x,row.top+18,3,row.height-26);ctx.fillRect(x+w-3,row.top+18,3,row.height-26);}
+      }
+    }
+    if(layout.caption) {
+      const {top,height}=layout.caption;
+      ctx.fillStyle='#141d24';ctx.fillRect(0,top,width,height-2);
+      for(const caption of this.audioTimelineRanges(this.project.analysis.transcript.segments)) {
+        const x=caption.start*px,w=(caption.end-caption.start)*px;
+        if(x+w<left || x>right)continue;
+        ctx.fillStyle='#6b5722';ctx.fillRect(x+1,top+1,Math.max(1,w-2),height-4);ctx.strokeStyle='#c9a94a';ctx.strokeRect(x+1.5,top+1.5,Math.max(0,w-3),height-5);
+        ctx.save();ctx.beginPath();ctx.rect(x+2,top,Math.max(0,w-4),height-2);ctx.clip();ctx.fillStyle='#eef3ff';ctx.font='10px sans-serif';ctx.fillText(`Cc ${caption.text}`,Math.max(x+4,left+this.labelInset(70)),top+17);ctx.restore();
+      }
+    }
+  }
+
+  labelInset(width) { return this.headersActive ? 8 : width; }
+
+  // Studio track headers: an HTML column beside the scrolling canvas, aligned to
+  // the lane geometry drawn below. Lock and mute proxy the existing Edit and
+  // mixer controls, so each setting keeps one source of truth.
+  trackHeaderColumn() {
+    if (this.headerColumn !== undefined) return this.headerColumn;
+    this.headerColumn = null;
+    const element = typeof Element !== "undefined" && this.scroll instanceof Element ? this.scroll : null;
+    if (!element || this.sourceReview || !element.closest(".studio-timeline-dock") || !element.parentNode) return null;
+    const body = document.createElement("div"), column = document.createElement("div"), rows = document.createElement("div");
+    body.className = "timeline-body"; column.className = "timeline-track-headers"; rows.className = "timeline-track-rows";
+    column.setAttribute("role", "group"); column.setAttribute("aria-label", "Tracks");
+    column.append(rows); element.parentNode.insertBefore(body, element); body.append(column, element);
+    element.addEventListener("scroll", () => { rows.style.transform = `translateY(${-element.scrollTop}px)`; }, { passive: true });
+    column.addEventListener("click", (event) => {
+      const button = event.target.closest?.("button[data-proxy]");
+      const target = button && document.querySelector(button.dataset.proxy);
+      if (target && !target.disabled) { target.click(); this.scheduleDraw(); }
+    });
+    this.headerColumn = { rows, items: new Map() };
+    return this.headerColumn;
+  }
+
+  laneGuide(layout) {
+    const lanes = [], sequence = Boolean(this.project?.manual?.sequence), twoSources = Boolean(this.project?.sources?.B);
+    const video = (slot) => {
+      if (!this.project?.sources?.[slot]) return;
+      const { top, bottom } = this.trackLane(slot);
+      lanes.push({ key: `video-${slot}`, label: `Video ${slot}`, top, height: bottom - top, lock: slot, active: this.editTarget === slot || (sequence && this.editTarget === "edit") });
+    };
+    if (sequence) {
+      video("A"); video("B");
+      lanes.push({ key: "layout", label: "Layout", top: twoSources ? 152 : 96, height: 22 });
+      lanes.push({ key: "audio", label: "Original", top: twoSources ? 186 : 130, height: 26, mute: "source" });
+    } else {
+      const shift = this.hasTrackLanes() ? 68 : 0;
+      lanes.push({ key: "edit", label: "Edit", top: 72, height: 28, active: this.editTarget === "edit" });
+      if (this.hasTrackLanes()) { video("A"); video("B"); }
+      lanes.push({ key: "layout", label: "Layout", top: 104 + shift, height: 26 });
+      lanes.push({ key: "audio", label: "Original", top: 134 + shift, height: 38, mute: "source" });
+    }
+    const names = { music: "Music", voice: "Voiceover", effects: "Effects", title: "Text", caption: "Captions" };
+    layout.rows.forEach((row, index) => lanes.push({
+      key: `row-${index}-${row.group}`, label: row.type === "visual" ? (row.label === "IMAGE" ? "Images" : "Overlay") : names[row.group] || "Text",
+      top: row.top, height: row.height - 4, mute: row.type === "audio" && names[row.group] && row.group !== "title" && row.group !== "caption" ? row.group : null,
+    }));
+    if (layout.caption) lanes.push({ key: "captions", label: "Captions", top: layout.caption.top, height: layout.caption.height - 2 });
+    return lanes;
+  }
+
+  syncTrackHeaders(layout, height) {
+    const headers = this.trackHeaderColumn();
+    if (!headers) return false;
+    const seen = new Set();
+    headers.rows.style.height = `${height}px`;
+    for (const lane of this.laneGuide(layout)) {
+      seen.add(lane.key);
+      let item = headers.items.get(lane.key);
+      if (!item) {
+        item = document.createElement("div"); item.className = "track-header";
+        const name = document.createElement("span"), actions = document.createElement("span");
+        name.className = "track-name"; actions.className = "track-actions";
+        item.append(name, actions); headers.rows.append(item); headers.items.set(lane.key, item);
+      }
+      item.style.top = `${lane.top}px`; item.style.height = `${lane.height}px`;
+      item.classList.toggle("active", Boolean(lane.active));
+      item.dataset.lane = lane.key.replace(/-.*$/, "");
+      if (item.firstChild.textContent !== lane.label) item.firstChild.textContent = lane.label;
+      this.syncHeaderButton(item.lastChild, "lock", lane.lock ? `#trackLock${lane.lock}` : null, lane.label);
+      this.syncHeaderButton(item.lastChild, "mute", lane.mute ? `[data-mute="${lane.mute}"]` : null, lane.label);
+    }
+    for (const [key, item] of headers.items) if (!seen.has(key)) { item.remove(); headers.items.delete(key); }
+    return true;
+  }
+
+  syncHeaderButton(container, kind, selector, label) {
+    let button = container.querySelector(`[data-kind="${kind}"]`);
+    const target = selector ? document.querySelector(selector) : null;
+    if (!target || target.hidden) { button?.remove(); return; }
+    if (!button) { button = document.createElement("button"); button.type = "button"; button.dataset.kind = kind; container.append(button); }
+    const pressed = target.getAttribute("aria-pressed") === "true";
+    const name = `${kind === "lock" ? (pressed ? "Unlock" : "Lock") : (pressed ? "Unmute" : "Mute")} ${label}`;
+    button.dataset.proxy = selector;
+    button.setAttribute("aria-pressed", String(pressed));
+    button.disabled = Boolean(target.disabled);
+    if (button.getAttribute("aria-label") !== name) { button.setAttribute("aria-label", name); button.title = name; }
   }
 
   geometry() {
@@ -377,8 +598,9 @@ export class TimelineView {
     this.compact = this.sourceReview || Boolean(this.scroll.closest?.(".studio-timeline-dock"));
     const sequence = Boolean(this.project?.manual?.sequence);
     const extra = !sequence && this.hasTrackLanes() ? 68 : 0;
-    const cssHeight = sequence ? (this.project.sources?.B ? 230 : 174) : (this.compact ? 180 : 310) + extra;
-    const dpr = Math.min(1.5, window.devicePixelRatio || 1);
+    const mediaLayout = this.mediaLayout(), cssHeight = mediaLayout.height;
+    this.headersActive = this.syncTrackHeaders(mediaLayout, cssHeight);
+    const dpr = Math.min(1.5, window.devicePixelRatio || 1, Math.sqrt(16000000/Math.max(1,width*cssHeight)));
     this.canvas.style.width = `${width}px`;
     this.canvas.style.height = `${cssHeight}px`;
     const targetWidth = Math.max(1, Math.floor(width * dpr));
@@ -392,7 +614,7 @@ export class TimelineView {
     }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, width, cssHeight);
-    ctx.fillStyle = "#081013";
+    ctx.fillStyle = "#10181e";
     ctx.fillRect(0, 0, width, cssHeight);
 
     this.drawRuler(ctx, duration, width, px);
@@ -406,15 +628,17 @@ export class TimelineView {
     this.drawLayouts(ctx, px);
     this.drawWaveform(ctx, px, width);
     ctx.restore();
-    this.drawLabels(ctx);
+    this.drawMedia(ctx,px,width,mediaLayout);
     if (this.selection) this.drawSelection(ctx, this.selection, px, cssHeight);
     if (this.cutAnchor != null) this.drawPendingCut(ctx, px, cssHeight);
+    if (!this.headersActive) this.drawLabels(ctx,mediaLayout);
     if (this.hoverTime != null) this.drawHover(ctx, this.hoverTime, px, cssHeight);
     this.drawPlayhead(ctx, px, cssHeight);
+    if (this.snapGuide) this.drawSnapGuide(ctx, px, cssHeight);
   }
 
   drawRuler(ctx, duration, width, px) {
-    ctx.fillStyle = "#0d181c";
+    ctx.fillStyle = "#151e25";
     ctx.fillRect(0, 0, width, 30);
     const ideal = 92 / px;
     const steps = [.25,.5,1,2,5,10,15,30,60,120,300,600];
@@ -493,13 +717,23 @@ export class TimelineView {
         const x = clip.start * px, width = (clip.end - clip.start) * px;
         ctx.fillStyle = slot === "A" ? "#23616d" : "#5e4580";
         ctx.fillRect(x + 1, top + 2, Math.max(1, width - 2), h - 4);
+        const thumbUrls=this.project.sources?.[slot]?.thumbnail_urls || [];
+        const frames=slot==='A' ? this.images : thumbUrls.map(url=>this.mediaImages?.get(url));
+        if(frames?.some(Boolean)) {
+          ctx.save();ctx.beginPath();ctx.rect(x+1,top+2,Math.max(0,width-2),h-4);ctx.clip();ctx.globalAlpha=.85;
+          for(let ix=Math.max(x,viewportLeft);ix<x+width && ix<viewportLeft+this.scroll.clientWidth;ix+=64) {
+            const sourceTime=clip.source_start+(ix/px-clip.start)*(clip.video_speed||1);
+            const index=Math.min(frames.length-1,Math.max(0,Math.floor(sourceTime/Math.max(.001,this.project.sources[slot].duration)*frames.length)));
+            if(frames[index])ctx.drawImage(frames[index],ix,top+2,64,h-4);
+          }ctx.restore();
+        }
         ctx.strokeStyle = active ? "#d3f4f4" : (slot === "A" ? "#44b9c6" : "#ab8bce");
         ctx.lineWidth = 1; ctx.strokeRect(x + .5, top + 2.5, Math.max(0, width - 1), h - 5);
         if (width > 65) {
           ctx.save(); ctx.beginPath(); ctx.rect(x + 3, top, width - 6, h); ctx.clip();
           ctx.fillStyle = "#eef5f7"; ctx.font = "10px ui-monospace, monospace";
           const clipNumber = clipIndex + 1;
-          ctx.fillText(`${slot}${clipNumber} · ${formatTime(clip.source_start, true)} · ${(clip.end - clip.start).toFixed(1)}s`, Math.max(x + 8, viewportLeft + 64), top + (h > 40 ? 29 : 19));
+          ctx.fillText(`${slot}${clipNumber} · ${formatTime(clip.source_start, true)} · ${(clip.end - clip.start).toFixed(1)}s${clip.video_speed && clip.video_speed!==1 ? ` · ${clip.video_speed}× picture` : ''}`, Math.max(x + 8, viewportLeft + this.labelInset(64)), top + (h > 40 ? 29 : 19));
           ctx.restore();
         }
       }
@@ -517,9 +751,6 @@ export class TimelineView {
           ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, bottom); ctx.stroke();
         }
       }
-      ctx.fillStyle = "rgba(8,16,19,.94)"; ctx.fillRect(viewportLeft + 4, top + 4, 52, 21);
-      ctx.fillStyle = active ? "#ffffff" : "#8da1a6";
-      ctx.font = "700 9px ui-monospace, monospace"; ctx.fillText(`VIDEO ${slot}`, viewportLeft + 9, top + 18);
     }
   }
 
@@ -629,7 +860,7 @@ export class TimelineView {
       ctx.fillStyle = ["A", "screen"].includes(camera) ? "#44b9c6" : ["B", "camera"].includes(camera) ? "#9676bd" : "#c9b62c";
       ctx.globalAlpha = .82; ctx.fillRect(x, y, width, 22); ctx.globalAlpha = 1;
       // Clip labels to their own scene, especially on long/zoomed-out sources.
-      const labelX = Math.max(x + 6, (this.scroll.scrollLeft || 0) + 70);
+      const labelX = Math.max(x + 6, (this.scroll.scrollLeft || 0) + this.labelInset(70));
       if (width > 38 && labelX < x + width - 12) {
         ctx.save(); ctx.beginPath(); ctx.rect(x + 2, y, Math.max(0, width - 4), 22); ctx.clip();
         ctx.fillStyle = "#081013"; ctx.font = "700 9px ui-monospace, monospace";
@@ -640,25 +871,68 @@ export class TimelineView {
     }
   }
 
+  waveformProfile() {
+    const project = this.project;
+    const requested = String(this.getAudioSlot?.(project) || project?.manual?.source_mixer?.audio_slot || project?.settings?.audio_source || "A").toUpperCase();
+    let slot = ["A", "B"].includes(requested) ? requested : "A";
+    if (!project?.sources?.[slot] || project.sources[slot].has_audio === false) {
+      slot = ["A", "B"].find(key => project?.sources?.[key] && project.sources[key].has_audio !== false) || slot;
+    }
+    const source = project?.sources?.[slot];
+    if (!source || source.has_audio === false) return { slot, profile: null, state: "no-audio", native: true };
+    // Upload preparation measures each original source, even in a manual edit
+    // that has never run Director. Its timestamps are already source-native.
+    const prepared = project?.pre_analysis?.audio?.[slot];
+    if (prepared) return { slot, profile: prepared, state: prepared.available === false ? "unavailable" : prepared.waveform?.length ? "ready" : "empty", native: true };
+    const analyzed = String(project?.analysis?.audio_source || project?.draft?.audio_source || "A").toUpperCase();
+    const legacy = slot === analyzed ? project?.analysis?.audio : null;
+    if (legacy) return { slot, profile: legacy, state: legacy.available === false ? "unavailable" : legacy.waveform?.length ? "ready" : "empty", native: false };
+    return { slot, profile: null, state: source.preparation_error ? "unavailable" : source.audio_profile_ready === false ? "pending" : "empty", native: true };
+  }
+
+  waveformRanges(profile = this.waveformProfile()) {
+    const bins = profile.profile?.waveform;
+    if (profile.state !== "ready" || !Array.isArray(bins)) return [];
+    return this.sourceTimelineRanges(bins, profile.slot, profile.native ? 0 : profile.slot === "B" ? Number(this.project?.analysis?.audio_timeline_offset) || 0 : 0);
+  }
+
   drawWaveform(ctx, px, width) {
-    const bins = this.audioTimelineRanges(this.project?.analysis?.audio?.waveform || []);
+    const profile = this.waveformProfile(), bins = this.waveformRanges(profile);
     const y = this.project?.manual?.sequence ? (this.project.sources?.B ? 186 : 130) : this.compact ? 140 : 230, height = this.compact || this.project?.manual?.sequence ? 26 : 54, mid = y + height / 2;
-    ctx.strokeStyle = "rgba(226,235,238,.64)";
+    const left = Math.max(0, this.scroll.scrollLeft || 0), right = Math.min(width, left + (this.scroll.clientWidth || width));
+    ctx.fillStyle = "rgba(47,176,138,.14)";
+    ctx.fillRect(0, y, Math.min(width, timelineDuration(this.project) * px), height);
+    ctx.strokeStyle = "rgba(235,243,245,.22)";
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(left, mid); ctx.lineTo(right, mid); ctx.stroke();
+    ctx.strokeStyle = "#3fd09e";
     ctx.lineWidth = 1;
     ctx.beginPath();
     if (bins.length) {
       for (const bin of bins) {
-        const start = Number(bin.start || 0), end = Number(bin.end || start);
+        const start = Number(bin.start), end = Number(bin.end);
+        if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start || end * px < left || start * px > right) continue;
         const x = ((start + end) / 2) * px;
-        const rms = Math.max(-72, Math.min(0, Number(bin.rms_dbfs ?? -72)));
-        const peak = Math.max(-72, Math.min(0, Number(bin.peak_dbfs ?? rms)));
-        const amp = Math.max(2, ((rms + 72) / 72) * height * .42);
+        const rmsValue = Number(bin.rms_dbfs), peakValue = Number(bin.peak_dbfs ?? bin.rms_dbfs);
+        if (!Number.isFinite(rmsValue) || !Number.isFinite(peakValue)) continue;
+        const rms = Math.max(-72, Math.min(0, rmsValue)), peak = Math.max(-72, Math.min(0, peakValue));
+        const amp = ((rms + 72) / 72) * height * .42;
         const peakAmp = Math.max(amp, ((peak + 72) / 72) * height * .48);
-        ctx.moveTo(x, mid - amp); ctx.lineTo(x, mid + amp);
-        if (peakAmp > amp + 3) { ctx.moveTo(x, mid - peakAmp); ctx.lineTo(x, mid - amp - 1); }
+        const drawBin = position => {
+          if (amp > 0) { ctx.moveTo(position, mid - amp); ctx.lineTo(position, mid + amp); }
+          if (peakAmp > amp + 1) { ctx.moveTo(position, mid - peakAmp); ctx.lineTo(position, mid - amp); }
+        };
+        if (x >= left && x <= right) drawBin(x);
+        // A zoomed-in measurement occupies its true time span. Do not invent
+        // extra samples or leave wide gaps between the existing measured bins.
+        if ((end - start) * px > 3) {
+          for (let position = Math.ceil(Math.max(start * px, left) / 2) * 2; position < Math.min(end * px, right); position += 2) drawBin(position);
+        }
       }
     } else {
-      ctx.moveTo(0, mid); ctx.lineTo(width, mid);
+      const message = profile.state === "no-audio" ? "Source has no audio" : profile.state === "pending" ? "Measuring source audio\u2026" : profile.state === "unavailable" ? "Source waveform unavailable" : profile.state === "ready" ? "No source audio in this edit" : "No waveform data";
+      ctx.fillStyle = "#aebbc0"; ctx.font = "10px ui-monospace, monospace";
+      ctx.fillText(message, left + this.labelInset(74), mid + 3);
     }
     ctx.stroke();
   }
@@ -670,11 +944,19 @@ export class TimelineView {
     const selected = String(project.manual?.source_mixer?.audio_slot || project.settings?.audio_source || "A");
     if (selected !== analyzed) return [];
     const offset = selected === "B" ? Number(project.analysis?.audio_timeline_offset) || 0 : 0;
+    return this.sourceTimelineRanges(ranges, selected, offset);
+  }
+
+  sourceTimelineRanges(ranges, slot, offset = 0) {
+    if (!ranges.length || !this.getTrackClips || !this.project?.manual?.source_tracks) return ranges;
+    const project = this.project, clips = this.getTrackClips(project, slot);
     if (this.audioCacheProject !== project) { this.audioRangeCache = new Map(); this.audioCacheProject = project; }
-    const signature = `${selected}:${offset}`;
+    // Drag/trim previews can mutate the same project object. Include clip
+    // geometry so a repaint cannot reuse data from before the gesture.
+    const signature = `${slot}:${offset}:${clips.map(clip => `${clip.start},${clip.end},${clip.source_start}`).join(";")}`;
     const cached = this.audioRangeCache.get(ranges);
     if (cached?.signature === signature) return cached.mapped;
-    const mapped = this.getTrackClips(project, selected).flatMap((clip) => ranges.map((item) => {
+    const mapped = clips.flatMap((clip) => ranges.map((item) => {
       const start = Math.max(Number(item.start) - offset, clip.source_start);
       const end = Math.min(Number(item.end) - offset, clip.source_start + clip.end - clip.start);
       return { ...item, start: clip.start + start - clip.source_start, end: clip.start + end - clip.source_start };
@@ -683,13 +965,24 @@ export class TimelineView {
     return mapped;
   }
 
-  drawLabels(ctx) {
+  drawLabels(ctx, layout = this.mediaLayout()) {
     ctx.font = "700 9px ui-monospace, SFMono-Regular, Consolas, monospace";
     const labels = this.compact ? [["EDIT",80],["LAYOUT",123],["AUDIO",144]] : [["EDIT",127],["LAYOUT",199],["AUDIO",232]];
     if (this.sourceReview) labels.splice(0, labels.length, ["SOURCE",80],["AUDIO",144]);
     if (this.project?.manual?.sequence) { labels.splice(0, labels.length, ["LAYOUT",this.project.sources?.B ? 167 : 111],["AUDIO",this.project.sources?.B ? 198 : 142]); }
     else if (this.hasTrackLanes()) { labels[1][1] += 68; labels[2][1] += 68; }
     const viewportLeft = this.scroll.scrollLeft || 0;
+    if (this.hasTrackLanes()) for (const slot of ["A", "B"]) {
+      if (this.project?.manual?.sequence && !this.project.sources?.[slot]) continue;
+      const {top} = this.trackLane(slot), protectedTrack = this.lockedTargets(slot).length > 0;
+      const active = this.editTarget === slot || (this.project?.manual?.sequence && this.editTarget === "edit");
+      ctx.fillStyle = "rgba(8,16,19,.94)"; ctx.fillRect(viewportLeft + 4, top + 4, protectedTrack ? 96 : 52, 21);
+      ctx.fillStyle = active ? "#ffffff" : "#8da1a6";
+      ctx.font = "700 9px ui-monospace, monospace"; ctx.fillText(`VIDEO ${slot}${protectedTrack ? " · LOCKED" : ""}`, viewportLeft + 9, top + 18);
+    }
+    labels.push(...layout.rows.map(row => [row.label,row.top+13]));
+    if (layout.caption) labels.push([layout.caption.label,layout.caption.top+17]);
+    ctx.font = "700 10px ui-monospace, monospace";
     for (const [label,y] of labels) {
       const width = ctx.measureText(label).width + 12;
       ctx.fillStyle = "rgba(9,11,13,.94)"; ctx.fillRect(viewportLeft + 4, y - 11, width, 17);
@@ -699,9 +992,9 @@ export class TimelineView {
 
   drawPlayhead(ctx, px, height) {
     const x = this.playhead * px;
-    ctx.strokeStyle = "#c9b62c"; ctx.lineWidth = 1.5;
+    ctx.strokeStyle = "#1bd9ce"; ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, height); ctx.stroke();
-    ctx.fillStyle = "#c9b62c";
+    ctx.fillStyle = "#1bd9ce";
     ctx.beginPath(); ctx.moveTo(x - 6, 0); ctx.lineTo(x + 6, 0); ctx.lineTo(x, 8); ctx.closePath(); ctx.fill();
   }
 
@@ -730,15 +1023,35 @@ export class TimelineView {
 
   drawHover(ctx, time, px, height) {
     if (this.gesture?.kind === "move" && Number.isFinite(this.gesture.moveStart)) time = this.gesture.moveStart;
+    if (this.gesture?.kind === "trim" && Number.isFinite(this.gesture.trimTime)) time = this.gesture.trimTime;
     const x = time * px;
     ctx.strokeStyle = "rgba(255,255,255,.28)"; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(x, 30); ctx.lineTo(x, height); ctx.stroke();
-    const label = `${this.gesture?.kind === "move" ? this.gesture.target === "edit" ? "Move together · " : `Move ${this.gesture.target} · ` : ""}${formatTime(time, true)}`;
+    const operation = this.gesture?.kind === "trim" ? `Trim ${this.gesture.edge} · `
+      : this.gesture?.kind === "move" ? this.gesture.target === "edit" ? "Move together · " : `Move ${this.gesture.target} · ` : "";
+    const stamp = this.project?.manual?.sequence || this.sourceReview ? formatFrameTime(time, 1 / sequenceFrame(this.project)) : formatTime(time, true);
+    const label = `${operation}${stamp}`;
     ctx.font = "10px ui-monospace, monospace";
-    const w = ctx.measureText(label).width + 12;
-    const labelX = Math.max(2, Math.min(this.geometry().width - w - 2, x - w / 2));
+    const left = this.scroll.scrollLeft || 0, viewport = this.scroll.clientWidth || this.geometry().viewport;
+    const w = Math.min(ctx.measureText(label).width + 12,Math.max(0,viewport-4));
+    const labelX = Math.max(left+2, Math.min(left+viewport-w-2, x-w/2));
+    ctx.save(); ctx.beginPath(); ctx.rect(labelX,31,w,20); ctx.clip();
     ctx.fillStyle = "#f4f7f7"; ctx.fillRect(labelX, 31, w, 20);
     ctx.fillStyle = "#081013"; ctx.fillText(label, labelX + 6, 45);
+    ctx.restore();
+  }
+
+  drawSnapGuide(ctx, px, height) {
+    const { time, label } = this.snapGuide, x = time * px;
+    ctx.save(); ctx.strokeStyle = "#a6f1ed"; ctx.lineWidth = 1.5; ctx.setLineDash([4, 3]);
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, height); ctx.stroke(); ctx.setLineDash([]);
+    const text = `Snap · ${label}`;
+    ctx.font = "11px ui-monospace, monospace";
+    const width = ctx.measureText(text).width + 12;
+    const left = this.scroll.scrollLeft || 0;
+    const labelX = Math.max(left + 2, Math.min(left + this.scroll.clientWidth - width - 2, x + 6));
+    ctx.fillStyle = "#a6f1ed"; ctx.fillRect(labelX, 4, width, 20);
+    ctx.fillStyle = "#081013"; ctx.fillText(text, labelX + 6, 18); ctx.restore();
   }
 
   drawPendingCut(ctx, px, height) {
@@ -815,18 +1128,67 @@ export class TimelineView {
       || (time === timelineDuration(this.project) ? clips.find((clip) => clip.end === time) : null);
   }
 
-  snappedTime(time, event) {
+  snapPoints() {
+    const duration = timelineDuration(this.project), g = this.gesture;
+    const moving = g?.kind === "move" ? g.clip : null;
+    const ripple = Boolean(moving && this.project?.manual?.sequence);
+    const length = moving ? moving.end - moving.start : 0;
+    const points = [{time: 0, label: "Start"}, {time: duration, label: "End"}];
+    if (ripple && this.editTarget === "edit") points[1].time -= length;
+    const addEdges = (clip, label, affected = false) => {
+      for (let time of [clip.start, clip.end]) {
+        if (moving && affected && time > moving.start && time < moving.end) continue;
+        if (ripple && affected && time >= moving.end) time -= length;
+        points.push({time, label});
+      }
+    };
+    if (!this.sourceReview && this.hasTrackLanes()) {
+      for (const slot of ["A", "B"]) {
+        if (!this.project.sources?.[slot]) continue;
+        const affected = this.editTarget === "edit" || this.editTarget === slot;
+        for (const clip of this.getTrackClips(this.project, slot)) {
+          if (affected && (moving || g?.kind === "trim") && clip.start >= g.clip.start && clip.end <= g.clip.end) continue;
+          addEdges(clip, `${slot} edit`, affected);
+        }
+      }
+    } else {
+      for (const clip of this.targetClips()) {
+        if (moving && clip.id === moving.id) continue;
+        addEdges(clip, "Edit", true);
+      }
+    }
+    if (!this.sourceReview) for (const clip of this.project?.manual?.media_clips || []) {
+      if (clip.id === g?.media?.id || !this.project.assets?.[clip.asset_id]) continue;
+      // Added media currently stays on its own edit clock even in Together
+      // moves. Do not advertise a shifted edge that the backend will not move.
+      addEdges(clip, this.project.assets[clip.asset_id].kind === "audio" ? "Audio edge" : "Media edge");
+    }
+    if (!this.sourceReview) for (const clip of this.project?.manual?.text_clips || []) {
+      if (clip.id !== g?.media?.id) addEdges(clip, clip.kind === 'title' ? 'Text edge' : 'Caption edge');
+    }
+    // Pointerdown seeks the preview. Keep the user's original yellow marker
+    // as the target throughout a drag rather than chasing that seek.
+    points.push({time: g?.snapPlayhead ?? this.playhead, label: "Playhead"});
+    return points.filter(point => Number.isFinite(point.time) && point.time >= 0 && point.time <= duration);
+  }
+
+  snappedTime(time, event, offsets = [0]) {
+    this.snapGuide = null;
     if (this.sourceReview) time = Math.max(0, Math.min(timelineDuration(this.project), Math.round(time / sequenceFrame(this.project)) * sequenceFrame(this.project)));
     if (!this.snapping || event.altKey) return time;
-    const { px, duration } = this.geometry();
+    const { px } = this.geometry();
     const threshold = Math.min(.5, 8 / Math.max(px, .0001));
-    const boundaries = [0, duration, ...this.targetClips().flatMap((clip) => [clip.start, clip.end])];
     let nearest = time, distance = threshold;
-    for (const boundary of boundaries) {
-      const delta = Math.abs(time - boundary);
-      if (delta <= distance) { nearest = boundary; distance = delta; }
+    for (const point of this.snapPoints()) for (const offset of offsets) {
+      const delta = Math.abs(time + offset - point.time);
+      if (delta <= distance) { nearest = point.time - offset; distance = delta; this.snapGuide = point; }
     }
     return nearest;
+  }
+
+  validateSnap(times) {
+    // Source limits, collisions and ripple clamping always win over magnets.
+    if (this.snapGuide && !times.some(time => Math.abs(time - this.snapGuide.time) < 1e-6)) this.snapGuide = null;
   }
 
   selectionEdge(event, time) {
@@ -839,6 +1201,7 @@ export class TimelineView {
   }
 
   trimTarget() {
+    if (this.lockedTargets().length) return null;
     if (!this.project?.manual?.sequence || this.tool !== "select" || !this.selection) return null;
     if ((this.selection.end-this.selection.start)*this.geometry().px < 22) return null; // Zoom in for small clip handles; its body must stay draggable.
     return this.targetClips().find(c=>Math.abs(c.start-this.selection.start)<1e-6 && Math.abs(c.end-this.selection.end)<1e-6) || null;
@@ -880,6 +1243,8 @@ export class TimelineView {
   }
 
   cancelGesture(notify = true) {
+    this.snapGuide = null;
+    if(this.gesture?.kind==='media')this.onMediaPreview?.(this.gesture.media.id,null);
     const gesture = this.gesture;
     if (!gesture) return false;
     this.gesture = null;
@@ -908,6 +1273,7 @@ export class TimelineView {
   }
 
   updatePointerCursor(event, time) {
+    if (this.inEditLane(event) && this.lockedTargets().length && this.tool !== "range") { this.canvas.style.cursor = "not-allowed"; return; }
     if (this.gesture?.kind === "move") { this.canvas.style.cursor = "grabbing"; return; }
     const hoverTarget = this.project?.manual?.sequence ? this.targetAtEvent(event) : null;
     const lane = this.inEditLane(event);
@@ -938,6 +1304,7 @@ export class TimelineView {
   }
 
   canSplitAt(time) {
+    if (this.lockedTargets().length) return false;
     time = this.splitTime(time);
     if (!this.project?.manual?.sequence || this.editTarget !== "edit") return this.canSplitClip(this.clipAt(time), time);
     // At an existing A cut, B can still run across the playhead (and vice
@@ -956,6 +1323,21 @@ export class TimelineView {
     this.canvas.focus?.({ preventScroll: true });
     try { this.canvas.setPointerCapture?.(event.pointerId); } catch (_) { /* A cancelled pointer may no longer be capturable. */ }
     const time = this.timeFromEvent(event);
+    this.snapGuide = null;
+    const media = this.mediaAtEvent(event);
+    if (media) {
+      this.mediaSelection=media.clip.id; this.onMediaSelect?.(media.clip.id);
+      if(this.tool==='blade'){
+        if(time-media.clip.start>=.08-1e-9 && media.clip.end-time>=.08-1e-9)this.onMediaAction?.('media_split',{clip_id:media.clip.id,time});
+        this.releasePointer(event.pointerId);return;
+      }
+      const px=this.geometry().px;
+      const edge=(media.clip.end-media.clip.start)*px>=22 ? (Math.abs(time-media.clip.start)*px<8 ? 'start' : Math.abs(time-media.clip.end)*px<8 ? 'end' : null) : null;
+      this.gesture={kind:'media',pointerId:event.pointerId,media:{...media.clip},startTime:time,edge,patch:{},snapPlayhead:this.playhead,
+        clientX:event.clientX,clientY:event.clientY,dragged:false,
+        previousSelection:this.selection ? {...this.selection} : null,previousRangeSelection:this.selectionIsRange};this.scheduleDraw();return;
+    }
+    this.mediaSelection=null;
     this.hoverTime = time;
     const target = this.targetAtEvent(event);
     // Editing scope is an explicit choice. Merely touching B must not turn a
@@ -966,10 +1348,13 @@ export class TimelineView {
     const edge = !event.shiftKey && !["blade", "remove_between", "move"].includes(this.tool) ? this.selectionEdge(event, time) : null;
     this.selectionCursor = null;
     this.selectionAnchor = null;
-    this.gesture = { pointerId: event.pointerId, previousSelection: this.selection ? { ...this.selection } : null, clientX: event.clientX, clientY: event.clientY, startTime: time, kind: "scrub" };
+    this.gesture = { pointerId: event.pointerId, previousSelection: this.selection ? { ...this.selection } : null, clientX: event.clientX, clientY: event.clientY, startTime: time, snapPlayhead: this.playhead, kind: "scrub" };
     this.gesture.previousRangeSelection = this.selectionIsRange;
     const trimEdge = this.trimEdgeAt(event,time);
-    if (trimEdge) {
+    if (lane && this.lockedTargets().length && this.tool !== "range" && !event.shiftKey) {
+      this.gesture.kind = "locked";
+      this.setSelection(this.selectableRangeAt(time), false);
+    } else if (trimEdge) {
       this.gesture.kind = "trim"; this.gesture.edge = trimEdge;
       this.gesture.clip = {...this.trimTarget()}; this.gesture.target = this.editTarget;
     } else if (lane && !event.shiftKey && (this.tool === "move" || (this.project?.manual?.sequence && this.tool === "select")) && (this.editTarget !== "edit" || this.project?.manual?.sequence) && this.clipAt(time)) {
@@ -1013,6 +1398,31 @@ export class TimelineView {
 
   pointerMove(event) {
     if (this.gesture && this.gesture.pointerId !== event.pointerId) return;
+    this.snapGuide = null;
+    if(this.gesture?.kind==='media') {
+      if (Math.hypot(event.clientX-this.gesture.clientX,event.clientY-this.gesture.clientY)>6) this.gesture.dragged=true;
+      if (!this.gesture.dragged) return; // Selecting near a magnet must not edit the media.
+      const g=this.gesture,clip=g.media,delta=this.timeFromEvent(event)-g.startTime,limit=timelineDuration(this.project);
+      const asset=this.project.assets?.[clip.asset_id],timed=!clip.id?.startsWith('text_') && asset?.kind!=='image',sourceStart=Number(clip.source_start)||0;
+      let patch;
+      if(g.edge==='start') {
+        const start=Math.max(0,timed ? clip.start-sourceStart : 0,Math.min(clip.end-.08,this.snappedTime(clip.start+delta,event)));
+        patch={start};
+        if(timed)patch.source_start=sourceStart+start-clip.start;
+        if(asset?.kind==='video')patch.video_source_start=Math.max(0,Number(clip.video_source_start ?? sourceStart)+(start-clip.start)*(clip.speed||1));
+      }
+      else if(g.edge==='end') {
+        const available=Number(asset?.duration),maximum=timed ? (Number.isFinite(available) ? Math.min(limit,clip.start+available-sourceStart) : clip.end) : limit;
+        patch={end:Math.max(clip.start+.08,Math.min(maximum,this.snappedTime(clip.end+delta,event)))};
+      }
+      else {const start=Math.max(0,Math.min(limit-(clip.end-clip.start),this.snappedTime(clip.start+delta,event,[0,clip.end-clip.start])));patch={start,end:start+clip.end-clip.start};}
+      this.validateSnap(g.edge ? [patch[g.edge]] : [patch.start,patch.end]);
+      const length=(patch.end ?? clip.end)-(patch.start ?? clip.start),fadeIn=Number(clip.fade_in)||0,fadeOut=Number(clip.fade_out)||0;
+      if(g.edge && fadeIn+fadeOut>length) {
+        const scale=length/(fadeIn+fadeOut);patch.fade_in=fadeIn*scale;patch.fade_out=fadeOut*scale;
+      }
+      g.patch=patch;this.onMediaPreview?.(clip.id,patch);this.scheduleDraw();return;
+    }
     const time = this.timeFromEvent(event);
     this.hoverTime = time;
     if (this.gesture && Math.hypot(event.clientX - this.gesture.clientX, event.clientY - this.gesture.clientY) > 6) this.gesture.dragged = true;
@@ -1025,7 +1435,8 @@ export class TimelineView {
     this.updatePointerCursor(event, time);
     if (this.gesture?.kind === "trim") {
       const {clip,edge} = this.gesture;
-      this.gesture.trimTime = this.trimEdgeTime(clip,edge,time);
+      this.gesture.trimTime = this.trimEdgeTime(clip,edge,this.snappedTime(time,event));
+      this.validateSnap([this.gesture.trimTime]);
       this.setSelection({...clip,[edge]:this.gesture.trimTime},false);
     }
     if (this.gesture?.kind === "move") {
@@ -1043,6 +1454,7 @@ export class TimelineView {
         ? rippleMoveStart(this.project,clip.start,clip.end,start,this.editTarget === "edit" ? null : this.editTarget,this.getTrackClips)
         : start;
       this.gesture.collision = !this.project?.manual?.sequence && this.targetClips().some((other) => other.id !== clip.id && other.start < start + clip.end - clip.start - .000001 && other.end > start + .000001);
+      this.validateSnap(this.gesture.collision ? [] : [this.gesture.moveStart]);
     }
     if (["clip", "layout"].includes(this.gesture?.kind) && Math.abs(event.clientX - this.gesture.clientX) > 3) {
       this.gesture.kind = "range";
@@ -1050,7 +1462,10 @@ export class TimelineView {
       this.selecting = true;
     }
     if (this.scrubbing || ["range", "edge", "blade", "remove_between"].includes(this.gesture?.kind)) this.seekGesture(time);
-    if (this.gesture?.kind === "range" && this.selectionAnchor != null) this.setSelection({ start: this.selectionAnchor, end: this.snappedTime(time, event) }, false, true);
+    if (this.gesture?.kind === "range" && this.selectionAnchor != null) {
+      this.setSelection({ start: this.selectionAnchor, end: this.snappedTime(time, event) }, false, true);
+      this.validateSnap(this.selection ? [this.selection.start, this.selection.end] : []);
+    }
     if (this.gesture?.kind === "edge") {
       const previous = this.gesture.previousSelection;
       const snapped = this.snappedTime(time, event);
@@ -1059,6 +1474,7 @@ export class TimelineView {
         ? { start: Math.min(snapped, previous.end - minimum), end: previous.end }
         : { start: previous.start, end: Math.max(snapped, previous.start + minimum) };
       this.setSelection(next, false, true);
+      this.validateSnap(this.selection ? [this.selection[this.gesture.edge]] : []);
     }
     this.scheduleDraw();
   }
@@ -1066,10 +1482,22 @@ export class TimelineView {
   pointerUp(event) {
     const gesture = this.gesture;
     if (!gesture || gesture.pointerId !== event.pointerId) return;
+    if(this.gesture?.kind==='media') {
+      this.pointerMove(event);
+      const g=this.gesture;this.gesture=null;this.releasePointer(event.pointerId);this.onMediaPreview?.(g.media.id,null);
+      this.snapGuide=null;
+      // The server derives the independent picture in-point from source_start.
+      // Keep that preview-only value out of the public media_update payload.
+      const patch={...g.patch};delete patch.video_source_start;
+      const changed=Object.entries(patch).some(([key,value])=>Math.abs(value-Number(g.media[key]||0))>1e-9);
+      if(changed && this.canEdit() && !this.editPending)Promise.resolve(this.onMediaEdit?.(g.media.id,patch)).catch(()=>{});
+      this.scheduleDraw();return;
+    }
     // Some devices coalesce the last pointermove into pointerup. Commit the
     // actual release position instead of leaving the preview one frame behind.
     this.pointerMove(event);
     this.gesture = null;
+    this.snapGuide = null;
     this.scrubbing = false;
     this.selecting = false;
     this.selectionAnchor = null;
@@ -1087,7 +1515,7 @@ export class TimelineView {
           : { action: "track_move", slot: gesture.target, clip_id: gesture.clip.id, start: gesture.moveStart });
       }
     }
-    if (["range", "edge", "clip", "layout"].includes(gesture.kind)) this.onSelectionChange?.(this.selection);
+    if (["range", "edge", "clip", "layout", "locked"].includes(gesture.kind)) this.onSelectionChange?.(this.selection);
     if (gesture.kind === "layout" && !gesture.dragged && this.canEdit()) this.onLayoutSelect?.({ ...gesture.layout });
     if (gesture.kind === "remove_between" && !gesture.dragged && this.inEditLane(event)) this.cutOutAt(this.timeFromEvent(event));
     if (gesture.kind === "blade" && !gesture.dragged && this.inEditLane(event) && this.canEdit()) {
@@ -1108,6 +1536,10 @@ export class TimelineView {
       event.preventDefault(); event.stopPropagation?.(); return;
     }
     if (!this.canEdit() || this.editPending || event.ctrlKey || event.metaKey || event.altKey) return;
+    if(this.mediaSelection && ['Delete','Backspace'].includes(event.key)) {
+      event.preventDefault();event.stopPropagation?.();
+      if(!event.repeat)this.onMediaAction?.('media_remove',{clip_id:this.mediaSelection});return;
+    }
     if (event.key === "Enter" && !event.shiftKey && this.tool === "remove_between") {
       event.preventDefault(); event.stopPropagation?.();
       if (!event.repeat) this.cutOutAt(this.playhead);
@@ -1156,6 +1588,15 @@ export class TimelineView {
       this.scroll.scrollLeft += event.deltaX + event.deltaY;
     }
   }
+}
+
+// Output frame time, not source timecode or drop-frame notation. All supported
+// project rates are integer FPS; keep the existing duration formatter intact.
+export function formatFrameTime(seconds, fps = 30) {
+  fps = [24, 25, 30, 50, 60].includes(Math.round(fps)) ? Math.round(fps) : 30;
+  const value = Number(seconds), total = Math.max(0, Math.round((Number.isFinite(value) ? value : 0) * fps));
+  const frames = total % fps, whole = Math.floor(total / fps);
+  return [Math.floor(whole / 3600), Math.floor(whole / 60) % 60, whole % 60, frames].map(part => String(part).padStart(2, "0")).join(":");
 }
 
 export function formatTime(seconds, withMillis = false) {

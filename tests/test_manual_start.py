@@ -74,6 +74,45 @@ def test_manual_start_preserves_two_source_roles_without_fake_undo(settings):
     assert value["manual"]["history"]["undo_count"] == 0
 
 
+@pytest.mark.parametrize("goal,aspect,explicit_layout,expected", [
+    ("short", "9:16", None, "stacked"),
+    ("short", "9:16", "auto", "screen"),
+    ("short", "9:16", "pip", "pip"),
+    ("short", "16:9", None, "screen"),
+    ("youtube", "16:9", None, "screen"),
+])
+def test_manual_start_default_reels_stack_preserves_explicit_and_youtube_choices(settings, goal, aspect, explicit_layout, expected):
+    value = project(settings)
+    value["settings"].update(goal=goal, aspect=aspect)
+    value["sources"]["B"] = copy.deepcopy(value["sources"]["A"])
+    if explicit_layout is not None:
+        value["manual"]["source_mixer"]["default_layout"] = explicit_layout
+    start_manual_draft(value)
+    assert value["draft"]["camera_plan"][0]["camera"] == expected
+    assert value["settings"]["aspect"] == aspect
+    assert value["manual"]["history"]["undo_count"] == 0
+
+
+@pytest.mark.parametrize("a_audio,b_audio,requested,expected", [
+    (False, True, "A", "B"),
+    (True, False, "B", "A"),
+    (True, True, "B", "B"),
+    (True, True, "invalid", "A"),
+    (False, False, "invalid", "A"),
+])
+def test_manual_start_without_mixer_uses_available_audio(settings, a_audio, b_audio, requested, expected):
+    value = project(settings)
+    value["settings"].update(goal="short", aspect="9:16", audio_source=requested)
+    value["sources"]["B"] = copy.deepcopy(value["sources"]["A"])
+    value["sources"]["A"]["has_audio"] = a_audio
+    value["sources"]["B"]["has_audio"] = b_audio
+    value["manual"].pop("source_mixer")
+    start_manual_draft(value)
+    assert value["manual"]["source_mixer"]["audio_slot"] == expected
+    assert value["draft"]["audio_source"] == expected
+    assert value["draft"]["camera_plan"][0]["camera"] == "stacked"
+
+
 def test_manual_start_api_validates_revision_and_works_with_ai_disabled(settings):
     app = create_app(settings)
     client = app.test_client()

@@ -1,6 +1,54 @@
 # Beta status and limitations
 
-**An exploratory Windows beta for feedback from creators and editors. Not a production release, security certification or promise of professional-quality automatic edits.** Public access to a download does not change those quality boundaries.
+**An exploratory Windows/macOS beta, with a Linux source development path, for feedback from creators and editors. Not a production release, security certification or promise of professional-quality automatic edits.** Public access to a download does not change those quality boundaries.
+
+## Continuity review quality pass - 2026-10-01
+
+Missing or contradictory AI continuity responses require review. Requested repairs are distinguished from changes that survive the final story selection; ignored or restored actions remain visible as unresolved. An explicit AI rebuild refreshes older reviews without repeating cached transcription or forcing model setup when opening a project. These are verified pipeline safeguards, not a claim that every preset produces a coherent finished story.
+
+## Chroma Key and AI draft controls - 2026-10-01
+
+- [Green screen / Chroma key](CHROMA_KEY.md) supports A/B and ready Media videos with independent saved settings. Media videos can reveal earlier layers and the moving main edit through the removed color. Color/image replacement remains available. Edited playback previews the saved key; an exact native-size FFmpeg frame refreshes after Apply. Original footage mode stays unkeyed. Browser edges can differ from the exact frame/export. Apply/Reset support Undo/Redo; missing media/filters are reported. Direct transparent A/B compositing and alpha-channel MP4 output are not supported. High tolerance warns when it can erase the foreground; older saved settings are preserved.
+- AI results keep an existing manual timeline until **Apply new AI draft** is confirmed; Undo restores it. Single-moment styles use their duration budget, while Clean VOD retains natural cleanup. Requested/selected Story models and an installed fallback are reported explicitly; missing models are not downloaded automatically.
+- These source changes require current-source and exact-package release checks. See the release manifest for the public build. No new representative Hebrew/English accuracy, semantic edit-quality or real-footage performance result is claimed here; native/manual platform limits below still apply.
+
+## Editor reliability, mixer and stabilization - 2026-09-30
+
+- The candidate passed **1,816 Python regressions** (3 skipped on Windows) and **538 frontend checks**. Python includes frontend wrappers, so these totals overlap. These local results used baseline `8a8c7e6957f02536e44701b27aee78a798c0fab5` plus the editor changes; the earlier commit does not already contain them.
+- Fixed sub-frame A/B availability boundaries rejecting edits during sequence materialization. Actual FFmpeg renders at 30/60 FPS verified the boundary behavior; explicit cuts, source endpoints, gaps and timing remain deliberate.
+- Manual projects and Original footage now use prepared waveforms for the correct A/B source without Director/AI analysis. Decoded audio padding no longer creates bins beyond source duration. FFmpeg/FFprobe text output is decoded as UTF-8 for Unicode media names.
+- The compact mixer shows measured browser sample peaks/dBFS. Pause/seek clear stale levels, Original follows the selected A/B audio, volume/mute persist, and Solo stays preview-only. These are preview meters, not calibrated loudness certification; export normalization can change final loudness.
+- **Media > Stabilize footage** creates a separate local MP4 asset with optional FFmpeg vidstab filters. It offers progress, cancellation, retry, download and reuse as added footage while preserving originals and the edit. It may zoom/crop edges and cannot repair every kind of shake, blur or rolling shutter. No AI, model download or upload is involved. See [stabilization details](STABILIZATION.md).
+- Local Chrome/Windows checks exercised waveforms, A/B review, zoom/scroll, live mixer levels and stabilization controls. Synthetic footage verified stabilization output/timing and unchanged originals. These are not clean-machine setup, representative real-footage quality or long-session benchmarks.
+- Earlier Mac automation passed for earlier release payloads. This editor revision requires current-source macOS 15 Apple Silicon/Intel checks before publication; [GitHub Actions](https://github.com/VanoPeradze/cutroom/actions/workflows/macos.yml) records the tested commit. Finder/Gatekeeper, Safari, real Ollama/cloud integrations and native Linux end-to-end testing remain unverified here.
+- The label stays **1.1 Beta** with a new manifest build ID/checksums. Download the new revision, extract it separately and back up projects before migration. Source/test success alone does not establish publication of the ZIP or website.
+
+## Project management and custom text — 2026-09-28
+
+- All 1,539 Python regressions and 516 frontend checks passed. Python includes frontend wrappers, so these totals overlap. Coverage includes project focus and revision conflicts, confirmed deletion, original-file preservation, subtitle parsing, text autosave, timeline bounds and export behavior. Tests used synthetic projects; no paid AI calls or user recordings were used.
+- An isolated browser project verified rename/search/delete cancellation, bilingual SRT import and replacement, immediate text edits, independent text dragging, Undo, reload persistence, source/edit preview switching and Space playback. Welcome, project dialogs and captions were checked at 390 pixels without page-level horizontal overflow. Stale layer selection is cleared so a second Delete cannot target a previously selected footage range.
+- The lobby and Projects expose Open editor, Rename and confirmed permanent Delete; Projects also searches and sorts names. Deleting refuses active work without cancelling it. The confirmation explains which imported copies, project files and CUTROOM exports are removed, and that original files outside CUTROOM remain untouched.
+- Custom titles/captions preview immediately, save after typing pauses and have editable timeline layers. UTF-8 SRT/VTT import is limited to 1 MiB and 2,000 cues; project text is limited to 2,000 items, 1,000 characters each and 16 simultaneous items. Imports keep text/timing, using CUTROOM's style presets instead of file-specific formatting.
+- Custom text uses edited-video time and always burns into the MP4, independently of AI subtitle burning. Optional SRT combines AI and custom captions, excluding titles. Text does not automatically ripple with A/B; shortening that would leave a layer past the new end is rejected. Same-position text can overlap, and three positions/style presets do not provide a full motion-graphics or professional NLE toolset.
+- App and website surfaces and controls are softer, with decorative diagonal arrows removed. This source validation does not certify a clean-PC installation, long-project performance or AI quality. The website release manifest identifies the actual downloadable build; source changes alone do not establish that its archive or deployment has been updated.
+
+## Editor precision and track protection — 2026-09-28
+
+- All 1,492 Python regressions and 481 frontend checks passed. Python coverage includes frontend wrappers, so these totals are not independent scenarios. This includes 43 new backend protection checks. Repository link and diff-whitespace checks passed.
+- An isolated synthetic two-source browser project verified Snap-on extension into a gap, the bounded saved edge, Undo/Redo and reselection with the restored duration, Space play/pause, and Original footage review. Toolbar layouts at 390 and 768 pixels had no page-level horizontal overflow. No real AI calls, model downloads or user footage were used.
+- Snap is optional and starts off. It aligns trims/ranges and source reorder starts; added-media moves can align either edge. Added media remains on its independent clock during A/B reordering. Frame readouts use integer output FPS, not source/drop-frame timecode or a guarantee of frame-exact browser decoding.
+- A/B edit locks persist when reopening and stay outside Undo/Redo. Browser checks verified protected pointer/keyboard edits, editing and undoing on the other source, toggling protection without stopping playback, and read-only Original footage on a locked scope. No browser warnings/errors were observed; the new protection controls introduced no page-level horizontal overflow at 390 pixels.
+- Synthetic FFmpeg smoke exports passed at 60 FPS in 16:9 and 9:16. Locks leave the rendering graph and render-input fingerprint unchanged. This is not a long-4K benchmark or a clean-machine installation test.
+- Website checks passed (24; two file-symlink cases skipped on Windows). The public editor image is an actual capture of the current synthetic project, not a mockup.
+- This increment is prepared for the source ZIP and matching website download. The website release manifest identifies the exact downloadable archive; [the editor roadmap](EDITOR_ROADMAP.md) describes remaining gaps and subsequent verification gates. Packaging or deployment failure must be reported, not treated as a release.
+
+## Media, mixing and quality update — 2026-09-23
+
+- All 1,410 Python regressions and 420 frontend checks passed in this update. Synthetic FFmpeg checks cover added video/images/audio, fades, mixer buses, picture-only speed, cancellation and QHD/4K output dimensions. AI/provider responses were mocked; no billable requests or model downloads were used.
+- An isolated browser project verified image/audio import, visible media lanes, waveforms, autosaved volume and fades, continuous mixer playback and scrollable timeline bounds. Failed/cancelled imports expose Retry; imports release editing controls when finished.
+- Added media currently fits inside the existing edit. Main-timeline changes and AI rebuilds that would strand those clips are rejected without deleting them. Picture speed keeps duration and original speech timing, so it can lose lip sync or hold the final picture. Solo is preview-only; export normalization/limiting may change final loudness.
+- Local bilingual recovery is bounded and flags low-confidence lines for human review. These tests do not demonstrate a measured improvement on real Hebrew/English recordings. Clean-PC setup, long 4K sessions and multilingual accuracy still need real-user validation.
+- The public archive is named `CUTROOM-1.1-Beta.zip`; its internal manifest retains a unique build ID and checksums. Models, runtimes and private projects remain excluded.
 
 ## Keyboard preset update — 2026-09-20
 
@@ -36,6 +84,9 @@ The results below describe that packaging pass, not a continuously updated test 
 ## Still unverified
 
 - Clean Windows first installation without the developer's environment, including external installers/download services.
+- Real Finder/Gatekeeper launch, Safari behavior and real Mac Ollama/cloud integrations. Current-source Apple Silicon/Intel automation is a separate publication gate; prior passing runs cover their recorded earlier payloads.
+- Native Linux installation/edit/export and stabilization on actual distributions; Linux remains a source development path.
+- Stabilization on representative footage, Mac/Linux FFmpeg builds and nonlocal filesystem configurations. Runtime filter detection establishes availability, not output quality.
 - Transcription and editorial quality across languages, accents, noise and overlapping speech. No multilingual WER/CER acceptance benchmark is complete.
 - Quality on representative editor-owned gameplay, explanations and long-form footage; no blind professional-editor comparison.
 - Long/reordered 4K sessions, low-memory machines, non-NVIDIA performance and broad codec/hardware coverage.
@@ -43,7 +94,7 @@ The results below describe that packaging pass, not a continuously updated test 
 
 ## Boundaries
 
-Default YouTube cleanup is chronological, not a full narrative rewrite. Styles are pacing/selection presets, not creator replicas or reliable visual gameplay-event detectors. Camera proposals need confirmation. There are two sources, not unlimited NLE tracks. Source-only edits may intentionally leave gaps or change synchronization. Lower-rate footage exported at 60 FPS repeats frames.
+Default YouTube cleanup is chronological, not a full narrative rewrite. Styles are pacing/selection presets, not creator replicas or reliable visual gameplay-event detectors. Camera proposals need confirmation. There are two main sources plus bounded media/text layers, not unlimited NLE tracks. Those added layers do not automatically ripple with source edits. Source-only edits may intentionally leave gaps or change synchronization. Lower-rate footage exported at 60 FPS repeats frames.
 
 Keep backups and use copies, not urgent client deliveries. Review the exported file. Do not expose the server publicly. This is not a frozen offline executable: allowed dependency versions can change between installations.
 

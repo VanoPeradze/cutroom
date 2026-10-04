@@ -231,7 +231,7 @@ main { min-height: calc(100vh - 72px); }
 .recent-list { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 10px; overflow-x: auto; padding: 12px 1px 2px; }
 .recent-project { position: relative; min-width: 0; min-height: 86px; display: grid; grid-template-columns: 44px minmax(0,1fr) 18px; grid-template-rows: 1fr 1fr; align-items: center; column-gap: 12px; border: 1px solid var(--control-line); background: linear-gradient(145deg,rgba(19,33,38,.94),rgba(8,16,19,.94)); padding: 13px 14px; text-align: start; border-radius: 13px; transition: transform .16s ease,border-color .16s ease,background .16s ease; }
 .recent-project::before { content: ""; grid-column: 1; grid-row: 1 / 3; width: 44px; height: 44px; border: 1px solid rgba(144,122,181,.40); border-radius: 10px; background: linear-gradient(155deg,rgba(116,89,163,.42),rgba(68,185,198,.14)),repeating-linear-gradient(90deg,transparent 0 5px,rgba(255,255,255,.08) 5px 6px); }
-.recent-project::after { content: "↗"; grid-column: 3; grid-row: 1 / 3; color: #69768a; font-size: 13px; transition: color .16s ease,transform .16s ease; }
+.recent-project::after { content: none; }
 [dir="rtl"] .recent-project::after { transform: scaleX(-1); }
 .recent-project:hover { transform: translateY(-2px); border-color: var(--signal-text); background: linear-gradient(145deg,rgba(24,42,48,.97),rgba(13,24,28,.97)); }
 .recent-project:hover::after { color: var(--signal-text); }
@@ -2075,7 +2075,7 @@ button, summary { touch-action: manipulation; }
 }
 .studio-timeline-dock .timeline-range-form { margin-block: 4px 8px; padding: 10px; border: 1px solid var(--line-strong); border-radius: 8px; }
 @media (min-width: 961px) {
-  .timeline-range-form { grid-template-columns: minmax(100px,160px) minmax(100px,160px) auto minmax(0,1fr); }
-  .timeline-range-form > button { grid-column: 3; }
-  .timeline-range-form > .source-range-status { grid-column: 4; align-self: center; }
+  .studio-timeline-dock .timeline-range-form { grid-template-columns: minmax(100px,160px) minmax(100px,160px) auto minmax(0,1fr); }
+  .studio-timeline-dock .timeline-range-form > button { grid-column: 3; }
+  .studio-timeline-dock .timeline-range-form > .source-range-status { grid-column: 4; align-self: center; }
 }

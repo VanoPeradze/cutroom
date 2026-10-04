@@ -220,6 +220,15 @@ def analyze_audio(
             if samples.size == 0:
                 break
             start = index * window_seconds
+            index += 1
+            if duration > 0:
+                # AAC decoders can emit padding beyond the source clock. Drain
+                # it without creating empty/inverted waveform bins or including
+                # out-of-range samples in measured levels.
+                remaining = max(0, math.ceil((duration - start) * sample_rate - 1e-9))
+                samples = samples[:remaining]
+                if samples.size == 0:
+                    continue
             actual_duration = samples.size / sample_rate
             end = min(duration, start + actual_duration) if duration > 0 else start + actual_duration
             normalized = samples.astype(np.float32) / 32768.0
@@ -232,7 +241,6 @@ def analyze_audio(
                 "rms_dbfs": round(_dbfs_rms(samples), 2),
                 "peak_dbfs": round(_dbfs_peak(samples), 2),
             })
-            index += 1
             if cancel_check:
                 cancel_check()
             if progress and index % 25 == 0 and duration > 0:
