@@ -1,6 +1,6 @@
 import { applyTranslations, dictionaries } from "./i18n.js?v=1.1-beta-polish-1";
 import { TimelineView, formatTime, editableClips, timelineDuration, sequenceBlocks, sequenceGaps, rippleMoveStart } from "./timeline.js?v=1.1-beta-studio-1";
-import { MediaStudio } from "./media-studio.js?v=1.1-beta-studio-2";
+import { MediaStudio } from "./media-studio.js?v=1.1-beta-polish-1";
 import { StabilizationStudio } from "./stabilization-studio.js?v=1.1-beta-1";
 import { ChromaStudio } from "./chroma-studio.js?v=1.1-beta-chroma-edit-2";
 import { ChromaPreview } from "./chroma-preview.js?v=1.1-beta-chroma-edit-2";
@@ -661,6 +661,11 @@ function bindEvents() {
     button.addEventListener("click", () => openStudioTab(button.dataset.openStudioTab));
   });
   elements.reviewSpeechSettings.addEventListener("click", openSpeechReviewSettings);
+  document.getElementById("streamerLayoutReview")?.addEventListener("click", reviewStreamerLayout);
+  document.getElementById("streamerLayoutDismiss")?.addEventListener("click", () => {
+    try { localStorage.setItem(streamerTipKey(), "dismissed"); } catch { /* the tip simply returns next time */ }
+    renderStreamerLayoutTip();
+  });
   document.getElementById("reviewDurationSettings")?.addEventListener("click", () => {
     if (foregroundBusy() || state.manualEditBusy) return;
     showSetup();
@@ -2596,8 +2601,28 @@ function directorCompletionNotice(job, preserved = false) {
     kind:preserved || warning ? "info" : "success"};
 }
 
+// A facecam inside the recording is the standard gaming Short layout: camera on
+// top, game below. The detection is easy to miss in Layout, so the draft offers
+// it once; the frame is still checked and confirmed in Layout.
+function streamerTipKey() { return `cutroom-streamer-tip-${state.project?.id || ""}`; }
+function renderStreamerLayoutTip() {
+  const tip = document.getElementById("streamerLayoutTip"); if (!tip) return;
+  let dismissed = false;
+  try { dismissed = localStorage.getItem(streamerTipKey()) === "dismissed"; } catch { dismissed = false; }
+  const draft = state.project?.draft;
+  tip.hidden = dismissed || !draft || draft.aspect !== "9:16" || !embeddedCameraCandidate() || embeddedCameraIsActive();
+}
+
+function reviewStreamerLayout() {
+  if (foregroundBusy() || state.manualEditBusy) return;
+  openStudioTab("framing");
+  if (elements.embeddedCameraEditor) elements.embeddedCameraEditor.open = true;
+  (elements.embeddedCameraEditor || elements.cameraDetection)?.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
 function renderAiDraftNotice() {
   renderDurationReview();
+  renderStreamerLayoutTip();
   const notice = document.getElementById("aiDraftNotice"); if (!notice) return;
   notice.hidden = !currentAiDraftNotice();
   const text = notice.querySelector("p"); if (text) text.textContent = t("aiDraftKept");
@@ -5278,6 +5303,7 @@ function renderCameraDetection() {
   elements.useEmbeddedCamera.textContent = candidate
     ? active ? uiCopy("שמור שוב", "Save again") : uiCopy("בדוק והשתמש", "Review and use")
     : uiCopy("סמן ידנית", "Mark manually");
+  renderStreamerLayoutTip();
 }
 
 function setManualSelection(selection) {

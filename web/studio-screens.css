@@ -387,3 +387,15 @@ body:not(.studio-open) .topbar .project-name:focus { border-color:var(--cyan) !i
   body .home-hub .recent-list .recent-project .project-kind { display:none; }
 }
 body .home-hub .recent-list .recent-project, body .home-hub .recent-list .recent-project:hover { background:transparent; }
+/* Media shelf: status only while there is something to say, and a clear empty state. */
+.studio-workspace #studioShelfMedia .media-status { min-height:0; margin:8px 0 0; }
+.studio-workspace #studioShelfMedia .media-status:empty { display:none; }
+.studio-workspace #studioShelfMedia .media-empty { margin:4px 0 0; padding:14px 12px; border:1px dashed var(--line-strong); border-radius:6px; text-align:center; line-height:1.5; }
+/* Edit > Clip: the tools are the point of this panel, so they start open, with
+   a one-line reminder of how to use them above. */
+#studioPanelTimeline #editClipTools .studio-tool-intro { display:block; margin:0 0 12px; }
+#studioPanelTimeline #editClipTools .studio-tool-intro h3 { display:none; }
+#studioPanelTimeline #editClipTools .studio-tool-intro > span { display:block !important; margin:0; color:var(--muted); font-size:12px; line-height:1.5; }
+/* Draft: offer the streamer layout when a facecam was found in the recording. */
+#resultPanel .streamer-layout-tip { border-inline-start-color:var(--cyan); }
+#resultPanel .streamer-layout-tip .streamer-layout-actions { display:flex; flex-wrap:wrap; gap:8px; }
