@@ -1,10 +1,10 @@
 {
   "version": "1.1-beta",
-  "filename": "CUTROOM-1.1-Beta-windows-7009dc91-screens-20261004.zip",
-  "build_id": "CUTROOM-1.1-beta-20261004-202338",
-  "bytes": 3314653,
-  "sha256": "2f4aca30d25bd2fc8bf8263f1f411fca31d41ac37f5e8a74e726901e46a874f2",
-  "manifest_sha256": "5fbbc0ca0dfc946e8f14d72a4902056f4ec0eac622b92303adb3017b207b6d0f",
-  "url": "https://cutroom-studio--rp7fuofecs.expo.app/downloads/CUTROOM-1.1-Beta-windows-7009dc91-screens-20261004.zip",
-  "note": "Immutable validation deployment of reviewed product source 7009dc91db4ca9d51adb0e1c551f0cc8e0a2725a. Studio screens (Home, workspace panels, AI flow) in the approved concept layout, Story model upgrade suggestion, Director time estimate, the professional README and the Dependabot requirement updates. No private data, runtime or models. Native Apple Silicon/Intel candidate CI required before production."
+  "filename": "CUTROOM-1.1-Beta-windows-95d79036-polish-20261005.zip",
+  "build_id": "CUTROOM-1.1-beta-20261005-153925",
+  "bytes": 3328107,
+  "sha256": "3fd7305d2979c9da280e8d09adac0340f8a32b41f7e4f71b24019e06bfc4dbf2",
+  "manifest_sha256": "510556128fd7f716a527c0e5d02060228374cb42f8b2420fec55099134e257ef",
+  "url": "https://cutroom-studio--3yqlqyvgfx.expo.app/downloads/CUTROOM-1.1-Beta-windows-95d79036-polish-20261005.zip",
+  "note": "Immutable validation deployment of reviewed product source 95d79036b48fbb4a2b27326d0f27fdb5ace593ae. Cleaner Short drafts (isolated transcript blips and sub-second keeps removed), Word highlight captions, measured Reel option energy with the most intense moment, the streamer layout offer and studio polish. No private data, runtime or models. Native Apple Silicon/Intel candidate CI required before production."
 }
