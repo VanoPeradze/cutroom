@@ -1,4 +1,4 @@
-import { applyTranslations, dictionaries } from "./i18n.js?v=1.1-beta-chroma-edit-2";
+import { applyTranslations, dictionaries } from "./i18n.js?v=1.1-beta-polish-1";
 import { TimelineView, formatTime, editableClips, timelineDuration, sequenceBlocks, sequenceGaps, rippleMoveStart } from "./timeline.js?v=1.1-beta-studio-1";
 import { MediaStudio } from "./media-studio.js?v=1.1-beta-studio-2";
 import { StabilizationStudio } from "./stabilization-studio.js?v=1.1-beta-1";
@@ -8,7 +8,7 @@ import { SourceReview } from "./source-review.js?v=1.1-beta-8";
 import { initWorkspace } from "./workspace.js?v=1.1-beta-studio-1";
 import { KEYBOARD_PROFILES, resolveEditorShortcut, isEditorTransportSpace, shortcutRows } from "./keyboard.js?v=1.1-beta-2";
 import { AudioThresholdView } from "./audio-meter.js?v=1.1-beta-1";
-import { initWelcome, workflowSettings, cloudProviderName } from "./welcome.js?v=1.1-beta-1";
+import { initWelcome, workflowSettings, cloudProviderName } from "./welcome.js?v=1.1-beta-polish-1";
 import { initLocalModels } from "./local-models.js?v=1.1-beta-1";
 import { trackClips, trackAt, hasSourceTracks, SourceTimelineClock } from "./source-tracks.js?v=1.1-beta-1";
 import { initTrackProtection } from "./track-protection.js?v=1.1-beta-1";
@@ -1040,9 +1040,35 @@ function showWelcome() {
   window.scrollTo({ top: 0 });
 }
 
+// Start creates a project before a recording is chosen. Leaving it untouched
+// would add an empty "In setup" row to Home every time, so it is discarded.
+const DEFAULT_MANUAL_KEYS = new Set(["cuts", "keep_ranges", "camera_plan", "camera_overrides", "source_mixer", "crop"]);
+function untouchedProject(project) {
+  if (!project || project.draft || project.name_auto || (project.exports || []).length) return false;
+  if (!["", "new project", "untitled project"].includes(String(project.name || "").trim().toLowerCase())) return false;
+  if (Object.values(project.sources || {}).some(Boolean) || Object.keys(project.assets || {}).length) return false;
+  if (String(project.settings?.instruction || "").trim()) return false;
+  return Object.entries(project.manual || {}).every(([key, value]) =>
+    DEFAULT_MANUAL_KEYS.has(key) && (!Array.isArray(value) || value.length === 0));
+}
+
+async function discardUntouchedProject(nextProjectId = null) {
+  const project = state.project;
+  if (!project || project.id === nextProjectId || !untouchedProject(project) || foregroundBusy()) return;
+  try {
+    await api(`/api/projects/${encodeURIComponent(project.id)}`, { method: "DELETE" });
+    state.projects = state.projects.filter((item) => item.id !== project.id);
+    if (localStorage.getItem(lastProjectStorageKey()) === project.id) localStorage.removeItem(lastProjectStorageKey());
+    state.project = null;
+  } catch {
+    // Keeping an empty project is harmless; never block navigation on it.
+  }
+}
+
 async function goHome() {
   pauseAllMedia();
   if (!(await flushCurrentProjectSaves())) return;
+  await discardUntouchedProject();
   state.projectViewToken += 1;
   showWelcome();
 }
@@ -1058,6 +1084,7 @@ function showWorkspace() {
 async function createProject({ workflow = "short" } = {}) {
   pauseAllMedia();
   if (!(await flushCurrentProjectSaves())) return;
+  await discardUntouchedProject();
   const initialSettings = workflowSettings(workflow);
   const payload = await api("/api/projects", { method: "POST", body: JSON.stringify({ name: "New project", initial_settings: initialSettings }) });
   state.projects.unshift(payload.project);
@@ -1088,6 +1115,7 @@ async function openManualDraft() {
 async function openProject(projectId, { skipFlush = false } = {}) {
   pauseAllMedia();
   if (!skipFlush && !(await flushCurrentProjectSaves())) return null;
+  await discardUntouchedProject(projectId);
   const viewToken = ++state.projectViewToken;
   if (state.studio.open) setAdvanced(false);
   try {
@@ -1125,7 +1153,7 @@ function hydrateProject() {
   state.sourceMixerLayout = "auto";
   state.sourceMixerLayoutTouched = false;
   setManualSelection(null);
-  elements.projectName.value = state.project.name || "";
+  elements.projectName.value = projectLabel(state.project);
   renderSources();
   hydrateSettings();
   if (state.project.draft) showResult(); else showSetup();
@@ -4805,13 +4833,38 @@ function updatePreviewCaption(sourceTime) {
     if (segment && (transcriptTime < segment.start || transcriptTime >= segment.end)) segment = null;
   }
   const captionSettings = captionSettingsFromControls();
-  const text = captionPreviewText(segment, transcriptTime, captionSettings.words);
+  const highlight = captionSettings.style === "highlight";
+  const wordsPerCaption = highlight ? Math.min(captionSettings.words, HIGHLIGHT_WORDS_PER_CAPTION) : captionSettings.words;
+  const text = captionPreviewText(segment, transcriptTime, wordsPerCaption);
   elements.previewCaption.dataset.captionStyle = captionSettings.style;
   elements.previewCaption.dataset.captionPosition = captionSettings.position;
   elements.previewCaption.dataset.captionLayout = cameraAt(sourceTime);
   elements.previewCaption.style.setProperty("--caption-preview-scale", String(captionSettings.scale / 100));
-  elements.previewCaption.textContent = text;
+  const active = highlight && !RTL_CHARACTERS.test(text) ? captionActiveWord(segment, transcriptTime, wordsPerCaption) : -1;
+  if (active >= 0) {
+    elements.previewCaption.replaceChildren(...text.split(" ").flatMap((word, index) => {
+      const span = document.createElement("span");
+      span.textContent = word;
+      if (index === active) span.className = "caption-active-word";
+      return index ? [" ", span] : [span];
+    }));
+  } else {
+    elements.previewCaption.textContent = text;
+  }
   elements.previewCaption.hidden = !text;
+}
+
+// Word highlight shows a few words at a time and colours the one being spoken,
+// matching the export. Right-to-left lines stay plain, as they do in the export.
+const HIGHLIGHT_WORDS_PER_CAPTION = 4;
+const RTL_CHARACTERS = /[֐-ࣿיִ-﷿ﹰ-﻿]/;
+function captionActiveWord(segment, sourceTime, wordsPerCaption) {
+  const timedWords = Array.isArray(segment?.words) ? segment.words.filter((word) => String(word?.word || "").trim()) : [];
+  if (!timedWords.length) return -1;
+  // Same rule as captionPreviewText, so the lit word is always in the shown phrase.
+  let activeIndex = timedWords.findIndex((word) => sourceTime <= Number(word.end));
+  if (activeIndex < 0) activeIndex = timedWords.length - 1;
+  return activeIndex % wordsPerCaption;
 }
 
 function firstKeptTime() {
@@ -5935,7 +5988,7 @@ async function applyManualEdit(action, detail = {}, { isCurrent = () => true } =
       updateMediaPreview();
       return state.project;
     }
-    elements.projectName.value = state.project.name || "";
+    elements.projectName.value = projectLabel(state.project);
     hydrateSettings();
     if (state.project.draft) renderDraft();
     else {
@@ -6313,7 +6366,7 @@ function projectLibraryBusy(projectId) {
 
 function projectLibraryRows(query = "", order = "recent") {
   const needle = String(query).trim().toLocaleLowerCase("en");
-  const rows = state.projects.filter((project) => String(project.name || "").toLocaleLowerCase("en").includes(needle));
+  const rows = state.projects.filter((project) => projectLabel(project).toLocaleLowerCase("en").includes(needle));
   return rows.sort((a, b) => order === "name"
     ? String(a.name || "").localeCompare(String(b.name || ""), "en", { numeric: true, sensitivity: "base" })
     : String(order === "oldest" ? a.created_at || a.updated_at || "" : b.updated_at || "")
@@ -6329,9 +6382,9 @@ function projectLibraryCard(project, inDialog = false) {
   button.className = inDialog ? "dialog-project" : "recent-project";
   button.type = "button";
   button.dataset.projectAction = "open";
-  button.setAttribute("aria-label", `Open project: ${project.name}`);
+  button.setAttribute("aria-label", `Open project: ${projectLabel(project)}`);
   button.innerHTML = `<span><strong dir="auto"></strong><small></small></span><b class="project-open-label">Open editor</b>`;
-  $("strong", button).textContent = project.name;
+  $("strong", button).textContent = projectLabel(project);
   $("small", button).textContent = `${project.has_draft ? "Edit ready" : "In setup"} · ${formatDate(project.updated_at)}`;
   if (!inDialog) decorateHomeProject(button, project);
   if (state.project?.id === project.id) {
@@ -6353,18 +6406,23 @@ function projectLibraryCard(project, inDialog = false) {
   rename.type = "button";
   rename.dataset.projectAction = "rename";
   rename.textContent = "Rename";
-  rename.setAttribute("aria-label", `Rename project: ${project.name}`);
+  rename.setAttribute("aria-label", `Rename project: ${projectLabel(project)}`);
   rename.addEventListener("click", () => openProjectRename(project));
   const remove = document.createElement("button");
   remove.className = "project-delete dialog-project-delete button ghost compact";
   remove.type = "button";
   remove.dataset.projectAction = "delete";
   remove.textContent = "Delete";
-  remove.setAttribute("aria-label", `Delete project: ${project.name}`);
+  remove.setAttribute("aria-label", `Delete project: ${projectLabel(project)}`);
   remove.addEventListener("click", () => runUiAction(() => deleteProject(project)));
   actions.append(rename, remove);
   row.append(button, actions);
   return row;
+}
+
+// Projects that kept the default name show their draft title or recording.
+function projectLabel(project) {
+  return String(project?.display_name || project?.name || "Untitled project");
 }
 
 // Home library rows follow the studio design: a source frame, the kind of edit
@@ -6449,7 +6507,7 @@ function openProjectRename(project) {
   initProjectLibrary();
   if (projectLibraryBusy(project.id)) { toast("Wait for this project's import or active job before renaming it."); return; }
   projectLibrary.rename = { project, origin: projectLibraryFocus(), pending: false };
-  elements.projectRenameInput.value = state.project?.id === project.id ? state.project.name : project.name;
+  elements.projectRenameInput.value = projectLabel(state.project?.id === project.id ? state.project : project);
   setProjectActionError("rename");
   setProjectActionPending("rename", false);
   elements.projectRenameDialog.showModal();
@@ -6504,7 +6562,7 @@ async function deleteProject(project) {
     return;
   }
   projectLibrary.deletion = { project, origin: projectLibraryFocus(), pending: false };
-  elements.projectDeleteName.textContent = state.project?.id === project.id ? state.project.name : project.name;
+  elements.projectDeleteName.textContent = projectLabel(state.project?.id === project.id ? state.project : project);
   setProjectActionError("deletion");
   setProjectActionPending("deletion", false);
   elements.projectDeleteDialog.showModal();

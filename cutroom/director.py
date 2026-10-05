@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import math
+import re
 from pathlib import Path
 from typing import Any, Callable
 
@@ -16,7 +17,7 @@ from .jobs import JobCancelled, JobContext
 from .media import detect_scenes
 from .media_library import validate_media_bounds
 from .text_clips import validate_text_bounds
-from .projects import ProjectStore
+from .projects import ProjectStore, apply_draft_name
 from .source_tracks import has_sequence, source_sync_offset
 from .track_locks import require_tracks_unlocked
 from .sync import MIN_AUTOMATIC_SYNC_CONFIDENCE, synchronize_sources
@@ -53,6 +54,61 @@ def _prepared_vision_is_reusable(
     except (TypeError, ValueError, OverflowError):
         return False
     return sample_count >= required_samples
+
+
+def _segment_confidence(segment: dict[str, Any]) -> float | None:
+    probabilities = [float(word["probability"]) for word in segment.get("words") or [] if "probability" in word]
+    if probabilities:
+        return sum(probabilities) / len(probabilities)
+    logprob = segment.get("avg_logprob")
+    return math.exp(float(logprob)) if logprob is not None else None
+
+
+def _drop_isolated_blips(segments: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Remove one or two low-confidence words floating alone in silence.
+
+    Whisper sometimes "hears" a single word at the start of a recording or in
+    long music/game passages (for example "Unbound." at 0.0 s). Such a blip has
+    no editorial value, yet it became a story beat, the opening of a Short and
+    a caption. Only short, isolated, low-confidence segments are removed;
+    segments without confidence data are kept.
+    """
+    kept: list[dict[str, Any]] = []
+    for index, segment in enumerate(segments):
+        start, end = float(segment["start"]), float(segment["end"])
+        previous_end = float(segments[index - 1]["end"]) if index else None
+        next_start = float(segments[index + 1]["start"]) if index + 1 < len(segments) else None
+        isolated = (
+            (previous_end is None or start - previous_end >= 5.0)
+            and (next_start is None or next_start - end >= 5.0)
+        )
+        confidence = _segment_confidence(segment)
+        if (
+            isolated
+            and end - start <= 0.8
+            and len(re.findall(r"\w+", str(segment.get("text") or ""))) <= 2
+            and confidence is not None
+            and confidence < 0.65
+        ):
+            continue
+        kept.append(segment)
+    return kept
+
+
+def _drop_isolated_micro_keeps(cuts: list[dict[str, Any]], duration: float, minimum: float = 1.0) -> tuple[list[dict[str, float]], int]:
+    """A kept piece shorter than a second, far from any other kept footage, reads
+    as a glitch in a Short. Remove it unless it is the only footage left."""
+    keeps = invert_ranges(cuts, duration)
+    remaining = []
+    for index, keep in enumerate(keeps):
+        previous_gap = keep["start"] - keeps[index - 1]["end"] if index else math.inf
+        next_gap = keeps[index + 1]["start"] - keep["end"] if index + 1 < len(keeps) else math.inf
+        if keep["end"] - keep["start"] < minimum and previous_gap > 1.0 and next_gap > 1.0:
+            continue
+        remaining.append(keep)
+    if not remaining or len(remaining) == len(keeps):
+        return cuts, 0
+    return invert_ranges(remaining, duration), len(keeps) - len(remaining)
 
 
 def _normalize_transcript(
@@ -144,6 +200,10 @@ def _normalize_transcript(
                     changed = True
         segments.append(segment)
     segments.sort(key=lambda item: (float(item["start"]), float(item["end"])))
+    without_blips = _drop_isolated_blips(segments)
+    if len(without_blips) != len(segments):
+        segments = without_blips
+        changed = True
 
     words = [dict(word) for segment in segments for word in segment.get("words", [])]
     language_probability = max(0.0, min(1.0, _finite_number(raw.get("language_probability"), 0.0)))
@@ -2548,6 +2608,9 @@ def analyze_project(
         cuts, target_trim_count = _enforce_short_target(cuts, segments, decision, duration, target_duration)
         if target_trim_count:
             counts["target_trim"] = target_trim_count
+        cuts, micro_count = _drop_isolated_micro_keeps(cuts, duration)
+        if micro_count:
+            counts["micro_fragments"] = micro_count
     else:
         cuts, counts = _bounded_cuts(
             candidates,
@@ -2749,6 +2812,7 @@ def analyze_project(
             # alternate request yields exactly the same source selection.
             return
         latest["draft"] = draft
+        apply_draft_name(latest, draft.get("title"))
         # A new Draft cannot replace an active manual sequence implicitly. Its
         # current timeline and Undo history still belong to the user's edit; the
         # explicit sequence_reset action applies the new Draft and is undoable.

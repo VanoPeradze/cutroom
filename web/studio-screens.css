@@ -111,8 +111,16 @@ body:not(.studio-open) .topbar #themeToggle { order:4; }
   .home-hub .recent-project .project-kind { display:none; }
   .home-hub .welcome-copy h1 { font-size:30px; }
 }
-body .home-hub .recent-list .recent-project { padding:7px 16px; text-align:start; justify-items:start; }
-body .home-hub .recent-list .recent-project > span:not([class]) { align-items:flex-start; text-align:start; gap:2px; }
+/* Project rows: these selectors outrank the older flex row in studio-design.css,
+   which squeezed every row to 44 px and centred the text. */
+body .home-hub .recent-list .recent-project { display:grid; grid-template-columns:112px minmax(0,1.6fr) minmax(0,1fr) 72px; grid-template-rows:auto; gap:20px; align-items:center; height:auto; min-height:80px; padding:10px 16px; text-align:start; justify-items:start; }
+body .home-hub .recent-list .recent-project .project-thumb { width:112px; height:63px; border-radius:6px; }
+body .home-hub .recent-list .recent-project > span:not([class]) { align-items:flex-start; text-align:start; gap:4px; }
+body .home-hub .recent-list .recent-project :is(strong, small) { margin:0; align-self:flex-start; grid-column:auto; }
+body .home-hub .recent-list .recent-project .project-kind { display:inline-flex; align-items:center; gap:8px; padding:4px 11px; border-radius:999px; background:var(--surface-raised); color:var(--paper-dim); font-size:13px; white-space:nowrap; }
+body .home-hub .recent-list .recent-project .project-kind::before { width:8px; height:8px; margin:0; border:0; border-radius:50%; background:var(--muted); vertical-align:middle; }
+body .home-hub .recent-list .recent-project .project-kind[data-kind=short]::before { width:8px; height:8px; background:var(--signal); }
+body .home-hub .recent-list .recent-project .project-kind[data-kind=youtube]::before { background:var(--cyan); border-radius:50%; }
 body .home-hub .recent-list .recent-project strong { font:500 16px var(--font, system-ui); letter-spacing:0; color:var(--paper); }
 body .home-hub .recent-list .recent-project small { font:12px var(--font, system-ui); letter-spacing:0; color:var(--muted); }
 body .home-hub .recent-list .recent-project .project-length { justify-self:end; }
@@ -373,3 +381,9 @@ body:not(.studio-open) .topbar .project-name:focus { border-color:var(--cyan) !i
 #analysisPanel .director-progress-head strong { font-size:28px; font-weight:600; color:var(--cyan-text); font-variant-numeric:tabular-nums; }
 #analysisPanel .director-eta { display:block; min-height:18px; margin:-10px 0 14px; color:var(--paper-dim); font-size:13px; text-align:end; }
 .model-status .model-upgrade { border-color:var(--cyan); color:var(--cyan-text); }
+@media (max-width:899px) {
+  body .home-hub .recent-list .recent-project { grid-template-columns:88px minmax(0,1fr) auto; gap:14px; min-height:68px; }
+  body .home-hub .recent-list .recent-project .project-thumb { width:88px; height:50px; }
+  body .home-hub .recent-list .recent-project .project-kind { display:none; }
+}
+body .home-hub .recent-list .recent-project, body .home-hub .recent-list .recent-project:hover { background:transparent; }

@@ -678,3 +678,55 @@ def test_audio_source_b_is_aligned_to_source_a_timeline():
     assert "[1:a]asetpts=PTS-STARTPTS,adelay=250:all=1,apad,atrim=duration=5.000000" in graph
     assert "[amaster]anull[aa0]" in graph
     assert "volume=" not in graph
+
+
+def test_isolated_low_confidence_blip_is_dropped_but_real_short_lines_stay():
+    from cutroom.director import _normalize_transcript
+
+    raw = {"language": "en", "segments": [
+        # A hallucinated word at the very start of a long gameplay recording.
+        {"id": "s1", "start": 0.0, "end": 0.32, "text": "Unbound.", "avg_logprob": -0.707,
+         "words": [{"start": 0.0, "end": 0.32, "word": "Unbound.", "probability": 0.52}]},
+        {"id": "s2", "start": 70.0, "end": 72.0, "text": "Also, we're on our way.", "avg_logprob": -0.2},
+        # Confident short reactions are kept even when isolated.
+        {"id": "s3", "start": 120.0, "end": 120.5, "text": "Yes!", "avg_logprob": -0.1,
+         "words": [{"start": 120.0, "end": 120.5, "word": "Yes!", "probability": 0.97}]},
+        # Without confidence data a segment is never treated as noise.
+        {"id": "s4", "start": 300.0, "end": 300.3, "text": "Go.", "words": []},
+    ]}
+    transcript, changed = _normalize_transcript(raw, "auto", 400.0)
+    assert changed
+    assert [item["id"] for item in transcript["segments"]] == ["s2", "s3", "s4"]
+    assert "Unbound" not in transcript["text"]
+    assert all(word["word"] != "Unbound." for word in transcript["words"])
+
+
+def test_a_blip_inside_a_conversation_is_not_isolated():
+    from cutroom.director import _normalize_transcript
+
+    raw = {"language": "en", "segments": [
+        {"id": "s1", "start": 10.0, "end": 12.0, "text": "Watch the left side.", "avg_logprob": -0.2},
+        {"id": "s2", "start": 13.0, "end": 13.3, "text": "Uh.", "avg_logprob": -0.9},
+        {"id": "s3", "start": 14.0, "end": 16.0, "text": "Now push.", "avg_logprob": -0.2},
+    ]}
+    transcript, _ = _normalize_transcript(raw, "en", 30.0)
+    assert [item["id"] for item in transcript["segments"]] == ["s1", "s2", "s3"]
+
+
+def test_isolated_sub_second_keeps_are_removed_from_a_short():
+    from cutroom.director import _drop_isolated_micro_keeps
+
+    keeps = [{"start": 0.0, "end": 0.32}, {"start": 190.0, "end": 200.0}, {"start": 347.0, "end": 348.66},
+             {"start": 400.0, "end": 400.5}, {"start": 400.9, "end": 410.0}]
+    cuts = invert_ranges(keeps, 1000.0)
+    new_cuts, removed = _drop_isolated_micro_keeps(cuts, 1000.0)
+    assert removed == 1
+    # The 0.32 s blip is gone; a 1.66 s reaction and a short piece inside a passage stay.
+    assert invert_ranges(new_cuts, 1000.0) == keeps[1:]
+
+
+def test_micro_keep_removal_never_empties_the_edit():
+    from cutroom.director import _drop_isolated_micro_keeps
+
+    cuts = invert_ranges([{"start": 5.0, "end": 5.4}], 60.0)
+    assert _drop_isolated_micro_keeps(cuts, 60.0) == (cuts, 0)
