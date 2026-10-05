@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import math
+import re
 from pathlib import Path
 from typing import Any, Callable
 
@@ -16,7 +17,7 @@ from .jobs import JobCancelled, JobContext
 from .media import detect_scenes
 from .media_library import validate_media_bounds
 from .text_clips import validate_text_bounds
-from .projects import ProjectStore
+from .projects import ProjectStore, apply_draft_name
 from .source_tracks import has_sequence, source_sync_offset
 from .track_locks import require_tracks_unlocked
 from .sync import MIN_AUTOMATIC_SYNC_CONFIDENCE, synchronize_sources
@@ -53,6 +54,61 @@ def _prepared_vision_is_reusable(
     except (TypeError, ValueError, OverflowError):
         return False
     return sample_count >= required_samples
+
+
+def _segment_confidence(segment: dict[str, Any]) -> float | None:
+    probabilities = [float(word["probability"]) for word in segment.get("words") or [] if "probability" in word]
+    if probabilities:
+        return sum(probabilities) / len(probabilities)
+    logprob = segment.get("avg_logprob")
+    return math.exp(float(logprob)) if logprob is not None else None
+
+
+def _drop_isolated_blips(segments: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Remove one or two low-confidence words floating alone in silence.
+
+    Whisper sometimes "hears" a single word at the start of a recording or in
+    long music/game passages (for example "Unbound." at 0.0 s). Such a blip has
+    no editorial value, yet it became a story beat, the opening of a Short and
+    a caption. Only short, isolated, low-confidence segments are removed;
+    segments without confidence data are kept.
+    """
+    kept: list[dict[str, Any]] = []
+    for index, segment in enumerate(segments):
+        start, end = float(segment["start"]), float(segment["end"])
+        previous_end = float(segments[index - 1]["end"]) if index else None
+        next_start = float(segments[index + 1]["start"]) if index + 1 < len(segments) else None
+        isolated = (
+            (previous_end is None or start - previous_end >= 5.0)
+            and (next_start is None or next_start - end >= 5.0)
+        )
+        confidence = _segment_confidence(segment)
+        if (
+            isolated
+            and end - start <= 0.8
+            and len(re.findall(r"\w+", str(segment.get("text") or ""))) <= 2
+            and confidence is not None
+            and confidence < 0.65
+        ):
+            continue
+        kept.append(segment)
+    return kept
+
+
+def _drop_isolated_micro_keeps(cuts: list[dict[str, Any]], duration: float, minimum: float = 1.0) -> tuple[list[dict[str, float]], int]:
+    """A kept piece shorter than a second, far from any other kept footage, reads
+    as a glitch in a Short. Remove it unless it is the only footage left."""
+    keeps = invert_ranges(cuts, duration)
+    remaining = []
+    for index, keep in enumerate(keeps):
+        previous_gap = keep["start"] - keeps[index - 1]["end"] if index else math.inf
+        next_gap = keeps[index + 1]["start"] - keep["end"] if index + 1 < len(keeps) else math.inf
+        if keep["end"] - keep["start"] < minimum and previous_gap > 1.0 and next_gap > 1.0:
+            continue
+        remaining.append(keep)
+    if not remaining or len(remaining) == len(keeps):
+        return cuts, 0
+    return invert_ranges(remaining, duration), len(keeps) - len(remaining)
 
 
 def _normalize_transcript(
@@ -144,6 +200,10 @@ def _normalize_transcript(
                     changed = True
         segments.append(segment)
     segments.sort(key=lambda item: (float(item["start"]), float(item["end"])))
+    without_blips = _drop_isolated_blips(segments)
+    if len(without_blips) != len(segments):
+        segments = without_blips
+        changed = True
 
     words = [dict(word) for segment in segments for word in segment.get("words", [])]
     language_probability = max(0.0, min(1.0, _finite_number(raw.get("language_probability"), 0.0)))
@@ -1577,6 +1637,140 @@ def _effective_embedded_candidate(
     )
 
 
+# Spoken reactions that mark a moment worth clipping in gameplay and streams.
+_REACTION_CUE = re.compile(
+    r"\b(let'?s go|no way|oh my god|omg|what was that|what the|holy|wow|yo+|come on|nice|insane|clutch|"
+    r"damn|shit|fuck\w*|haha\w*|lol|yes+|no+o)\b|יאללה|וואו|וואלה|אחי|חח+|מה זה|איזה",
+    re.IGNORECASE,
+)
+
+
+def _energy_levels(waveform: list[dict[str, Any]]) -> dict[str, float] | None:
+    rms = sorted(_finite_number(row.get("rms_dbfs"), -120.0) for row in waveform)
+    peak = sorted(_finite_number(row.get("peak_dbfs"), -120.0) for row in waveform)
+    if not rms:
+        return None
+
+    def percentile(values: list[float], ratio: float) -> float:
+        return values[min(len(values) - 1, max(0, int(round((len(values) - 1) * ratio))))]
+
+    return {
+        "rms_floor": percentile(rms, 0.25), "rms_span": max(6.0, percentile(rms, 0.90) - percentile(rms, 0.25)),
+        "peak_floor": percentile(peak, 0.25), "peak_span": max(6.0, percentile(peak, 0.92) - percentile(peak, 0.25)),
+    }
+
+
+def _moment_signals(
+    start: float,
+    end: float,
+    waveform: list[dict[str, Any]],
+    segments: list[dict[str, Any]],
+    levels: dict[str, float] | None,
+) -> dict[str, Any]:
+    """How intense a source window is: sustained loudness relative to the whole
+    recording, how much of it is active, and spoken reactions per minute.
+
+    The 0-100 score ranks Reel options; it is a measured signal, not a
+    prediction of views.
+    """
+    energies: list[float] = []
+    if levels:
+        for row in waveform:
+            if _finite_number(row.get("end")) <= start or _finite_number(row.get("start")) >= end:
+                continue
+            rms = clamp((_finite_number(row.get("rms_dbfs"), -120.0) - levels["rms_floor"]) / levels["rms_span"], 0.0, 1.0)
+            peak = clamp((_finite_number(row.get("peak_dbfs"), -120.0) - levels["peak_floor"]) / levels["peak_span"], 0.0, 1.0)
+            energies.append(rms * 0.72 + peak * 0.28)
+    energies.sort(reverse=True)
+    loudest = energies[:max(1, len(energies) // 3)]
+    intensity = sum(loudest) / len(loudest) if energies else 0.0
+    active = sum(1 for value in energies if value >= 0.55) / len(energies) if energies else 0.0
+    reactions = 0
+    for item in segments:
+        if _finite_number(item.get("end")) <= start or _finite_number(item.get("start")) >= end:
+            continue
+        text = str(item.get("text") or "")
+        if "!" in text or _REACTION_CUE.search(text):
+            reactions += 1
+    minutes = max(0.25, (end - start) / 60.0)
+    reaction_rate = reactions / minutes
+    score = 100.0 * (0.55 * intensity + 0.25 * min(1.0, reaction_rate / 6.0) + 0.20 * active)
+    return {
+        "score": int(round(clamp(score, 0.0, 100.0))),
+        "energy": "high" if intensity >= 0.62 else "medium" if intensity >= 0.38 else "low",
+        "reactions": reactions,
+    }
+
+
+def _ranges_signals(
+    ranges: list[dict[str, Any]],
+    waveform: list[dict[str, Any]],
+    segments: list[dict[str, Any]],
+    levels: dict[str, float] | None,
+) -> dict[str, Any]:
+    rows = [(row, _moment_signals(_finite_number(row.get("start")), _finite_number(row.get("end")), waveform, segments, levels)) for row in ranges]
+    total = sum(max(0.0, _finite_number(row.get("end")) - _finite_number(row.get("start"))) for row, _ in rows)
+    if not rows or total <= 0:
+        return {"score": 0, "energy": "low", "reactions": 0}
+    score = sum(signals["score"] * (_finite_number(row.get("end")) - _finite_number(row.get("start"))) for row, signals in rows) / total
+    order = {"low": 0, "medium": 1, "high": 2}
+    weighted = sum(order[signals["energy"]] * (_finite_number(row.get("end")) - _finite_number(row.get("start"))) for row, signals in rows) / total
+    return {
+        "score": int(round(score)),
+        "energy": "high" if weighted >= 1.5 else "medium" if weighted >= 0.5 else "low",
+        "reactions": sum(signals["reactions"] for _, signals in rows),
+    }
+
+
+def _window_signals(
+    duration: float,
+    target: float,
+    waveform: list[dict[str, Any]],
+    segments: list[dict[str, Any]],
+    levels: dict[str, float] | None,
+) -> list[tuple[float, float, dict[str, Any]]]:
+    """Signals for every window of the requested length across the recording."""
+    if not levels or duration <= target:
+        return []
+    step = max(2.0, target / 6.0)
+    windows: list[tuple[float, float, dict[str, Any]]] = []
+    position = 0.0
+    while position + target <= duration + 1e-6:
+        windows.append((position, position + target, _moment_signals(position, position + target, waveform, segments, levels)))
+        position += step
+    return windows
+
+
+def _relative_energy(signals: dict[str, Any], window_scores: list[int]) -> dict[str, Any]:
+    """Label a moment against this recording: gameplay is loud almost all the
+    time, so an absolute loudness threshold would call everything "high"."""
+    if not window_scores:
+        return signals
+    below = sum(1 for score in window_scores if score < signals["score"])
+    ties = sum(1 for score in window_scores if score == signals["score"])
+    share = (below + ties / 2) / len(window_scores)  # mid-rank, so equal quiet windows do not inflate it
+    return {**signals, "energy": "high" if share >= 0.75 else "medium" if share >= 0.35 else "low"}
+
+
+def _most_intense_window(
+    windows: list[tuple[float, float, dict[str, Any]]],
+    duration: float,
+    segments: list[dict[str, Any]],
+) -> tuple[float, float, dict[str, Any]] | None:
+    """The continuous window with the strongest measured action and reactions,
+    snapped so it does not cut a sentence."""
+    if not windows:
+        return None
+    start, end, signals = max(windows, key=lambda row: (row[2]["score"], -row[0]))
+    for item in segments:
+        item_start, item_end = _finite_number(item.get("start")), _finite_number(item.get("end"))
+        if item_start < start < item_end and start - item_start <= 3.0:
+            start = item_start
+        if item_start < end < item_end:
+            end = item_end if item_end - end <= 3.0 else item_start
+    return round(max(0.0, start), 3), round(min(duration, end), 3), signals
+
+
 def _reel_candidate_window(
     anchor: dict[str, Any],
     segments: list[dict[str, Any]],
@@ -1621,6 +1815,7 @@ def _build_reel_candidates(
     story_beats: list[dict[str, Any]],
     scene_points: list[float],
     embedded_candidate: dict[str, Any] | None,
+    audio_profile: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     """Create ranked, directly-applicable Reel alternatives from cached analysis.
 
@@ -1636,13 +1831,20 @@ def _build_reel_candidates(
     if duration <= target + 1.0:
         return []
 
+    waveform = [row for row in (audio_profile or {}).get("waveform") or [] if isinstance(row, dict)]
+    levels = _energy_levels(waveform) if waveform else None
+    windows = _window_signals(duration, target, waveform, segments, levels)
+    window_scores = [signals["score"] for _, _, signals in windows]
+    primary_ranges = copy.deepcopy(draft.get("keep_ranges") or [])
+    primary_signals = _relative_energy(_ranges_signals(primary_ranges, waveform, segments, levels), window_scores)
     primary = {
         "id": "director_pick",
         "kind": "director_pick",
         "rank": 1,
-        "score": 96,
+        "score": primary_signals["score"],
+        "signals": primary_signals,
         "output_duration": round(_finite_number(draft.get("output_duration")), 3),
-        "keep_ranges": copy.deepcopy(draft.get("keep_ranges") or []),
+        "keep_ranges": primary_ranges,
         "cuts": copy.deepcopy(draft.get("cuts") or []),
         "ai_camera_plan": copy.deepcopy(draft.get("ai_camera_plan") or draft.get("camera_plan") or []),
         "camera_plan": copy.deepcopy(draft.get("camera_plan") or []),
@@ -1652,47 +1854,28 @@ def _build_reel_candidates(
     signatures = {
         tuple((round(_finite_number(item.get("start")), 2), round(_finite_number(item.get("end")), 2)) for item in primary["keep_ranges"])
     }
-
-    anchors = [item for item in story_beats if isinstance(item, dict)]
-    if not anchors:
-        anchors = [item for item in segments if isinstance(item, dict)]
-    anchors = sorted(
-        anchors,
-        key=lambda item: (
-            _finite_number(item.get("editorial_score"), 0.5)
-            + (0.22 if item.get("role_hint") in {"hook", "conclusion"} else 0.0)
-            + _finite_number(item.get("novelty")) * 0.08,
-            _finite_number(item.get("end")) - _finite_number(item.get("start")),
-        ),
-        reverse=True,
-    )
     has_b = bool((project.get("sources") or {}).get("B"))
     requested_layout = str(draft.get("layout") or "auto")
     pace = str(draft.get("pace") or "balanced")
     overrides = (project.get("manual") or {}).get("camera_overrides") or []
     chosen_centers: list[float] = []
 
-    for anchor in anchors:
-        if len(candidates) >= 3:
-            break
-        start, end = _reel_candidate_window(anchor, segments, duration, target)
+    def add_candidate(start: float, end: float, kind: str, preview: str, protected: tuple[float, float] | None = None) -> bool:
         center = (start + end) / 2.0
         if any(abs(center - other) < target * 0.42 for other in chosen_centers):
-            continue
+            return False
         outside = []
         if start > 0.0:
             outside.append({"start": 0.0, "end": start})
         if end < duration:
             outside.append({"start": end, "end": duration})
         cleanup: list[dict[str, float]] = []
-        anchor_start = _finite_number(anchor.get("start"))
-        anchor_end = _finite_number(anchor.get("end"))
         for item in segments:
             item_start = _finite_number(item.get("start"))
             item_end = _finite_number(item.get("end"))
             if item_end <= start or item_start >= end:
                 continue
-            if item_start < anchor_end and item_end > anchor_start:
+            if protected and item_start < protected[1] and item_end > protected[0]:
                 continue
             obvious_retry = bool(item.get("false_start")) or _finite_number(item.get("repeat_score")) >= 0.88
             empty_filler = _finite_number(item.get("filler_ratio")) >= 0.72 and _finite_number(item.get("editorial_score"), 1.0) < 0.34
@@ -1709,8 +1892,7 @@ def _build_reel_candidates(
             output_duration = range_duration(keep_ranges)
         signature = tuple((round(float(item["start"]), 2), round(float(item["end"]), 2)) for item in keep_ranges)
         if not signature or signature in signatures:
-            continue
-
+            return False
         ai_plan, _ = _camera_plan_for_layout(
             keep_ranges,
             has_b,
@@ -1725,23 +1907,53 @@ def _build_reel_candidates(
             overrides if isinstance(overrides, list) else [],
             has_b=has_b,
         )
-        editorial = _finite_number(anchor.get("editorial_score"), 0.5)
-        score = min(94, max(70, round(78 + editorial * 13 + (2 if anchor.get("role_hint") else 0))))
-        kind = "focused_moment" if len(candidates) == 1 else "alternate_highlight"
+        signals = _relative_energy(_ranges_signals(keep_ranges, waveform, segments, levels), window_scores)
         candidates.append({
             "id": f"reel_{len(candidates) + 1}",
             "kind": kind,
             "rank": len(candidates) + 1,
-            "score": score,
+            "score": signals["score"],
+            "signals": signals,
             "output_duration": round(output_duration, 3),
             "keep_ranges": keep_ranges,
             "cuts": cuts,
             "ai_camera_plan": ai_plan,
             "camera_plan": camera_plan,
-            "preview": str(anchor.get("text") or "")[:220],
+            "preview": preview[:220],
         })
         signatures.add(signature)
         chosen_centers.append(center)
+        return True
+
+    # Gameplay and streams: the strongest continuous stretch of action and
+    # reactions, which a transcript-led story can miss entirely.
+    intense = _most_intense_window(windows, duration, segments)
+    if intense:
+        start, end, _ = intense
+        lines = [str(item.get("text") or "").strip() for item in segments
+                 if _finite_number(item.get("start")) < end and _finite_number(item.get("end")) > start]
+        add_candidate(start, end, "intense_moment", " ".join(line for line in lines if line))
+
+    anchors = [item for item in story_beats if isinstance(item, dict)]
+    if not anchors:
+        anchors = [item for item in segments if isinstance(item, dict)]
+    anchors = sorted(
+        anchors,
+        key=lambda item: (
+            _finite_number(item.get("editorial_score"), 0.5)
+            + (0.22 if item.get("role_hint") in {"hook", "conclusion"} else 0.0)
+            + _finite_number(item.get("novelty")) * 0.08,
+            _finite_number(item.get("end")) - _finite_number(item.get("start")),
+        ),
+        reverse=True,
+    )
+    for anchor in anchors:
+        if len(candidates) >= 3:
+            break
+        start, end = _reel_candidate_window(anchor, segments, duration, target)
+        kind = "focused_moment" if not any(item["kind"] == "focused_moment" for item in candidates) else "alternate_highlight"
+        add_candidate(start, end, kind, str(anchor.get("text") or ""),
+                      (_finite_number(anchor.get("start")), _finite_number(anchor.get("end"))))
     return candidates if len(candidates) > 1 else []
 
 
@@ -2548,6 +2760,9 @@ def analyze_project(
         cuts, target_trim_count = _enforce_short_target(cuts, segments, decision, duration, target_duration)
         if target_trim_count:
             counts["target_trim"] = target_trim_count
+        cuts, micro_count = _drop_isolated_micro_keeps(cuts, duration)
+        if micro_count:
+            counts["micro_fragments"] = micro_count
     else:
         cuts, counts = _bounded_cuts(
             candidates,
@@ -2647,6 +2862,7 @@ def analyze_project(
         story_beats,
         scenes_a + [_finite_number(item.get("start")) for item in segments[1:]],
         embedded_candidate,
+        sound_profile,
     )
     if reel_candidates:
         draft["reel_candidates"] = reel_candidates
@@ -2749,6 +2965,7 @@ def analyze_project(
             # alternate request yields exactly the same source selection.
             return
         latest["draft"] = draft
+        apply_draft_name(latest, draft.get("title"))
         # A new Draft cannot replace an active manual sequence implicitly. Its
         # current timeline and Undo history still belong to the user's edit; the
         # explicit sequence_reset action applies the new Draft and is undoable.

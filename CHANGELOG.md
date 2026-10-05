@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.1 Beta - 2026-10-05 - Cleaner Shorts and studio polish
+
+- Short drafts no longer open on a single misheard word: isolated, low-confidence one- or two-word blips (such as a word Whisper "hears" at 0:00 of a gameplay recording) are dropped from the transcript, and isolated pieces under a second are removed from Shorts.
+- Added the **Word highlight** caption style, the default for new Shorts: up to four words at a time with the spoken word coloured, placed at about two thirds of the height in vertical video. Hebrew and Arabic lines stay plain short phrases because the subtitle renderer loses their word order once colours split the text.
+- Reel options now include **Most intense moment**, the strongest continuous stretch of action and spoken reactions, and show measured energy relative to the recording instead of a fixed score.
+- When a facecam is found inside a vertical Short's recording, the draft offers the streamer layout (camera on top, game below); the frame is still confirmed in Layout.
+- Home lists projects in aligned rows with a type chip and a real name (from the recording, then the AI title; typed names are kept). An untouched new project is discarded when you leave it.
+- Edit opens with its clip tools visible, the Media shelf has a clear empty state, Captions show style and position first (fixing squeezed style buttons), the default timeline fits the captions lane, and collapsible inspector sections show a chevron.
+- The 1.1 Beta Windows and Mac downloads include this update and the studio layout below.
+
 ## 1.1 Beta - 2026-10-04 - Studio layout
 
 - Rebuilt the editor in the studio layout: one top bar with Undo/Redo, How to edit, Help and Export; a monitor header over the video with 16:9/9:16; centered transport with the timecode; and an icon timeline toolbar. Track headers beside the timeline lock and mute through the existing Edit and mixer controls.
@@ -7,7 +17,7 @@
 - Simplified Home: three start cards, recent projects with a source frame, kind and length, and a folded "AI is optional" banner. The Director screen shows the source footage and, once the rate is meaningful, the estimated time left.
 - Auto mode uses the stronger models only when they are already installed and the GPU has room: Whisper Turbo (or the Hebrew Turbo model) for transcription and the 9B Story model for drafts. When the 9B model would fit but is missing, the status offers **Better drafts**; the download still needs your confirmation.
 - Story AI no longer reloads the local model between passes: contexts snap to 8K/16K/32K and do not shrink within one job.
-- Redesigned the README and website in the studio style. The published 1.1 Beta downloads still use the previous interface until the next release.
+- Redesigned the README and website in the studio style. The downloads received this layout with the 2026-10-05 update.
 
 ## 1.1 Beta - 2026-10-03 - Preview-first workspace
 
