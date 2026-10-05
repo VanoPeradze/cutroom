@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.1 Beta - 2026-10-04 - Studio layout
+
+- Rebuilt the editor in the studio layout: one top bar with Undo/Redo, How to edit, Help and Export; a monitor header over the video with 16:9/9:16; centered transport with the timecode; and an icon timeline toolbar. Track headers beside the timeline lock and mute through the existing Edit and mixer controls.
+- Gave each workspace a library and a focused panel: Media search and filters, the Audio track mixer, Captions import and style buttons, Layout composition tiles, and Output presets with grouped resolution, frame-rate and quality buttons. Every new control drives the original one, so projects, settings and shortcuts are unchanged. The playhead is now cyan.
+- Simplified Home: three start cards, recent projects with a source frame, kind and length, and a folded "AI is optional" banner. The Director screen shows the source footage and, once the rate is meaningful, the estimated time left.
+- Auto mode uses the stronger models only when they are already installed and the GPU has room: Whisper Turbo (or the Hebrew Turbo model) for transcription and the 9B Story model for drafts. When the 9B model would fit but is missing, the status offers **Better drafts**; the download still needs your confirmation.
+- Story AI no longer reloads the local model between passes: contexts snap to 8K/16K/32K and do not shrink within one job.
+- Redesigned the README and website in the studio style. The published 1.1 Beta downloads still use the previous interface until the next release.
+
 ## 1.1 Beta - 2026-10-03 - Preview-first workspace
 
 - Reserved the upper workspace for the video and bounded contextual tools, with a full-width timeline and one ordered navigation row. Oversized legacy display preferences fall back without changing projects.
