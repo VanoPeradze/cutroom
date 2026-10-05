@@ -5,7 +5,7 @@ The timeline is your edited video, not the original recording's clock. Each clip
 ## Start here
 
 1. Click the ruler to seek. Space plays or pauses without changing the editing tool or preview mode.
-   Zoom in/out centers on the yellow playhead, clamped at timeline boundaries. Fit still shows everything; Zoom to selection still targets the selected range.
+   Zoom in/out centers on the playhead, clamped at timeline boundaries. Fit still shows everything; Zoom to selection still targets the selected range.
 2. Choose **Range**, drag over an unwanted section, then **Remove from video**.
 3. Choose **Select / Move** to drag one cut. **Cut** clicks split at one point; dragging with Cut also moves a clip, without switching tools.
 4. **Undo** reverses manual edits. Changes save automatically.
