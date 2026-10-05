@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.1 Beta - 2026-10-05 - Cleaner Shorts and studio polish
+
+- Short drafts no longer open on a single misheard word: isolated, low-confidence one- or two-word blips (such as a word Whisper "hears" at 0:00 of a gameplay recording) are dropped from the transcript, and isolated pieces under a second are removed from Shorts.
+- Added the **Word highlight** caption style, the default for new Shorts: up to four words at a time with the spoken word coloured, placed at about two thirds of the height in vertical video. Hebrew and Arabic lines stay plain short phrases because the subtitle renderer loses their word order once colours split the text.
+- Reel options now include **Most intense moment**, the strongest continuous stretch of action and spoken reactions, and show measured energy relative to the recording instead of a fixed score.
+- When a facecam is found inside a vertical Short's recording, the draft offers the streamer layout (camera on top, game below); the frame is still confirmed in Layout.
+- Home lists projects in aligned rows with a type chip and a real name (from the recording, then the AI title; typed names are kept). An untouched new project is discarded when you leave it.
+- Edit opens with its clip tools visible, the Media shelf has a clear empty state, Captions show style and position first (fixing squeezed style buttons), the default timeline fits the captions lane, and collapsible inspector sections show a chevron.
+- Published downloads still use the previous interface until the next release.
+
 ## 1.1 Beta - 2026-10-04 - Studio layout
 
 - Rebuilt the editor in the studio layout: one top bar with Undo/Redo, How to edit, Help and Export; a monitor header over the video with 16:9/9:16; centered transport with the timecode; and an icon timeline toolbar. Track headers beside the timeline lock and mute through the existing Edit and mixer controls.
