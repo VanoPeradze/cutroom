@@ -10,7 +10,7 @@ Use copies of non-sensitive footage. Send feedback privately to whoever sent the
 2. Make a YouTube draft. Check that preview and export stay horizontal.
 3. Make a vertical camera/screen draft, with separate or embedded sources. Check roles, 30/70 framing and audio sync.
 4. Correct a caption. Split, remove, move and trim a clip. Restore from **Original footage**, then Undo.
-5. Try **Together** and **A only / B only**. Check what moves. Zoom around the yellow playhead. Reopen and check saved changes.
+5. Try **Together** and **A only / B only**. Check what moves. Zoom around the playhead. Reopen and check saved changes.
 6. Export and watch the actual file, including the final seconds. If appropriate, compare 30 and 60 FPS.
 
 If something fails, note where; you do not need to keep repeating it.

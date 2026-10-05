@@ -19,6 +19,17 @@ export function visualMotion(clip, time) {
   return 'none';
 }
 
+// Library rows show a frame (or a waveform for sound) and the clip length.
+function libraryClock(seconds) {
+  const value = Math.max(0, Math.round(Number(seconds) || 0));
+  return `${String(Math.floor(value / 60)).padStart(2, '0')}:${String(value % 60).padStart(2, '0')}`;
+}
+function libraryThumb(url, kind) {
+  const thumb = document.createElement('span'); thumb.className = 'library-thumb'; thumb.dataset.kind = kind || 'video'; thumb.setAttribute('aria-hidden', 'true');
+  if (url) { const image = document.createElement('img'); image.src = url; image.alt = ''; image.loading = 'lazy'; thumb.append(image); }
+  return thumb;
+}
+
 export class MediaStudio {
   constructor(root, stage, options) {
     this.root = root; this.stage = stage; this.options = options;
@@ -160,17 +171,19 @@ export class MediaStudio {
       this.sourceLibrary.replaceChildren();
       for (const [slot, source] of Object.entries(project?.sources || {})) {
         if (!source) continue;
-        const card = document.createElement('button'); card.type = 'button'; card.className = 'source-library-card';
+        const card = document.createElement('button'); card.type = 'button'; card.className = 'source-library-card'; card.dataset.kind = 'video';
+        const thumbs = source.thumbnail_urls || [], thumb = libraryThumb(thumbs[Math.floor(thumbs.length / 3)], 'video');
         const badge = document.createElement('b'); badge.textContent = slot;
         const copy = document.createElement('span'); copy.textContent = source.name || `Source ${slot}`;
-        const detail = document.createElement('small'); detail.textContent = `Original footage · ${Number(source.duration || 0).toFixed(1)}s`;
-        card.append(badge,copy,detail); card.addEventListener('click', () => this.options.reviewSource?.(slot)); this.sourceLibrary.append(card);
+        const detail = document.createElement('small'); detail.dataset.kind = 'video'; detail.textContent = `${slot} · ${libraryClock(source.duration)}`;
+        card.append(thumb,badge,copy,detail); card.addEventListener('click', () => this.options.reviewSource?.(slot)); this.sourceLibrary.append(card);
       }
     }
     for (const asset of Object.values(project?.assets || {})) {
-      const card = document.createElement('div'); card.className = 'media-asset';
-      if (asset.thumbnail_url) { const image = document.createElement('img'); image.src = asset.thumbnail_url; image.alt = ''; image.loading = 'lazy'; card.append(image); }
+      const card = document.createElement('div'); card.className = 'media-asset'; card.dataset.kind = asset.kind;
+      card.append(libraryThumb(asset.thumbnail_url, asset.kind));
       const title = document.createElement('span'); title.textContent = `${asset.name} · ${asset.kind}`; title.title = asset.name; card.append(title);
+      const meta = document.createElement('small'); meta.className = 'media-asset-meta'; meta.dataset.kind = asset.kind; meta.textContent = asset.kind === 'image' ? 'Image' : libraryClock(asset.duration); card.append(meta);
       const button = document.createElement('button'); button.type = 'button'; button.dataset.asset = asset.id;
       button.textContent = asset.status === 'ready' ? '+ Add' : asset.status || 'Preparing'; button.disabled = asset.status !== 'ready'; card.append(button); library.append(card);
       if (['failed','cancelled'].includes(asset.status)) { delete button.dataset.asset; button.dataset.retry=asset.id;button.textContent='Retry';button.disabled=false; }

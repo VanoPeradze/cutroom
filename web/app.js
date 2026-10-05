@@ -1,6 +1,6 @@
 import { applyTranslations, dictionaries } from "./i18n.js?v=1.1-beta-chroma-edit-2";
 import { TimelineView, formatTime, editableClips, timelineDuration, sequenceBlocks, sequenceGaps, rippleMoveStart } from "./timeline.js?v=1.1-beta-studio-1";
-import { MediaStudio } from "./media-studio.js?v=1.1-beta-chroma-edit-2";
+import { MediaStudio } from "./media-studio.js?v=1.1-beta-studio-2";
 import { StabilizationStudio } from "./stabilization-studio.js?v=1.1-beta-1";
 import { ChromaStudio } from "./chroma-studio.js?v=1.1-beta-chroma-edit-2";
 import { ChromaPreview } from "./chroma-preview.js?v=1.1-beta-chroma-edit-2";
@@ -547,6 +547,7 @@ function bindEvents() {
   document.getElementById("confirmApplyAiDraft")?.addEventListener("click", confirmAiDraftApply);
   for (const id of ["cancelApplyAiDraft", "closeApplyAiDraft"]) document.getElementById(id)?.addEventListener("click", () => document.getElementById("aiDraftApplyDialog")?.close());
   elements.newProjectButton.addEventListener("click", () => state.welcome?.chooseService());
+  document.getElementById("homeViewAllProjects")?.addEventListener("click", () => elements.projectsButton.click());
   elements.dialogNewProject.addEventListener("click", () => runUiAction(async () => { elements.projectsDialog.close(); await goHome(); state.welcome?.chooseService(); }));
   elements.homeButton.addEventListener("click", () => runUiAction(goHome));
   elements.projectsButton.addEventListener("click", openProjectsDialog);
@@ -959,6 +960,7 @@ function bindEvents() {
   elements.cancelExportJobButton.addEventListener("click", cancelActiveJob);
   elements.confirmExport.addEventListener("click", startExport);
   elements.modelButton.addEventListener("click", installModel);
+  document.getElementById?.("modelUpgradeButton")?.addEventListener("click", () => document.getElementById("homeModelsButton")?.click());
   elements.retryAIButton.addEventListener("click", retryLocalAI);
 
   document.addEventListener("keydown", handleEditorShortcut, true);
@@ -6331,6 +6333,7 @@ function projectLibraryCard(project, inDialog = false) {
   button.innerHTML = `<span><strong dir="auto"></strong><small></small></span><b class="project-open-label">Open editor</b>`;
   $("strong", button).textContent = project.name;
   $("small", button).textContent = `${project.has_draft ? "Edit ready" : "In setup"} · ${formatDate(project.updated_at)}`;
+  if (!inDialog) decorateHomeProject(button, project);
   if (state.project?.id === project.id) {
     const current = document.createElement("small");
     current.className = "project-current-label";
@@ -6362,6 +6365,32 @@ function projectLibraryCard(project, inDialog = false) {
   actions.append(rename, remove);
   row.append(button, actions);
   return row;
+}
+
+// Home library rows follow the studio design: a source frame, the kind of edit
+// and its length. The whole row still opens the project.
+const PROJECT_KINDS = { manual: "Manual edit", youtube: "YouTube", short: "Short / Reel" };
+function decorateHomeProject(button, project) {
+  if (typeof button.prepend !== "function" || typeof button.insertBefore !== "function") return;
+  const thumb = document.createElement("span");
+  thumb.className = "project-thumb";
+  thumb.setAttribute("aria-hidden", "true");
+  if (project.thumbnail_url) {
+    const image = document.createElement("img");
+    image.src = project.thumbnail_url; image.alt = ""; image.loading = "lazy"; image.decoding = "async";
+    thumb.append(image);
+  }
+  const kind = document.createElement("span");
+  kind.className = "project-kind";
+  kind.dataset.kind = project.workflow || "manual";
+  kind.textContent = PROJECT_KINDS[project.workflow] || "Edit";
+  const length = document.createElement("span");
+  length.className = "project-length";
+  const duration = Number(project.sources?.A?.duration);
+  length.textContent = Number.isFinite(duration) && duration > 0 ? formatTime(duration) : "--:--";
+  button.prepend(thumb);
+  button.insertBefore(kind, $(".project-open-label", button));
+  button.insertBefore(length, $(".project-open-label", button));
 }
 
 function renderRecentProjects() {
@@ -6794,6 +6823,18 @@ function renderModelStatus() {
   $("small", elements.modelStatus).textContent = detail;
   elements.modelButton.hidden = !engineAvailable || (installed && !(fallback && selection?.requested_model_installed === false)) || preparing || installing;
   elements.modelButton.textContent = fallback ? "Download requested model" : "Download model…";
+  // Auto mode can suggest a larger Story model that fits this GPU; the download
+  // itself still happens in AI connection with the usual confirmation.
+  const upgrade = document.getElementById?.("modelUpgradeButton");
+  if (upgrade) {
+    const suggested = ready && !fallback && !preparing && !installing ? selection?.upgrade_model : null;
+    upgrade.hidden = !suggested;
+    if (suggested) {
+      upgrade.textContent = `Better drafts: get ${suggested}`;
+      upgrade.title = `Your GPU can run ${suggested}. It writes stronger drafts than ${actualModel}. Opens AI connection; the download needs your confirmation.`;
+      $("small", elements.modelStatus).textContent = `${actualModel} · Runs on this computer · ${suggested} fits your GPU for stronger drafts`;
+    }
+  }
   elements.retryAIButton.hidden = runtime?.can_retry === false || (ready && !preparing && !installing);
   elements.retryAIButton.textContent = preparing ? "Preparing…" : "Retry AI";
   for (const button of [elements.modelButton, elements.retryAIButton]) button.disabled = preparing || installing || foregroundBusy();

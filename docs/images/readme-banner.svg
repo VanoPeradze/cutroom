@@ -1,33 +1,44 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="340" viewBox="0 0 1200 340" role="img" aria-labelledby="title desc">
-  <title id="title">CUTROOM — Your footage. Your edit.</title>
-  <desc id="desc">CUTROOM brand banner in violet and cyan, with an abstract arrangement of independent video clips. Free, open-source video editing for creators.</desc>
+  <title id="title">CUTROOM — Your footage. Your final cut.</title>
+  <desc id="desc">CUTROOM banner in the studio design: the cyan and violet mark, the headline, and an abstract editor with a preview, a playhead and colored timeline tracks.</desc>
   <defs>
-    <linearGradient id="backdrop" x2="1" y2="1"><stop stop-color="#081013"/><stop offset="1" stop-color="#171625"/></linearGradient>
-    <linearGradient id="violet" x2="1" y2="1"><stop stop-color="#9c81ce"/><stop offset="1" stop-color="#7459a3"/></linearGradient>
-    <linearGradient id="cyan" x2="1" y2="1"><stop stop-color="#71d5df"/><stop offset="1" stop-color="#44b9c6"/></linearGradient>
-    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0H0V40" fill="none" stroke="#b7b5d0" stroke-opacity=".035"/></pattern>
+    <linearGradient id="backdrop" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#121a20"/><stop offset="1" stop-color="#151d26"/></linearGradient>
+    <linearGradient id="headline" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#1bd9ce"/><stop offset="1" stop-color="#a38bd0"/></linearGradient>
+    <radialGradient id="glow" cx=".18" cy=".1" r=".7"><stop stop-color="#1bd9ce" stop-opacity=".14"/><stop offset="1" stop-color="#1bd9ce" stop-opacity="0"/></radialGradient>
+    <radialGradient id="scene" cx=".3" cy=".3" r=".8"><stop stop-color="#e6b07c" stop-opacity=".55"/><stop offset=".55" stop-color="#3a4852"/><stop offset="1" stop-color="#1b252c"/></radialGradient>
+    <clipPath id="frame"><rect x="0" y="0" width="420" height="170" rx="8"/></clipPath>
   </defs>
   <rect width="1200" height="340" rx="20" fill="url(#backdrop)"/>
-  <rect width="1200" height="340" rx="20" fill="url(#grid)"/>
-  <path d="M54 45h23l-6 45H48z" fill="url(#violet)"/>
-  <path d="M84 45h18c5 0 8 4 7 9l-5 36H78z" fill="url(#cyan)"/>
-  <text x="126" y="78" fill="#f4f1f8" font-family="Segoe UI,Arial,sans-serif" font-size="31" font-weight="750" letter-spacing="4">CUTROOM</text>
-  <text x="52" y="164" fill="#f4f1f8" font-family="Segoe UI,Arial,sans-serif" font-size="58" font-weight="750" letter-spacing="-2">Your footage.</text>
-  <text x="52" y="228" fill="#b598e1" font-family="Segoe UI,Arial,sans-serif" font-size="58" font-weight="750" letter-spacing="-2">Your edit.</text>
-  <text x="54" y="285" fill="#b5bfca" font-family="Segoe UI,Arial,sans-serif" font-size="17" letter-spacing=".3">Free, open-source video editing for creators.</text>
-  <g transform="translate(663 54)">
-    <rect x="0" y="21" width="282" height="158" rx="13" fill="#182831" stroke="#44b9c6" stroke-opacity=".55"/>
-    <path d="M24 145l55-59 43 35 49-69 87 93" fill="none" stroke="#44b9c6" stroke-opacity=".35" stroke-width="2"/>
-    <circle cx="213" cy="61" r="13" fill="#44b9c6" fill-opacity=".2"/>
-    <rect x="305" y="0" width="121" height="179" rx="13" fill="#272139" stroke="#9c81ce" stroke-opacity=".65"/>
-    <rect x="319" y="15" width="93" height="47" rx="6" fill="#7459a3" fill-opacity=".7"/>
-    <rect x="319" y="69" width="93" height="95" rx="6" fill="#44b9c6" fill-opacity=".13"/>
-    <path d="M354 101l25 15-25 15z" fill="#b598e1"/>
-    <rect y="205" width="426" height="1" fill="#ffffff" fill-opacity=".1"/>
-    <rect y="222" width="114" height="27" rx="5" fill="url(#violet)"/>
-    <rect x="121" y="222" width="184" height="27" rx="5" fill="#7459a3" fill-opacity=".4"/>
-    <rect x="312" y="222" width="114" height="27" rx="5" fill="url(#cyan)"/>
-    <path d="M187 194v66" stroke="#efe2a7" stroke-width="2"/>
-    <path d="M181 189h12l-6 8z" fill="#efe2a7"/>
+  <rect width="1200" height="340" rx="20" fill="url(#glow)"/>
+  <rect x=".5" y=".5" width="1199" height="339" rx="19.5" fill="none" stroke="#2b3740"/>
+
+  <path d="M66 44h17L71 92H54z" fill="#1bd9ce"/>
+  <path d="M93 44h17L98 92H81z" fill="#a38bd0"/>
+  <text x="126" y="80" fill="#edf2f5" font-family="Segoe UI,Arial,sans-serif" font-size="30" font-weight="700" letter-spacing="3">CUTROOM</text>
+  <text x="54" y="166" fill="#edf2f5" font-family="Segoe UI,Arial,sans-serif" font-size="56" font-weight="700" letter-spacing="-1.5">Your footage.</text>
+  <text x="54" y="230" fill="url(#headline)" font-family="Segoe UI,Arial,sans-serif" font-size="56" font-weight="700" letter-spacing="-1.5">Your final cut.</text>
+  <text x="56" y="284" fill="#bfcbd3" font-family="Segoe UI,Arial,sans-serif" font-size="18">Free, local-first video editing for creators.</text>
+
+  <g transform="translate(700 40)">
+    <rect x="-14" y="-12" width="474" height="284" rx="14" fill="#1a242b" stroke="#2b3740"/>
+    <g clip-path="url(#frame)" transform="translate(13 0)">
+      <rect width="420" height="170" fill="url(#scene)"/>
+      <path d="M70 0v170M150 0v170M230 0v170M310 0v170" stroke="#ffffff" stroke-opacity=".05" stroke-width="3"/>
+      <circle cx="210" cy="85" r="24" fill="#0a0e11" fill-opacity=".45" stroke="#ffffff" stroke-opacity=".75" stroke-width="2"/>
+      <path d="M203 73l20 12-20 12z" fill="#ffffff"/>
+      <rect x="150" y="138" width="120" height="16" rx="4" fill="#0a0e11" fill-opacity=".7"/>
+      <rect x="160" y="144" width="100" height="4" rx="2" fill="#ffffff" fill-opacity=".85"/>
+    </g>
+    <g transform="translate(13 186)">
+      <rect width="420" height="14" rx="3" fill="#4a5862" stroke="#6b7c88"/>
+      <rect x="0" y="20" width="96" height="12" rx="3" fill="#4a3fa0" stroke="#8a7be8"/>
+      <rect x="150" y="20" width="110" height="12" rx="3" fill="#6b5722" stroke="#c9a94a"/>
+      <rect x="0" y="38" width="420" height="12" rx="3" fill="#1f6f5c"/>
+      <path d="M4 44h412" stroke="#3fd09e" stroke-width="6" stroke-dasharray="2 3"/>
+      <rect x="40" y="56" width="300" height="12" rx="3" fill="#25458c"/>
+      <path d="M44 62h292" stroke="#86a9ff" stroke-width="5" stroke-dasharray="2 3"/>
+      <path d="M232 -10v84" stroke="#1bd9ce" stroke-width="2"/>
+      <path d="M226 -14h12l-6 7z" fill="#1bd9ce"/>
+    </g>
   </g>
 </svg>
