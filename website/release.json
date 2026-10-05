@@ -3,32 +3,32 @@
   "label": "1.1 Beta",
   "layout": "windows-mac-folders-v1",
   "filename": "CUTROOM-1.1-Beta.zip",
-  "bytes": 6572913,
-  "sha256": "6515e3f8a128430eed29033d3937d648c86cd07711c4c7178ec9902a1edb53ec",
-  "build_id": "CUTROOM-1.1-beta-mac-20261003-100916",
+  "bytes": 6676204,
+  "sha256": "740c76ab4a0223a5f5ddc4edaa49fb3b3f92c6e3aeb974651bddbbf09b07ec4f",
+  "build_id": "CUTROOM-1.1-beta-mac-20261005-155228",
   "release_state": "validated",
-  "source_commit": "92b2261c491b9cd3fea15dcce4ef10b808a5b302",
-  "base_commit": "e45a35f2cb9acd92ea935ba8bc419e94ded7b05f",
+  "source_commit": "e813133831681865ae630d772af3ac4b04b41f8f",
+  "base_commit": "1273b8536ffd0cbba29b12af5e6f90f273c9075f",
   "uncommitted_changes": false,
-  "editor_revision": "preview-first-workspace-layout-order-chroma-numeric-duration",
-  "mac_validation_url": "https://github.com/VanoPeradze/cutroom/actions/runs/37115289870",
-  "validated_pr_head": "ecf0ec541fb73a9cb0139e1e2fef6fe29cfde473",
+  "editor_revision": "studio-layout-polish-word-highlight-intense-moment-streamer-layout",
+  "mac_validation_url": "https://github.com/VanoPeradze/cutroom/actions/runs/37336374217",
+  "validated_pr_head": "3948d644f496069095e369d739fcdebaf2e06d17",
   "native_mac_validation": "passed",
   "url": "https://cutroom-studio.expo.app/downloads/CUTROOM-1.1-Beta.zip",
   "platforms": {
     "windows": {
       "filename": "CUTROOM-1.1-Beta-Windows.zip",
-      "bytes": 3276552,
-      "sha256": "c00536f0d48df8c9998bad3a0d26fa427e074b2075e73acd3d31affe5dd73d99",
+      "bytes": 3328072,
+      "sha256": "11a963f06dc2f643177c65191b151a19df8d99a422a1be9e3a8f6d3832599858",
       "url": "https://cutroom-studio.expo.app/downloads/CUTROOM-1.1-Beta-Windows.zip"
     },
     "mac": {
       "filename": "CUTROOM-1.1-Beta-Mac.zip",
-      "bytes": 3287986,
-      "sha256": "b070296da8a265554e117c4019cad1180bacd23e5fda1a13d452e8bcad80b0b3",
+      "bytes": 3339575,
+      "sha256": "2c1a93f696b8e7aadb9d93034a21f27cdb5cce43e99666ffcb48f42fc123de18",
       "url": "https://cutroom-studio.expo.app/downloads/CUTROOM-1.1-Beta-Mac.zip"
     }
   },
-  "update_date": "2026-10-03",
-  "native_tested_merge_commit": "d3f1d1c3aae70baebe9926acbea269918cc946f8"
+  "update_date": "2026-10-05",
+  "native_tested_merge_commit": "d5328dcf553ada294e7d811d6f2292a21faa8fc9"
 }
