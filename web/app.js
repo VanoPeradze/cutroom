@@ -2967,6 +2967,18 @@ function renderReelCandidates() {
     director_pick: uiCopy("בחירת ה־Director", "Director's pick"),
     focused_moment: uiCopy("רגע ממוקד", "Focused moment"),
     alternate_highlight: uiCopy("היילייט חלופי", "Alternate highlight"),
+    intense_moment: uiCopy("הרגע הכי עוצמתי", "Most intense moment"),
+  };
+  const energyLabels = {
+    high: uiCopy("אנרגיה גבוהה", "High energy"),
+    medium: uiCopy("אנרגיה בינונית", "Medium energy"),
+    low: uiCopy("אנרגיה נמוכה", "Low energy"),
+  };
+  // Measured against this recording: loudness, activity and spoken reactions.
+  const signalText = (signals) => {
+    if (!signals || !energyLabels[signals.energy]) return "";
+    const reactions = Number(signals.reactions || 0);
+    return ` · ${energyLabels[signals.energy]}${reactions ? ` · ${reactions} ${uiCopy("תגובות", reactions === 1 ? "reaction" : "reactions")}` : ""}`;
   };
   const activeId = String(draft.active_reel_candidate || "director_pick");
   for (const candidate of candidates) {
@@ -2982,7 +2994,8 @@ function renderReelCandidates() {
     const strong = document.createElement("b");
     strong.textContent = labels[candidate.kind] || uiCopy("חלופת Reel", "Reel option");
     const meta = document.createElement("small");
-    meta.textContent = `${formatTime(Number(candidate.output_duration || 0))} · ${Number(candidate.score || 0)} ${uiCopy("ציון עריכתי", "editorial score")}`;
+    meta.textContent = `${formatTime(Number(candidate.output_duration || 0))}${signalText(candidate.signals)}`;
+    if (candidate.signals) meta.title = uiCopy("נמדד מול ההקלטה הזו: עוצמת קול, פעילות ותגובות מדוברות.", "Measured against this recording: loudness, activity and spoken reactions.");
     title.append(strong, meta);
     head.append(rank, title);
     const preview = document.createElement("p");

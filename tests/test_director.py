@@ -730,3 +730,41 @@ def test_micro_keep_removal_never_empties_the_edit():
 
     cuts = invert_ranges([{"start": 5.0, "end": 5.4}], 60.0)
     assert _drop_isolated_micro_keeps(cuts, 60.0) == (cuts, 0)
+
+
+def test_reel_options_include_the_most_intense_stretch_with_measured_labels():
+    # Quiet 3-minute recording with one loud, reactive fight at 100-130 s.
+    waveform = [
+        {"start": float(t), "end": float(t + 2), "rms_dbfs": -30.0 if 100 <= t < 130 else -50.0,
+         "peak_dbfs": -8.0 if 100 <= t < 130 else -30.0}
+        for t in range(0, 180, 2)
+    ]
+    segments = [
+        {"id": "s1", "start": 20.0, "end": 26.0, "text": "So the plan is to go left.", "editorial_score": .7},
+        {"id": "s2", "start": 104.0, "end": 106.0, "text": "Let's go!", "editorial_score": .5},
+        {"id": "s3", "start": 112.0, "end": 114.0, "text": "No way, he's one shot!", "editorial_score": .5},
+        {"id": "s4", "start": 150.0, "end": 156.0, "text": "Anyway, back to the base.", "editorial_score": .6},
+    ]
+    beats = [{"id": "b1", "start": 20.0, "end": 26.0, "text": "So the plan is to go left.", "editorial_score": .9, "novelty": .9}]
+    project = {"sources": {"A": {"duration": 180.0}, "B": None}, "manual": {"cuts": [], "camera_overrides": []}}
+    draft = {
+        "goal": "short", "source_duration": 180.0, "target_duration": 30.0, "output_duration": 30.0,
+        "keep_ranges": [{"start": 10.0, "end": 40.0}], "cuts": [{"start": 0.0, "end": 10.0}, {"start": 40.0, "end": 180.0}],
+        "camera_plan": [{"start": 10.0, "end": 40.0, "camera": "A"}], "layout": "A", "pace": "dynamic", "summary": "plan",
+    }
+
+    candidates = _build_reel_candidates(project, draft, segments, beats, [], None, {"waveform": waveform})
+
+    assert candidates[0]["id"] == "director_pick"
+    intense = next(item for item in candidates if item["kind"] == "intense_moment")
+    start, end = intense["keep_ranges"][0]["start"], intense["keep_ranges"][-1]["end"]
+    assert start <= 104.0 and end >= 114.0
+    assert intense["signals"]["energy"] == "high" and intense["signals"]["reactions"] == 2
+    assert candidates[0]["signals"]["energy"] == "low"
+    assert intense["score"] > candidates[0]["score"]
+
+
+def test_reel_options_without_audio_keep_story_alternatives():
+    from cutroom.director import _moment_signals
+
+    assert _moment_signals(0.0, 30.0, [], [], None) == {"score": 0, "energy": "low", "reactions": 0}
