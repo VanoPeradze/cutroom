@@ -5,6 +5,7 @@ import json
 import re
 import shutil
 import threading
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
 
@@ -147,6 +148,7 @@ class ProjectStore:
                 projects.append({
                     "id": project["id"],
                     "name": project.get("name") if isinstance(project.get("name"), str) else "Untitled project",
+                    "display_name": display_name(project),
                     "updated_at": updated_at,
                     "created_at": created_at,
                     "sources": {
@@ -282,6 +284,7 @@ class ProjectStore:
         def apply(project: dict[str, Any]) -> None:
             if "name" in patch:
                 project["name"] = str(patch["name"]).strip()[:120] or project["name"]
+                project.pop("name_auto", None)
             if "language" in patch:
                 project["language"] = str(patch["language"])
             if isinstance(patch.get("settings"), dict):
@@ -341,10 +344,71 @@ class ProjectStore:
         return paths
 
 
+_DEFAULT_PROJECT_NAMES = {"", "new project", "untitled project"}
+_GENERIC_DRAFT_TITLES = {"cutroom story", "cutroom first draft", "ai draft", *_DEFAULT_PROJECT_NAMES}
+
+
+def name_from_source(filename: str) -> str:
+    """A readable project name from a recording's file name.
+
+    OBS and similar recorders name files by timestamp ("2026-03-04 19-28-20").
+    """
+    stem = Path(str(filename or "")).stem.strip()
+    match = re.fullmatch(r"(\d{4})-(\d{2})-(\d{2})[ _T](\d{2})[-.](\d{2})(?:[-.]\d{2})?", stem)
+    if match:
+        year, month, day, hour, minute = (int(value) for value in match.groups())
+        try:
+            moment = datetime(year, month, day, hour, minute)
+        except ValueError:
+            moment = None
+        if moment:
+            return f"Recording {moment:%b} {moment.day}, {moment.year} · {moment:%H:%M}"
+    return re.sub(r"\s+", " ", stem.replace("_", " ")).strip()[:120] or "Untitled project"
+
+
+def apply_automatic_name(project: dict[str, Any], name: str) -> None:
+    """Name a project that still has its default name, or an earlier automatic
+    one. A name the user typed is never replaced."""
+    name = str(name or "").strip()[:120]
+    current = str(project.get("name") or "").strip().casefold()
+    if name and (current in _DEFAULT_PROJECT_NAMES or project.get("name_auto")):
+        project["name"] = name
+        project["name_auto"] = True
+
+
+def display_name(project: dict[str, Any]) -> str:
+    """What to call a project that still has its default name: its AI draft
+    title, else its recording. Older projects were all "New project"."""
+    name = str(project.get("name") or "").strip()
+    if name.casefold() not in _DEFAULT_PROJECT_NAMES:
+        return name
+    draft = project.get("draft") if isinstance(project.get("draft"), dict) else {}
+    title = str(draft.get("title") or "").strip()
+    if title and title.casefold() not in _GENERIC_DRAFT_TITLES:
+        return title[:120]
+    sources = project.get("sources") if isinstance(project.get("sources"), dict) else {}
+    source = sources.get("A")
+    if isinstance(source, dict) and source.get("name"):
+        return name_from_source(source["name"])
+    return name or "Untitled project"
+
+
+def apply_draft_name(project: dict[str, Any], title: Any) -> None:
+    title = str(title or "").strip()
+    if title.casefold() not in _GENERIC_DRAFT_TITLES:
+        apply_automatic_name(project, title)
+
+
 def _summary_workflow(project: dict[str, Any]) -> str | None:
+    """The starting point chosen on Home. AI projects store it as their goal."""
     settings = project.get("settings") if isinstance(project.get("settings"), dict) else {}
     workflow = settings.get("workflow")
-    return workflow if workflow in {"manual", "youtube", "short"} else None
+    if workflow == "manual":
+        return "manual"
+    goal = settings.get("goal")
+    if workflow in {"youtube", "short"}:
+        return workflow
+    return goal if workflow == "ai" and goal in {"youtube", "short"} else None
 
 
 def _summary_thumbnail(sources: dict[str, Any]) -> str | None:

@@ -8,7 +8,7 @@
   <script src="/assets/ui-shell.js?v=1.1-beta-2"></script>
   <title>CUTROOM 1.1 Beta — Your editing workspace</title>
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/assets/styles.css?v=1.1-beta-5">
+  <link rel="stylesheet" href="/assets/styles.css?v=1.1-beta-polish-2">
   <link rel="stylesheet" href="/assets/workspace.css?v=1.1-beta-3">
   <link rel="stylesheet" href="/assets/media-studio.css?v=1.1-beta-5">
   <link rel="stylesheet" href="/assets/stabilization-studio.css?v=1.1-beta-1">
@@ -19,7 +19,7 @@
   <link rel="stylesheet" href="/assets/editor-panels.css?v=1.1-beta-focused-3">
   <link rel="stylesheet" href="/assets/studio-design.css?v=1.1-beta-design-1">
   <link rel="stylesheet" href="/assets/studio-chrome.css?v=1.1-beta-chrome-1">
-  <link rel="stylesheet" href="/assets/studio-screens.css?v=1.1-beta-screens-1">
+  <link rel="stylesheet" href="/assets/studio-screens.css?v=1.1-beta-screens-9">
 </head>
 <body class="welcome-mode">
   <a class="skip-link" href="#main" data-i18n="skip">Skip to content</a>
@@ -300,6 +300,7 @@
       <section class="result-panel" id="resultPanel" hidden>
         <div id="durationReview" class="ai-draft-notice duration-review" role="status" hidden><p></p><button type="button" class="button ghost compact" id="reviewDurationSettings" data-i18n="reviewDurationSettings">Review style &amp; length</button></div>
         <div id="aiDraftNotice" class="ai-draft-notice" role="status" hidden><p data-i18n="aiDraftKept">New draft ready; your manual timeline was kept.</p><button id="applyAiDraftButton" type="button" class="button ghost compact" data-i18n="aiDraftApply">Apply new AI draft</button></div>
+        <div id="streamerLayoutTip" class="ai-draft-notice streamer-layout-tip" role="status" hidden><p>Your facecam was found in this recording. The streamer layout puts your camera on top and the game below, the usual look for gaming Shorts.</p><span class="streamer-layout-actions"><button type="button" class="button primary compact" id="streamerLayoutReview">Preview streamer layout</button><button type="button" class="button ghost compact" id="streamerLayoutDismiss">Not now</button></span></div>
         <div class="result-header">
           <div><p class="eyebrow" data-i18n="firstDraft">First edit</p><span id="draftEngineBadge" class="engine-badge"></span><h2 id="draftTitle">CUTROOM Draft</h2><p id="draftSummary"></p></div>
           <div class="duration-verdict"><span id="beforeDuration">00:00</span><i>→</i><strong id="afterDuration">00:00</strong><small data-i18n="beforeAfter">Before / after</small></div>
@@ -413,7 +414,7 @@
               <div class="editor-more-panel"><button id="trackLockA" type="button" aria-pressed="false">Lock A</button><button id="trackLockB" type="button" aria-pressed="false" hidden>Lock B</button></div>
               <p id="trackProtectionStatus" role="status">Locks protect edits without muting or hiding footage.</p>
             </details>
-            <details class="editor-more" id="editorMoreTools"><summary>More editing tools</summary><div class="editor-more-panel">
+            <details class="editor-more" id="editorMoreTools" open><summary>Clip tools</summary><div class="editor-more-panel">
               <button id="manualSplit" type="button" disabled>Split at playhead</button><button id="manualRestore" type="button" disabled>Add to edit</button><button id="manualClear" type="button" disabled>Clear selection</button>
               <button id="clipDuplicate" type="button" disabled>Duplicate clip</button><button id="manualRange" type="button" aria-expanded="false" aria-controls="timelineRangeForm">Range…</button><button id="manualLayout" type="button" disabled>Layout…</button>
               <button type="button" data-timeline-tool="remove_between" aria-pressed="false">Cut out</button><button type="button" data-timeline-tool="move" aria-pressed="false" disabled hidden>Move clip</button><button type="button" id="trackReset" hidden>Reset track</button>
@@ -606,7 +607,7 @@
               </div>
               <div class="caption-option-grid">
                 <label class="caption-language-control"><span><b>Speech language</b><small>Auto-detect checks evidence across the recording.</small><small class="rebuild-chip" data-rebuild-chip>Draft rebuild</small></span><select id="spokenLanguageSelect"><option value="auto">Auto-detect</option><option value="he">Hebrew</option><option value="en">English</option><option value="ar">Arabic</option><option value="es">Spanish</option><option value="fr">French</option><option value="ru">Russian</option></select><em id="captionLanguageStatus">Detected after analysis</em></label>
-                <label><span><b>Style</b><small>Visual treatment in the final video.</small></span><select id="captionStyleSelect"><option value="clean">Clean</option><option value="bold" selected>Bold</option><option value="boxed">Boxed</option></select></label>
+                <label><span><b>Style</b><small>Visual treatment in the final video.</small></span><select id="captionStyleSelect"><option value="highlight">Word highlight</option><option value="clean">Clean</option><option value="bold" selected>Bold</option><option value="boxed">Boxed</option></select></label>
                 <label><span><b>Position</b><small>Auto avoids faces in stacked layouts.</small></span><select id="captionPositionSelect"><option value="auto" selected>Automatic safe area</option><option value="top">Top</option><option value="center">Center</option><option value="bottom">Bottom</option></select></label>
                 <label><span><b>Size</b><small>Scale relative to the output frame.</small></span><div class="caption-range"><input id="captionScale" type="range" min="75" max="150" step="5" value="100"><output id="captionScaleOut">100%</output></div></label>
                 <label><span><b>Words per caption</b><small>Fewer words create faster, punchier captions.</small></span><div class="caption-range"><input id="captionWordsPerLine" type="range" min="2" max="12" step="1" value="9"><output id="captionWordsPerLineOut">9</output></div></label>
@@ -837,7 +838,7 @@
       <footer class="connection-actions"><button class="button ghost" id="forgetCloudKey" type="button">Forget session key</button><button class="button primary" id="saveAIConnection" type="submit">Use this connection</button></footer>
     </form>
   </dialog>
-  <script type="module" src="/assets/app.js?v=1.1-beta-studio-2"></script>
+  <script type="module" src="/assets/app.js?v=1.1-beta-polish-8"></script>
   <script src="/assets/studio-screens.js?v=1.1-beta-screens-1" defer></script>
 </body>
 </html>

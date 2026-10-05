@@ -144,7 +144,7 @@ Object.assign(en, {
   podcastModeTitle: "Conversation clip with speaker focus", podcastModeText: "Keeps complete ideas, removes dead air and uses the available camera angles without excessive switching.",
   cleanModeTitle: "Clean the recording, keep the structure", cleanModeText: "Conservative cleanup: long pauses and level problems are fixed while the original sequence stays intact.",
   editCharacter: "Edit character", editCharacterHelp: "Only change this if you want to override the smart defaults", timelineGesture: "Drag = scrub · Ctrl+wheel = zoom",
-  decision_target_trim: "Target duration enforced", decision_smart_layout: "Screen + Facecam layout confirmed"
+  decision_micro_fragments: "Isolated sub-second fragments removed", decision_target_trim: "Target duration enforced", decision_smart_layout: "Screen + Facecam layout confirmed"
 });
 Object.assign(he, {
   shortPromise: "סיפור מהודק · 9:16 · מסגור אוטומטי", youtubePromise: "שומר את המבנה · מסיר שקט ארוך",
@@ -153,7 +153,7 @@ Object.assign(he, {
   podcastModeTitle: "קטע שיחה עם פוקוס על הדובר", podcastModeText: "שומר רעיונות שלמים, מסיר זמן מת ומשתמש בזוויות הקיימות בלי להחליף מצלמה יותר מדי.",
   cleanModeTitle: "ניקוי של ההקלטה, בלי לשנות את המבנה", cleanModeText: "ניקוי שמרני: הפסקות ארוכות ובעיות עוצמה מטופלות, והרצף המקורי נשאר כפי שהוא.",
   editCharacter: "אופי העריכה", editCharacterHelp: "משנים רק אם רוצים לעקוף את ברירת המחדל החכמה", timelineGesture: "גרירה = Scrub · Ctrl+גלגלת = Zoom",
-  decision_target_trim: "זמן היעד נאכף", decision_smart_layout: "פריסת מסך + מצלמה אושרה"
+  decision_micro_fragments: "נוקו קטעים בודדים קצרים משנייה", decision_target_trim: "זמן היעד נאכף", decision_smart_layout: "פריסת מסך + מצלמה אושרה"
 });
 Object.assign(ar, {
   shortPromise: "قصة مركزة · 9:16 · تأطير تلقائي", youtubePromise: "يحافظ على البنية · يزيل الصمت الطويل",
@@ -162,7 +162,7 @@ Object.assign(ar, {
   podcastModeTitle: "مقطع حوار مع تركيز على المتحدث", podcastModeText: "يحافظ على الأفكار الكاملة ويزيل الفراغ ويستخدم الزوايا المتاحة بدون تبديل مفرط.",
   cleanModeTitle: "نظف التسجيل وحافظ على بنيته", cleanModeText: "تنظيف محافظ للصمت الطويل ومستويات الصوت مع إبقاء التسلسل الأصلي.",
   editCharacter: "طابع المونتاج", editCharacterHelp: "غيّره فقط لتجاوز الإعدادات الذكية", timelineGesture: "اسحب للتنقل · Ctrl+العجلة للتكبير",
-  decision_target_trim: "تم تطبيق المدة المستهدفة", decision_smart_layout: "تم اكتشاف تخطيط الشاشة + الكاميرا"
+  decision_micro_fragments: "تمت إزالة مقاطع معزولة أقصر من ثانية", decision_target_trim: "تم تطبيق المدة المستهدفة", decision_smart_layout: "تم اكتشاف تخطيط الشاشة + الكاميرا"
 });
 Object.assign(es, {
   shortPromise: "Historia compacta · 9:16 · encuadre automático", youtubePromise: "Conserva la estructura · elimina silencios largos",
@@ -171,7 +171,7 @@ Object.assign(es, {
   podcastModeTitle: "Clip de conversación centrado en el hablante", podcastModeText: "Conserva ideas completas, elimina tiempos muertos y usa los ángulos disponibles sin cambiar en exceso.",
   cleanModeTitle: "Limpia la grabación y conserva la estructura", cleanModeText: "Limpieza conservadora de pausas largas y niveles de audio manteniendo la secuencia original.",
   editCharacter: "Carácter del montaje", editCharacterHelp: "Solo cámbialo si quieres anular los ajustes inteligentes", timelineGesture: "Arrastrar = scrub · Ctrl+rueda = zoom",
-  decision_target_trim: "Duración objetivo aplicada", decision_smart_layout: "Diseño pantalla + cámara detectado"
+  decision_micro_fragments: "Fragmentos aislados de menos de un segundo eliminados", decision_target_trim: "Duración objetivo aplicada", decision_smart_layout: "Diseño pantalla + cámara detectado"
 });
 Object.assign(fr, {
   shortPromise: "Histoire resserrée · 9:16 · cadrage automatique", youtubePromise: "Préserve la structure · retire les longs silences",
@@ -180,7 +180,7 @@ Object.assign(fr, {
   podcastModeTitle: "Extrait de conversation centré sur l'orateur", podcastModeText: "Conserve les idées complètes, retire les temps morts et utilise les angles disponibles sans trop de changements.",
   cleanModeTitle: "Nettoyer l'enregistrement tout en gardant sa structure", cleanModeText: "Nettoyage conservateur des longues pauses et niveaux audio en gardant la séquence d'origine.",
   editCharacter: "Caractère du montage", editCharacterHelp: "À modifier uniquement pour remplacer les réglages intelligents", timelineGesture: "Glisser = scrub · Ctrl+molette = zoom",
-  decision_target_trim: "Durée cible appliquée", decision_smart_layout: "Disposition écran + caméra détectée"
+  decision_micro_fragments: "Fragments isolés de moins d’une seconde supprimés", decision_target_trim: "Durée cible appliquée", decision_smart_layout: "Disposition écran + caméra détectée"
 });
 Object.assign(ru, {
   shortPromise: "Плотная история · 9:16 · автокадрирование", youtubePromise: "Сохраняет структуру · убирает длинные паузы",
@@ -189,7 +189,7 @@ Object.assign(ru, {
   podcastModeTitle: "Фрагмент разговора с фокусом на спикере", podcastModeText: "Сохраняет законченные мысли, убирает простои и использует доступные ракурсы без лишних переключений.",
   cleanModeTitle: "Очистить запись, сохранив структуру", cleanModeText: "Консервативная очистка длинных пауз и уровней звука при сохранении исходной последовательности.",
   editCharacter: "Характер монтажа", editCharacterHelp: "Меняйте только если хотите переопределить умные настройки", timelineGesture: "Перетаскивание = scrub · Ctrl+колесо = zoom",
-  decision_target_trim: "Целевая длительность соблюдена", decision_smart_layout: "Обнаружен экран + камера"
+  decision_micro_fragments: "Удалены изолированные фрагменты короче секунды", decision_target_trim: "Целевая длительность соблюдена", decision_smart_layout: "Обнаружен экран + камера"
 });
 
 

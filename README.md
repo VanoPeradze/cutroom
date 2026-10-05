@@ -29,7 +29,7 @@
 </p>
 
 > [!NOTE]
-> The screenshots show the redesigned studio from the current source on `master`, captured on 4 October 2026 with a locally recorded gameplay clip. The published 1.1 Beta downloads still use the previous interface until the next release. The screenshots show the interface, not AI editing quality.
+> The screenshots show the CUTROOM 1.1 Beta studio, captured on 4 October 2026 with a locally recorded gameplay clip. They show the interface, not AI editing quality.
 
 ## Contents
 
