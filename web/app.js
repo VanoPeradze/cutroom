@@ -1,14 +1,14 @@
-import { applyTranslations, dictionaries } from "./i18n.js?v=1.1-beta-chroma-edit-2";
+import { applyTranslations, dictionaries } from "./i18n.js?v=1.1-beta-polish-1";
 import { TimelineView, formatTime, editableClips, timelineDuration, sequenceBlocks, sequenceGaps, rippleMoveStart } from "./timeline.js?v=1.1-beta-studio-1";
-import { MediaStudio } from "./media-studio.js?v=1.1-beta-studio-2";
+import { MediaStudio } from "./media-studio.js?v=1.1-beta-polish-1";
 import { StabilizationStudio } from "./stabilization-studio.js?v=1.1-beta-1";
 import { ChromaStudio } from "./chroma-studio.js?v=1.1-beta-chroma-edit-2";
 import { ChromaPreview } from "./chroma-preview.js?v=1.1-beta-chroma-edit-2";
 import { SourceReview } from "./source-review.js?v=1.1-beta-8";
-import { initWorkspace } from "./workspace.js?v=1.1-beta-studio-1";
+import { initWorkspace } from "./workspace.js?v=1.1-beta-polish-1";
 import { KEYBOARD_PROFILES, resolveEditorShortcut, isEditorTransportSpace, shortcutRows } from "./keyboard.js?v=1.1-beta-2";
 import { AudioThresholdView } from "./audio-meter.js?v=1.1-beta-1";
-import { initWelcome, workflowSettings, cloudProviderName } from "./welcome.js?v=1.1-beta-1";
+import { initWelcome, workflowSettings, cloudProviderName } from "./welcome.js?v=1.1-beta-polish-1";
 import { initLocalModels } from "./local-models.js?v=1.1-beta-1";
 import { trackClips, trackAt, hasSourceTracks, SourceTimelineClock } from "./source-tracks.js?v=1.1-beta-1";
 import { initTrackProtection } from "./track-protection.js?v=1.1-beta-1";
@@ -661,6 +661,11 @@ function bindEvents() {
     button.addEventListener("click", () => openStudioTab(button.dataset.openStudioTab));
   });
   elements.reviewSpeechSettings.addEventListener("click", openSpeechReviewSettings);
+  document.getElementById("streamerLayoutReview")?.addEventListener("click", reviewStreamerLayout);
+  document.getElementById("streamerLayoutDismiss")?.addEventListener("click", () => {
+    try { localStorage.setItem(streamerTipKey(), "dismissed"); } catch { /* the tip simply returns next time */ }
+    renderStreamerLayoutTip();
+  });
   document.getElementById("reviewDurationSettings")?.addEventListener("click", () => {
     if (foregroundBusy() || state.manualEditBusy) return;
     showSetup();
@@ -1040,9 +1045,35 @@ function showWelcome() {
   window.scrollTo({ top: 0 });
 }
 
+// Start creates a project before a recording is chosen. Leaving it untouched
+// would add an empty "In setup" row to Home every time, so it is discarded.
+const DEFAULT_MANUAL_KEYS = new Set(["cuts", "keep_ranges", "camera_plan", "camera_overrides", "source_mixer", "crop"]);
+function untouchedProject(project) {
+  if (!project || project.draft || project.name_auto || (project.exports || []).length) return false;
+  if (!["", "new project", "untitled project"].includes(String(project.name || "").trim().toLowerCase())) return false;
+  if (Object.values(project.sources || {}).some(Boolean) || Object.keys(project.assets || {}).length) return false;
+  if (String(project.settings?.instruction || "").trim()) return false;
+  return Object.entries(project.manual || {}).every(([key, value]) =>
+    DEFAULT_MANUAL_KEYS.has(key) && (!Array.isArray(value) || value.length === 0));
+}
+
+async function discardUntouchedProject(nextProjectId = null) {
+  const project = state.project;
+  if (!project || project.id === nextProjectId || !untouchedProject(project) || foregroundBusy()) return;
+  try {
+    await api(`/api/projects/${encodeURIComponent(project.id)}`, { method: "DELETE" });
+    state.projects = state.projects.filter((item) => item.id !== project.id);
+    if (localStorage.getItem(lastProjectStorageKey()) === project.id) localStorage.removeItem(lastProjectStorageKey());
+    state.project = null;
+  } catch {
+    // Keeping an empty project is harmless; never block navigation on it.
+  }
+}
+
 async function goHome() {
   pauseAllMedia();
   if (!(await flushCurrentProjectSaves())) return;
+  await discardUntouchedProject();
   state.projectViewToken += 1;
   showWelcome();
 }
@@ -1058,6 +1089,7 @@ function showWorkspace() {
 async function createProject({ workflow = "short" } = {}) {
   pauseAllMedia();
   if (!(await flushCurrentProjectSaves())) return;
+  await discardUntouchedProject();
   const initialSettings = workflowSettings(workflow);
   const payload = await api("/api/projects", { method: "POST", body: JSON.stringify({ name: "New project", initial_settings: initialSettings }) });
   state.projects.unshift(payload.project);
@@ -1088,6 +1120,7 @@ async function openManualDraft() {
 async function openProject(projectId, { skipFlush = false } = {}) {
   pauseAllMedia();
   if (!skipFlush && !(await flushCurrentProjectSaves())) return null;
+  await discardUntouchedProject(projectId);
   const viewToken = ++state.projectViewToken;
   if (state.studio.open) setAdvanced(false);
   try {
@@ -1125,7 +1158,7 @@ function hydrateProject() {
   state.sourceMixerLayout = "auto";
   state.sourceMixerLayoutTouched = false;
   setManualSelection(null);
-  elements.projectName.value = state.project.name || "";
+  elements.projectName.value = projectLabel(state.project);
   renderSources();
   hydrateSettings();
   if (state.project.draft) showResult(); else showSetup();
@@ -2568,8 +2601,28 @@ function directorCompletionNotice(job, preserved = false) {
     kind:preserved || warning ? "info" : "success"};
 }
 
+// A facecam inside the recording is the standard gaming Short layout: camera on
+// top, game below. The detection is easy to miss in Layout, so the draft offers
+// it once; the frame is still checked and confirmed in Layout.
+function streamerTipKey() { return `cutroom-streamer-tip-${state.project?.id || ""}`; }
+function renderStreamerLayoutTip() {
+  const tip = document.getElementById("streamerLayoutTip"); if (!tip) return;
+  let dismissed = false;
+  try { dismissed = localStorage.getItem(streamerTipKey()) === "dismissed"; } catch { dismissed = false; }
+  const draft = state.project?.draft;
+  tip.hidden = dismissed || !draft || draft.aspect !== "9:16" || !embeddedCameraCandidate() || embeddedCameraIsActive();
+}
+
+function reviewStreamerLayout() {
+  if (foregroundBusy() || state.manualEditBusy) return;
+  openStudioTab("framing");
+  if (elements.embeddedCameraEditor) elements.embeddedCameraEditor.open = true;
+  (elements.embeddedCameraEditor || elements.cameraDetection)?.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
 function renderAiDraftNotice() {
   renderDurationReview();
+  renderStreamerLayoutTip();
   const notice = document.getElementById("aiDraftNotice"); if (!notice) return;
   notice.hidden = !currentAiDraftNotice();
   const text = notice.querySelector("p"); if (text) text.textContent = t("aiDraftKept");
@@ -2939,6 +2992,18 @@ function renderReelCandidates() {
     director_pick: uiCopy("בחירת ה־Director", "Director's pick"),
     focused_moment: uiCopy("רגע ממוקד", "Focused moment"),
     alternate_highlight: uiCopy("היילייט חלופי", "Alternate highlight"),
+    intense_moment: uiCopy("הרגע הכי עוצמתי", "Most intense moment"),
+  };
+  const energyLabels = {
+    high: uiCopy("אנרגיה גבוהה", "High energy"),
+    medium: uiCopy("אנרגיה בינונית", "Medium energy"),
+    low: uiCopy("אנרגיה נמוכה", "Low energy"),
+  };
+  // Measured against this recording: loudness, activity and spoken reactions.
+  const signalText = (signals) => {
+    if (!signals || !energyLabels[signals.energy]) return "";
+    const reactions = Number(signals.reactions || 0);
+    return ` · ${energyLabels[signals.energy]}${reactions ? ` · ${reactions} ${uiCopy("תגובות", reactions === 1 ? "reaction" : "reactions")}` : ""}`;
   };
   const activeId = String(draft.active_reel_candidate || "director_pick");
   for (const candidate of candidates) {
@@ -2954,7 +3019,8 @@ function renderReelCandidates() {
     const strong = document.createElement("b");
     strong.textContent = labels[candidate.kind] || uiCopy("חלופת Reel", "Reel option");
     const meta = document.createElement("small");
-    meta.textContent = `${formatTime(Number(candidate.output_duration || 0))} · ${Number(candidate.score || 0)} ${uiCopy("ציון עריכתי", "editorial score")}`;
+    meta.textContent = `${formatTime(Number(candidate.output_duration || 0))}${signalText(candidate.signals)}`;
+    if (candidate.signals) meta.title = uiCopy("נמדד מול ההקלטה הזו: עוצמת קול, פעילות ותגובות מדוברות.", "Measured against this recording: loudness, activity and spoken reactions.");
     title.append(strong, meta);
     head.append(rank, title);
     const preview = document.createElement("p");
@@ -4551,6 +4617,8 @@ function syncSecondaryPreview(globalTime) {
     side_by_side: uiCopy("זה לצד זה", "SPLIT"), pip: "PIP", embedded_stack: uiCopy("מצלמה פנימית", "SCREEN + CAM"),
   };
   elements.cameraBadge.textContent = camera === "gap" ? "GAP" : cameraLabels[camera] || singleSlot;
+  // With one recording and no composition, the "A" label only covers the video.
+  elements.cameraBadge.hidden = !state.project?.sources?.B && !cameraLabels[camera] && camera !== "gap";
 
   if (camera === "embedded_stack") {
     const candidate = embeddedCameraPreviewCandidate();
@@ -4805,13 +4873,38 @@ function updatePreviewCaption(sourceTime) {
     if (segment && (transcriptTime < segment.start || transcriptTime >= segment.end)) segment = null;
   }
   const captionSettings = captionSettingsFromControls();
-  const text = captionPreviewText(segment, transcriptTime, captionSettings.words);
+  const highlight = captionSettings.style === "highlight";
+  const wordsPerCaption = highlight ? Math.min(captionSettings.words, HIGHLIGHT_WORDS_PER_CAPTION) : captionSettings.words;
+  const text = captionPreviewText(segment, transcriptTime, wordsPerCaption);
   elements.previewCaption.dataset.captionStyle = captionSettings.style;
   elements.previewCaption.dataset.captionPosition = captionSettings.position;
   elements.previewCaption.dataset.captionLayout = cameraAt(sourceTime);
   elements.previewCaption.style.setProperty("--caption-preview-scale", String(captionSettings.scale / 100));
-  elements.previewCaption.textContent = text;
+  const active = highlight && !RTL_CHARACTERS.test(text) ? captionActiveWord(segment, transcriptTime, wordsPerCaption) : -1;
+  if (active >= 0) {
+    elements.previewCaption.replaceChildren(...text.split(" ").flatMap((word, index) => {
+      const span = document.createElement("span");
+      span.textContent = word;
+      if (index === active) span.className = "caption-active-word";
+      return index ? [" ", span] : [span];
+    }));
+  } else {
+    elements.previewCaption.textContent = text;
+  }
   elements.previewCaption.hidden = !text;
+}
+
+// Word highlight shows a few words at a time and colours the one being spoken,
+// matching the export. Right-to-left lines stay plain, as they do in the export.
+const HIGHLIGHT_WORDS_PER_CAPTION = 4;
+const RTL_CHARACTERS = /[֐-ࣿיִ-﷿ﹰ-﻿]/;
+function captionActiveWord(segment, sourceTime, wordsPerCaption) {
+  const timedWords = Array.isArray(segment?.words) ? segment.words.filter((word) => String(word?.word || "").trim()) : [];
+  if (!timedWords.length) return -1;
+  // Same rule as captionPreviewText, so the lit word is always in the shown phrase.
+  let activeIndex = timedWords.findIndex((word) => sourceTime <= Number(word.end));
+  if (activeIndex < 0) activeIndex = timedWords.length - 1;
+  return activeIndex % wordsPerCaption;
 }
 
 function firstKeptTime() {
@@ -5212,6 +5305,7 @@ function renderCameraDetection() {
   elements.useEmbeddedCamera.textContent = candidate
     ? active ? uiCopy("שמור שוב", "Save again") : uiCopy("בדוק והשתמש", "Review and use")
     : uiCopy("סמן ידנית", "Mark manually");
+  renderStreamerLayoutTip();
 }
 
 function setManualSelection(selection) {
@@ -5935,7 +6029,7 @@ async function applyManualEdit(action, detail = {}, { isCurrent = () => true } =
       updateMediaPreview();
       return state.project;
     }
-    elements.projectName.value = state.project.name || "";
+    elements.projectName.value = projectLabel(state.project);
     hydrateSettings();
     if (state.project.draft) renderDraft();
     else {
@@ -6313,7 +6407,7 @@ function projectLibraryBusy(projectId) {
 
 function projectLibraryRows(query = "", order = "recent") {
   const needle = String(query).trim().toLocaleLowerCase("en");
-  const rows = state.projects.filter((project) => String(project.name || "").toLocaleLowerCase("en").includes(needle));
+  const rows = state.projects.filter((project) => projectLabel(project).toLocaleLowerCase("en").includes(needle));
   return rows.sort((a, b) => order === "name"
     ? String(a.name || "").localeCompare(String(b.name || ""), "en", { numeric: true, sensitivity: "base" })
     : String(order === "oldest" ? a.created_at || a.updated_at || "" : b.updated_at || "")
@@ -6329,9 +6423,9 @@ function projectLibraryCard(project, inDialog = false) {
   button.className = inDialog ? "dialog-project" : "recent-project";
   button.type = "button";
   button.dataset.projectAction = "open";
-  button.setAttribute("aria-label", `Open project: ${project.name}`);
+  button.setAttribute("aria-label", `Open project: ${projectLabel(project)}`);
   button.innerHTML = `<span><strong dir="auto"></strong><small></small></span><b class="project-open-label">Open editor</b>`;
-  $("strong", button).textContent = project.name;
+  $("strong", button).textContent = projectLabel(project);
   $("small", button).textContent = `${project.has_draft ? "Edit ready" : "In setup"} · ${formatDate(project.updated_at)}`;
   if (!inDialog) decorateHomeProject(button, project);
   if (state.project?.id === project.id) {
@@ -6353,18 +6447,23 @@ function projectLibraryCard(project, inDialog = false) {
   rename.type = "button";
   rename.dataset.projectAction = "rename";
   rename.textContent = "Rename";
-  rename.setAttribute("aria-label", `Rename project: ${project.name}`);
+  rename.setAttribute("aria-label", `Rename project: ${projectLabel(project)}`);
   rename.addEventListener("click", () => openProjectRename(project));
   const remove = document.createElement("button");
   remove.className = "project-delete dialog-project-delete button ghost compact";
   remove.type = "button";
   remove.dataset.projectAction = "delete";
   remove.textContent = "Delete";
-  remove.setAttribute("aria-label", `Delete project: ${project.name}`);
+  remove.setAttribute("aria-label", `Delete project: ${projectLabel(project)}`);
   remove.addEventListener("click", () => runUiAction(() => deleteProject(project)));
   actions.append(rename, remove);
   row.append(button, actions);
   return row;
+}
+
+// Projects that kept the default name show their draft title or recording.
+function projectLabel(project) {
+  return String(project?.display_name || project?.name || "Untitled project");
 }
 
 // Home library rows follow the studio design: a source frame, the kind of edit
@@ -6449,7 +6548,7 @@ function openProjectRename(project) {
   initProjectLibrary();
   if (projectLibraryBusy(project.id)) { toast("Wait for this project's import or active job before renaming it."); return; }
   projectLibrary.rename = { project, origin: projectLibraryFocus(), pending: false };
-  elements.projectRenameInput.value = state.project?.id === project.id ? state.project.name : project.name;
+  elements.projectRenameInput.value = projectLabel(state.project?.id === project.id ? state.project : project);
   setProjectActionError("rename");
   setProjectActionPending("rename", false);
   elements.projectRenameDialog.showModal();
@@ -6504,7 +6603,7 @@ async function deleteProject(project) {
     return;
   }
   projectLibrary.deletion = { project, origin: projectLibraryFocus(), pending: false };
-  elements.projectDeleteName.textContent = state.project?.id === project.id ? state.project.name : project.name;
+  elements.projectDeleteName.textContent = projectLabel(state.project?.id === project.id ? state.project : project);
   setProjectActionError("deletion");
   setProjectActionPending("deletion", false);
   elements.projectDeleteDialog.showModal();

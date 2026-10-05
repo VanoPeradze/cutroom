@@ -2,7 +2,9 @@ export function workflowSettings(kind) {
   if (!["short", "youtube", "manual"].includes(kind)) throw new Error("Choose a starting point.");
   return { workflow: kind === "manual" ? "manual" : "ai", goal: kind === "short" ? "short" : "youtube",
     aspect: kind === "short" ? "9:16" : "16:9", layout: "auto",
-    auto_reframe: kind === "short", editorial_effects: kind !== "manual" };
+    auto_reframe: kind === "short", editorial_effects: kind !== "manual",
+    // Shorts and Reels start with the social caption style; it can be changed in Captions.
+    ...(kind === "short" ? { caption_style: "highlight" } : {}) };
 }
 
 export function cloudProviderName(connection = {}) {

@@ -59,7 +59,7 @@ from cutroom.media_library import (
     ASSET_ID_RE, MAX_ASSETS, MEDIA_ACTION_FIELDS, MediaLibraryError,
     asset_kind, asset_size_limit, prepare_asset, probe_asset, safe_asset_path,
 )
-from cutroom.projects import ProjectStateError, ProjectStore
+from cutroom.projects import ProjectStateError, ProjectStore, apply_automatic_name, display_name, name_from_source
 from cutroom.text_clips import MAX_CAPTION_IMPORT_BYTES, TEXT_ACTION_FIELDS
 from cutroom.render import InsufficientStorageError, available_encoders, ensure_render_storage, render_project
 from cutroom.utils import sanitize_filename
@@ -1574,6 +1574,8 @@ def create_app(settings: Settings | None = None) -> Flask:
                 staging.replace(destination)
                 installed_destination = True
                 project["sources"][slot] = source_record
+                if slot == "A":
+                    apply_automatic_name(project, name_from_source(source_record.get("name")))
                 project.setdefault("pre_analysis", {}).setdefault("audio", {}).pop(slot, None)
                 project.setdefault("pre_analysis", {}).setdefault("vision", {}).pop(slot, None)
                 project["analysis"] = None
@@ -2711,6 +2713,7 @@ def _prepare_source_impl(
 
 def _public_project(project: dict[str, Any]) -> dict[str, Any]:
     public = json.loads(json.dumps(project))
+    public["display_name"] = display_name(public)
     strip_private_edit_history(public)
     try:
         public["editor_sequence"] = editor_sequence_snapshot(public)

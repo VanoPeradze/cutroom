@@ -182,7 +182,7 @@ test("divider drag updates live and cancellation restores previous preference", 
 });
 
 test("invalid display preferences or blocked storage do not break the editor", () => {
-  const invalid = harness({ savedHeight: "NaN" }); assert.equal(invalid.el("workspaceDivider").getAttribute("aria-valuenow"), "232");
+  const invalid = harness({ savedHeight: "NaN" }); assert.equal(invalid.el("workspaceDivider").getAttribute("aria-valuenow"), "256");
   const h = harness({ storageDenied: true }); assert.doesNotThrow(() => h.controller.setTimelineHeight(320));
   assert.equal(h.el("workspaceDivider").getAttribute("aria-valuenow"), "320");
 });
@@ -320,7 +320,7 @@ test("Edit effects preserves separate widths across tabs without moving or resta
 test("oversized legacy display settings fall back without deleting old keys or changing media", () => {
   const h=harness({inspector:true,savedWidth:"860",savedHeight:"800"});
   assert.equal(h.el("workspaceInspectorDivider").getAttribute("aria-valuenow"),"344");
-  assert.equal(h.el("workspaceDivider").getAttribute("aria-valuenow"),"232");
+  assert.equal(h.el("workspaceDivider").getAttribute("aria-valuenow"),"256");
   assert.equal(h.store.get("cutroom-inspector-width-v1"),"860");
   assert.equal(h.store.get("cutroom-timeline-height-v3"),"800");
   assert.equal(h.a.parentElement,h.stage); assert.equal(h.b.parentElement,h.stage);
