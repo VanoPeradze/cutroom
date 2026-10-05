@@ -1,82 +1,91 @@
 <p align="center">
-  <img src="docs/images/readme-banner.svg" alt="CUTROOM — Your footage. Your edit." width="960">
+  <img src="docs/images/readme-banner.svg" alt="CUTROOM — Your footage. Your final cut." width="960">
 </p>
 
 <p align="center">
-  <strong>A local-first video editor for YouTube, Shorts and Reels.</strong><br>
-  Cut your recording. Shape the frame. Get the sound and captions right.
+  <strong>A free, local-first video editor for YouTube, Shorts and Reels.</strong><br>
+  Cut your recording, frame every shot, mix the sound and add captions.<br>
+  Start by hand, or let optional AI draft a first cut that you review and change.
 </p>
 
 <p align="center">
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.1%20Beta-7459a3?style=flat-square" alt="Version 1.1 Beta"></a>
-  <a href="docs/BETA_STATUS.md"><img src="https://img.shields.io/badge/status-beta-c9b62c?style=flat-square" alt="Beta software"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-44b9c6?style=flat-square" alt="MIT license"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.1%20Beta-1bd9ce?style=flat-square" alt="Version 1.1 Beta"></a>
+  <a href="docs/BETA_STATUS.md"><img src="https://img.shields.io/badge/status-beta-d6c247?style=flat-square" alt="Beta software"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-a38bd0?style=flat-square" alt="MIT license"></a>
+  <a href="docs/PLATFORMS.md"><img src="https://img.shields.io/badge/platforms-Windows%20%7C%20macOS%20%7C%20Linux%20(source)-2b3740?style=flat-square" alt="Windows, macOS and Linux from source"></a>
+  <a href="docs/AI_CONNECTIONS.md"><img src="https://img.shields.io/badge/AI-optional-1bd9ce?style=flat-square" alt="AI is optional"></a>
 </p>
 
 <p align="center">
-  <a href="https://cutroom-studio.expo.app/downloads/CUTROOM-1.1-Beta-Windows.zip"><strong>Download Windows beta</strong></a> ·
-  <a href="https://cutroom-studio.expo.app/downloads/CUTROOM-1.1-Beta-Mac.zip"><strong>Download Mac beta</strong></a> ·
-  <a href="docs/PLATFORMS.md#linux-source-based-development-path">Linux source setup</a>
+  <a href="https://cutroom-studio.expo.app/"><strong>Website</strong></a> ·
+  <a href="https://cutroom-studio.expo.app/downloads/CUTROOM-1.1-Beta-Windows.zip"><strong>Download for Windows</strong></a> ·
+  <a href="https://cutroom-studio.expo.app/downloads/CUTROOM-1.1-Beta-Mac.zip"><strong>Download for Mac</strong></a> ·
+  <a href="docs/USER_GUIDE_EN.md">User guide</a> ·
+  <a href="docs/README_HE.md">Hebrew README</a>
 </p>
-
-CUTROOM brings your camera recordings, screen captures and gameplay into an **editable timeline**. Work by hand, or ask optional AI to propose a first cut that you review and change. The application runs on your computer, with a browser interface and local MP4 rendering.
-
-The source is MIT-licensed, with no CUTROOM subscription or export watermark. Optional cloud AI uses your own provider account; its quotas and charges are separate.
-
-> **Current development preview:** the three screenshots below show a real local build captured on 4 October 2026. This interface is still being revised and **is not included in the published 1.1 Beta downloads**. All three show the same frame from a locally recorded gameplay project in the dark theme; they do not demonstrate AI editing quality.
 
 <p align="center">
-  <a href="https://github.com/VanoPeradze/cutroom/blob/master/docs/images/readme/development-editor-20261004.png"><img src="https://raw.githubusercontent.com/VanoPeradze/cutroom/master/docs/images/readme/development-editor-20261004.png" alt="Development preview: CUTROOM editor with project media, video preview, clip controls and a three-clip timeline" width="1200"></a>
+  <a href="https://github.com/VanoPeradze/cutroom/blob/master/docs/images/readme/studio-edit-20261004.png"><img src="https://raw.githubusercontent.com/VanoPeradze/cutroom/master/docs/images/readme/studio-edit-20261004.png" alt="CUTROOM studio: media library, preview with transport controls, Edit tools and a timeline with track headers" width="1200"></a>
 </p>
 
-*Edit workspace — project media, player and timeline together. Click any screenshot to view it at full size.*
+> [!NOTE]
+> The screenshots show the redesigned studio from the current source on `master`, captured on 4 October 2026 with a locally recorded gameplay clip. The published 1.1 Beta downloads still use the previous interface until the next release. The screenshots show the interface, not AI editing quality.
 
-## From recording to MP4
+## Contents
 
-1. **Import your footage.** Start with one recording, or add separate camera and screen sources.
-2. **Build your edit.** Choose manual editing or review an AI-assisted draft. Split, trim and arrange clips; adjust framing and sound.
-3. **Finish and review.** Add text or captions, choose landscape or vertical output, export an MP4 and watch the result.
+- [Highlights](#highlights)
+- [Quick start](#quick-start)
+- [How it works](#how-it-works)
+- [AI, your way](#ai-your-way)
+- [Privacy](#privacy)
+- [Requirements](#requirements)
+- [Beta status](#beta-status)
+- [Documentation](#documentation)
+- [Contributing and support](#contributing-and-support)
+- [License and credits](#license-and-credits)
 
-[Open the user guide](docs/USER_GUIDE_EN.md) · [Keyboard shortcuts](docs/KEYBOARD_SHORTCUTS.md)
+## Highlights
 
-## Tools for the edit
+- **Six focused workspaces.** Media, Edit, Layout, Audio, Captions and Output share one player and one timeline.
+- **Independent A/B tracks.** Cut, trim and move a camera and a screen recording together or separately, with Undo/Redo and track locks. [Timeline controls](docs/INDEPENDENT_TRACKS.md)
+- **Camera and screen layouts.** Stacked, side by side, picture in picture, camera only or screen only, for a selected range or the entire edit.
+- **Track mixer.** Balance Original, Music, Voiceover, Effects and Master with live level meters. Mute applies to preview and export; Solo is for preview only.
+- **Text and captions.** Add titles and captions, import SRT or VTT, and correct and style an optional AI transcript.
+- **Green screen and stabilization.** Apply a chroma key to any video source, or create an optional stabilized local copy. [Green screen](docs/CHROMA_KEY.md) · [Stabilization](docs/STABILIZATION.md)
+- **Local MP4 export.** Landscape, vertical, square, portrait or the source shape, from 720p to 4K at up to 60 FPS, with no CUTROOM watermark.
+- **AI is optional.** Manual editing needs no AI model, API key or account.
 
-- **Independent video tracks.** Cut and move sources A and B together or separately, with Undo/Redo and track protection. [Timeline controls](docs/INDEPENDENT_TRACKS.md)
-- **Camera and screen layouts.** Set source roles, adjust framing and review synchronization.
-- **Media and audio.** Add B-roll, images, music and voiceover. Source waveforms work without AI; mixer controls let you adjust levels and mute channels.
-- **Text and captions.** Create text layers, import SRT/VTT captions and adjust wording, timing and style. AI transcription is optional.
-- **Green screen and stabilization.** Apply Chroma Key to a selected source or imported video. Optional stabilization creates a separate local copy when the installed FFmpeg supports it and may crop the edges. [Green screen guide](docs/CHROMA_KEY.md) · [Stabilization guide](docs/STABILIZATION.md)
-- **Local export.** Render landscape or vertical MP4 video, with resolution options from 720p to 4K and frame rates up to 60 FPS. Higher settings do not recover missing source detail.
+<table>
+  <tr>
+    <td width="33%"><a href="https://github.com/VanoPeradze/cutroom/blob/master/docs/images/readme/studio-home-20261004.png"><img src="https://raw.githubusercontent.com/VanoPeradze/cutroom/master/docs/images/readme/studio-home-20261004.png" alt="Home: start a Short or Reel, a YouTube video or a manual edit, with recent projects below"></a></td>
+    <td width="33%"><a href="https://github.com/VanoPeradze/cutroom/blob/master/docs/images/readme/studio-audio-20261004.png"><img src="https://raw.githubusercontent.com/VanoPeradze/cutroom/master/docs/images/readme/studio-audio-20261004.png" alt="Audio workspace: track mixer with Original, Music, Voiceover, Effects and Master channels"></a></td>
+    <td width="33%"><a href="https://github.com/VanoPeradze/cutroom/blob/master/docs/images/readme/studio-output-20261004.png"><img src="https://raw.githubusercontent.com/VanoPeradze/cutroom/master/docs/images/readme/studio-output-20261004.png" alt="Output workspace: output presets, resolution, frame rate and quality, with Export video"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Home</sub></td>
+    <td align="center"><sub>Audio</sub></td>
+    <td align="center"><sub>Output</sub></td>
+  </tr>
+</table>
 
-<p align="center">
-  <a href="https://github.com/VanoPeradze/cutroom/blob/master/docs/images/readme/development-audio-20261004.png"><img src="https://raw.githubusercontent.com/VanoPeradze/cutroom/master/docs/images/readme/development-audio-20261004.png" alt="Development preview: Audio workspace with original audio, music, voiceover, effects and master mixer controls beside the video" width="1200"></a>
-</p>
+## Quick start
 
-*Audio workspace, development preview — channel levels and mute controls beside the player. This capture is paused; Solo monitors a channel in preview only.*
+### Download for Windows or macOS
 
-<p align="center">
-  <a href="https://github.com/VanoPeradze/cutroom/blob/master/docs/images/readme/development-captions-20261004.png"><img src="https://raw.githubusercontent.com/VanoPeradze/cutroom/master/docs/images/readme/development-captions-20261004.png" alt="Development preview: a selected caption with editable text, start and end times, position and style, visible in both the video and timeline" width="1200"></a>
-</p>
+1. Download the ZIP for your computer: [Windows](https://cutroom-studio.expo.app/downloads/CUTROOM-1.1-Beta-Windows.zip) or [Mac](https://cutroom-studio.expo.app/downloads/CUTROOM-1.1-Beta-Mac.zip).
+2. Extract the entire archive.
+3. Open the launcher beside the **App** folder: **START CUTROOM.bat** on Windows, **START CUTROOM.command** on macOS.
+4. CUTROOM opens in your browser. Keep the launch window open while you edit; closing the browser alone does not stop CUTROOM.
 
-*Captions workspace, development preview — a manually added caption with editable wording and timing.*
+**First setup needs internet** to install dependencies. Python, FFmpeg and AI models are not bundled in the ZIPs. Keep **App**, **START HERE.html** and the launcher together. If the browser does not open, copy the address shown in the launch window once setup finishes. The Mac launcher is unsigned and is not a notarized `.app`; the [platform guide](docs/PLATFORMS.md) explains the security prompts.
 
-## Install and start
+To update, extract a fresh copy separately and back up your projects before moving them. The older combined ZIP is still supported: open its `windows` or `mac` folder first.
 
-| Platform | Download and launch | What to expect |
-| --- | --- | --- |
-| **Windows** | [Windows beta ZIP](https://cutroom-studio.expo.app/downloads/CUTROOM-1.1-Beta-Windows.zip). Extract the entire archive, then open **START CUTROOM.bat** beside **App**. | Source and launcher; fresh-computer and broad hardware testing remain ongoing. |
-| **macOS** | [Mac beta ZIP](https://cutroom-studio.expo.app/downloads/CUTROOM-1.1-Beta-Mac.zip). Extract the entire archive, then open **START CUTROOM.command** beside **App**. | Targets macOS 15+ on Apple Silicon and Intel. Automated checks are separate from physical installation, Finder/Gatekeeper and Safari testing, which still need manual verification. |
-| **Linux** | Use a source checkout and the commands below. | Development path; no Linux binary download or verified end-to-end Linux installation. |
+### Run from source
 
-Keep **App**, **START HERE.html** and the launcher together. **First setup needs internet** to obtain dependencies; Python, FFmpeg and AI models are not bundled in the ZIPs. The Mac launcher is unsigned and is not a notarized `.app`. Follow the [platform setup guide](docs/PLATFORMS.md) for prerequisites and security prompts.
-
-Keep the launcher or terminal open while editing. If the browser does not open, copy the address shown in the launch window once setup finishes. For updates, extract a fresh copy separately and back up your projects before migration. The older combined ZIP is also supported: open its `windows` or `mac` folder first.
-
-### From source
-
-Windows users can run `run_windows.bat` from the repository root. For Mac, follow the [Mac setup guide](https://github.com/VanoPeradze/cutroom/blob/master/docs/MAC_BETA.md).
-
-On Linux, first install **Python 3.11 or 3.12** with `venv` and `pip`, **FFmpeg/FFprobe**, and **Bash**. In a writable checkout of this repository, run:
+- **Windows:** run `run_windows.bat` from the repository root.
+- **macOS:** follow the [Mac setup guide](https://github.com/VanoPeradze/cutroom/blob/master/docs/MAC_BETA.md).
+- **Linux:** install **Python 3.11 or 3.12** with `venv` and `pip`, **FFmpeg/FFprobe** and **Bash**, then run:
 
 ```sh
 chmod +x setup_linux.sh run_linux.sh
@@ -84,40 +93,84 @@ bash setup_linux.sh
 bash run_linux.sh
 ```
 
-Setup creates a local virtual environment and installs Python dependencies. FFmpeg needs the encoding and subtitle filters described in the [Linux prerequisites](docs/PLATFORMS.md#linux-source-based-development-path).
+Setup creates a local virtual environment and installs the Python dependencies. FFmpeg needs the encoding and subtitle filters listed in the [Linux prerequisites](docs/PLATFORMS.md#linux-source-based-development-path).
 
-## Choose how AI works
+## How it works
+
+1. **Bring your footage.** Start with one recording, or add a camera and a screen recording as sources A and B.
+2. **Build your edit.** Edit by hand, or review an AI-assisted YouTube cleanup or Short/Reel draft.
+3. **Make it yours.** Trim and arrange clips, adjust framing and sound, add captions, then export an MP4 and watch the result.
+
+| Workspace | What you do there |
+| --- | --- |
+| **Media** | Import recordings, images, music and voiceover. Search and filter the project library. Your original files stay untouched. |
+| **Edit** | Split, trim, move and restore clips. Protect a track with a lock. Apply a green screen in **Effects**. |
+| **Layout** | Choose the composition, assign camera and screen roles, set the framing and adjust the sync offset. |
+| **Audio** | Mix Original, Music, Voiceover, Effects and Master with live meters, Mute and Solo. |
+| **Captions** | Add text and captions, import SRT or VTT, correct the transcript and style the subtitles. |
+| **Output** | Choose the shape, resolution, frame rate and quality, then export. |
+
+[User guide](docs/USER_GUIDE_EN.md) · [Keyboard shortcuts](docs/KEYBOARD_SHORTCUTS.md) · [Shortcut profiles](docs/KEYBOARD_PROFILES.md)
+
+## AI, your way
 
 | Mode | What it does | What it needs |
 | --- | --- | --- |
-| **Manual editing** | You make the cuts, add media and captions, and export. | No AI model or provider account. |
-| **Local AI** | Transcribes speech and can propose edits using models on your computer. | Separate model downloads, disk space and processing resources. Story AI also needs a separate local engine; CUTROOM links to its installer. |
-| **Cloud AI — optional** | Uses Groq or a compatible provider for transcription and edit planning. | Your own API account, compatible models and explicit cloud consent. Provider limits and billing apply. |
+| **Manual editing** | You make the cuts, add media and captions, and export. | No AI model, API key or account. |
+| **Local AI** | Transcribes speech and proposes an edit using models on your computer. | Separate model downloads, disk space and processing time. Story AI also needs a separate local engine; CUTROOM links to its installer. |
+| **Cloud AI (optional)** | Uses Groq or a compatible provider for transcription and edit planning. | Your own API account, compatible models and your explicit consent. Provider limits and billing apply. |
 
-Editing, preview generation and video export run locally. With cloud AI enabled, **selected audio chunks go to the provider for transcription; transcript text and editing instructions/context go there for planning**. These requests do not send video frames. Provider retention and privacy terms apply to the content you send.
+- **You stay in control.** A new AI draft does not replace your manual timeline until you choose **Apply new AI draft**, and Undo stays available.
+- **No surprise downloads.** In Auto mode, CUTROOM uses the stronger transcription and Story models only when they are already installed and your graphics card has room for them. It suggests a larger Story model when it would fit, and every model download waits for your confirmation.
+- **Know your limits.** Mac transcription currently runs on the CPU. A chat subscription does not include API access, and free tiers have usage limits.
 
-Local models are separate downloads. Mac transcription currently runs on the CPU. A chat subscription does not provide API access, and a provider's free tier has usage limits.
+[AI connections and privacy](docs/AI_CONNECTIONS.md) · [Models and download sizes](docs/MODELS.md)
 
-[AI connections and privacy](docs/AI_CONNECTIONS.md) · [Model requirements](docs/MODELS.md)
+## Privacy
 
-## Beta expectations
+- **Local work.** Editing, preview and MP4 export run on your computer. Projects and working media are stored locally.
+- **Cloud AI only with consent.** When cloud AI is enabled, selected audio is sent to your provider for transcription, and transcript text and editing context for planning. Video frames are not sent. The provider's retention and privacy terms apply.
+- **No CUTROOM account.** There is no CUTROOM subscription, account or export watermark.
 
-Start with a short recording and keep your originals. Review transcripts, AI selections, source roles, synchronization and the exported MP4. AI offers a draft for you to edit; default YouTube cleanup is chronological, and editing presets do not establish editorial quality.
+## Requirements
 
-The editor has two main video sources plus media and text layers. Added layers stay within the existing edit and do not automatically follow source reordering. Automated checks and synthetic renders do not establish real-footage quality, installation on every computer or AI accuracy.
+| Platform | Status |
+| --- | --- |
+| **Windows** | Beta ZIP with launcher. Testing on fresh computers and a wide range of hardware is ongoing. |
+| **macOS** | Beta ZIP for macOS 15 or later on Apple Silicon and Intel. Automated checks run for both architectures; Finder, Gatekeeper and Safari behavior still need manual verification. |
+| **Linux** | Source checkout only: Python 3.11/3.12, FFmpeg/FFprobe and Bash. No Linux download, and the full Linux installation is not yet verified end to end. |
+
+See the [platform guide](docs/PLATFORMS.md) for exact prerequisites, commands and troubleshooting.
+
+## Beta status
+
+CUTROOM 1.1 Beta is beta software. Start with a short recording and keep your originals. Review transcripts, AI selections, source roles, synchronization and the exported MP4 before you publish. AI proposes a draft for you to edit; the default YouTube cleanup keeps your recording's order.
+
+The editor has two main video sources plus media and text layers. Added layers stay within the existing edit and do not automatically follow source reordering. Automated checks and synthetic renders do not prove real-footage quality, installation on every computer or AI accuracy.
 
 [Beta status](docs/BETA_STATUS.md) · [Known limits](docs/QUALITY_AND_LIMITS.md) · [Mac validation](https://github.com/VanoPeradze/cutroom/blob/master/docs/MAC_BETA.md) · [Changelog](CHANGELOG.md)
 
-## Help improve CUTROOM
+## Documentation
 
-[Report an issue](https://github.com/VanoPeradze/cutroom/issues/new/choose) with your OS, browser, steps to reproduce and a short redacted error message. The [tester feedback guide](docs/BETA_FEEDBACK.md) explains what helps most.
+| Guide | Covers |
+| --- | --- |
+| [User guide](docs/USER_GUIDE_EN.md) · [Hebrew user guide](docs/USER_GUIDE_HE.md) | The complete editing workflow |
+| [Platform setup](docs/PLATFORMS.md) | Windows, macOS and Linux installation and troubleshooting |
+| [AI connections](docs/AI_CONNECTIONS.md) · [Models](docs/MODELS.md) | Local and cloud AI, privacy, model sizes |
+| [Timeline controls](docs/INDEPENDENT_TRACKS.md) | Working with sources A and B |
+| [Green screen](docs/CHROMA_KEY.md) · [Stabilization](docs/STABILIZATION.md) | Effects and their limits |
+| [Keyboard shortcuts](docs/KEYBOARD_SHORTCUTS.md) | Commands and shortcut profiles |
+| [Test on another PC](docs/TEST_ON_ANOTHER_PC.md) | First-run checks and common setup problems |
+| [All guides](docs/README.md) | The full documentation index |
 
-Contributors can start with [development setup and checks](docs/CONTRIBUTING.md). CUTROOM uses Python, plain JavaScript and FFmpeg.
+## Contributing and support
 
-[Website](https://cutroom-studio.expo.app/) · [All guides](docs/README.md) · [Contributing](.github/CONTRIBUTING.md) · [Security reports](.github/SECURITY.md)
+- **Found a problem?** [Open an issue](https://github.com/VanoPeradze/cutroom/issues/new/choose) with your operating system, browser, steps to reproduce and a short, redacted error message. The [tester feedback guide](docs/BETA_FEEDBACK.md) explains what helps most.
+- **Want to contribute?** Start with [development setup and checks](docs/CONTRIBUTING.md) and the [contribution guidelines](.github/CONTRIBUTING.md). CUTROOM is built with Python, plain JavaScript and FFmpeg.
+- **Security issue?** Please follow the private process in the [security policy](.github/SECURITY.md) instead of opening a public issue.
 
 ## License and credits
 
-CUTROOM is released under the **[MIT License](LICENSE)**. Third-party tools and AI models retain their own licenses; see [third-party notices](docs/THIRD_PARTY_NOTICES.md).
+CUTROOM is released under the **[MIT License](LICENSE)**. Third-party tools and AI models keep their own licenses; see the [third-party notices](docs/THIRD_PARTY_NOTICES.md).
 
 Thanks to the open-source projects behind CUTROOM, including FFmpeg, faster-whisper, ivrit.ai and the local Story engine listed in the [third-party notices](docs/THIRD_PARTY_NOTICES.md), and to Groq for providing a free API tier within its quotas. CUTROOM is independent and is not sponsored or endorsed by Groq.

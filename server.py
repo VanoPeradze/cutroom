@@ -983,7 +983,11 @@ def create_app(settings: Settings | None = None) -> Flask:
 
     @app.get("/api/projects")
     def list_projects():
-        return jsonify({"projects": store.list()})
+        projects = store.list()
+        for project in projects:
+            name = project.pop("thumbnail_name", None)
+            project["thumbnail_url"] = f"/api/projects/{project['id']}/cache/thumbnails-A/{name}" if name else None
+        return jsonify({"projects": projects})
 
     @app.post("/api/projects")
     def create_project():
