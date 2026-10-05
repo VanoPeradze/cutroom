@@ -111,8 +111,16 @@ body:not(.studio-open) .topbar #themeToggle { order:4; }
   .home-hub .recent-project .project-kind { display:none; }
   .home-hub .welcome-copy h1 { font-size:30px; }
 }
-body .home-hub .recent-list .recent-project { padding:7px 16px; text-align:start; justify-items:start; }
-body .home-hub .recent-list .recent-project > span:not([class]) { align-items:flex-start; text-align:start; gap:2px; }
+/* Project rows: these selectors outrank the older flex row in studio-design.css,
+   which squeezed every row to 44 px and centred the text. */
+body .home-hub .recent-list .recent-project { display:grid; grid-template-columns:112px minmax(0,1.6fr) minmax(0,1fr) 72px; grid-template-rows:auto; gap:20px; align-items:center; height:auto; min-height:80px; padding:10px 16px; text-align:start; justify-items:start; }
+body .home-hub .recent-list .recent-project .project-thumb { width:112px; height:63px; border-radius:6px; }
+body .home-hub .recent-list .recent-project > span:not([class]) { align-items:flex-start; text-align:start; gap:4px; }
+body .home-hub .recent-list .recent-project :is(strong, small) { margin:0; align-self:flex-start; grid-column:auto; }
+body .home-hub .recent-list .recent-project .project-kind { display:inline-flex; align-items:center; gap:8px; padding:4px 11px; border-radius:999px; background:var(--surface-raised); color:var(--paper-dim); font-size:13px; white-space:nowrap; }
+body .home-hub .recent-list .recent-project .project-kind::before { width:8px; height:8px; margin:0; border:0; border-radius:50%; background:var(--muted); vertical-align:middle; }
+body .home-hub .recent-list .recent-project .project-kind[data-kind=short]::before { width:8px; height:8px; background:var(--signal); }
+body .home-hub .recent-list .recent-project .project-kind[data-kind=youtube]::before { background:var(--cyan); border-radius:50%; }
 body .home-hub .recent-list .recent-project strong { font:500 16px var(--font, system-ui); letter-spacing:0; color:var(--paper); }
 body .home-hub .recent-list .recent-project small { font:12px var(--font, system-ui); letter-spacing:0; color:var(--muted); }
 body .home-hub .recent-list .recent-project .project-length { justify-self:end; }
@@ -373,3 +381,43 @@ body:not(.studio-open) .topbar .project-name:focus { border-color:var(--cyan) !i
 #analysisPanel .director-progress-head strong { font-size:28px; font-weight:600; color:var(--cyan-text); font-variant-numeric:tabular-nums; }
 #analysisPanel .director-eta { display:block; min-height:18px; margin:-10px 0 14px; color:var(--paper-dim); font-size:13px; text-align:end; }
 .model-status .model-upgrade { border-color:var(--cyan); color:var(--cyan-text); }
+@media (max-width:899px) {
+  body .home-hub .recent-list .recent-project { grid-template-columns:88px minmax(0,1fr) auto; gap:14px; min-height:68px; }
+  body .home-hub .recent-list .recent-project .project-thumb { width:88px; height:50px; }
+  body .home-hub .recent-list .recent-project .project-kind { display:none; }
+}
+body .home-hub .recent-list .recent-project, body .home-hub .recent-list .recent-project:hover { background:transparent; }
+/* Media shelf: status only while there is something to say, and a clear empty state. */
+.studio-workspace #studioShelfMedia .media-status { min-height:0; margin:8px 0 0; }
+.studio-workspace #studioShelfMedia .media-status:empty { display:none; }
+.studio-workspace #studioShelfMedia .media-empty { margin:4px 0 0; padding:14px 12px; border:1px dashed var(--line-strong); border-radius:6px; text-align:center; line-height:1.5; }
+/* Edit > Clip: the tools are the point of this panel, so they start open, with
+   a one-line reminder of how to use them above. */
+#studioPanelTimeline #editClipTools .studio-tool-intro { display:block; margin:0 0 12px; }
+#studioPanelTimeline #editClipTools .studio-tool-intro h3 { display:none; }
+#studioPanelTimeline #editClipTools .studio-tool-intro > span { display:block !important; margin:0; color:var(--muted); font-size:12px; line-height:1.5; }
+/* Draft: offer the streamer layout when a facecam was found in the recording. */
+#resultPanel .streamer-layout-tip { border-inline-start-color:var(--cyan); }
+#resultPanel .streamer-layout-tip .streamer-layout-actions { display:flex; flex-wrap:wrap; gap:8px; }
+/* Captions: the visual choices first (style, position, size), then the
+   output toggles with short descriptions, and the speech language last. */
+#studioPanelTranscript .caption-control-panel { display:flex; flex-direction:column; }
+#studioPanelTranscript .caption-control-panel > .caption-control-head { order:0; }
+#studioPanelTranscript .caption-control-panel > .caption-option-grid { order:1; margin-bottom:10px; }
+#studioPanelTranscript .caption-control-panel > .caption-switch-grid { order:2; margin-bottom:0; }
+#studioPanelTranscript .caption-option-grid > .caption-language-control { order:9; }
+#studioPanelTranscript .caption-toggle-card small { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+#studioPanelTranscript .caption-option-grid { grid-template-columns:1fr; }
+#studioPanelTranscript .caption-option-grid > label { display:flex; flex-direction:column; align-items:stretch; gap:8px; }
+#studioPanelTranscript .caption-option-grid > label > span { min-height:0; }
+#studioPanelTranscript .caption-option-grid .studio-segmented { display:flex; flex-wrap:wrap; gap:6px; width:100%; }
+#studioPanelTranscript .caption-option-grid .studio-segmented > button { flex:1 1 auto; min-width:0; }
+.preview-stage .preview-badge[hidden] { display:none; }
+/* Inspector disclosures use flex summaries, which drop the native marker, so
+   collapsed sections read as headings with nothing under them. */
+.studio-workspace :is(.framing-source-preview, .layout-default-disclosure, #trackProtection, #editorMoreTools, .editor-ai-suggestions, .caption-settings-disclosure, #transcriptSection) > summary::after { content:""; flex:0 0 auto; width:7px; height:7px; margin-inline-start:auto; border-right:1.5px solid var(--muted); border-bottom:1.5px solid var(--muted); transform:rotate(-45deg); transition:transform .15s ease; }
+[dir="rtl"] .studio-workspace :is(.framing-source-preview, .layout-default-disclosure, #trackProtection, #editorMoreTools, .editor-ai-suggestions, .caption-settings-disclosure, #transcriptSection) > summary::after { transform:rotate(135deg); }
+.studio-workspace :is(.framing-source-preview, .layout-default-disclosure, #trackProtection, #editorMoreTools, .editor-ai-suggestions, .caption-settings-disclosure, #transcriptSection)[open] > summary::after { transform:rotate(45deg); }
+/* Reel option cards used a fixed near-black background, so in Day mode their
+   theme-coloured text was dark on dark. */
+#resultPanel .reel-candidate { background:var(--surface-inset); }

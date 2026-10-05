@@ -116,7 +116,7 @@ If a job fails, read the explanation and fix that cause. Original recordings are
 
 ## 5. Review the first cut
 
-The overview shows the draft, before/after duration and **What changed**. If **Reel options** appear, compare them; they are candidates, not proof of better storytelling.
+The overview shows the draft, before/after duration and **What changed**. If **Reel options** appear, compare them; they are candidates, not proof of better storytelling. **Most intense moment** is the strongest continuous stretch of the requested length, measured from loudness, activity and spoken reactions. Each card's energy is relative to the same recording, not a prediction of views. When CUTROOM finds your facecam inside the recording of a vertical Short, the overview offers **Preview streamer layout** (camera on top, game below); confirm the camera frame in Layout before it is used.
 
 **Shorter**, **Keep more**, **More energy**, **Fewer switches**, **Focus speaker** and **Try another cut** ask for draft changes. These are editorial actions, not playback controls. Review the result before fine manual work: AI actions can change the draft. Use **Studio** for precise editing.
 
@@ -229,7 +229,7 @@ Under **AI subtitle style & speech language**:
 
 - **Burn into video:** permanently render AI captions into the exported picture; custom text remains visible independently.
 - **Export SRT file:** create a separate editable subtitle file containing AI and custom captions, without titles.
-- **Style / Position / Size:** control appearance; check faces, graphics and platform overlays yourself.
+- **Style / Position / Size:** control appearance; check faces, graphics and platform overlays yourself. **Word highlight**, the default for new Shorts, shows up to four words at a time and colours the word being spoken; in vertical video its Auto position sits at about two thirds of the height, above the Shorts/Reels buttons and most game subtitles. Hebrew and Arabic lines show the same short phrases without the per-word colour.
 - **Words per caption:** shorter or longer caption chunks, not different transcription.
 - **Speech language:** affects AI transcription and can require rebuilding; it is not a translation target.
 
