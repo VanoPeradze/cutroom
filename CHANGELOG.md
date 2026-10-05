@@ -8,7 +8,7 @@
 - When a facecam is found inside a vertical Short's recording, the draft offers the streamer layout (camera on top, game below); the frame is still confirmed in Layout.
 - Home lists projects in aligned rows with a type chip and a real name (from the recording, then the AI title; typed names are kept). An untouched new project is discarded when you leave it.
 - Edit opens with its clip tools visible, the Media shelf has a clear empty state, Captions show style and position first (fixing squeezed style buttons), the default timeline fits the captions lane, and collapsible inspector sections show a chevron.
-- Published downloads still use the previous interface until the next release.
+- The 1.1 Beta Windows and Mac downloads include this update and the studio layout below.
 
 ## 1.1 Beta - 2026-10-04 - Studio layout
 
@@ -17,7 +17,7 @@
 - Simplified Home: three start cards, recent projects with a source frame, kind and length, and a folded "AI is optional" banner. The Director screen shows the source footage and, once the rate is meaningful, the estimated time left.
 - Auto mode uses the stronger models only when they are already installed and the GPU has room: Whisper Turbo (or the Hebrew Turbo model) for transcription and the 9B Story model for drafts. When the 9B model would fit but is missing, the status offers **Better drafts**; the download still needs your confirmation.
 - Story AI no longer reloads the local model between passes: contexts snap to 8K/16K/32K and do not shrink within one job.
-- Redesigned the README and website in the studio style. The published 1.1 Beta downloads still use the previous interface until the next release.
+- Redesigned the README and website in the studio style. The downloads received this layout with the 2026-10-05 update.
 
 ## 1.1 Beta - 2026-10-03 - Preview-first workspace
 
