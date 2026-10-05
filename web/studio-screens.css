@@ -412,3 +412,4 @@ body .home-hub .recent-list .recent-project, body .home-hub .recent-list .recent
 #studioPanelTranscript .caption-option-grid > label > span { min-height:0; }
 #studioPanelTranscript .caption-option-grid .studio-segmented { display:flex; flex-wrap:wrap; gap:6px; width:100%; }
 #studioPanelTranscript .caption-option-grid .studio-segmented > button { flex:1 1 auto; min-width:0; }
+.preview-stage .preview-badge[hidden] { display:none; }

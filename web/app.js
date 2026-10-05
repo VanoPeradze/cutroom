@@ -5,7 +5,7 @@ import { StabilizationStudio } from "./stabilization-studio.js?v=1.1-beta-1";
 import { ChromaStudio } from "./chroma-studio.js?v=1.1-beta-chroma-edit-2";
 import { ChromaPreview } from "./chroma-preview.js?v=1.1-beta-chroma-edit-2";
 import { SourceReview } from "./source-review.js?v=1.1-beta-8";
-import { initWorkspace } from "./workspace.js?v=1.1-beta-studio-1";
+import { initWorkspace } from "./workspace.js?v=1.1-beta-polish-1";
 import { KEYBOARD_PROFILES, resolveEditorShortcut, isEditorTransportSpace, shortcutRows } from "./keyboard.js?v=1.1-beta-2";
 import { AudioThresholdView } from "./audio-meter.js?v=1.1-beta-1";
 import { initWelcome, workflowSettings, cloudProviderName } from "./welcome.js?v=1.1-beta-polish-1";
@@ -4617,6 +4617,8 @@ function syncSecondaryPreview(globalTime) {
     side_by_side: uiCopy("זה לצד זה", "SPLIT"), pip: "PIP", embedded_stack: uiCopy("מצלמה פנימית", "SCREEN + CAM"),
   };
   elements.cameraBadge.textContent = camera === "gap" ? "GAP" : cameraLabels[camera] || singleSlot;
+  // With one recording and no composition, the "A" label only covers the video.
+  elements.cameraBadge.hidden = !state.project?.sources?.B && !cameraLabels[camera] && camera !== "gap";
 
   if (camera === "embedded_stack") {
     const candidate = embeddedCameraPreviewCandidate();
