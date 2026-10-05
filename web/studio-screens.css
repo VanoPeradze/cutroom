@@ -418,3 +418,6 @@ body .home-hub .recent-list .recent-project, body .home-hub .recent-list .recent
 .studio-workspace :is(.framing-source-preview, .layout-default-disclosure, #trackProtection, #editorMoreTools, .editor-ai-suggestions, .caption-settings-disclosure, #transcriptSection) > summary::after { content:""; flex:0 0 auto; width:7px; height:7px; margin-inline-start:auto; border-right:1.5px solid var(--muted); border-bottom:1.5px solid var(--muted); transform:rotate(-45deg); transition:transform .15s ease; }
 [dir="rtl"] .studio-workspace :is(.framing-source-preview, .layout-default-disclosure, #trackProtection, #editorMoreTools, .editor-ai-suggestions, .caption-settings-disclosure, #transcriptSection) > summary::after { transform:rotate(135deg); }
 .studio-workspace :is(.framing-source-preview, .layout-default-disclosure, #trackProtection, #editorMoreTools, .editor-ai-suggestions, .caption-settings-disclosure, #transcriptSection)[open] > summary::after { transform:rotate(45deg); }
+/* Reel option cards used a fixed near-black background, so in Day mode their
+   theme-coloured text was dark on dark. */
+#resultPanel .reel-candidate { background:var(--surface-inset); }
