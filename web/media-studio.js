@@ -192,7 +192,7 @@ export class MediaStudio {
         download.download = asset.name || 'stabilized.mp4'; download.textContent = 'Download copy'; card.append(download);
       }
     }
-    if (!library.children.length) { const note = document.createElement('p'); note.className = 'media-help'; note.textContent = 'Video, PNG/JPG/WebP images, music and voiceover. Files are processed locally; no AI needed.'; library.append(note); }
+    if (!library.children.length) { const note = document.createElement('p'); note.className = 'media-help media-empty'; note.textContent = 'Add music, voiceover, images or more video with Import. Files stay on this computer.'; library.append(note); }
     const clip = this.clips().find(item => item.id === this.selected), asset = project?.assets?.[clip?.asset_id];
     this.root.querySelector('.media-inspector').hidden = !clip;
     this.root.querySelector('.media-selection-empty').hidden = Boolean(clip);
@@ -263,7 +263,12 @@ export class MediaStudio {
           return false;
         }
       }
-      if (this.project()?.id === projectId) { this.status.textContent = 'Saved'; this.render(); this.options.preview(); }
+      if (this.project()?.id === projectId) {
+        // A brief confirmation; a permanent "Saved" line reads as leftover text.
+        this.status.textContent = 'Saved'; this.render(); this.options.preview();
+        clearTimeout(this.savedTimer);
+        this.savedTimer = setTimeout(() => { if (this.status.textContent === 'Saved') this.status.textContent = ''; }, 2000);
+      }
       return true;
     }).finally(()=>{if(this.saving===task)this.saving = null;});
     this.saving=task;

@@ -205,7 +205,8 @@ export function initWorkspace({ document: doc = document, window: win = window, 
     const dockHeight = panel.querySelector(".advanced-tabs") ? 44 : 0;
     const monitorMinimum = Math.min(420, Math.max(320, Math.round(height * .5)));
     const maximum = Math.max(minimum, Math.floor(height - headerHeight - dockHeight - 8 - monitorMinimum));
-    return { minimum, maximum, defaultHeight: Math.min(280, Math.max(232, Math.round(height * .26))) };
+    // 256 px fits the standard lanes (video, layout, original audio, captions) without scrolling.
+    return { minimum, maximum, defaultHeight: Math.min(300, Math.max(256, Math.round(height * .28))) };
   };
   const applyTimelineHeight = () => {
     const bounds = heightBounds();

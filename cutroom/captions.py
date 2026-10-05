@@ -1,11 +1,18 @@
 from __future__ import annotations
 
 import math
+import re
 from pathlib import Path
 from typing import Any
 
 
-CAPTION_STYLE_CHOICES = frozenset({"clean", "bold", "boxed"})
+CAPTION_STYLE_CHOICES = frozenset({"clean", "bold", "boxed", "highlight"})
+# "highlight" is the short-form social style: a few words at a time, with the
+# word being spoken coloured as it is said.
+HIGHLIGHT_WORDS_PER_CAPTION = 4
+HIGHLIGHT_VERTICAL_POSITION = 0.64
+HIGHLIGHT_ACTIVE_COLOUR = "&H4DE1FF&"  # ASS BGR for #FFE14D
+_RTL_CHARACTERS = re.compile("[֐-ࣿיִ-﷿ﹰ-﻿]")
 CAPTION_POSITION_CHOICES = frozenset({"auto", "top", "center", "bottom"})
 CAPTION_SCALE_RANGE = (75, 150)
 CAPTION_WORDS_PER_LINE_RANGE = (2, 12)
@@ -126,7 +133,10 @@ def _caption_entries(
     transcript: dict[str, Any],
     keep_ranges: list[dict[str, Any]],
     words_per_caption: int | None = 9,
+    word_timings: list[list[tuple[float, float, str]]] | None = None,
 ) -> list[tuple[float, float, str]]:
+    """Caption lines in output time. When ``word_timings`` is a list, it receives
+    each line's words in output time (empty for wordless transcripts)."""
     if words_per_caption is not None:
         words_per_caption = max(CAPTION_WORDS_PER_LINE_RANGE[0], min(CAPTION_WORDS_PER_LINE_RANGE[1], int(words_per_caption)))
     entries: list[tuple[float, float, str]] = []
@@ -159,6 +169,13 @@ def _caption_entries(
                     text = " ".join(str(word.get("word", "")).strip() for word in chunk).strip()
                     if text and end > start:
                         entries.append((start, end, text))
+                        if word_timings is not None:
+                            word_timings.append([
+                                (output_cursor + max(keep_start, float(word["start"])) - keep_start,
+                                 output_cursor + min(keep_end, float(word["end"])) - keep_start,
+                                 str(word.get("word", "")).strip())
+                                for word in chunk if str(word.get("word", "")).strip()
+                            ])
                 output_cursor += max(0.0, keep_end - keep_start)
         else:
             text = str(segment.get("text", "")).strip()
@@ -167,7 +184,43 @@ def _caption_entries(
                 end = _output_time(overlap_end, keep_ranges)
                 if text and start is not None and end is not None and end > start:
                     entries.append((start, end, text))
+                    if word_timings is not None:
+                        word_timings.append([])
     return entries
+
+
+def _highlight_entries(
+    entries: list[tuple[float, float, str]],
+    word_timings: list[list[tuple[float, float, str]]],
+) -> list[tuple[float, float, Any]]:
+    """Split each line into one event per spoken word. The event value is
+    ``(words, active_index)``; a wordless line keeps its plain text.
+
+    Right-to-left lines stay plain short phrases: libass loses the word order of
+    Hebrew/Arabic text once colour overrides split it into runs.
+    """
+    output: list[tuple[float, float, Any]] = []
+    for (start, end, text), words in zip(entries, word_timings):
+        if not words or _RTL_CHARACTERS.search(text):
+            output.append((start, end, text))
+            continue
+        labels = [word for _, _, word in words]
+        for index, (word_start, _, _) in enumerate(words):
+            piece_start = start if index == 0 else max(start, word_start)
+            piece_end = end if index + 1 == len(words) else min(end, words[index + 1][0])
+            if round(piece_end * 100) > round(piece_start * 100):
+                output.append((piece_start, piece_end, (labels, index)))
+    return output
+
+
+def _ass_caption_text(value: Any) -> str:
+    if isinstance(value, tuple):
+        labels, active = value
+        return " ".join(
+            f"{{\\c{HIGHLIGHT_ACTIVE_COLOUR}}}{_ass_escape(label)}{{\\r}}" if index == active else _ass_escape(label)
+            for index, label in enumerate(labels)
+        )
+    return _ass_escape(str(value))
 
 
 def _finite_time(value: Any) -> float | None:
@@ -276,8 +329,9 @@ def _layout_override(
     font_size: int,
     margin_v: int,
     outline: int,
+    default_ratio: float | None = None,
 ) -> str:
-    ratio = _LAYOUT_AWARE_CAPTION_POSITIONS.get(str(layout or ""))
+    ratio = _LAYOUT_AWARE_CAPTION_POSITIONS.get(str(layout or ""), default_ratio)
     if ratio is None:
         return ""
     center_x = max(1, int(round(width / 2)))
@@ -297,6 +351,7 @@ def _ass_style(name: str, width: int, height: int, caption_style: str, caption_p
         "bold": {"bold": -1, "border_style": 1, "outline": max(2, round(font_size * 0.09)), "shadow": 0, "outline_color": "&HCC000000", "back_color": "&H66000000"},
         "clean": {"bold": 0, "border_style": 1, "outline": max(1, round(font_size * 0.055)), "shadow": max(1, round(font_size * 0.025)), "outline_color": "&HD9000000", "back_color": "&H99000000"},
         "boxed": {"bold": -1, "border_style": 3, "outline": max(3, round(font_size * 0.12)), "shadow": 0, "outline_color": "&H00131008", "back_color": "&H99131008"},
+        "highlight": {"bold": -1, "border_style": 1, "outline": max(3, round(font_size * 0.11)), "shadow": max(1, round(font_size * 0.03)), "outline_color": "&H00000000", "back_color": "&H80000000"},
     }[caption_style]
     outline = int(style_values["outline"])
     alignment = {"auto": 2, "bottom": 2, "center": 5, "top": 8}[caption_position]
@@ -341,9 +396,24 @@ def build_ass(
     caption_position = normalized["caption_position"]
     caption_scale = normalized["caption_scale"]
     words_per_caption = normalized["caption_words_per_line"]
-    entries = _caption_entries(transcript, keep_ranges, words_per_caption)
+    if caption_style == "highlight":
+        word_timings: list[list[tuple[float, float, str]]] = []
+        lines_of_words = _caption_entries(
+            transcript, keep_ranges, min(words_per_caption, HIGHLIGHT_WORDS_PER_CAPTION), word_timings,
+        )
+        entries = _highlight_entries(lines_of_words, word_timings)
+    else:
+        entries = _caption_entries(transcript, keep_ranges, words_per_caption)
     style_line, font_size, margin_v, outline = _ass_style("Default", width, height, caption_style, caption_position, caption_scale)
     projected_layouts = _project_layout_ranges(layout_ranges, keep_ranges) if caption_position == "auto" else []
+    # Shorts/Reels place their own title and buttons over the bottom of the
+    # frame, and gameplay often has subtitles there. The social style sits at
+    # about two thirds of the height instead; older styles keep their position.
+    social_ratio = (
+        HIGHLIGHT_VERTICAL_POSITION
+        if caption_style == "highlight" and caption_position == "auto" and height > width
+        else None
+    )
     positioned_entries = _entries_with_layout(entries, projected_layouts)
     manual_styles: dict[tuple[str, str, int], str] = {}
     for row in text_clips or []:
@@ -357,10 +427,10 @@ def build_ass(
     for start, end, value, layout in positioned_entries:
         if not value:
             continue
-        override = _layout_override(layout, width, height, font_size, margin_v, outline)
+        override = _layout_override(layout, width, height, font_size, margin_v, outline, social_ratio)
         lines.append(
             f"Dialogue: 0,{_ass_timestamp(start)},{_ass_timestamp(end)},Default,,0,0,0,,"
-            f"{override}{_ass_escape(value)}\n"
+            f"{override}{_ass_caption_text(value)}\n"
         )
     for row in text_clips or []:
         name = manual_styles[(row["style"], row["position"], row["scale"])]

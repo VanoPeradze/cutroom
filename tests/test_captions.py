@@ -242,3 +242,62 @@ def test_srt_word_limit_creates_readable_short_caption_events(tmp_path):
     assert "one two" in text
     assert "three four" in text
     assert "five" in text
+
+
+def test_highlight_style_colours_each_spoken_word_in_short_phrases(tmp_path):
+    words = [
+        {"start": 0.0, "end": 0.4, "word": "Keep"},
+        {"start": 0.5, "end": 0.9, "word": "your"},
+        {"start": 1.0, "end": 1.4, "word": "mask"},
+        {"start": 1.5, "end": 1.9, "word": "on"},
+        {"start": 2.0, "end": 2.6, "word": "now!"},
+    ]
+    transcript = {"segments": [{"start": 0.0, "end": 2.6, "text": "Keep your mask on now!", "words": words}]}
+    target = build_ass(transcript, [{"start": 0.0, "end": 3.0}], tmp_path / "highlight.ass", 1080, 1920,
+                       caption_style="highlight", words_per_caption=9)
+    dialogues = [line for line in target.read_text(encoding="utf-8-sig").splitlines() if line.startswith("Dialogue: 0,")]
+    # Four words per phrase at most, one event per word, the active one coloured.
+    assert len(dialogues) == 5
+    assert dialogues[0].endswith(r"{\c&H4DE1FF&}Keep{\r} your mask on")
+    assert dialogues[2].endswith(r"Keep your {\c&H4DE1FF&}mask{\r} on")
+    assert dialogues[4].endswith(r"{\c&H4DE1FF&}now!{\r}")
+    # Each word stays lit until the next one starts: no flicker between words.
+    assert dialogues[0].split(",")[1:3] == ["0:00:00.00", "0:00:00.50"]
+    assert dialogues[1].split(",")[1:3] == ["0:00:00.50", "0:00:01.00"]
+
+
+def test_highlight_style_sits_above_the_platform_ui_in_vertical_video(tmp_path):
+    transcript = {"segments": [{"start": 0.0, "end": 1.0, "text": "Go", "words": [{"start": 0.0, "end": 1.0, "word": "Go"}]}]}
+    vertical = build_ass(transcript, [{"start": 0.0, "end": 1.0}], tmp_path / "v.ass", 1080, 1920, caption_style="highlight")
+    assert r"{\an8\pos(540,1229)}" in vertical.read_text(encoding="utf-8-sig")
+    landscape = build_ass(transcript, [{"start": 0.0, "end": 1.0}], tmp_path / "h.ass", 1920, 1080, caption_style="highlight")
+    assert r"\pos(" not in landscape.read_text(encoding="utf-8-sig")
+    chosen = build_ass(transcript, [{"start": 0.0, "end": 1.0}], tmp_path / "b.ass", 1080, 1920,
+                       caption_style="highlight", caption_position="bottom")
+    assert r"\pos(" not in chosen.read_text(encoding="utf-8-sig")
+
+
+def test_highlight_style_keeps_hebrew_as_plain_short_phrases(tmp_path):
+    words = [{"start": 0.0, "end": 0.4, "word": "תשמור"}, {"start": 0.5, "end": 0.9, "word": "על"},
+             {"start": 1.0, "end": 1.4, "word": "המסכה"}, {"start": 1.5, "end": 1.9, "word": "עכשיו"},
+             {"start": 2.0, "end": 2.4, "word": "בבקשה"}]
+    transcript = {"segments": [{"start": 0.0, "end": 2.4, "text": "", "words": words}]}
+    target = build_ass(transcript, [{"start": 0.0, "end": 3.0}], tmp_path / "he.ass", 1080, 1920,
+                       caption_style="highlight")
+    dialogues = [line for line in target.read_text(encoding="utf-8-sig").splitlines() if line.startswith("Dialogue: 0,")]
+    texts = [line.rsplit(",,", 1)[1].split("}", 1)[-1] for line in dialogues]
+    assert texts == ["תשמור על המסכה עכשיו", "בבקשה"]
+    assert all("&H4DE1FF&" not in line for line in dialogues)
+
+
+def test_highlight_style_escapes_words_and_keeps_wordless_lines(tmp_path):
+    transcript = {"segments": [
+        {"start": 0.0, "end": 1.0, "text": "a {tag}", "words": [
+            {"start": 0.0, "end": 0.4, "word": "a"}, {"start": 0.5, "end": 0.9, "word": "{tag}"}]},
+        {"start": 2.0, "end": 3.0, "text": "No timings here", "words": []},
+    ]}
+    target = build_ass(transcript, [{"start": 0.0, "end": 3.0}], tmp_path / "escape.ass", 1920, 1080,
+                       caption_style="highlight")
+    text = target.read_text(encoding="utf-8-sig")
+    assert "{tag}" not in text.replace(r"{\c&H4DE1FF&}", "").replace(r"{\r}", "")
+    assert text.rstrip().endswith("No timings here")
