@@ -144,9 +144,9 @@ On larger screens, drag the preview/timeline divider to resize either area; doub
 
 **Cut:** click once to split. This alone removes nothing. **Cut out**, in More editing tools, removes the interval between two clicks; Escape cancels the pending first cut.
 
-Click the ruler to move the yellow playhead. **+ / −** zoom around it; **Fit** shows the full edit. **Zoom to selection** focuses a marked range. Undo/Redo reverse manual edits without changing original media.
+Click the ruler to move the playhead. **+ / −** zoom around it; **Fit** shows the full edit. **Zoom to selection** focuses a marked range. Undo/Redo reverse manual edits without changing original media.
 
-**Snap** is beside Undo/Redo in the timeline toolbar. Switch it on to align a trim, range or moved clip to the yellow playhead, A/B cuts or added media/audio edges. A cyan guide names the alignment target. **Alt** temporarily bypasses snapping; **Esc** cancels a drag without saving. Snap starts off, and never makes ruler seeking jump to a cut. Reordering source clips aligns the leading edge and closes the old position; added media can align either edge without reordering the base footage. Source limits still apply: snapping cannot reveal frames that do not exist. The timeline hover readout uses **hours:minutes:seconds:frames** at the output frame rate; a trim shows its actual allowed edge, not an unreachable pointer position.
+**Snap** is beside Undo/Redo in the timeline toolbar. Switch it on to align a trim, range or moved clip to the playhead, A/B cuts or added media/audio edges. A cyan guide names the alignment target. **Alt** temporarily bypasses snapping; **Esc** cancels a drag without saving. Snap starts off, and never makes ruler seeking jump to a cut. Reordering source clips aligns the leading edge and closes the old position; added media can align either edge without reordering the base footage. Source limits still apply: snapping cannot reveal frames that do not exist. The timeline hover readout uses **hours:minutes:seconds:frames** at the output frame rate; a trim shows its actual allowed edge, not an unreachable pointer position.
 
 ### Together or one source?
 
@@ -179,7 +179,7 @@ Open **More editing tools → Keys / Shortcuts** and choose a preset. The list s
 
 ### Add media and mix sound
 
-In **Media & audio**, choose **Add media** to import video, an image or audio into this project's library. Wait for preparation, place the yellow playhead and select **+ Add**. Drag the new clip or its edges in the waveform/timeline lanes; use its inspector for exact start/end, source in, volume and fades. Images can stay still, slowly zoom or pan. **Use clip audio** enables sound from an added video; check its **Audio group**.
+In **Media & audio**, choose **Add media** to import video, an image or audio into this project's library. Wait for preparation, place the playhead and select **+ Add**. Drag the new clip or its edges in the waveform/timeline lanes; use its inspector for exact start/end, source in, volume and fades. Images can stay still, slowly zoom or pan. **Use clip audio** enables sound from an added video; check its **Audio group**.
 
 The timeline waveform shows measured audio from the selected original A/B source, including manual edits without AI. Imported audio has its own waveform. A silent section, missing audio and a pending/unavailable measurement are different states.
 
