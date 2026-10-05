@@ -26,6 +26,8 @@ DEFAULTS: dict[str, Any] = {
     "audio_analysis_window_seconds": 0.20,
     "scene_analysis_fps": 1.5,
     "vision_samples": {"lite": 12, "balanced": 20, "quality": 32},
+    # Gameplay vision: sampled 8 s windows per performance mode, and a time cap.
+    "visual_moments": {"budget": {"lite": 48, "balanced": 120, "quality": 200}, "max_seconds": 900},
     "ai": {
         "enabled": True,
         "ollama_url": "http://127.0.0.1:11434",
@@ -39,6 +41,8 @@ DEFAULTS: dict[str, Any] = {
         "hebrew_whisper_model": "ivrit-ai/whisper-large-v3-turbo-ct2",
         "hebrew_auto_gpu_max_seconds": 3600,
         "performance_mode": "auto",
+        # auto: streamer styles on a GPU-class device; on: any Short; off: never.
+        "visual_ai": "auto",
         "whisper_device": "auto",
         "whisper_compute_type": "auto",
         "whisper_isolate_process": True,

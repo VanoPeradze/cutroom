@@ -38,7 +38,7 @@ Hebrew local transcription uses a short Hebrew/English spelling hint. In Auto, t
 
 ## What leaves your computer?
 
-For cloud transcription, CUTROOM extracts the selected audio track into small temporary chunks and sends those to your selected provider endpoint. For Story AI, it sends transcript text and editing context/instructions. It does not send video frames. Transcripts and instructions may contain sensitive information from your recording, so use cloud AI only for content you are allowed to share with the provider.
+For cloud transcription, CUTROOM extracts the selected audio track into small temporary chunks and sends those to your selected provider endpoint. For Story AI, it sends transcript text and editing context/instructions. It does not send video frames: Gameplay vision runs only with local AI and is skipped while a cloud connection is selected. Transcripts and instructions may contain sensitive information from your recording, so use cloud AI only for content you are allowed to share with the provider.
 
 Editing, preview generation and video export still run locally. This is not a browser-only hosted editor, and it does not eliminate the local video-processing installation. Existing installers and ZIPs have not been made smaller by this change.
 

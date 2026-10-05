@@ -37,11 +37,13 @@ _SPEECH = {
     "ivrit-ai/whisper-large-v3-turbo-ct2": ("Hebrew · ivrit.ai", 1.63, "Hebrew-focused transcription for Quality mode with the spoken language set to Hebrew."),
 }
 _STORY = {
-    "qwen3.5:2b": ("Story · Lite", 2.7, "Lighter story planning; complex material may need a stronger model."),
-    "qwen3.5:4b": ("Story · Balanced", 3.4, "The default local model for organizing a first cut."),
-    "qwen3.5:9b": ("Story · Quality", 6.6, "Stronger story planning with higher memory use and longer processing times."),
+    "qwen3.5:2b": ("Story · Lite", 2.7, "Lighter story planning; complex material may need a stronger model. Also powers Gameplay vision."),
+    "qwen3.5:4b": ("Story · Balanced", 3.4, "The default local model for organizing a first cut. Also powers Gameplay vision; nothing else to download."),
+    "qwen3.5:9b": ("Story · Quality (optional)", 6.6, "Optional upgrade for stronger story planning. Quality mode works without it, using the Balanced model; this one needs more memory and time."),
     "qwen3:8b": ("Story · alternative", 5.2, "Configured fallback for local story planning."),
 }
+# Never required for any feature; offered as an upgrade only.
+_OPTIONAL_STORY = {"qwen3.5:9b"}
 _FILES = ["config.json", "preprocessor_config.json", "model.bin", "tokenizer.json", "vocabulary.*"]
 
 
@@ -144,6 +146,7 @@ def catalog(settings: Settings, runtime: dict[str, Any], *, engine_installed: bo
                 ),
                 "installed": installed, "status": "installed" if installed else "not_installed",
                 "can_download": not installed and (speech_ready if kind == "transcription" else engine_installed),
+                "optional": kind == "editor" and model in _OPTIONAL_STORY,
             })
     unsupported = [model for model in speech_profiles if model not in _SPEECH] + [model for model in story_profiles if model and model not in _STORY]
     return {
@@ -157,6 +160,7 @@ def catalog(settings: Settings, runtime: dict[str, Any], *, engine_installed: bo
         "models": rows,
         "notes": [
             "Download one speech model and one Story model for your preferred profile. You do not need all models.",
+            "Story · Quality (9B) is optional. Every feature, including Quality mode and Gameplay vision, works with Story · Balanced.",
             "Sizes are estimates for model files, not total installation size or RAM requirements. Allow extra disk space for caches and videos.",
             "Downloads need internet. Installed local models process footage on your computer; no footage is uploaded by this setup.",
             "Downloading a model does not change your editing profile. Auto mode can choose a lighter model based on your computer.",

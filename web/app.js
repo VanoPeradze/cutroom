@@ -1,4 +1,4 @@
-import { applyTranslations, dictionaries } from "./i18n.js?v=1.1-beta-polish-1";
+import { applyTranslations, dictionaries } from "./i18n.js?v=1.1-beta-vision-1";
 import { TimelineView, formatTime, editableClips, timelineDuration, sequenceBlocks, sequenceGaps, rippleMoveStart } from "./timeline.js?v=1.1-beta-studio-1";
 import { MediaStudio } from "./media-studio.js?v=1.1-beta-polish-1";
 import { StabilizationStudio } from "./stabilization-studio.js?v=1.1-beta-1";
@@ -9,7 +9,7 @@ import { initWorkspace } from "./workspace.js?v=1.1-beta-polish-1";
 import { KEYBOARD_PROFILES, resolveEditorShortcut, isEditorTransportSpace, shortcutRows } from "./keyboard.js?v=1.1-beta-2";
 import { AudioThresholdView } from "./audio-meter.js?v=1.1-beta-1";
 import { initWelcome, workflowSettings, cloudProviderName } from "./welcome.js?v=1.1-beta-polish-1";
-import { initLocalModels } from "./local-models.js?v=1.1-beta-1";
+import { initLocalModels } from "./local-models.js?v=1.1-beta-vision-1";
 import { trackClips, trackAt, hasSourceTracks, SourceTimelineClock } from "./source-tracks.js?v=1.1-beta-1";
 import { initTrackProtection } from "./track-protection.js?v=1.1-beta-1";
 import { TextStudio } from "./text-studio.js?v=1.1-beta-2";
@@ -138,7 +138,7 @@ function cacheElements() {
     "transcriptFilter", "transcriptResults", "transcriptRemove", "transcriptRestore", "transcriptEditForm", "transcriptEditText", "transcriptEditTime", "transcriptEditStatus", "transcriptSave", "transcriptDiscard", "transcriptPrevious", "transcriptNext", "transcriptSaveAll",
     "keyboardProfile", "keyboardHelpProfile", "keyboardHelp", "keyboardDialog", "keyboardDescription", "keyboardLimitations", "keyboardShortcutList", "clipTrimForm", "clipTrimIn", "clipTrimOut", "clipTrimTitle", "clipTrimApply", "clipTrimStatus", "timelineTarget", "timelineTargetField", "trackReset", "trackHelp", "clipSourceIn", "clipSourceField", "clipMove",
     "qualitySelect", "fpsSelect", "fpsHelp", "exportFpsSelect", "exportFpsHelp", "exportFrameRateField", "autoReframe", "effectsToggle", "captionsToggle", "burnCaptionsToggle", "studioBurnCaptionsToggle", "captionControlStatus", "captionLanguageStatus",
-    "captionStyleSelect", "captionPositionSelect", "captionScale", "captionScaleOut", "captionWordsPerLine", "captionWordsPerLineOut", "spokenLanguageSelect", "performanceModeSelect", "audioPresetChoices", "audioPresetNote",
+    "captionStyleSelect", "captionPositionSelect", "captionScale", "captionScaleOut", "captionWordsPerLine", "captionWordsPerLineOut", "spokenLanguageSelect", "performanceModeSelect", "visualAiSelect", "audioPresetChoices", "audioPresetNote",
     "silenceAction", "silenceMin", "silenceMinOut", "silenceKeep", "silenceKeepOut", "maxRemoveRatio", "maxRemoveOut",
     "quietAction", "quietGain", "quietGainOut", "loudAction", "loudGain", "loudGainOut", "normalizeAudio",
     "modelStatus", "modelButton", "retryAIButton", "setupRuntimeDock", "studioRuntimeDock", "draftRebuildNotice", "draftRebuildTitle", "draftRebuildText", "rebuildDraftButton", "exportDialog", "closeExportDialog", "exportSummary",
@@ -622,7 +622,14 @@ function bindEvents() {
     scheduleSettingsPatch({ requiresRebuild: true, reason: "language" });
     renderLanguageDetectionStatus();
   });
-  elements.performanceModeSelect.addEventListener("change", () => scheduleSettingsPatch({ requiresRebuild: true, reason: "performance" }));
+  elements.performanceModeSelect.addEventListener("change", () => {
+    scheduleSettingsPatch({ requiresRebuild: true, reason: "performance" });
+    // The Story model depends on the mode: refresh a running local engine's
+    // status so an optional upgrade shows now, not after the next AI run.
+    const connection = state.system?.ai_connection;
+    if (state.system?.runtime?.state === "ready" && (!connection?.mode || connection.mode === "local")) prepareLocalAI().catch(() => {});
+  });
+  elements.visualAiSelect?.addEventListener("change", () => scheduleSettingsPatch({ requiresRebuild: true, reason: "visual_ai" }));
   [elements.silenceAction, elements.quietAction, elements.loudAction, elements.normalizeAudio].forEach((control) => control.addEventListener("change", () => {
     setAudioPresetCustom(); updateAudioOutputs(); scheduleSettingsPatch({ requiresRebuild: true, reason: "audio" });
   }));
@@ -1205,6 +1212,7 @@ function hydrateSettings() {
   elements.captionWordsPerLine.value = clampInteger(settings.caption_words_per_line, 2, 12, CAPTION_DEFAULTS.words);
   elements.spokenLanguageSelect.value = optionExists(elements.spokenLanguageSelect, settings.spoken_language) ? settings.spoken_language : "auto";
   elements.performanceModeSelect.value = optionExists(elements.performanceModeSelect, settings.performance_mode) ? settings.performance_mode : "auto";
+  if (elements.visualAiSelect) elements.visualAiSelect.value = optionExists(elements.visualAiSelect, settings.visual_ai) ? settings.visual_ai : "auto";
   renderCaptionControls();
   renderLanguageDetectionStatus();
   hydrateAudioSettings(settings.audio_cleanup || {});
@@ -1966,6 +1974,7 @@ function currentSettings() {
     caption_words_per_line: captionSettings.words,
     spoken_language: elements.spokenLanguageSelect.value,
     performance_mode: elements.performanceModeSelect.value,
+    ...(elements.visualAiSelect ? { visual_ai: elements.visualAiSelect.value } : {}),
     audio_cleanup: currentAudioSettings(),
   };
 }
@@ -2993,6 +3002,7 @@ function renderReelCandidates() {
     focused_moment: uiCopy("רגע ממוקד", "Focused moment"),
     alternate_highlight: uiCopy("היילייט חלופי", "Alternate highlight"),
     intense_moment: uiCopy("הרגע הכי עוצמתי", "Most intense moment"),
+    action_moment: uiCopy("האקשן הכי חזק במשחק", "Best gameplay action"),
   };
   const energyLabels = {
     high: uiCopy("אנרגיה גבוהה", "High energy"),
@@ -3003,7 +3013,10 @@ function renderReelCandidates() {
   const signalText = (signals) => {
     if (!signals || !energyLabels[signals.energy]) return "";
     const reactions = Number(signals.reactions || 0);
-    return ` · ${energyLabels[signals.energy]}${reactions ? ` · ${reactions} ${uiCopy("תגובות", reactions === 1 ? "reaction" : "reactions")}` : ""}`;
+    const action = Number(signals.visual?.action);
+    // Gameplay vision: how much visible action the local model saw (0-100).
+    const visual = Number.isFinite(action) && action >= 50 ? ` · ${uiCopy("אקשן על המסך", "On-screen action")} ${Math.round(action)}` : "";
+    return ` · ${energyLabels[signals.energy]}${reactions ? ` · ${reactions} ${uiCopy("תגובות", reactions === 1 ? "reaction" : "reactions")}` : ""}${visual}`;
   };
   const activeId = String(draft.active_reel_candidate || "director_pick");
   for (const candidate of candidates) {
@@ -3020,7 +3033,9 @@ function renderReelCandidates() {
     strong.textContent = labels[candidate.kind] || uiCopy("חלופת Reel", "Reel option");
     const meta = document.createElement("small");
     meta.textContent = `${formatTime(Number(candidate.output_duration || 0))}${signalText(candidate.signals)}`;
-    if (candidate.signals) meta.title = uiCopy("נמדד מול ההקלטה הזו: עוצמת קול, פעילות ותגובות מדוברות.", "Measured against this recording: loudness, activity and spoken reactions.");
+    if (candidate.signals) meta.title = candidate.signals.visual
+      ? uiCopy("נמדד מול ההקלטה הזו: עוצמת קול, תגובות מדוברות ומה שנראה על המסך.", "Measured against this recording: loudness, spoken reactions and what was seen on screen.")
+      : uiCopy("נמדד מול ההקלטה הזו: עוצמת קול, פעילות ותגובות מדוברות.", "Measured against this recording: loudness, activity and spoken reactions.");
     title.append(strong, meta);
     head.append(rank, title);
     const preview = document.createElement("p");
@@ -3125,6 +3140,7 @@ function renderDecisions() {
     if (decision.type === "duration") value = `${formatTime(decision.before)} → ${formatTime(decision.after)}`;
     else if (decision.type === "sync") value = `${Number(decision.offset).toFixed(2)}s`;
     else if (decision.type === "audio_profile") value = `${t("noiseFloor")} ${Number(decision.noise).toFixed(1)} dB · ${t("speechLevel")} ${Number(decision.speech).toFixed(1)} dB`;
+    else if (decision.type === "visual_ai") value = `${decision.count || 0} ${t("visualMomentsWatched")}`;
     else value = `${decision.count || 0} ${t("occurrences")}`;
     item.innerHTML = `<i></i><strong></strong><span></span>`;
     $("strong", item).textContent = label;
@@ -6922,16 +6938,21 @@ function renderModelStatus() {
   $("small", elements.modelStatus).textContent = detail;
   elements.modelButton.hidden = !engineAvailable || (installed && !(fallback && selection?.requested_model_installed === false)) || preparing || installing;
   elements.modelButton.textContent = fallback ? "Download requested model" : "Download model…";
-  // Auto mode can suggest a larger Story model that fits this GPU; the download
-  // itself still happens in AI connection with the usual confirmation.
+  // The larger Story model is optional. Quality and a roomy GPU in Auto offer
+  // it; the download itself still happens in AI connection with confirmation.
   const upgrade = document.getElementById?.("modelUpgradeButton");
   if (upgrade) {
     const suggested = ready && !fallback && !preparing && !installing ? selection?.upgrade_model : null;
     upgrade.hidden = !suggested;
     if (suggested) {
-      upgrade.textContent = `Better drafts: get ${suggested}`;
-      upgrade.title = `Your GPU can run ${suggested}. It writes stronger drafts than ${actualModel}. Opens AI connection; the download needs your confirmation.`;
-      $("small", elements.modelStatus).textContent = `${actualModel} · Runs on this computer · ${suggested} fits your GPU for stronger drafts`;
+      const qualityMode = selection?.upgrade_reason === "quality_mode";
+      upgrade.textContent = `Optional: get ${suggested}`;
+      upgrade.title = qualityMode
+        ? `Quality works with ${actualModel}. ${suggested} is an optional, larger download for stronger drafts. Opens AI connection; nothing downloads without your confirmation.`
+        : `Your GPU can run ${suggested}. It writes stronger drafts than ${actualModel}. Opens AI connection; the download needs your confirmation.`;
+      $("small", elements.modelStatus).textContent = qualityMode
+        ? `${actualModel} · Runs on this computer · ${suggested} is an optional upgrade`
+        : `${actualModel} · Runs on this computer · ${suggested} fits your GPU for stronger drafts`;
     }
   }
   elements.retryAIButton.hidden = runtime?.can_retry === false || (ready && !preparing && !installing);

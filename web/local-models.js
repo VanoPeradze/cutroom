@@ -70,7 +70,7 @@ export function initLocalModels({document, api, changed = async () => {}, busy =
         if (!model) { download.disabled = true; description.textContent = "No configured model is available."; return; }
         choices[kind] = model.model;
         description.textContent = `${model.description || ""} ${model.requirements || ""}`.trim();
-        facts.textContent = `${modelSize(model.estimated_download_gb)} download · ${model.installed ? "Downloaded" : model.status === "unknown" ? "Status not verified" : "Not downloaded"} · Used by: ${(model.profiles || []).join(", ") || "configured profile"}`;
+        facts.textContent = `${modelSize(model.estimated_download_gb)} download · ${model.installed ? "Downloaded" : model.status === "unknown" ? "Status not verified" : model.optional ? "Optional, not needed" : "Not downloaded"} · Used by: ${(model.profiles || []).join(", ") || "configured profile"}`;
         download.textContent = model.installed ? "Downloaded" : `Download ${kind === "editor" ? "Story" : "transcription"} model`;
         download.disabled = model.installed || model.can_download === false || Boolean(active) || submitting;
       };

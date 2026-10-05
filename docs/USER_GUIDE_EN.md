@@ -52,7 +52,7 @@ Open **AI connection**. Selecting an option is not enough: choose **Use local AI
 Local AI has two separate jobs:
 
 - **Speech model:** turns spoken audio into words and timings. Smaller models use fewer resources; larger or language-specific models may help difficult speech but still make mistakes.
-- **Story model:** reads the transcript to help summarize and select moments. It cannot recover words that transcription missed, and it is not a visual gameplay-understanding engine.
+- **Story model:** reads the transcript to help summarize and select moments. With **Gameplay vision** it also looks at sampled frames to tell action from menus and cutscenes; that uses the same model, with nothing else to download. It cannot recover words that transcription missed.
 
 Models are not bundled in the ZIP. Downloads require internet; installed files are reused. You do not need every model. Downloading a model does not itself change the project's performance profile or switch your AI connection.
 
@@ -66,10 +66,10 @@ Models are not bundled in the ZIP. Downloads require internet; installed files a
 | --- | --- | --- | --- | --- |
 | Lite | Whisper Base | 0.15 GB | Qwen3.5 2B | 2.7 GB |
 | Balanced | Whisper Small | 0.49 GB | Qwen3.5 4B | 3.4 GB |
-| Quality | Whisper Turbo | 1.63 GB | Qwen3.5 9B | 6.6 GB |
-| Quality, Hebrew selected | ivrit.ai Whisper Large V3 Turbo | 1.63 GB | Qwen3.5 9B | 6.6 GB |
+| Quality | Whisper Turbo | 1.63 GB | Qwen3.5 4B; 9B optional | 3.4 GB (+6.6 GB optional) |
+| Quality, Hebrew selected | ivrit.ai Whisper Large V3 Turbo | 1.63 GB | Qwen3.5 4B; 9B optional | 3.4 GB (+6.6 GB optional) |
 
-These are estimates for model downloads, **not total installation size or memory requirements**. Dependencies, cache overhead, footage, previews and exports take additional space. Check the requested and selected Story model: if preferred 9B/2B is missing, a configured installed fallback (4B by default) can be reported and used. Models are not downloaded automatically; choose an installed model or explicitly download the preferred one. A profile label does not guarantee semantic editing quality. [Full model details](MODELS.md)
+These are estimates for model downloads, **not total installation size or memory requirements**. Dependencies, cache overhead, footage, previews and exports take additional space. The 9B Story model is optional: Quality works fully with 4B, and the status offers 9B as an upgrade you may download. If the Lite 2B model is missing, an installed fallback (4B by default) is reported and used. Models are not downloaded automatically; choose an installed model or explicitly download the preferred one. A profile label does not guarantee semantic editing quality. [Full model details](MODELS.md)
 
 The Story runtime is **Ollama**, separate from the model weights. CUTROOM's model-download action does not silently install this application or approve Windows permission prompts. Cancelling can leave reusable partial download files. Do not delete shared model caches as a routine fix. **Downloaded** checks files, not whether your computer has enough memory or whether the model has completed a successful inference.
 
@@ -102,7 +102,8 @@ In **Advanced**, **Source B offset** adjusts sync for the whole edit. Positive v
 ## 4. Prepare an AI draft
 
 - **Speech language:** choose the actual spoken language when known. Auto-detect can be wrong with short speech, music or mixed languages. This workflow transcribes speech; it is not a complete translation service.
-- **Edit style:** guides rhythm and moment selection. It does not clone a creator, add licensed assets or guarantee visual gameplay-event detection.
+- **Edit style:** guides rhythm and moment selection. It does not clone a creator or add licensed assets.
+- **Gameplay vision** (AI draft settings): *Automatic* lets the local Story model look at sampled frames for streamer styles when an NVIDIA GPU or Apple Silicon is available. It favours visible fights and skips menus, maps and loading screens, and adds a **Best gameplay action** Reel option. *On for every Short* also runs on CPU, more slowly. *Off* turns it off. Frames stay on your computer, and it never runs with cloud AI. It is evidence, not a guarantee: review the draft.
 - **Target length:** sets the duration budget for a single-moment Short/Reel style. Sentence boundaries and source coverage can shorten the result; check actual duration.
 - **Director instruction:** an optional brief, for example “Keep the explanation and its example; remove repeated setup.” It guides editing, not unrestricted video generation.
 - **Burn captions into video:** captions become part of the MP4 picture. You can adjust them later.
