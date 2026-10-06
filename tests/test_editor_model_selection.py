@@ -11,7 +11,7 @@ class Settings:
           "editor_fallback_models": ["qwen3:8b"], "performance_mode": "auto"}
 
 
-@pytest.mark.parametrize("mode,requested", [("quality", "qwen3.5:9b"), ("lite", "qwen3.5:2b")])
+@pytest.mark.parametrize("mode,requested", [("lite", "qwen3.5:2b")])
 def test_installed_fallback_is_usable_but_identified_as_different_model(monkeypatch, mode, requested):
     monkeypatch.setattr(intelligence, "_ollama_inventory", lambda _: (True, {"qwen3.5:4b"}))
     status = intelligence.story_ai_status(Settings(), {"performance_mode": mode})
@@ -25,6 +25,21 @@ def test_installed_fallback_is_usable_but_identified_as_different_model(monkeypa
     assert "not installed" in status["message"]
     assert status["recommended_model"] == requested
     assert intelligence._select_editor_model(Settings(), {"performance_mode": mode}) == "qwen3.5:4b"
+
+
+def test_quality_without_the_optional_large_model_uses_the_default_model_as_requested(monkeypatch):
+    # The 9B Story model is an optional download: Quality must work fully with
+    # the default model, without a "missing model" fallback, and offer 9B only
+    # as an optional upgrade.
+    monkeypatch.setattr(intelligence, "_ollama_inventory", lambda _: (True, {"qwen3.5:4b"}))
+    status = intelligence.story_ai_status(Settings(), {"performance_mode": "quality"})
+    assert status["ready"] is True
+    assert status["requested_model"] == status["selected_model"] == "qwen3.5:4b"
+    assert status["using_fallback"] is False
+    assert status["fallback_reason"] is None
+    assert "not installed" not in status["message"]
+    assert status["upgrade_model"] == "qwen3.5:9b"
+    assert status["upgrade_reason"] == "quality_mode"
 
 
 def test_requested_installed_model_is_selected_without_fallback(monkeypatch):
@@ -51,8 +66,9 @@ def test_no_available_configured_model_never_sends_request_to_missing_model(monk
     status = intelligence.story_ai_status(Settings(), {"performance_mode": "quality"})
     assert status["ready"] is False
     assert status["selected_model"] is None
-    assert status["requested_model"] == "qwen3.5:9b"
-    assert status["recommended_model"] == "qwen3.5:9b"
+    # Recommend the default download, never the optional large model.
+    assert status["requested_model"] == "qwen3.5:4b"
+    assert status["recommended_model"] == "qwen3.5:4b"
     assert status["reason"] == reason
 
 
@@ -79,7 +95,8 @@ def test_missing_or_unusable_model_edit_is_labelled_basic_cleanup(monkeypatch, r
     )
     assert engine == "deterministic"
     assert editorial["model_selection"]["selected_model"] == "qwen3.5:4b"
-    assert editorial["model_selection"]["using_fallback"] is True
+    assert editorial["model_selection"]["requested_model"] == "qwen3.5:4b"
+    assert editorial["model_selection"]["using_fallback"] is False
     assert editorial["warnings"][0]["type"] == "story_ai_fallback"
     assert "basic transcript cleanup" in editorial["warnings"][0]["message"]
 
@@ -135,4 +152,12 @@ def test_auto_suggests_the_larger_story_model_only_when_it_would_run_and_is_miss
     intelligence._STORY_GPU_PROBE.clear()
     status = intelligence.story_ai_status(Settings(), {"performance_mode": "auto"})
     assert status["upgrade_model"] == expected
+    assert status["upgrade_reason"] == ("gpu_room" if expected else None)
     assert status["ready"] is True
+
+
+def test_quality_with_the_large_model_installed_offers_no_upgrade(monkeypatch):
+    monkeypatch.setattr(intelligence, "_ollama_inventory", lambda _: (True, {"qwen3.5:4b", "qwen3.5:9b"}))
+    status = intelligence.story_ai_status(Settings(), {"performance_mode": "quality"})
+    assert status["selected_model"] == "qwen3.5:9b"
+    assert status["upgrade_model"] is None and status["upgrade_reason"] is None

@@ -92,6 +92,7 @@ class ProjectStore:
                 **DEFAULT_CAPTION_SETTINGS,
                 "spoken_language": "auto",
                 "performance_mode": "auto",
+                "visual_ai": "auto",
                 "audio_cleanup": {
                     "preset": "clean",
                     "silence_action": "shorten",

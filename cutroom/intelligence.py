@@ -428,7 +428,8 @@ STORY_CRITIC_SCHEMA = {
 }
 
 
-def story_cache_fingerprint(segments: list[dict[str, Any]], brief: dict[str, Any], model: str) -> str:
+def story_cache_fingerprint(segments: list[dict[str, Any]], brief: dict[str, Any], model: str,
+                            visual_key: str | None = None) -> str:
     """Identify the exact transcript, intent, model and pipeline behind a story cache."""
 
     segment_identity = [
@@ -451,6 +452,7 @@ def story_cache_fingerprint(segments: list[dict[str, Any]], brief: dict[str, Any
             "performance_mode": brief.get("performance_mode"),
             "goal": brief.get("goal"),
             "instruction": brief.get("instruction"),
+            **({"visual_moments": visual_key} if visual_key else {}),
         },
     )
 
@@ -503,13 +505,17 @@ def _auto_story_quality_ready(settings: Settings, model: str) -> bool:
     return ready
 
 
-def _model_preferences(settings: Settings, brief: dict[str, Any]) -> list[str]:
+def _model_preferences(settings: Settings, brief: dict[str, Any], installed: set[str] | None = None) -> list[str]:
     base = str(settings.ai.get("editor_model", "qwen3.5:4b"))
     fallbacks = [str(item) for item in settings.ai.get("editor_fallback_models", [])]
     mode = str(brief.get("performance_mode") or settings.ai.get("performance_mode", "auto"))
     preferred: list[str] = []
     quality_model = str(settings.ai.get("editor_quality_model") or "qwen3.5:9b")
-    if mode == "quality" or (mode == "auto" and _auto_story_quality_ready(settings, quality_model)):
+    # The larger Quality Story model is an optional download. Quality uses it
+    # when the person installed it; otherwise the default model is the request,
+    # not a "missing model" fallback that would look like a broken setup.
+    quality_installed = installed is not None and quality_model.strip().removesuffix(":latest") in installed
+    if (mode == "quality" and quality_installed) or (mode == "auto" and _auto_story_quality_ready(settings, quality_model)):
         preferred.append(quality_model)
     elif mode == "lite":
         preferred.append(str(settings.ai.get("editor_lite_model") or "qwen3.5:2b"))
@@ -541,9 +547,9 @@ def story_ai_status(settings: Settings, brief: dict[str, Any] | None = None) -> 
                 "using_fallback": False, "fallback_reason": None,
                 "message": (f"Using configured {provider_label} model {selected['model']}." if ready
                             else f"Connect {provider_label} in AI connection before creating a cloud edit.")}
-    preferred = _model_preferences(settings, brief)
-    requested = preferred[0] if preferred else "qwen3.5:4b"
     if not settings.ai.get("enabled", True):
+        preferred = _model_preferences(settings, brief)
+        requested = preferred[0] if preferred else "qwen3.5:4b"
         return {
             "ready": False, "ollama_available": False, "installed_models": [], "selected_model": None,
             "recommended_model": requested, "requested_model": requested, "requested_model_installed": None,
@@ -551,6 +557,8 @@ def story_ai_status(settings: Settings, brief: dict[str, Any] | None = None) -> 
             "message": "Story AI is disabled. Enable AI or continue with manual editing.",
         }
     available, installed = _ollama_inventory(settings)
+    preferred = _model_preferences(settings, brief, installed if available else None)
+    requested = preferred[0] if preferred else "qwen3.5:4b"
     selected = next((model for model in preferred if model in installed), None) if available else None
     using_fallback = bool(selected and selected != requested)
     if not available:
@@ -563,8 +571,10 @@ def story_ai_status(settings: Settings, brief: dict[str, Any] | None = None) -> 
                    "Review this draft; install the requested model explicitly in AI connection if needed.")
     else:
         message = f"Using installed model {selected}."
+    upgrade_model, upgrade_reason = _story_upgrade(settings, brief, available, installed, selected)
     return {
-        "upgrade_model": _story_upgrade(settings, brief, available, installed, selected),
+        "upgrade_model": upgrade_model,
+        "upgrade_reason": upgrade_reason,
         "ready": bool(available and selected),
         "ollama_available": available,
         "installed_models": sorted(installed),
@@ -585,13 +595,18 @@ def story_ai_status(settings: Settings, brief: dict[str, Any] | None = None) -> 
     }
 
 
-def _story_upgrade(settings: Settings, brief: dict[str, Any], available: bool, installed: set[str], selected: str | None) -> str | None:
-    """Suggest the larger Story model in Auto when this GPU can run it and it is
-    missing. A suggestion only: downloading still needs the user's confirmation."""
+def _story_upgrade(
+    settings: Settings, brief: dict[str, Any], available: bool, installed: set[str], selected: str | None,
+) -> tuple[str | None, str | None]:
+    """Offer the optional larger Story model: in Quality, where the person asked
+    for the best drafts, and in Auto when this GPU can run it. A suggestion
+    only: downloading still needs the user's confirmation."""
     mode = str(brief.get("performance_mode") or settings.ai.get("performance_mode", "auto"))
     quality = str(settings.ai.get("editor_quality_model") or "qwen3.5:9b").strip().removesuffix(":latest")
-    if mode != "auto" or not available or not selected or quality in installed or selected == quality:
-        return None
+    if mode not in {"auto", "quality"} or not available or not selected or quality in installed or selected == quality:
+        return None, None
+    if mode == "quality":
+        return quality, "quality_mode"
     from .transcription import _cuda_has_capacity, cuda_available
     try:
         minimum = float(settings.ai.get("editor_quality_min_free_mb", 9216))
@@ -603,7 +618,7 @@ def _story_upgrade(settings: Settings, brief: dict[str, Any], available: bool, i
     else:
         room = bool(cuda_available(settings) and _cuda_has_capacity(settings, minimum_free_mb=minimum))
         _STORY_GPU_PROBE[minimum] = (time.monotonic(), room)
-    return quality if room else None
+    return (quality, "gpu_room") if room else (None, None)
 
 
 def _ready_story_model_status(settings: Settings, brief: dict[str, Any]) -> dict[str, Any]:
@@ -1002,6 +1017,37 @@ def build_story_chapters(beats: list[dict[str, Any]], max_chapters: int = 12) ->
     return chapters
 
 
+def _on_screen_field(beat: dict[str, Any]) -> dict[str, str]:
+    note = str(beat.get("on_screen") or "").strip()
+    return {"on_screen": note} if note else {}
+
+
+def _on_screen_guidance(beats: Any) -> str:
+    """Explain the vision notes only to requests that actually contain them."""
+    if not any(str(beat.get("on_screen") or "").strip() for beat in beats):
+        return ""
+    return (
+        " Some beats include on_screen: what a local vision pass saw in the video during that beat. "
+        "In gameplay the spoken text is often a game character, so use on_screen to know what actually happens. "
+        "For highlights prefer beats with gameplay action and avoid menus, maps and loading screens. "
+        "Never invent events that neither the text nor on_screen shows."
+    )
+
+
+def annotate_story_beats(beats: list[dict[str, Any]], visual_moments: dict[str, Any] | None) -> list[dict[str, Any]]:
+    """Attach a short on-screen note to each beat that the vision pass saw clearly."""
+    from .visual_moments import VisualTimeline, on_screen_note
+
+    timeline = VisualTimeline(visual_moments)
+    if not timeline:
+        return beats
+    output = []
+    for beat in beats:
+        note = on_screen_note(timeline.evidence(float(beat.get("start", 0.0)), float(beat.get("end", 0.0))))
+        output.append({**beat, "on_screen": note} if note else beat)
+    return output
+
+
 def _chapter_prompt_payload(chapter: dict[str, Any], text_limit: int) -> dict[str, Any]:
     return {
         "id": chapter["id"],
@@ -1015,6 +1061,7 @@ def _chapter_prompt_payload(chapter: dict[str, Any], text_limit: int) -> dict[st
                 # Understand the complete thought before selecting a short
                 # excerpt. _chapter_summary_batches bounds these requests.
                 "text": str(beat.get("text", "")),
+                **_on_screen_field(beat),
             }
             for beat in chapter["beats"]
         ],
@@ -1140,6 +1187,7 @@ def _chapter_summary_payload(
                     "Understand what is being explained or happening, what changes, what depends on earlier context, and what payoff or result appears. "
                     "Do not select clips yet. Return JSON only: {chapters:[{id,title,summary,role,key_points,key_beat_ids,depends_on,unresolved_questions}]}. "
                     "role must be one of setup,problem,development,example,turn,result,conclusion,other. Only use supplied chapter and beat IDs."
+                    + _on_screen_guidance(beat for chapter in chapter_batch for beat in chapter["beats"])
                     + retry_instruction
                 ),
             },
@@ -1765,6 +1813,7 @@ def _select_story_beats(
                     "Stay close to the target duration; audio cleanup happens later. Every planned story slot must receive at least one beat. "
                     "Return JSON only with keys slot_selections,highlight_beat_ids,opening_beat_id,closing_beat_id,title,summary. "
                     "slot_selections is a list of {slot_index,beat_ids}; only use beats from that slot's chapter_ids or required_context_chapter_ids. Only use supplied beat IDs."
+                    + _on_screen_guidance(candidates)
                 ),
             },
             {
@@ -1776,7 +1825,7 @@ def _select_story_beats(
                     "plan": plan,
                     "chapter_summaries": summaries,
                     "candidate_beats": [
-                        {"id": beat["id"], "start": beat["start"], "duration": beat["duration"], "role": beat.get("role_hint"), "text": _balanced_excerpt(str(beat.get("text", "")), 520)}
+                        {"id": beat["id"], "start": beat["start"], "duration": beat["duration"], "role": beat.get("role_hint"), "text": _balanced_excerpt(str(beat.get("text", "")), 520), **_on_screen_field(beat)}
                         for beat in candidates
                     ],
                 }, ensure_ascii=False),
@@ -1934,7 +1983,7 @@ def _critic_story_selection(
     valid = {str(item["id"]): item for item in candidates}
     selected = [identifier for identifier in selection.get("keep_beat_ids", []) if identifier in valid]
     selected_rows = [
-        {"id": identifier, "start": valid[identifier]["start"], "text": _balanced_excerpt(str(valid[identifier].get("text", "")), 520)}
+        {"id": identifier, "start": valid[identifier]["start"], "text": _balanced_excerpt(str(valid[identifier].get("text", "")), 520), **_on_screen_field(valid[identifier])}
         for identifier in selected
     ]
     mode = str(brief.get("performance_mode") or settings.ai.get("performance_mode", "auto"))
@@ -1951,11 +2000,12 @@ def _critic_story_selection(
                     "You are CUTROOM's continuity critic. Audit the proposed edit as if the viewer has never seen the source. "
                     "Check whether references still make sense, setup exists before payoff, transitions are understandable, claims have enough context, and repeated ideas are not wasting the time budget. "
                     "You may add or remove only supplied candidate beat IDs. Return JSON only with keys verdict,add_beat_ids,remove_beat_ids,issues,summary. verdict is pass or revise."
+                    + _on_screen_guidance(valid.values())
                 ),
             },
             {"role": "user", "content": json.dumps({
                 "brief": brief, "outline": outline, "plan": plan, "selected": selected_rows,
-                "candidates": [{"id": identifier, "start": row["start"], "text": _balanced_excerpt(str(row.get("text", "")), 300)} for identifier, row in valid.items()],
+                "candidates": [{"id": identifier, "start": row["start"], "text": _balanced_excerpt(str(row.get("text", "")), 300), **_on_screen_field(row)} for identifier, row in valid.items()],
             }, ensure_ascii=False)},
         ],
     }
@@ -2235,13 +2285,15 @@ def hierarchical_story_edit(
     progress: Callable[[float, str], None] | None = None,
     story_cache: dict[str, Any] | None = None,
     cancel_check: Callable[[], None] | None = None,
+    *,
+    visual_key: str | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     _check_cancelled(cancel_check)
     status = _ready_story_model_status(settings, brief)
     if status.get("using_fallback") and progress:
         progress(0.01, status["message"])
     model = str(status["selected_model"])
-    expected_cache_fingerprint = story_cache_fingerprint(segments, brief, model)
+    expected_cache_fingerprint = story_cache_fingerprint(segments, brief, model, visual_key)
     mode = str(brief.get("performance_mode") or settings.ai.get("performance_mode", "auto"))
     max_chapters = 8 if mode == "lite" else 16 if mode == "quality" else 12
     chapters = build_story_chapters(beats, max_chapters=max_chapters)
@@ -2510,6 +2562,7 @@ def plan_edit(
     progress: Callable[[float, str], None] | None = None,
     story_cache: dict[str, Any] | None = None,
     cancel_check: Callable[[], None] | None = None,
+    visual_moments: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], str]:
     _check_cancelled(cancel_check)
     language = str(brief.get("language") or "en")
@@ -2519,8 +2572,12 @@ def plan_edit(
 
     goal = str(brief.get("goal") or "short")
     if goal in {"short", "podcast"}:
-        beats = build_story_beats(enriched, language)
+        beats = annotate_story_beats(build_story_beats(enriched, language), visual_moments)
         _check_cancelled(cancel_check)
+        # The vision notes change the Story input, so they belong to its cache
+        # identity. Without notes the identity is unchanged from earlier versions.
+        visual_key = str((visual_moments or {}).get("cache_key") or "")
+        noted = bool(visual_key) and any(beat.get("on_screen") for beat in beats)
         decision, hierarchy = hierarchical_story_edit(
             beats,
             enriched,
@@ -2529,6 +2586,7 @@ def plan_edit(
             progress,
             story_cache,
             cancel_check,
+            **({"visual_key": visual_key} if noted else {}),
         )
         return {
             "segments": enriched,

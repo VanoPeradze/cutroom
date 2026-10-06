@@ -24,6 +24,15 @@ from .sync import MIN_AUTOMATIC_SYNC_CONFIDENCE, synchronize_sources
 from .transcription import cuda_available, transcribe, transcript_quality_report
 from .cloud_ai import CloudAIError, enabled as cloud_enabled
 from .vision import VISION_ANALYSIS_VERSION, analyze_faces_and_embedded_camera, normalized_vision_sample_count
+from .visual_moments import (
+    DEAD_SCREENS,
+    VISUAL_MOMENTS_VERSION,
+    VisualTimeline,
+    accelerated_inference_available,
+    analyze_visual_moments,
+    resolve_visual_pass,
+    summary as visual_summary,
+)
 from .utils import clamp, invert_ranges, merge_ranges, range_duration
 
 
@@ -841,6 +850,10 @@ def _short_segment_value(segment: dict[str, Any], decision: dict[str, Any]) -> f
         score += 0.82
     if identifier in {str(item) for item in decision.get("keep_ids", [])}:
         score += 0.25
+    # Gameplay vision evidence, present only when that pass ran: visible action
+    # earns a place; menus, maps and loading screens are dead time.
+    score += _finite_number(segment.get("visual_action")) * 0.45
+    score -= _finite_number(segment.get("visual_dead")) * 0.55
     return score
 
 
@@ -942,6 +955,7 @@ def _select_audio_highlight_ranges(
     selection_seed: Any = None,
     pace: str = "balanced",
     selection_policy: dict[str, Any] | None = None,
+    visual: VisualTimeline | None = None,
 ) -> list[dict[str, float]]:
     """Build a real non-verbal highlight reel from measured audio activity.
 
@@ -949,6 +963,8 @@ def _select_audio_highlight_ranges(
     correct to return no speech, but a Highlights edit can still use real evidence:
     sustained RMS energy, short peaks and timeline diversity. This deliberately
     avoids claiming that Story AI understood words that were never present.
+    When the gameplay vision pass ran, what is on screen is blended in: visible
+    action raises a moment, and menus or loading screens are pushed down.
     """
     target = min(float(duration), max(8.0, float(target_duration)))
     target_mode = (selection_policy or {}).get("duration_mode") == "target"
@@ -977,10 +993,22 @@ def _select_audio_highlight_ranges(
     peak_floor, peak_high = percentile(peak_values, 0.25), percentile(peak_values, 0.92)
     rms_span, peak_span = max(6.0, rms_high - rms_floor), max(6.0, peak_high - peak_floor)
 
+    visual_energy: dict[int, tuple[float, float]] = {}
+    if visual:
+        for item in waveform:
+            evidence = visual.evidence(float(item["start"]), float(item["end"]))
+            if evidence:
+                visual_energy[id(item)] = (float(evidence["action"]), float(evidence["dead"]))
+
     def frame_energy(item: dict[str, Any]) -> float:
         rms = clamp((float(item.get("rms_dbfs", -120.0)) - rms_floor) / rms_span, 0.0, 1.35)
         peak = clamp((float(item.get("peak_dbfs", -120.0)) - peak_floor) / peak_span, 0.0, 1.35)
-        return rms * 0.72 + peak * 0.28
+        energy = rms * 0.72 + peak * 0.28
+        seen = visual_energy.get(id(item))
+        if seen is None:
+            return energy
+        action, dead = seen
+        return (energy * 0.55 + action * 1.35 * 0.45) * (1.0 - 0.75 * dead)
 
     style_limit = (selection_policy or {}).get("max_moments")
     if style_limit or target_mode:
@@ -1666,9 +1694,11 @@ def _moment_signals(
     waveform: list[dict[str, Any]],
     segments: list[dict[str, Any]],
     levels: dict[str, float] | None,
+    visual: VisualTimeline | None = None,
 ) -> dict[str, Any]:
     """How intense a source window is: sustained loudness relative to the whole
-    recording, how much of it is active, and spoken reactions per minute.
+    recording, how much of it is active, and spoken reactions per minute. With
+    gameplay vision, visible action counts too and dead screens count against.
 
     The 0-100 score ranks Reel options; it is a measured signal, not a
     prediction of views.
@@ -1694,12 +1724,25 @@ def _moment_signals(
             reactions += 1
     minutes = max(0.25, (end - start) / 60.0)
     reaction_rate = reactions / minutes
-    score = 100.0 * (0.55 * intensity + 0.25 * min(1.0, reaction_rate / 6.0) + 0.20 * active)
-    return {
+    reaction = min(1.0, reaction_rate / 6.0)
+    seen = visual.evidence(start, end) if visual else None
+    if seen:
+        score = 100.0 * (0.36 * intensity + 0.16 * reaction + 0.13 * active + 0.35 * float(seen["action"]))
+        score *= 1.0 - 0.7 * float(seen["dead"])
+    else:
+        score = 100.0 * (0.55 * intensity + 0.25 * reaction + 0.20 * active)
+    signals: dict[str, Any] = {
         "score": int(round(clamp(score, 0.0, 100.0))),
         "energy": "high" if intensity >= 0.62 else "medium" if intensity >= 0.38 else "low",
         "reactions": reactions,
     }
+    if seen:
+        signals["visual"] = {
+            "action": int(round(float(seen["action"]) * 100)),
+            "screen": seen["screen"],
+            "event": seen["event"],
+        }
+    return signals
 
 
 def _ranges_signals(
@@ -1707,19 +1750,33 @@ def _ranges_signals(
     waveform: list[dict[str, Any]],
     segments: list[dict[str, Any]],
     levels: dict[str, float] | None,
+    visual: VisualTimeline | None = None,
 ) -> dict[str, Any]:
-    rows = [(row, _moment_signals(_finite_number(row.get("start")), _finite_number(row.get("end")), waveform, segments, levels)) for row in ranges]
+    rows = [(row, _moment_signals(_finite_number(row.get("start")), _finite_number(row.get("end")), waveform, segments, levels, visual)) for row in ranges]
     total = sum(max(0.0, _finite_number(row.get("end")) - _finite_number(row.get("start"))) for row, _ in rows)
     if not rows or total <= 0:
         return {"score": 0, "energy": "low", "reactions": 0}
     score = sum(signals["score"] * (_finite_number(row.get("end")) - _finite_number(row.get("start"))) for row, signals in rows) / total
     order = {"low": 0, "medium": 1, "high": 2}
     weighted = sum(order[signals["energy"]] * (_finite_number(row.get("end")) - _finite_number(row.get("start"))) for row, signals in rows) / total
-    return {
+    output: dict[str, Any] = {
         "score": int(round(score)),
         "energy": "high" if weighted >= 1.5 else "medium" if weighted >= 0.5 else "low",
         "reactions": sum(signals["reactions"] for _, signals in rows),
     }
+    seen = [(row, signals["visual"]) for row, signals in rows if signals.get("visual")]
+    if seen:
+        seen_total = sum(max(0.0, _finite_number(row.get("end")) - _finite_number(row.get("start"))) for row, _ in seen) or 1.0
+        strongest = max(seen, key=lambda pair: pair[1]["action"])[1]
+        output["visual"] = {
+            "action": int(round(sum(
+                item["action"] * max(0.0, _finite_number(row.get("end")) - _finite_number(row.get("start")))
+                for row, item in seen
+            ) / seen_total)),
+            "screen": strongest["screen"],
+            "event": strongest["event"],
+        }
+    return output
 
 
 def _window_signals(
@@ -1728,6 +1785,7 @@ def _window_signals(
     waveform: list[dict[str, Any]],
     segments: list[dict[str, Any]],
     levels: dict[str, float] | None,
+    visual: VisualTimeline | None = None,
 ) -> list[tuple[float, float, dict[str, Any]]]:
     """Signals for every window of the requested length across the recording."""
     if not levels or duration <= target:
@@ -1736,7 +1794,7 @@ def _window_signals(
     windows: list[tuple[float, float, dict[str, Any]]] = []
     position = 0.0
     while position + target <= duration + 1e-6:
-        windows.append((position, position + target, _moment_signals(position, position + target, waveform, segments, levels)))
+        windows.append((position, position + target, _moment_signals(position, position + target, waveform, segments, levels, visual)))
         position += step
     return windows
 
@@ -1762,13 +1820,37 @@ def _most_intense_window(
     if not windows:
         return None
     start, end, signals = max(windows, key=lambda row: (row[2]["score"], -row[0]))
+    start, end = _snap_window_to_speech(start, end, duration, segments)
+    return start, end, signals
+
+
+def _snap_window_to_speech(
+    start: float,
+    end: float,
+    duration: float,
+    segments: list[dict[str, Any]],
+) -> tuple[float, float]:
     for item in segments:
         item_start, item_end = _finite_number(item.get("start")), _finite_number(item.get("end"))
         if item_start < start < item_end and start - item_start <= 3.0:
             start = item_start
         if item_start < end < item_end:
             end = item_end if item_end - end <= 3.0 else item_start
-    return round(max(0.0, start), 3), round(min(duration, end), 3), signals
+    return round(max(0.0, start), 3), round(min(duration, end), 3)
+
+
+def _best_action_window(
+    windows: list[tuple[float, float, dict[str, Any]]],
+    duration: float,
+    segments: list[dict[str, Any]],
+) -> tuple[float, float, dict[str, Any]] | None:
+    """The window where the gameplay vision pass saw the most action."""
+    seen = [row for row in windows if (row[2].get("visual") or {}).get("action", 0) >= 50]
+    if not seen:
+        return None
+    start, end, signals = max(seen, key=lambda row: (row[2]["visual"]["action"], row[2]["score"], -row[0]))
+    start, end = _snap_window_to_speech(start, end, duration, segments)
+    return start, end, signals
 
 
 def _reel_candidate_window(
@@ -1816,12 +1898,14 @@ def _build_reel_candidates(
     scene_points: list[float],
     embedded_candidate: dict[str, Any] | None,
     audio_profile: dict[str, Any] | None = None,
+    visual: VisualTimeline | None = None,
 ) -> list[dict[str, Any]]:
     """Create ranked, directly-applicable Reel alternatives from cached analysis.
 
     This deliberately performs no transcription, model call, frame analysis or
     render. Alternatives are diverse source windows around already-scored story
     beats, with obvious retakes removed and all existing manual cuts respected.
+    Cached gameplay vision evidence, when present, adds a best-action option.
     """
 
     if str(draft.get("goal") or "") != "short":
@@ -1833,10 +1917,10 @@ def _build_reel_candidates(
 
     waveform = [row for row in (audio_profile or {}).get("waveform") or [] if isinstance(row, dict)]
     levels = _energy_levels(waveform) if waveform else None
-    windows = _window_signals(duration, target, waveform, segments, levels)
+    windows = _window_signals(duration, target, waveform, segments, levels, visual)
     window_scores = [signals["score"] for _, _, signals in windows]
     primary_ranges = copy.deepcopy(draft.get("keep_ranges") or [])
-    primary_signals = _relative_energy(_ranges_signals(primary_ranges, waveform, segments, levels), window_scores)
+    primary_signals = _relative_energy(_ranges_signals(primary_ranges, waveform, segments, levels, visual), window_scores)
     primary = {
         "id": "director_pick",
         "kind": "director_pick",
@@ -1907,7 +1991,7 @@ def _build_reel_candidates(
             overrides if isinstance(overrides, list) else [],
             has_b=has_b,
         )
-        signals = _relative_energy(_ranges_signals(keep_ranges, waveform, segments, levels), window_scores)
+        signals = _relative_energy(_ranges_signals(keep_ranges, waveform, segments, levels, visual), window_scores)
         candidates.append({
             "id": f"reel_{len(candidates) + 1}",
             "kind": kind,
@@ -1925,15 +2009,28 @@ def _build_reel_candidates(
         chosen_centers.append(center)
         return True
 
+    def window_preview(start: float, end: float, signals: dict[str, Any]) -> str:
+        lines = [str(item.get("text") or "").strip() for item in segments
+                 if _finite_number(item.get("start")) < end and _finite_number(item.get("end")) > start]
+        spoken = " ".join(line for line in lines if line)
+        event = str((signals.get("visual") or {}).get("event") or "").strip().rstrip(".!? ")
+        # Name what is on screen first: in gameplay the dialogue is often an NPC.
+        return f"{event}. {spoken}".strip() if event else spoken
+
     # Gameplay and streams: the strongest continuous stretch of action and
     # reactions, which a transcript-led story can miss entirely.
     intense = _most_intense_window(windows, duration, segments)
     if intense:
-        start, end, _ = intense
-        lines = [str(item.get("text") or "").strip() for item in segments
-                 if _finite_number(item.get("start")) < end and _finite_number(item.get("end")) > start]
-        add_candidate(start, end, "intense_moment", " ".join(line for line in lines if line))
+        start, end, signals = intense
+        add_candidate(start, end, "intense_moment", window_preview(start, end, signals))
+    # With gameplay vision, also offer where the most visible action is. It can
+    # differ from the loudest stretch (a quiet sniper fight, a loud cutscene).
+    action = _best_action_window(windows, duration, segments)
+    if action:
+        start, end, signals = action
+        add_candidate(start, end, "action_moment", window_preview(start, end, signals))
 
+    candidate_limit = 4 if any(item["kind"] == "action_moment" for item in candidates) else 3
     anchors = [item for item in story_beats if isinstance(item, dict)]
     if not anchors:
         anchors = [item for item in segments if isinstance(item, dict)]
@@ -1948,7 +2045,7 @@ def _build_reel_candidates(
         reverse=True,
     )
     for anchor in anchors:
-        if len(candidates) >= 3:
+        if len(candidates) >= candidate_limit:
             break
         start, end = _reel_candidate_window(anchor, segments, duration, target)
         kind = "focused_moment" if not any(item["kind"] == "focused_moment" for item in candidates) else "alternate_highlight"
@@ -2514,6 +2611,20 @@ def analyze_project(
     ):
         project.setdefault("manual", {}).setdefault("crop", {}).setdefault("A", {}).update(vision["focus"])
 
+    # Gameplay vision: sampled windows rated by the local Story model's image
+    # support. Reused while the source and model are unchanged; it changes the
+    # Story input, so cached story decisions are reused only with equal evidence.
+    visual_moments, visual_plan, visual_computed, visual_warning = _resolve_visual_moments(
+        context, settings, brief, cached_analysis, cache_fingerprints.get("source"),
+        source_a, duration, sound_profile,
+    )
+    visual_timeline = VisualTimeline(visual_moments)
+    visual_key = visual_moments.get("cache_key") if visual_timeline else None
+    if visual_key:
+        cache_fingerprints["visual_moments"] = visual_key
+    visual_inputs_match = (cached_fingerprints or {}).get("visual_moments") == visual_key
+    reusable_story = reusable_story and visual_inputs_match
+
     # Persist the expensive reusable context before Story AI starts. If a local
     # model fails or CUTROOM closes during a later pass, retrying can reuse the
     # transcript/audio/vision instead of processing a long recording again.
@@ -2521,6 +2632,7 @@ def analyze_project(
         not reusable_context
         or (need_vision and not reusable_vision)
         or transcript_upgraded
+        or visual_computed
     ) and not project.get("draft"):
         context_snapshot = {
             "cache_fingerprints": cache_fingerprints,
@@ -2536,6 +2648,7 @@ def analyze_project(
             "scenes": {"A": copy.deepcopy(scenes_a), "B": []},
             "sync": copy.deepcopy(sync),
             "vision": copy.deepcopy(vision),
+            "visual_moments": copy.deepcopy(visual_moments) if visual_timeline else None,
             "thumbnails": {"A": []},
             "waveform": None,
             "engine": "context_cache",
@@ -2577,7 +2690,8 @@ def analyze_project(
         context.checkpoint()
         store.update(project_id, commit_context)
 
-    context.update(0.58, "Understanding the story")
+    story_start = max(0.58, float(context.job.progress))
+    context.update(story_start, "Understanding the story")
     story_beats: list[dict[str, Any]] = []
     story_hierarchy: dict[str, Any] | None = None
     model_selection: dict[str, Any] | None = None
@@ -2604,6 +2718,7 @@ def analyze_project(
         )
         and cached_editorial.get("transcript_fingerprint") == editorial_transcript_fingerprint
         and cache_fingerprints_match(cached_fingerprints, cache_fingerprints, ("story",))
+        and visual_inputs_match
     )
     if goal in {"short", "podcast"} and not transcript.get("segments") and not nonverbal_highlights:
         detail = f" ({transcription_warning})" if transcription_warning else ""
@@ -2663,8 +2778,9 @@ def analyze_project(
             transcript.get("segments", []),
             settings,
             brief,
-            progress=lambda value, message: context.update(0.58 + value * 0.18, message),
+            progress=lambda value, message: context.update(story_start + value * max(0.005, 0.76 - story_start), message),
             story_cache=(cached_analysis.get("story_hierarchy") if reusable_story and cached_analysis else None),
+            visual_moments=visual_moments if visual_timeline else None,
         )
         model_selection = copy.deepcopy(editorial.get("model_selection") or (editorial.get("story_hierarchy") or {}).get("model_selection"))
         planner_warnings = copy.deepcopy(editorial.get("warnings") or [])
@@ -2723,6 +2839,7 @@ def analyze_project(
     # cleanup and defensible transcript cleanup inside those passages.
     if goal == "short" and (duration > target_duration or brief.get("duration_mode") == "target"):
         selection_policy = ((brief.get("style_profile") or {}).get("selection_policy") or {})
+        selection_segments = _with_visual_evidence(segments, visual_timeline)
         story_keep = (
             _select_audio_highlight_ranges(
                 sound_profile,
@@ -2732,10 +2849,11 @@ def analyze_project(
                 selection_seed=selection_seed,
                 pace=pace,
                 selection_policy=selection_policy,
+                visual=visual_timeline,
             )
             if nonverbal_highlights
             else _select_short_story_ranges(
-                segments,
+                selection_segments,
                 decision,
                 duration,
                 target_duration,
@@ -2757,7 +2875,10 @@ def analyze_project(
             target_duration,
         )
         counts["story_selection"] = len(story_keep)
-        cuts, target_trim_count = _enforce_short_target(cuts, segments, decision, duration, target_duration)
+        cuts, dead_screen_count = _cut_dead_screens(cuts, visual_timeline, segments, duration)
+        if dead_screen_count:
+            counts["dead_screen"] = dead_screen_count
+        cuts, target_trim_count = _enforce_short_target(cuts, selection_segments, decision, duration, target_duration)
         if target_trim_count:
             counts["target_trim"] = target_trim_count
         cuts, micro_count = _drop_isolated_micro_keeps(cuts, duration)
@@ -2818,6 +2939,8 @@ def analyze_project(
     old_keep_ranges = (project.get("draft") or {}).get("keep_ranges") or []
     variation_changed = keep_ranges != old_keep_ranges
     decisions = _aggregate_decisions(counts, duration, output_duration, bool(source_b), sync)
+    if visual_timeline:
+        decisions.insert(0, {"type": "visual_ai", "count": len(visual_timeline.windows)})
     if any(str(item.get("camera")) == "embedded_stack" for item in camera_plan):
         decisions.append({"type": "smart_layout", "count": 1})
     draft = {
@@ -2854,6 +2977,7 @@ def analyze_project(
         "selection_strategy": SELECTION_STRATEGY_VERSION,
         "selection_variant": normalized_selection_variant,
         "selection_seed": selection_seed,
+        "visual_ai": visual_summary(visual_moments, visual_plan),
     }
     reel_candidates = _build_reel_candidates(
         project,
@@ -2863,6 +2987,7 @@ def analyze_project(
         scenes_a + [_finite_number(item.get("start")) for item in segments[1:]],
         embedded_candidate,
         sound_profile,
+        visual_timeline,
     )
     if reel_candidates:
         draft["reel_candidates"] = reel_candidates
@@ -2893,11 +3018,13 @@ def analyze_project(
         "scenes": {"A": scenes_a, "B": scenes_b},
         "sync": sync,
         "vision": vision,
+        "visual_moments": visual_moments if visual_timeline else None,
         "thumbnails": {"A": thumbnails},
         "waveform": waveform,
         "engine": engine,
         "warnings": (
             ([{"type": "transcription", "message": transcription_warning}] if transcription_warning else [])
+            + ([{"type": "visual_ai", "message": visual_warning}] if visual_warning else [])
             + ([copy.deepcopy(transcript_fallback)] if transcript_fallback else [])
             + ([{
                 "type": "nonverbal_highlights",
@@ -3006,6 +3133,115 @@ def analyze_project(
     return result
 
 
+def _resolve_visual_moments(
+    context: JobContext,
+    settings: Settings,
+    brief: dict[str, Any],
+    cached_analysis: dict[str, Any] | None,
+    source_fingerprint: str | None,
+    source_path: Path,
+    duration: float,
+    sound_profile: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any], bool, str | None]:
+    """Run or reuse the gameplay vision pass: (result, plan, computed, warning).
+
+    The pass is advisory evidence. An unavailable engine, a model without image
+    support or a failed request leaves the edit to speech and sound, as before.
+    """
+    from .intelligence import story_ai_status
+
+    try:
+        plan = resolve_visual_pass(
+            settings,
+            brief,
+            cloud=cloud_enabled(settings),
+            accelerated=accelerated_inference_available(settings),
+            story_status=lambda: story_ai_status(settings, brief),
+        )
+    except Exception:
+        return {}, {"mode": "auto", "run": False, "reason": "status_failed"}, False, None
+    if not plan.get("run"):
+        return {}, plan, False, None
+    key = stable_fingerprint("visual-moments", {
+        "version": VISUAL_MOMENTS_VERSION,
+        "source": source_fingerprint,
+        "model": plan["model"],
+        "budget": plan["budget"],
+    })
+    cached = (cached_analysis or {}).get("visual_moments")
+    if isinstance(cached, dict) and cached.get("cache_key") == key and cached.get("available") is True:
+        context.checkpoint("Reusing what was seen in the gameplay")
+        return copy.deepcopy(cached), plan, False, None
+    start = max(0.57, float(context.job.progress))
+    span = max(0.005, 0.62 - start)
+    context.update(start, "Watching the gameplay")
+    try:
+        result = analyze_visual_moments(
+            source_path,
+            duration,
+            settings,
+            str(plan["model"]),
+            budget=int(plan["budget"]),
+            waveform=[row for row in (sound_profile or {}).get("waveform") or [] if isinstance(row, dict)],
+            progress=lambda value, message: context.update(start + value * span, message),
+            cancel_check=context.check_cancelled,
+        )
+    except JobCancelled:
+        raise
+    except Exception as exc:
+        return {}, plan, False, f"Gameplay vision was skipped ({type(exc).__name__}); this draft uses speech and sound."
+    context.checkpoint()
+    result["cache_key"] = key
+    warning = None
+    if result.get("available") is not True and result.get("reason") in {"model_failed", "time_limit", "insufficient_results"}:
+        warning = "Gameplay vision did not finish; this draft uses speech and sound. Rebuild to try again."
+    return result, plan, True, warning
+
+
+def _cut_dead_screens(
+    cuts: list[dict[str, Any]],
+    visual: VisualTimeline,
+    segments: list[dict[str, Any]],
+    duration: float,
+) -> tuple[list[dict[str, float]], int]:
+    """Remove kept menus, maps and loading screens that nobody talks over.
+
+    Like measured silence, these are dead time in a Short. Only windows the
+    vision pass actually analyzed count (never the gaps between samples), each
+    keeps a half-second margin, and any overlapping speech keeps the window.
+    """
+    if not visual:
+        return cuts, 0
+    keep = invert_ranges(cuts, duration)
+    spoken = [(_finite_number(item.get("start")), _finite_number(item.get("end"))) for item in segments]
+    added: list[dict[str, float]] = []
+    for row in visual.windows:
+        if row.get("screen") not in DEAD_SCREENS:
+            continue
+        start, end = float(row["start"]) + 0.5, float(row["end"]) - 0.5
+        if end - start < 3.0 or any(left < end + 0.3 and right > start - 0.3 for left, right in spoken):
+            continue
+        if any(item["start"] < end and item["end"] > start for item in keep):
+            added.append({"start": round(start, 3), "end": round(end, 3)})
+    if not added:
+        return cuts, 0
+    return merge_ranges([*cuts, *added], gap=0.05), len(added)
+
+
+def _with_visual_evidence(segments: list[dict[str, Any]], visual: VisualTimeline) -> list[dict[str, Any]]:
+    """Copies of transcript segments carrying the on-screen evidence for selection."""
+    if not visual:
+        return segments
+    output = []
+    for item in segments:
+        evidence = visual.evidence(_finite_number(item.get("start")), _finite_number(item.get("end")))
+        if evidence is None:
+            output.append(item)
+            continue
+        output.append({**item, "visual_action": evidence["action"], "visual_dead": evidence["dead"]})
+    return output
+
+
 def _plan_edit_with_cancel(
     context: JobContext,
     transcript_segments: list[dict[str, Any]],
@@ -3013,9 +3249,11 @@ def _plan_edit_with_cancel(
     brief: dict[str, Any],
     progress: Callable[[float, str], None],
     story_cache: dict[str, Any] | None,
+    visual_moments: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], str]:
     """Pass cancellation into current planners without breaking older hooks."""
 
+    extra = {"visual_moments": visual_moments} if visual_moments else {}
     try:
         return plan_edit(
             transcript_segments,
@@ -3024,6 +3262,7 @@ def _plan_edit_with_cancel(
             progress=progress,
             story_cache=story_cache,
             cancel_check=context.check_cancelled,
+            **extra,
         )
     except TypeError as exc:
         if "cancel_check" not in str(exc):

@@ -372,13 +372,13 @@ def test_unusable_ai_response_warning_and_actual_model_survive_saved_draft_and_c
     job_context = context()
     result = director.analyze_project(job_context, project_id, store, settings, {
         "goal": "youtube", "instruction": "Preserve the explanations.", "captions": True,
-        "performance_mode": "quality",
+        "performance_mode": "lite",
     })
     saved = store.load(project_id)
     assert calls == ["qwen3.5:4b"]
     assert result["engine"] == "deterministic"
     assert result["model_selection"]["selected_model"] == "qwen3.5:4b"
-    assert result["model_selection"]["requested_model"] == "qwen3.5:9b"
+    assert result["model_selection"]["requested_model"] == "qwen3.5:2b"
     assert result["model_selection"]["using_fallback"] is True
     assert result["warnings"][0]["type"] == "story_ai_fallback"
     assert saved["draft"]["model_selection"] == result["model_selection"]

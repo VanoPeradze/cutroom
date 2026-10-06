@@ -53,6 +53,7 @@
 - **Text and captions.** Add titles and captions, import SRT or VTT, and correct and style an optional AI transcript.
 - **Green screen and stabilization.** Apply a chroma key to any video source, or create an optional stabilized local copy. [Green screen](docs/CHROMA_KEY.md) · [Stabilization](docs/STABILIZATION.md)
 - **Local MP4 export.** Landscape, vertical, square, portrait or the source shape, from 720p to 4K at up to 60 FPS, with no CUTROOM watermark.
+- **Gameplay vision for Shorts.** The local Story model looks at sampled frames to find fights and skip menus and loading screens. There is nothing extra to download, and frames stay on your computer. [Models](docs/MODELS.md#gameplay-vision)
 - **AI is optional.** Manual editing needs no AI model, API key or account.
 
 <table>

@@ -24,16 +24,24 @@ The ivrit.ai model card lists Apache-2.0. faster-whisper and CTranslate2 are inf
 | --- | --- | --- |
 | `qwen3.5:4b` | Normal choice / missing-model recommendation | 3.4 GB |
 | `qwen3.5:2b` | Preferred in explicit Lite **if installed** | 2.7 GB |
-| `qwen3.5:9b` | Preferred in Quality **if installed**; also fallback | 6.6 GB |
+| `qwen3.5:9b` | **Optional upgrade.** Used in Quality when installed, and in Auto when the GPU has room; also fallback | 6.6 GB |
 | `qwen3:8b` | Additional installed-model fallback | Depends on tag/quantization; not required. |
 
 These catalog sizes are downloads, not RAM/VRAM requirements. Context and inference need additional memory. Qwen3.5 model cards list Apache-2.0. [Ollama catalog](https://ollama.com/library/qwen3.5), [4B card](https://huggingface.co/Qwen/Qwen3.5-4B), [9B card](https://huggingface.co/Qwen/Qwen3.5-9B)
 
-Selection follows preference order among compatible installed tags. Quality can use 4B when 9B is missing; Lite can use 4B when 2B is missing. Switching mode does not install its preferred model. You do not need every model.
+Selection follows preference order among compatible installed tags. **The 9B model is optional:** without it, Quality runs on 4B as a normal, complete setup (not a "missing model" fallback) and the status offers 9B as an optional upgrade. Lite can use 4B when 2B is missing. Switching mode does not install its preferred model. You do not need every model.
 
 Ollama is the local runtime, not the model. CUTROOM attempts to start it automatically, without downloading or warming models just because the app opens. Semantic drafts need a ready compatible model. Default chronological YouTube cleanup does not require Story AI.
 
-Although Qwen3.5 supports images, **CUTROOM currently sends transcript/story data, not full video understanding**. Swapping a tag does not make it recognize gameplay events visually.
+## Gameplay vision
+
+Qwen3.5 Story models also accept images, so **Gameplay vision** uses the Story model you already installed. There is nothing extra to download.
+
+- **What it does:** samples the recording in 8-second windows (Lite 48, Balanced/Auto 120, Quality 200 windows; short recordings are covered completely). Each window becomes one image of four frames. The model answers concrete questions (is a weapon firing, are enemies visible, explosion, damage, downed player, fast movement, and whether the screen is gameplay, a cutscene, a menu/map, loading or a full-screen webcam) plus a short description. CUTROOM computes the action score from those answers.
+- **How it is used:** the Story model sees an `on_screen` note for beats with clear evidence (gameplay action, cutscene, menu). Selection favours visible action and pushes menus, maps and loading screens down. No-speech highlights blend it with audio. Reel options gain **Best gameplay action** when it differs from the most intense moment.
+- **When it runs:** *Automatic* runs for streamer styles on an NVIDIA GPU or Apple Silicon. *On for every Short* runs for any Short on any device; on CPU it uses the Lite window count and can take much longer. *Off* never runs. It never runs with a cloud connection: video frames are never uploaded. A model without image support is skipped.
+- **Cost:** on an RTX 4070 Ti Super, 120 windows of a 27-minute 1080p60 recording took about 2 minutes. Results are cached per source and model, and reused by variations and rebuilds.
+- **Limits:** a small model is a noisy observer. In testing it mistook an in-game recorded scene for a fight and a full-screen webcam for gameplay. Gaps between sampled windows are inferred from the nearest window. It is evidence for selection, not ground truth; a failure leaves the draft to speech and sound.
 
 ## Camera detection and other processing
 

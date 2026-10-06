@@ -118,6 +118,7 @@ SETTINGS_FIELDS = {
     "caption_words_per_line",
     "spoken_language",
     "performance_mode",
+    "visual_ai",
     "audio_cleanup",
     "instruction",
 }
@@ -149,6 +150,7 @@ SETTING_CHOICES = {
     "quality": {"fast", "balanced", "quality"},
     "resolution": {"720", "1080", "1440", "2160"},
     "performance_mode": {"auto", "lite", "balanced", "quality"},
+    "visual_ai": {"auto", "on", "off"},
     "caption_style": CAPTION_STYLE_CHOICES,
     "caption_position": CAPTION_POSITION_CHOICES,
 }
@@ -328,6 +330,7 @@ def _validate_settings_payload(payload: dict[str, Any]) -> None:
         "audio_source": 8,
         "spoken_language": 24,
         "performance_mode": 24,
+        "visual_ai": 8,
         "caption_style": 16,
         "caption_position": 16,
     }

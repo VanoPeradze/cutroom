@@ -313,6 +313,17 @@ Object.assign(ru, {
   decision_smart_layout: "Компоновка экран + камера подтверждена"
 });
 
+Object.assign(en, {
+  visualAi: "Gameplay vision", visualAiAuto: "Automatic (streamer styles)", visualAiOn: "On for every Short", visualAiOff: "Off",
+  decision_visual_ai: "Gameplay vision", visualMomentsWatched: "moments watched",
+  decision_dead_screen: "Silent menus and loading screens removed"
+});
+Object.assign(he, {
+  visualAi: "ראייה של המשחק", visualAiAuto: "אוטומטי (סגנונות סטרימר)", visualAiOn: "פעיל בכל Short", visualAiOff: "כבוי",
+  decision_visual_ai: "ראייה של המשחק", visualMomentsWatched: "רגעים נצפו",
+  decision_dead_screen: "הוסרו תפריטים ומסכי טעינה בלי דיבור"
+});
+
 export const dictionaries = { en, he, ar, es, fr, ru };
 export const RTL_LANGUAGES = new Set(["he", "ar"]);
 

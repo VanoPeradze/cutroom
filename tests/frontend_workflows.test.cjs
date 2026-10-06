@@ -153,7 +153,7 @@ function settingsApp() {
     layoutSelect: ["auto", "A", "embedded_stack"], aspectSelect: ["source", "16:9", "9:16", "1:1", "4:5"],
     resolutionSelect: ["720", "1080", "2160"], qualitySelect: ["balanced", "high"],
     captionStyleSelect: ["clean"], captionPositionSelect: ["bottom"],
-    spokenLanguageSelect: ["auto", "en"], performanceModeSelect: ["auto", "lite", "quality"],
+    spokenLanguageSelect: ["auto", "en"], performanceModeSelect: ["auto", "lite", "quality"], visualAiSelect: ["auto", "on", "off"],
   })) nodes.get(id).options = values.map((value) => ({ value }));
   nodes.get("layoutSelect").closest = () => null;
   run(`

@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1 Beta - 2026-10-05 - Gameplay vision and an optional 9B model
+
+- Added **Gameplay vision**. The local Story model looks at sampled 8-second windows, four frames each, and reports what is on screen: firing, enemies, explosions, damage, a downed player or fast movement, and whether it is gameplay, a cutscene, a menu or map, a loading screen or a full-screen webcam. Qwen3.5 Story models accept images, so nothing extra is downloaded.
+- The evidence reaches every selection path. The Story model gets an `on_screen` note per beat, because in gameplay the dialogue is often a game character. Segment selection favours visible action and pushes menus and loading screens down, and no-speech highlights blend it with audio. Reel options add **Best gameplay action** when it differs from the most intense moment, and cards show the on-screen action level.
+- *Automatic* runs for streamer styles on an NVIDIA GPU or Apple Silicon. *On for every Short* also runs on CPU with fewer windows, and *Off* never runs. Frames never leave the computer and the pass never runs with cloud AI. Results are cached per source and model, and a failed pass leaves the draft to speech and sound. On an RTX 4070 Ti Super, 120 windows of a 27-minute 1080p60 recording took about 2 minutes.
+- The 9B Story model is now optional everywhere. Without it, Quality runs on 4B as a normal setup instead of reporting a missing-model fallback, recommends 4B rather than 9B when no model is installed, and offers 9B as **Optional: get qwen3.5:9b**. AI connection labels it **Story · Quality (optional)**.
+
 ## 1.1 Beta - 2026-10-05 - Cleaner Shorts and studio polish
 
 - Short drafts no longer open on a single misheard word: isolated, low-confidence one- or two-word blips (such as a word Whisper "hears" at 0:00 of a gameplay recording) are dropped from the transcript, and isolated pieces under a second are removed from Shorts.
