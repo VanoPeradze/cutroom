@@ -7,6 +7,16 @@ const test = require("node:test");
 const source = fs.readFileSync(path.join(__dirname, "../web/timeline.js"), "utf8").replace(/^export /gm, "");
 const plain = (value) => JSON.parse(JSON.stringify(value));
 
+test('caption blocks show whole words or an ellipsis, never unreadable fragments', () => {
+  const scope = vm.createContext({ window: { devicePixelRatio: 1 }, ResizeObserver: class { observe() {} }, requestAnimationFrame: () => 1, cancelAnimationFrame() {} });
+  vm.runInContext(source + "\nglobalThis.fitCanvasLabel = fitCanvasLabel;", scope);
+  const ctx = { measureText: (text) => ({ width: text.length * 6 }) };
+  assert.equal(scope.fitCanvasLabel(ctx, 'Speech', 60), 'Speech');
+  assert.equal(scope.fitCanvasLabel(ctx, 'Tzuyshens, these people', 60), 'Tzuyshens…');
+  assert.equal(scope.fitCanvasLabel(ctx, 'Speech', 13), '', 'too narrow for any readable text');
+  assert.equal(scope.fitCanvasLabel(ctx, '   ', 200), '');
+});
+
 test('custom titles and captions occupy visible edit-clock lanes without media assets', () => {
   const h=sequenceFixture();h.project.manual.text_clips=[
     {id:'text_one',kind:'title',start:1,end:4,text:'Title'},
@@ -440,12 +450,12 @@ for (const twoSources of [false, true]) {
   test(`media rows and captions expand the canvas below ${twoSources ? 'both sources' : 'source A'}`, () => {
     const h = mediaFixture({ twoSources });
     h.project.settings.captions = true;
-    h.project.analysis = { audio_source: 'A', transcript: { segments: [{ start: 10.5, end: 11, text: 'Speech' }] } };
+    h.project.analysis = { audio_source: 'A', transcript: { segments: [{ start: 10.5, end: 14, text: 'Speech' }] } };
     h.timeline.draw();
     const base = twoSources ? 230 : 174;
     assert.equal(h.canvas.style.height, `${base + 60 + 30}px`);
     assert.equal(h.canvas.height, base + 60 + 30);
-    const caption = h.draws.find(draw => draw.text === 'Cc Speech');
+    const caption = h.draws.find(draw => draw.text === 'Speech');
     assert.ok(caption);
     assert.equal(caption.y, base + 60 + 17);
     const captionBlock = h.draws.find(draw => draw.fill === '#6b5722');
