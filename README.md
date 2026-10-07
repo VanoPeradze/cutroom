@@ -25,7 +25,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/VanoPeradze/cutroom/blob/master/docs/images/readme/studio-edit-20261004.png"><img src="https://raw.githubusercontent.com/VanoPeradze/cutroom/master/docs/images/readme/studio-edit-20261004.png" alt="CUTROOM studio: media library, preview with transport controls, Edit tools and a timeline with track headers" width="1200"></a>
+  <a href="https://github.com/VanoPeradze/cutroom/blob/master/docs/images/readme/studio-edit-20261007.png"><img src="https://raw.githubusercontent.com/VanoPeradze/cutroom/master/docs/images/readme/studio-edit-20261007.png" alt="CUTROOM studio: media library, preview with transport controls, Edit tools and a timeline with track headers" width="1200"></a>
 </p>
 
 > [!NOTE]
@@ -58,9 +58,9 @@
 
 <table>
   <tr>
-    <td width="33%"><a href="https://github.com/VanoPeradze/cutroom/blob/master/docs/images/readme/studio-home-20261004.png"><img src="https://raw.githubusercontent.com/VanoPeradze/cutroom/master/docs/images/readme/studio-home-20261004.png" alt="Home: start a Short or Reel, a YouTube video or a manual edit, with recent projects below"></a></td>
-    <td width="33%"><a href="https://github.com/VanoPeradze/cutroom/blob/master/docs/images/readme/studio-audio-20261004.png"><img src="https://raw.githubusercontent.com/VanoPeradze/cutroom/master/docs/images/readme/studio-audio-20261004.png" alt="Audio workspace: track mixer with Original, Music, Voiceover, Effects and Master channels"></a></td>
-    <td width="33%"><a href="https://github.com/VanoPeradze/cutroom/blob/master/docs/images/readme/studio-output-20261004.png"><img src="https://raw.githubusercontent.com/VanoPeradze/cutroom/master/docs/images/readme/studio-output-20261004.png" alt="Output workspace: output presets, resolution, frame rate and quality, with Export video"></a></td>
+    <td width="33%"><a href="https://github.com/VanoPeradze/cutroom/blob/master/docs/images/readme/studio-home-20261007.png"><img src="https://raw.githubusercontent.com/VanoPeradze/cutroom/master/docs/images/readme/studio-home-20261007.png" alt="Home: start a Short or Reel, a YouTube video or a manual edit, with recent projects below"></a></td>
+    <td width="33%"><a href="https://github.com/VanoPeradze/cutroom/blob/master/docs/images/readme/studio-audio-20261007.png"><img src="https://raw.githubusercontent.com/VanoPeradze/cutroom/master/docs/images/readme/studio-audio-20261007.png" alt="Audio workspace: track mixer with Original, Music, Voiceover, Effects and Master channels"></a></td>
+    <td width="33%"><a href="https://github.com/VanoPeradze/cutroom/blob/master/docs/images/readme/studio-output-20261007.png"><img src="https://raw.githubusercontent.com/VanoPeradze/cutroom/master/docs/images/readme/studio-output-20261007.png" alt="Output workspace: output presets, resolution, frame rate and quality, with Export video"></a></td>
   </tr>
   <tr>
     <td align="center"><sub>Home</sub></td>

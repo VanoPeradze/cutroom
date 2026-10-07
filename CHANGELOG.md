@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.1 Beta - 2026-10-07 - Layout fixes and new screenshots
+
+- Fixed layout and overlap problems found by an automated sweep of every screen from 1920x1080 down to 1024x700, in night and day mode:
+  - **Media:** the library no longer cuts off the Images tab or the search box, and narrow libraries stack each card's thumbnail above its name.
+  - **Editor at 900-1099px:** keeps three columns instead of squeezing the preview to a 164px strip.
+  - **Layout:** composition tiles no longer break labels one word per line.
+  - **Output:** the frame-rate buttons read 24, 25, 30, 50 and 60 without a cut-off "60 FPS".
+  - **Export dialog:** shows its three facts in equal columns.
+- More fixes:
+  - **Project overview up to 1100px:** the top bar keeps the project name on one line instead of drawing it over the step bar and buttons, and the review notes beside the video are no longer one word per line.
+  - **Reel option details:** now readable (they were 8px).
+  - **"Build my first cut" bar:** no longer hangs below the window edge.
+  - **Narrow preview:** the preview-mode menu no longer slides under the play button.
+- Timeline caption blocks show whole words with an ellipsis instead of unreadable fragments, and drop the redundant "Cc" prefix.
+- New screenshots for the guides, README and website use original synthetic gameplay footage instead of third-party games. The website adds a Gameplay vision highlight, aligns the start-card tags and stacks the download buttons on phones.
+
 ## 1.1 Beta - 2026-10-05 - Gameplay vision and an optional 9B model
 
 - Added **Gameplay vision**. The local Story model looks at sampled 8-second windows, four frames each, and reports what is on screen: firing, enemies, explosions, damage, a downed player or fast movement, and whether it is gameplay, a cutscene, a menu or map, a loading screen or a full-screen webcam. Qwen3.5 Story models accept images, so nothing extra is downloaded.

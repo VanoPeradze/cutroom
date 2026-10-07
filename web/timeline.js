@@ -7,6 +7,20 @@ export function timelineDuration(project) {
 
 function selectionMinimum(project) { return project?.manual?.sequence || project?.__sourceReview ? 1 / 60 - 1e-9 : .03; }
 
+// The longest prefix of `text` that fits `width`, ending in an ellipsis when cut.
+// Short blocks draw nothing rather than unreadable fragments.
+export function fitCanvasLabel(ctx, text, width) {
+  const value = String(text || "").trim();
+  if (!value || width < 14) return "";
+  if (ctx.measureText(value).width <= width) return value;
+  let low = 0, high = value.length;
+  while (low < high) {
+    const middle = Math.ceil((low + high) / 2);
+    if (ctx.measureText(`${value.slice(0, middle).trimEnd()}…`).width <= width) low = middle; else high = middle - 1;
+  }
+  return low >= 2 ? `${value.slice(0, low).trimEnd()}…` : "";
+}
+
 function sequenceFrame(project) {
   const fps = Number(project?.settings?.fps);
   return 1 / ([24, 25, 30, 50, 60].includes(fps) ? fps : 30);
@@ -479,7 +493,11 @@ export class TimelineView {
         const x=caption.start*px,w=(caption.end-caption.start)*px;
         if(x+w<left || x>right)continue;
         ctx.fillStyle='#6b5722';ctx.fillRect(x+1,top+1,Math.max(1,w-2),height-4);ctx.strokeStyle='#c9a94a';ctx.strokeRect(x+1.5,top+1.5,Math.max(0,w-3),height-5);
-        ctx.save();ctx.beginPath();ctx.rect(x+2,top,Math.max(0,w-4),height-2);ctx.clip();ctx.fillStyle='#eef3ff';ctx.font='10px sans-serif';ctx.fillText(`Cc ${caption.text}`,Math.max(x+4,left+this.labelInset(70)),top+17);ctx.restore();
+        // The lane header already says Captions: give the block's width to the words.
+        const textX=Math.max(x+5,left+this.labelInset(70));
+        ctx.font='11px sans-serif';
+        const label=fitCanvasLabel(ctx,caption.text,x+w-5-textX);
+        if(label){ctx.save();ctx.beginPath();ctx.rect(x+2,top,Math.max(0,w-4),height-2);ctx.clip();ctx.fillStyle='#f6eed6';ctx.fillText(label,textX,top+17);ctx.restore();}
       }
     }
   }

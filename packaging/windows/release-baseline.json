@@ -1,10 +1,10 @@
 {
   "version": "1.1-beta",
-  "filename": "CUTROOM-1.1-Beta-windows-b4fac476-vision-20261005.zip",
-  "build_id": "CUTROOM-1.1-beta-20261005-193625",
-  "bytes": 3350708,
-  "sha256": "47fe2de4b0caa8bc8182cf4d3d0cf0b110f57cf5a1e881592e0d8aa64e5f3e4f",
-  "manifest_sha256": "a416559a7008475fef8a7c69c2ff07d1768f1425d5941bab77e6f7ff4b542e83",
-  "url": "https://cutroom-studio--crh0s2adxz.expo.app/downloads/CUTROOM-1.1-Beta-windows-b4fac476-vision-20261005.zip",
-  "note": "Immutable validation deployment of reviewed product source b4fac476a050d6ddda42042c7524a3d4f2766ed7. Local gameplay vision (the installed Qwen3.5 Story model rates sampled frames; Best gameplay action Reel option; silent menus and loading screens cut), the 9B Story model as an optional upgrade, and master's Dependabot requirement floors. No private data, runtime or models. Native Apple Silicon/Intel candidate CI required before production."
+  "filename": "CUTROOM-1.1-Beta-windows-db6bf5c-polish-20261007.zip",
+  "build_id": "CUTROOM-1.1-beta-20261007-124438",
+  "bytes": 3519995,
+  "sha256": "08b81825f0e8cc903e68b84fdfe05d54a4314ee3910c2b891ba04c105de51f48",
+  "manifest_sha256": "aa55b4ab9f59ea3da77abb1b97bf07a082cc9786a9c040663b6b7a89691d65b2",
+  "url": "https://cutroom-studio--ae57sm10qs.expo.app/downloads/CUTROOM-1.1-Beta-windows-db6bf5c-polish-20261007.zip",
+  "note": "Immutable validation deployment of reviewed product source db6bf5c3862a2f1be0c1e1c6759c6e6f4c59b14e. Layout and overlap fixes from a full-screen sweep (media library, 900-1099px editor grid, Project overview top bar and notes, Reel option details, Director action bar, timeline caption labels), new synthetic-footage screenshots, plus gameplay vision and the optional 9B Story model. No private data, runtime or models. Native Apple Silicon/Intel candidate CI required before production."
 }

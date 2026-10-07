@@ -1,0 +1,105 @@
+/* Layout and overlap fixes found by an automated sweep of every screen at
+   1920x1080 down to 1024x700. Loaded last; each rule names what it fixes.
+   Presentation only: ids, text alternatives and behavior are unchanged. */
+
+/* Library shelf: its width is fixed by the grid, so its contents adapt to it. */
+.studio-workspace .studio-shelf { container:studio-shelf / inline-size; }
+
+/* Media search and type tabs used to force a 214px column into a ~170px shelf,
+   cutting off "Images" and the search box's edge. */
+.studio-workspace .library-tools { grid-template-columns:minmax(0,1fr); }
+.studio-workspace .library-filter { display:flex; justify-content:space-between; gap:6px; }
+.studio-workspace .library-filter button { min-width:0; padding-inline:1px; font-size:13px; }
+/* Too narrow for one row of four tabs: two rows of two, never touching labels. */
+@container studio-shelf (max-width:178px) {
+  .studio-workspace .library-filter { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:0 8px; }
+  .studio-workspace .library-filter button { justify-self:start; font-size:12.5px; }
+}
+
+/* A media card in a narrow shelf left its file name a 29px column. Stack the
+   thumbnail above the name and details instead. */
+@container studio-shelf (max-width:250px) {
+  .studio-workspace :is(.source-library-card,.media-asset) { grid-template-columns:minmax(0,1fr) auto; grid-template-rows:auto auto auto; row-gap:6px; padding:8px; }
+  .studio-workspace :is(.source-library-card,.media-asset) .library-thumb { grid-row:1; grid-column:1 / -1; width:100%; height:auto; aspect-ratio:16 / 9; }
+  .studio-workspace :is(.source-library-card,.media-asset) > span:not(.library-thumb) { grid-row:2; grid-column:1 / -1; font-size:13px; }
+  .studio-workspace :is(.source-library-card,.media-asset) small { grid-row:3; grid-column:1 / -1; font-size:12px; }
+  .studio-workspace .media-asset > button { grid-column:1 / -1; grid-row:4; justify-self:start; }
+}
+
+/* Layout composition: three columns broke "Side by side" and "Picture in
+   picture" into one word per line. Two columns keep each label readable. */
+@container studio-shelf (max-width:280px) {
+  .composition-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+}
+.composition-tile b { text-wrap:balance; text-align:center; line-height:1.25; }
+
+/* Export dialog: the three facts shared a two-column grid with the Output
+   summary card, leaving an empty cell and a clipped divider. */
+#exportSummary.export-summary { grid-template-columns:repeat(3,minmax(0,1fr)); gap:0; padding:14px 0; }
+#exportSummary.export-summary > div { display:grid; justify-items:center; gap:4px; padding:0 10px; border-inline-start:1px solid var(--line); text-align:center; }
+#exportSummary.export-summary > div:first-child { border-inline-start:0; }
+#exportDialog header { padding-inline-end:52px; }
+
+/* Reel options: the details line was 8px monospace and the preview 10px. */
+.reel-candidate small { font:12px/1.4 var(--font, system-ui, sans-serif); color:var(--paper-dim); white-space:normal; }
+.reel-candidate p { font-size:12.5px; line-height:1.5; }
+.reel-candidates-head > span { font-size:11px; }
+.reel-candidate.active .button:disabled { border-color:transparent; background:var(--surface-selected, rgba(27,217,206,.12)); color:var(--cyan-text); opacity:1; cursor:default; }
+
+/* The project step bar stays in the page behind the full-screen editor; hide it
+   there so it is neither painted under the preview nor read by screen readers. */
+body.studio-open #setupWorkflowSteps { visibility:hidden; }
+
+/* Top bar on project pages up to 1100px: the name used to move to a second
+   row that spilled over the step bar while the bar kept its height. */
+@media (min-width:651px) and (max-width:1100px) {
+  body:not(.studio-open) .app-chrome .topbar { grid-template-columns:auto minmax(0,1fr) auto; }
+  body:not(.studio-open) .app-chrome .project-head { grid-column:2; grid-row:1; justify-content:flex-start; min-width:0; }
+  body:not(.studio-open) .app-chrome .top-actions { grid-column:3; grid-row:1; }
+  /* The name field sized itself to its text and ran under the buttons. */
+  body:not(.studio-open) .app-chrome .project-name { field-sizing:fixed; flex:1 1 auto; width:auto; min-width:0; text-overflow:ellipsis; }
+}
+
+/* Project overview: an older rule split the 310px side column in two (meant for
+   when it sits under the video), leaving the review notes one word per line. */
+@media (min-width:900px) {
+  .result-grid > .verdict-column { grid-template-columns:minmax(0,1fr); }
+  .result-grid > .verdict-column > * { grid-column:auto; }
+}
+
+/* Editor between 900 and 1099px: the library took a full-width row under a
+   164px-high preview. Keep three columns with a narrower library instead. */
+@media (min-width:900px) and (max-width:1099px) and (min-height:601px) {
+  .advanced-panel.studio-workspace:not([hidden]),.advanced-panel.studio-workspace.studio-transcript:not([hidden]) {
+    --workspace-inspector-width:clamp(268px,30vw,320px);
+    grid-template-columns:clamp(176px,18vw,200px) minmax(0,1fr) 8px var(--workspace-inspector-width);
+    grid-template-rows:36px minmax(0,1fr) 8px var(--workspace-timeline-height) 58px;
+  }
+  .advanced-panel.studio-workspace.inspector-collapsed:not([hidden]),.advanced-panel.studio-workspace.studio-transcript.inspector-collapsed:not([hidden]) {
+    grid-template-columns:clamp(176px,18vw,200px) minmax(0,1fr) 0 0;
+  }
+  .advanced-panel.studio-workspace .studio-header { grid-column:2 / -1; grid-row:1; }
+  .advanced-panel.studio-workspace .studio-shelf { grid-column:1; grid-row:1 / 3; max-height:none; min-height:0; overflow:auto; border-top:0; border-inline-end:1px solid var(--line); }
+  .advanced-panel.studio-workspace .studio-preview-dock { grid-column:2; grid-row:2; }
+  .advanced-panel.studio-workspace .inspector-divider { grid-column:3; grid-row:2; }
+  .advanced-panel.studio-workspace .advanced-content { grid-column:4; grid-row:2; }
+  .advanced-panel.studio-workspace .workspace-divider { grid-column:1 / -1; grid-row:3; }
+  .advanced-panel.studio-workspace .studio-timeline-dock { grid-column:1 / -1; grid-row:4; }
+  .advanced-panel.studio-workspace .advanced-tabs { grid-column:1 / -1; grid-row:5; }
+}
+
+/* A narrow monitor gives the preview-mode menu a ~126px column; its 150px
+   minimum pushed it under the play button. */
+@container studio-monitor (max-width:540px) {
+  .studio-workspace .studio-preview-dock #previewMode { min-width:0; width:100%; }
+}
+
+/* "Build my first cut" bar: stuck at bottom:-24px it hung 24px past the window
+   edge, hiding the button's description. Stick it to the edge itself. */
+.director-panel .director-action { bottom:0; }
+@media (max-width:899px),(max-height:600px) {
+  .director-panel .director-action { bottom:0; }
+}
+
+/* "Review original footage" keeps its green restore cue, in the day palette too. */
+html[data-theme="light"] .studio-workspace #manualRestore:not(:disabled) { border-color:#7cb898; background:#e2f3e9; color:#14472f; }

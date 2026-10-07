@@ -1,10 +1,10 @@
 import { applyTranslations, dictionaries } from "./i18n.js?v=1.1-beta-vision-1";
-import { TimelineView, formatTime, editableClips, timelineDuration, sequenceBlocks, sequenceGaps, rippleMoveStart } from "./timeline.js?v=1.1-beta-studio-1";
+import { TimelineView, formatTime, editableClips, timelineDuration, sequenceBlocks, sequenceGaps, rippleMoveStart } from "./timeline.js?v=1.1-beta-polish-1";
 import { MediaStudio } from "./media-studio.js?v=1.1-beta-polish-1";
 import { StabilizationStudio } from "./stabilization-studio.js?v=1.1-beta-1";
 import { ChromaStudio } from "./chroma-studio.js?v=1.1-beta-chroma-edit-2";
 import { ChromaPreview } from "./chroma-preview.js?v=1.1-beta-chroma-edit-2";
-import { SourceReview } from "./source-review.js?v=1.1-beta-8";
+import { SourceReview } from "./source-review.js?v=1.1-beta-polish-1";
 import { initWorkspace } from "./workspace.js?v=1.1-beta-polish-1";
 import { KEYBOARD_PROFILES, resolveEditorShortcut, isEditorTransportSpace, shortcutRows } from "./keyboard.js?v=1.1-beta-2";
 import { AudioThresholdView } from "./audio-meter.js?v=1.1-beta-1";

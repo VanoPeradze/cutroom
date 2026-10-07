@@ -130,7 +130,8 @@
     shelf.append(presets);
 
     segmented($("#resolutionSelect"), { 1440: "1440p", 2160: "2160p" });
-    segmented($("#fpsSelect"), { 24: "24", 25: "25", 30: "30", 50: "50", 60: "60 FPS" });
+    // The "Frame rate" label names the unit; equal labels keep all five readable.
+    segmented($("#fpsSelect"), { 24: "24", 25: "25", 30: "30", 50: "50", 60: "60" });
     segmented($("#qualitySelect"), { quality: "High" });
 
     // Summary and the main Export action at the end of the tools.
