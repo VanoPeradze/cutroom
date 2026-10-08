@@ -241,7 +241,8 @@ def test_every_setup_path_selects_python_312_because_numpy_requires_it():
     assert re.search(r"^numpy>=2\.5", requirements, re.MULTILINE)
     windows = (ROOT / "setup_windows.ps1").read_text(encoding="ascii")
     assert '$script:PythonVersion = "3.12"' in windows
-    assert '"--no-registry", $script:PythonVersion' in windows
+    # --no-bin keeps uv from adding a python3.12.exe shim to the user's ~/.local/bin.
+    assert '"--no-registry", "--no-bin", $script:PythonVersion' in windows
     assert '"--python", $script:PythonVersion' in windows
     for path in ("setup_windows.ps1", "setup_linux.sh", "packaging/mac/setup_macos.sh",
                  "packaging/mac/preflight_macos.py", "scripts/smoke_macos.py"):

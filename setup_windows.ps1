@@ -356,7 +356,7 @@ function Prepare-PythonEnvironment {
         $uvPath = Install-UvBootstrap
         Configure-UvEnvironment
         Invoke-External -FilePath $uvPath -Arguments @(
-            "--no-config", "python", "install", "--no-registry", $script:PythonVersion
+            "--no-config", "python", "install", "--no-registry", "--no-bin", $script:PythonVersion
         ) -FailureMessage "CUTROOM could not download its private Python runtime."
         Invoke-External -FilePath $uvPath -Arguments @(
             "--no-config", "venv", "--clear", "--no-project", "--python", $script:PythonVersion, "--seed", ".venv"
