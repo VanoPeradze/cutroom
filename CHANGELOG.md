@@ -4,6 +4,7 @@
 
 - Fixed first-time setup on computers without Python 3.12. Since 21 September CUTROOM's numpy requirement has needed Python 3.12, but Windows setup still picked Python 3.11 first and downloaded a private Python 3.11 when none was installed, so installing the Python packages failed. Windows, Mac and Linux setup now use Python 3.12 only. Windows downloads a private Python 3.12 when the computer has none, and an existing CUTROOM environment built with Python 3.11 is rebuilt with 3.12 the next time setup or repair runs.
 - The private Python that Windows setup downloads now stays inside the CUTROOM folder. It no longer adds a `python3.12.exe` shortcut to the user's `.local\bin` folder.
+- The Windows launchers start their helper scripts by explicit path, so they also work on computers where the `NoDefaultCurrentDirectoryInExePath` security setting stops Windows from running scripts by name from the current folder.
 
 ## 1.1 Beta - 2026-10-07 - Layout fixes and new screenshots
 

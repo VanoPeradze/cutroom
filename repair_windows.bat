@@ -3,7 +3,7 @@ setlocal EnableExtensions
 cd /d "%~dp0"
 title CUTROOM 1.1 Beta Repair
 
-if exist ".runtime-paths.cmd" call ".runtime-paths.cmd"
+if exist ".runtime-paths.cmd" call ".\.runtime-paths.cmd"
 if defined LOCALAPPDATA set "PATH=%LOCALAPPDATA%\Microsoft\WindowsApps;%LOCALAPPDATA%\Microsoft\WinGet\Links;%LOCALAPPDATA%\Programs\Ollama;%PATH%"
 
 powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "%~dp0scripts\verify_windows_installer.ps1"
@@ -23,7 +23,7 @@ if errorlevel 1 (
   exit /b 1
 )
 
-if exist ".runtime-paths.cmd" call ".runtime-paths.cmd"
+if exist ".runtime-paths.cmd" call ".\.runtime-paths.cmd"
 echo.
 echo Repair completed. Run run_windows.bat.
 pause

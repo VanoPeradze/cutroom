@@ -256,8 +256,9 @@ def test_windows_launcher_restores_runtime_paths_and_exposes_setup_logs():
     launcher = (ROOT / "run_windows.bat").read_text(encoding="ascii")
     repair = (ROOT / "repair_windows.bat").read_text(encoding="ascii")
     setup = (ROOT / "setup_windows.ps1").read_text(encoding="ascii")
-    assert 'if exist ".runtime-paths.cmd" call ".runtime-paths.cmd"' in launcher
-    assert 'if exist ".runtime-paths.cmd" call ".runtime-paths.cmd"' in repair
+    # Explicit .\ paths keep working where NoDefaultCurrentDirectoryInExePath is set.
+    assert r'if exist ".runtime-paths.cmd" call ".\.runtime-paths.cmd"' in launcher
+    assert r'if exist ".runtime-paths.cmd" call ".\.runtime-paths.cmd"' in repair
     assert "setup-last-error.txt" in launcher
     assert "setup-windows.log" in launcher
     assert "Write-RuntimePaths" in setup
