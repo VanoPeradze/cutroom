@@ -58,7 +58,7 @@
 
 <table>
   <tr>
-    <td width="33%"><a href="https://github.com/VanoPeradze/cutroom/blob/master/docs/images/readme/studio-home-20261007.png"><img src="https://raw.githubusercontent.com/VanoPeradze/cutroom/master/docs/images/readme/studio-home-20261007.png" alt="Home: start a Short or Reel, a YouTube video or a manual edit, with recent projects below"></a></td>
+    <td width="33%"><a href="https://github.com/VanoPeradze/cutroom/blob/master/docs/images/readme/studio-home-20261009.png"><img src="https://raw.githubusercontent.com/VanoPeradze/cutroom/master/docs/images/readme/studio-home-20261009.png" alt="Home: start a Short or Reel, a YouTube video or a manual edit, with recent projects below"></a></td>
     <td width="33%"><a href="https://github.com/VanoPeradze/cutroom/blob/master/docs/images/readme/studio-audio-20261007.png"><img src="https://raw.githubusercontent.com/VanoPeradze/cutroom/master/docs/images/readme/studio-audio-20261007.png" alt="Audio workspace: track mixer with Original, Music, Voiceover, Effects and Master channels"></a></td>
     <td width="33%"><a href="https://github.com/VanoPeradze/cutroom/blob/master/docs/images/readme/studio-output-20261007.png"><img src="https://raw.githubusercontent.com/VanoPeradze/cutroom/master/docs/images/readme/studio-output-20261007.png" alt="Output workspace: output presets, resolution, frame rate and quality, with Export video"></a></td>
   </tr>
