@@ -3,8 +3,8 @@ set -euo pipefail
 cd "$(dirname "$0")"
 resolve_python() {
   local candidate
-  for candidate in python3.12 python3.11 python3; do
-    if command -v "$candidate" >/dev/null 2>&1 && "$candidate" -c 'import sys; raise SystemExit(0 if (3, 11) <= sys.version_info[:2] < (3, 13) else 1)' >/dev/null 2>&1; then
+  for candidate in python3.12 python3; do
+    if command -v "$candidate" >/dev/null 2>&1 && "$candidate" -c 'import sys; raise SystemExit(0 if (3, 12) <= sys.version_info[:2] < (3, 13) else 1)' >/dev/null 2>&1; then
       command -v "$candidate"
       return 0
     fi
@@ -12,7 +12,7 @@ resolve_python() {
   return 1
 }
 
-python_bin=$(resolve_python) || { echo "Python 3.11 or 3.12 is required."; exit 1; }
+python_bin=$(resolve_python) || { echo "Python 3.12 is required."; exit 1; }
 command -v ffmpeg >/dev/null || { echo "FFmpeg is required. Install it with your distribution package manager."; exit 1; }
 command -v ffprobe >/dev/null || { echo "FFprobe is required. Install the full FFmpeg package."; exit 1; }
 "$python_bin" -m venv .venv

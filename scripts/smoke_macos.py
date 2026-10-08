@@ -143,8 +143,8 @@ def install_and_check(archive: Path, *, transcribe: bool = False, repair_missing
                       windows_baseline: Path | None = None) -> dict:
     if sys.platform != "darwin":
         raise RuntimeError("This installation smoke must run on macOS; it is not a simulated Mac test")
-    if not (3, 11) <= sys.version_info[:2] < (3, 13):
-        raise RuntimeError("Run the installation smoke with native Python 3.11 or 3.12")
+    if not (3, 12) <= sys.version_info[:2] < (3, 13):
+        raise RuntimeError("Run the installation smoke with native Python 3.12")
     if allow_baseline_restart_failure:
         verify_restart_baseline(archive)
     # Import only the stdlib-based verifier from the checkout, never archive code.

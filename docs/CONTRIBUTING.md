@@ -29,13 +29,13 @@ Clone the repository using your existing access, or fork it if repository permis
 
 ### Windows
 
-Run `run_windows.bat` from the repository root. The launcher performs initial setup when needed and opens the editor. Setup accepts Python 3.11 or 3.12, creates `.venv`, installs Python dependencies, and checks FFmpeg/FFprobe. It may download runtimes and attempt to install Ollama. Read the [setup guide](TEST_ON_ANOTHER_PC.md) for installation behavior and troubleshooting.
+Run `run_windows.bat` from the repository root. The launcher performs initial setup when needed and opens the editor. Setup uses Python 3.12 (an existing installation or a private download), creates `.venv`, installs Python dependencies, and checks FFmpeg/FFprobe. It may download runtimes and attempt to install Ollama. Read the [setup guide](TEST_ON_ANOTHER_PC.md) for installation behavior and troubleshooting.
 
 Keep the launcher console open while using the editor. Local AI models are separate downloads; manual editing does not require them or an AI account. See [AI connections](AI_CONNECTIONS.md) and [models](MODELS.md) before testing AI-specific changes.
 
 ### Linux development path
 
-The repository includes Linux scripts. Install Python 3.11 or 3.12 with `venv` and `pip`, and compatible FFmpeg/FFprobe with your distribution's tools. FFmpeg needs the `subtitles` filter (libass) for burned captions. Run from the repository root:
+The repository includes Linux scripts. Install Python 3.12 with `venv` and `pip`, and compatible FFmpeg/FFprobe with your distribution's tools. FFmpeg needs the `subtitles` filter (libass) for burned captions. Run from the repository root:
 
 ```sh
 chmod +x setup_linux.sh run_linux.sh
@@ -47,7 +47,7 @@ The setup script creates `.venv` and downloads Python dependencies. Executable p
 
 ### macOS
 
-Use the combined beta download's `mac/START CUTROOM.command` on macOS 15+ with native Apple Silicon or Intel Python 3.11/3.12. The Mac overlay uses separate compatibility constraints and FFmpeg checks; `packaging/mac` is packaging input, not a ready-to-run checkout folder. See [platform setup](PLATFORMS.md) and [Mac beta development/validation notes](https://github.com/VanoPeradze/cutroom/blob/master/docs/MAC_BETA.md) before testing Mac packaging changes. The [successful master validation](https://github.com/VanoPeradze/cutroom/actions/runs/36674994899) covers both architectures at `cb052b5764b89205e2537292a7beb0fba5b38b3d`; it does not replace manual Finder/Gatekeeper or Safari QA.
+Use the combined beta download's `mac/START CUTROOM.command` on macOS 15+ with native Apple Silicon or Intel Python 3.12. The Mac overlay uses separate compatibility constraints and FFmpeg checks; `packaging/mac` is packaging input, not a ready-to-run checkout folder. See [platform setup](PLATFORMS.md) and [Mac beta development/validation notes](https://github.com/VanoPeradze/cutroom/blob/master/docs/MAC_BETA.md) before testing Mac packaging changes. The [successful master validation](https://github.com/VanoPeradze/cutroom/actions/runs/36674994899) covers both architectures at `cb052b5764b89205e2537292a7beb0fba5b38b3d`; it does not replace manual Finder/Gatekeeper or Safari QA.
 
 The editor normally opens at `http://127.0.0.1:8765`. Keep it on the local computer; do not expose the development server publicly.
 

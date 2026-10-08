@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1 Beta - 2026-10-08 - Setup uses Python 3.12
+
+- Fixed first-time setup on computers without Python 3.12. Since 21 September CUTROOM's numpy requirement has needed Python 3.12, but Windows setup still picked Python 3.11 first and downloaded a private Python 3.11 when none was installed, so installing the Python packages failed. Windows, Mac and Linux setup now use Python 3.12 only. Windows downloads a private Python 3.12 when the computer has none, and an existing CUTROOM environment built with Python 3.11 is rebuilt with 3.12 the next time setup or repair runs.
+
 ## 1.1 Beta - 2026-10-07 - Layout fixes and new screenshots
 
 - Fixed layout and overlap problems found by an automated sweep of every screen from 1920x1080 down to 1024x700, in night and day mode:

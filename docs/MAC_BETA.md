@@ -24,7 +24,7 @@ cannot be opened, use **START HERE.html** and report the exact message.
 
 ## First-time requirements
 
-Setup reuses a compatible Python 3.11/3.12 and FFmpeg when present. Otherwise it
+Setup reuses a compatible Python 3.12 and FFmpeg when present. Otherwise it
 offers to install Python 3.12 and **ffmpeg@7** through an existing Homebrew
 installation, then installs the Python dependencies inside this copy's **App/.venv**.
 This maintained FFmpeg 7 build includes subtitle support and the command-line

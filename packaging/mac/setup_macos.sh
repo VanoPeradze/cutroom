@@ -58,7 +58,7 @@ cutroom_prepare_environment() {
 }
 
 cutroom_python_supported() {
-  "$1" -c 'import os, platform, sys; expected = os.environ.get("CUTROOM_MAC_ARCH"); raise SystemExit(0 if (3, 11) <= sys.version_info[:2] < (3, 13) and (not expected or platform.machine() == expected) else 1)' >/dev/null 2>&1
+  "$1" -c 'import os, platform, sys; expected = os.environ.get("CUTROOM_MAC_ARCH"); raise SystemExit(0 if (3, 12) <= sys.version_info[:2] < (3, 13) and (not expected or platform.machine() == expected) else 1)' >/dev/null 2>&1
 }
 
 cutroom_resolve_python() {
@@ -68,10 +68,10 @@ cutroom_resolve_python() {
       printf '%s\n' "$CUTROOM_PYTHON"
       return 0
     fi
-    printf 'CUTROOM_PYTHON must name a native Python 3.11 or 3.12 executable.\n' >&2
+    printf 'CUTROOM_PYTHON must name a native Python 3.12 executable.\n' >&2
     return 1
   fi
-  for candidate in python3.12 python3.11 /opt/homebrew/opt/python@3.12/bin/python3.12 /usr/local/opt/python@3.12/bin/python3.12 /Library/Frameworks/Python.framework/Versions/3.12/bin/python3.12 /Library/Frameworks/Python.framework/Versions/3.11/bin/python3.11 python3; do
+  for candidate in python3.12 /opt/homebrew/opt/python@3.12/bin/python3.12 /usr/local/opt/python@3.12/bin/python3.12 /Library/Frameworks/Python.framework/Versions/3.12/bin/python3.12 python3; do
     if command -v "$candidate" >/dev/null 2>&1 && cutroom_python_supported "$candidate"; then
       command -v "$candidate"
       return 0
@@ -130,7 +130,7 @@ cutroom_setup_main() {
   fi
   brew_bin="$(command -v brew || true)"
   if [[ ( "$need_python" == yes || "$need_ffmpeg" == yes ) && -z "$brew_bin" ]]; then
-    printf '\nPython 3.11/3.12 and compatible FFmpeg with libass, libx264 and AAC are required.\n' >&2
+    printf '\nPython 3.12 and compatible FFmpeg with libass, libx264 and AAC are required.\n' >&2
     printf 'Homebrew is not installed. Install it using the official website, then run:\n' >&2
     printf '  brew install python@3.12 ffmpeg@7\n' >&2
     printf 'Then double-click START CUTROOM.command again. Setup will ask before installing Python packages.\n' >&2
@@ -163,14 +163,14 @@ cutroom_setup_main() {
   if [[ "$need_python" == yes ]]; then
     HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 "$brew_bin" install python@3.12
     cutroom_prepare_environment
-    python_bin="$(cutroom_resolve_python)" || { printf 'A native Python 3.11/3.12 still could not be found.\n' >&2; cutroom_help; return 1; }
+    python_bin="$(cutroom_resolve_python)" || { printf 'A native Python 3.12 still could not be found.\n' >&2; cutroom_help; return 1; }
     cutroom_overrides_ready "$python_bin"
   fi
   if [[ "$need_ffmpeg" == yes ]]; then
     HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 "$brew_bin" install ffmpeg@7
   fi
   cutroom_prepare_environment
-  python_bin="$(cutroom_resolve_python)" || { printf 'A native Python 3.11/3.12 still could not be found.\n' >&2; cutroom_help; return 1; }
+  python_bin="$(cutroom_resolve_python)" || { printf 'A native Python 3.12 still could not be found.\n' >&2; cutroom_help; return 1; }
   if ! cutroom_system_ready "$python_bin"; then
     printf 'FFmpeg is still unavailable or lacks required codecs/options. Check CUTROOM_FFMPEG/CUTROOM_FFPROBE if you set custom paths.\n' >&2
     cutroom_help

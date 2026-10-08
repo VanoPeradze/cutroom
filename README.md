@@ -86,7 +86,7 @@ To update, extract a fresh copy separately and back up your projects before movi
 
 - **Windows:** run `run_windows.bat` from the repository root.
 - **macOS:** follow the [Mac setup guide](https://github.com/VanoPeradze/cutroom/blob/master/docs/MAC_BETA.md).
-- **Linux:** install **Python 3.11 or 3.12** with `venv` and `pip`, **FFmpeg/FFprobe** and **Bash**, then run:
+- **Linux:** install **Python 3.12** with `venv` and `pip`, **FFmpeg/FFprobe** and **Bash**, then run:
 
 ```sh
 chmod +x setup_linux.sh run_linux.sh
@@ -139,7 +139,7 @@ Setup creates a local virtual environment and installs the Python dependencies. 
 | --- | --- |
 | **Windows** | Beta ZIP with launcher. Testing on fresh computers and a wide range of hardware is ongoing. |
 | **macOS** | Beta ZIP for macOS 15 or later on Apple Silicon and Intel. Automated checks run for both architectures; Finder, Gatekeeper and Safari behavior still need manual verification. |
-| **Linux** | Source checkout only: Python 3.11/3.12, FFmpeg/FFprobe and Bash. No Linux download, and the full Linux installation is not yet verified end to end. |
+| **Linux** | Source checkout only: Python 3.12, FFmpeg/FFprobe and Bash. No Linux download, and the full Linux installation is not yet verified end to end. |
 
 See the [platform guide](docs/PLATFORMS.md) for exact prerequisites, commands and troubleshooting.
 

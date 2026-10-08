@@ -129,7 +129,7 @@ def test_windows_installer_verifier_resolves_repository_from_another_directory(t
 def test_linux_setup_resolves_supported_python_and_verifies_the_runtime_before_success():
     setup = (ROOT / "setup_linux.sh").read_text(encoding="utf-8")
     launcher = (ROOT / "run_linux.sh").read_text(encoding="utf-8")
-    assert "python3.12 python3.11 python3" in setup
+    assert "python3.12 python3" in setup
     assert "command -v ffprobe" in setup
     assert ".venv/bin/python scripts/preflight.py" in setup
     assert setup.index("scripts/preflight.py") < setup.index(".setup-complete")
@@ -233,6 +233,22 @@ def test_windows_bootstrap_uses_v3_path_then_safe_private_fallback():
     assert "--managed-python" not in setup
     assert "UV_PYTHON_PREFERENCE" in setup  # explicitly removed from inherited environments
     assert 'Remove-Item Env:UV_PYTHON_PREFERENCE' in setup
+
+
+def test_every_setup_path_selects_python_312_because_numpy_requires_it():
+    # numpy 2.5+ ships wheels only for Python 3.12+, so a 3.11 environment fails at pip install.
+    requirements = (ROOT / "requirements.txt").read_text(encoding="utf-8")
+    assert re.search(r"^numpy>=2\.5", requirements, re.MULTILINE)
+    windows = (ROOT / "setup_windows.ps1").read_text(encoding="ascii")
+    assert '$script:PythonVersion = "3.12"' in windows
+    assert '"--no-registry", $script:PythonVersion' in windows
+    assert '"--python", $script:PythonVersion' in windows
+    for path in ("setup_windows.ps1", "setup_linux.sh", "packaging/mac/setup_macos.sh",
+                 "packaging/mac/preflight_macos.py", "scripts/smoke_macos.py"):
+        text = (ROOT / path).read_text(encoding="utf-8")
+        assert "(3, 12) <= sys.version_info[:2] < (3, 13)" in text, path
+        for legacy in ("(3, 11)", "python3.11", "-3.11", "Python311", '"3.11"'):
+            assert legacy not in text, (path, legacy)
 
 
 def test_windows_launcher_restores_runtime_paths_and_exposes_setup_logs():

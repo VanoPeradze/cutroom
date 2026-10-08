@@ -19,7 +19,7 @@ Choose the **Windows** or **Mac** download. Each ZIP contains its launcher, **ST
 3. Let setup finish, then keep its console open while editing. Open `http://127.0.0.1:8765` if the browser does not open automatically.
 4. Start with **Manual edit**, import a short recording, export it and watch the MP4 outside CUTROOM.
 
-Setup accepts an existing Python 3.11/3.12 or downloads a private Python runtime, then installs the Python dependencies. FFmpeg and FFprobe are required; setup can attempt installation through Windows Package Manager. It may also attempt to install/start Ollama, but manual editing does not require it. Dependencies and local AI models are not bundled. See [Windows setup and troubleshooting](TEST_ON_ANOTHER_PC.md) for download behavior and diagnostics.
+Setup accepts an existing Python 3.12 or downloads a private Python 3.12 runtime, then installs the Python dependencies. FFmpeg and FFprobe are required; setup can attempt installation through Windows Package Manager. It may also attempt to install/start Ollama, but manual editing does not require it. Dependencies and local AI models are not bundled. See [Windows setup and troubleshooting](TEST_ON_ANOTHER_PC.md) for download behavior and diagnostics.
 
 For a GitHub source checkout, run **`run_windows.bat` from the repository root**. Do not rearrange an existing working installation to match the ZIP: its runtime paths and Python environment can depend on its current folder. To receive this editor revision, download a fresh copy and extract it separately. Back up projects before migration; the public 1.1 Beta filename stays the same, while the manifest records a new build ID/checksums.
 
@@ -31,7 +31,7 @@ For a GitHub source checkout, run **`run_windows.bat` from the repository root**
 4. Keep Terminal open while editing. If needed, open `http://127.0.0.1:8765` after the server starts.
 5. Try a short manual project first, then review the exported MP4 and saved project after restart.
 
-Setup reuses a compatible **native Python 3.11/3.12** and FFmpeg/FFprobe when available. If required tools are missing or incompatible, it uses an existing **Homebrew** installation to offer Python 3.12 and **ffmpeg@7**. Homebrew is needed for that installation path, not when all compatible tools already exist. If Homebrew is missing, follow the [official installation guide](https://docs.brew.sh/Installation), then launch CUTROOM again; Homebrew may require Apple's Command Line Tools. CUTROOM does not install Homebrew for you.
+Setup reuses a compatible **native Python 3.12** and FFmpeg/FFprobe when available. If required tools are missing or incompatible, it uses an existing **Homebrew** installation to offer Python 3.12 and **ffmpeg@7**. Homebrew is needed for that installation path, not when all compatible tools already exist. If Homebrew is missing, follow the [official installation guide](https://docs.brew.sh/Installation), then launch CUTROOM again; Homebrew may require Apple's Command Line Tools. CUTROOM does not install Homebrew for you.
 
 The Mac FFmpeg checks require libass subtitles, libx264, AAC and the command options used by this beta. Mac Python dependencies use their own compatibility constraints. Local transcription currently runs on the **CPU**; Apple GPU transcription is not implemented. Local Story AI requires a separate [Ollama installation](https://ollama.com/download/mac) and your chosen model.
 
@@ -43,7 +43,7 @@ Linux users can try the repository scripts; this is not a packaged Linux release
 
 Before setup, install these using your distribution's supported tools:
 
-- **Python 3.11 or 3.12**, including working `venv` and `pip` support.
+- **Python 3.12**, including working `venv` and `pip` support.
 - **FFmpeg and FFprobe**, available on `PATH`. For MP4 export, FFmpeg needs libx264 and AAC; burned captions require its `subtitles` filter/libass. Use a build compatible with the application's FFmpeg options; the Linux preflight checks executable availability, not all rendering capabilities.
 - **Bash**, a writable local folder and internet for Python dependency downloads. Ollama and AI model downloads are optional.
 
