@@ -29,7 +29,7 @@ a,button,summary{touch-action:manipulation;-webkit-tap-highlight-color:transpare
 .hero{padding-top:62px}
 .hero-lead{display:grid;grid-template-columns:minmax(0,1.75fr) minmax(320px,1fr);align-items:end;gap:64px;margin-bottom:52px}
 .hero-title .eyebrow{color:var(--cyan)}
-h1{margin:0;font-family:var(--display);font-weight:750;font-size:clamp(64px,7.7vw,110px);line-height:1.01;letter-spacing:-.055em}
+h1{margin:0;font-family:var(--display);font-weight:750;font-size:clamp(52px,5.3vw,76px);line-height:1.02;letter-spacing:-.05em}
 h1 span{display:block}
 h1 span+span{color:var(--cyan)}
 .hero-action{padding-bottom:3px}
@@ -130,7 +130,7 @@ h2{font-family:var(--display);font-size:clamp(34px,4vw,56px);line-height:1.07;fo
 .image-dialog button{position:sticky;top:0;display:block;margin-inline-start:auto;padding:12px 24px;min-height:48px;border:0;background:var(--text);color:var(--ink);font-weight:600}
 @keyframes arrive{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
 html[dir=rtl] .eyebrow{letter-spacing:0}
-html[dir=rtl] h1{font-size:clamp(60px,7.2vw,104px);letter-spacing:-.045em;line-height:1.12}
+html[dir=rtl] h1{font-size:clamp(52px,5.8vw,88px);letter-spacing:-.045em;line-height:1.12}
 html[dir=rtl] h2{letter-spacing:-.02em}
 .workspace-shot,.shot-button img,.image-dialog img{direction:ltr}
 @media(min-width:1536px){.hero{padding-top:82px}.hero-lead{gap:120px}.hero-action{max-width:390px}}
@@ -138,7 +138,7 @@ html[dir=rtl] h2{letter-spacing:-.02em}
  .shell,.site-header,.footer{padding-inline:28px}
  .site-header nav{gap:0}.site-header nav a{padding-inline:9px}.github-link{margin-inline-start:4px}
  .hero{padding-top:45px}.hero-lead{grid-template-columns:minmax(0,1.2fr) minmax(300px,1fr);gap:32px;margin-bottom:38px}
- h1{font-size:clamp(62px,8vw,82px)}html[dir=rtl] h1{font-size:clamp(54px,7vw,72px)}
+ h1{font-size:clamp(50px,7vw,72px)}html[dir=rtl] h1{font-size:clamp(50px,7vw,72px)}
  .intro{font-size:16px}.start,.ai-layout{gap:52px}.start{padding-block:72px}.support{gap:45px}
  .tour-heading{gap:35px}.ai-options article{grid-template-columns:125px 1fr;gap:20px}
 }
@@ -147,7 +147,7 @@ html[dir=rtl] h2{letter-spacing:-.02em}
  .site-header{height:70px;gap:12px}.brand{font-size:18px;gap:8px}.brand img{width:26px}
  .site-header nav .nav-section{display:none}.site-header nav a{padding-inline:10px}.github-link span{display:none}.github-link{margin-inline-start:0;min-width:42px}
  .hero{padding-top:35px}.hero-lead{grid-template-columns:1fr;gap:28px;margin-bottom:30px}
- .eyebrow{font-size:11px;margin-bottom:16px}h1{font-size:clamp(47px,11.6vw,79px);letter-spacing:-.05em}html[dir=rtl] h1{font-size:clamp(46px,11.4vw,78px)}
+ .eyebrow{font-size:11px;margin-bottom:16px}h1{font-size:clamp(40px,10.6vw,64px);letter-spacing:-.045em}html[dir=rtl] h1{font-size:clamp(40px,10.6vw,64px)}
  .hero-action{max-width:540px}.intro{max-width:460px;margin-bottom:20px;font-size:16px}
  .download-action{flex-direction:row;gap:8px}.button{padding-inline:13px;font-size:13px;gap:8px;min-height:56px}
  .platform-links{gap:0 14px}.setup-note{font-size:11px;max-width:330px}
