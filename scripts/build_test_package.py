@@ -54,7 +54,7 @@ WINDOWS_LAUNCHER = "START CUTROOM.bat"
 WINDOWS_HELP = "START HERE.html"
 WINDOWS_SOURCE_DIRECTORY = "App"
 START_TEXT = """CUTROOM {version_label}
-Your footage. Your edit.
+Hours of footage. Minutes to a great clip.
 
 Free and open source (MIT). No subscription. No CUTROOM watermark.
 

@@ -2,7 +2,7 @@
 
 ## A short introduction to share
 
-**Your footage. Your edit.** CUTROOM is a free, open-source video editor for creators. Turn camera recordings, screen captures or gameplay into an editable first cut for YouTube, Shorts or Reels. Get help from AI, or skip AI and edit manually. Shape individual clips, frame camera and screen, correct captions and export up to 60 FPS—without a CUTROOM subscription or watermark.
+**Hours of footage. Minutes to a great clip.** CUTROOM is a free, open-source video editor for creators. Turn camera recordings, screen captures or gameplay into an editable first cut for YouTube, Shorts or Reels. Get help from AI, or skip AI and edit manually. Shape individual clips, frame camera and screen, correct captions and export up to 60 FPS—without a CUTROOM subscription or watermark.
 
 We're inviting editors to try the beta and tell us what actually saves time. AI drafts still need review; this is not a promise of a perfect edit in one click.
 

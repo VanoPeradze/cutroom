@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/images/readme-banner.svg" alt="CUTROOM — Your footage. Your final cut." width="960">
+  <img src="docs/images/readme-banner.svg" alt="CUTROOM — Hours of footage. Minutes to a great clip." width="960">
 </p>
 
 <p align="center">
