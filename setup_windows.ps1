@@ -4,6 +4,9 @@ Set-Location -LiteralPath $PSScriptRoot
 
 $script:CutroomVersion = "1.1 Beta"
 $script:UvVersion = "0.12.5"
+# numpy 2.5 and later publish wheels only for Python 3.12+, so 3.11 cannot install requirements.txt.
+$script:PythonVersion = "3.12"
+$script:PythonProbe = "import sys; raise SystemExit(0 if (3, 12) <= sys.version_info[:2] < (3, 13) else 1)"
 $script:TranscriptStarted = $false
 $script:LogDirectory = Join-Path $PSScriptRoot "data\logs"
 $script:LogPath = Join-Path $script:LogDirectory "setup-windows.log"
@@ -172,24 +175,14 @@ function Download-File {
 }
 
 function Resolve-SystemPython {
-    $probe = "import sys; raise SystemExit(0 if (3, 11) <= sys.version_info[:2] < (3, 13) else 1)"
+    $probe = $script:PythonProbe
     $candidates = New-Object System.Collections.Generic.List[string]
 
     if ($env:LOCALAPPDATA) {
-        foreach ($version in @("Python311", "Python312")) {
-            $candidates.Add((Join-Path $env:LOCALAPPDATA "Programs\Python\$version\python.exe"))
-        }
-        $pythonRoot = Join-Path $env:LOCALAPPDATA "Programs\Python"
-        if (Test-Path -LiteralPath $pythonRoot -PathType Container) {
-            Get-ChildItem -LiteralPath $pythonRoot -Directory -Filter "Python31*" -ErrorAction SilentlyContinue |
-                Where-Object { $_.Name -in @("Python311", "Python312") } |
-                ForEach-Object { $candidates.Add((Join-Path $_.FullName "python.exe")) }
-        }
+        $candidates.Add((Join-Path $env:LOCALAPPDATA "Programs\Python\Python312\python.exe"))
     }
     if ($env:ProgramFiles) {
-        foreach ($version in @("Python311", "Python312")) {
-            $candidates.Add((Join-Path $env:ProgramFiles "$version\python.exe"))
-        }
+        $candidates.Add((Join-Path $env:ProgramFiles "Python312\python.exe"))
     }
 
     foreach ($candidate in @($candidates | Select-Object -Unique)) {
@@ -200,14 +193,13 @@ function Resolve-SystemPython {
 
     $py = Resolve-Executable -Name "py.exe"
     if ($py) {
-        foreach ($selector in @("-3.11", "-3.12")) {
-            if (Test-External -FilePath $py -Arguments @($selector, "-c", $probe)) {
-                return [PSCustomObject]@{ FilePath = $py; PrefixArgs = @($selector); Description = "Python through py.exe $selector" }
-            }
+        $selector = "-$($script:PythonVersion)"
+        if (Test-External -FilePath $py -Arguments @($selector, "-c", $probe)) {
+            return [PSCustomObject]@{ FilePath = $py; PrefixArgs = @($selector); Description = "Python through py.exe $selector" }
         }
     }
 
-    foreach ($name in @("python3.11.exe", "python3.12.exe", "python.exe")) {
+    foreach ($name in @("python3.12.exe", "python.exe")) {
         $candidate = Resolve-Executable -Name $name
         if ($candidate -and (Test-External -FilePath $candidate -Arguments @("-c", $probe))) {
             return [PSCustomObject]@{ FilePath = $candidate; PrefixArgs = @(); Description = $candidate }
@@ -342,14 +334,14 @@ function Configure-UvEnvironment {
 
 function Prepare-PythonEnvironment {
     $venvPython = Join-Path $PSScriptRoot ".venv\Scripts\python.exe"
-    $venvProbe = "import sys; raise SystemExit(0 if (3, 11) <= sys.version_info[:2] < (3, 13) else 1)"
+    $venvProbe = $script:PythonProbe
     if ((Test-Path -LiteralPath $venvPython -PathType Leaf) -and (Test-External -FilePath $venvPython -Arguments @("-c", $venvProbe))) {
         Write-Step "Using the existing CUTROOM Python environment"
         return $venvPython
     }
 
     if (Test-Path -LiteralPath ".venv") {
-        Write-Step "Removing an incomplete Python environment"
+        Write-Step "Replacing an incomplete or outdated Python environment with Python $($script:PythonVersion)"
         Remove-Item -LiteralPath ".venv" -Recurse -Force
     }
 
@@ -364,10 +356,10 @@ function Prepare-PythonEnvironment {
         $uvPath = Install-UvBootstrap
         Configure-UvEnvironment
         Invoke-External -FilePath $uvPath -Arguments @(
-            "--no-config", "python", "install", "--no-registry", "3.11"
+            "--no-config", "python", "install", "--no-registry", "--no-bin", $script:PythonVersion
         ) -FailureMessage "CUTROOM could not download its private Python runtime."
         Invoke-External -FilePath $uvPath -Arguments @(
-            "--no-config", "venv", "--clear", "--no-project", "--python", "3.11", "--seed", ".venv"
+            "--no-config", "venv", "--clear", "--no-project", "--python", $script:PythonVersion, "--seed", ".venv"
         ) -FailureMessage "CUTROOM could not create its private Python environment."
     }
 

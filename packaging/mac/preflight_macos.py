@@ -73,8 +73,8 @@ def check_python(*, imports: bool = True) -> list[str]:
             failures.append(f"PyAV {av_version} is incompatible with this beta's transcription; run Mac setup to install av>=18.1.0,<19.")
     except PackageNotFoundError:
         failures.append("PyAV is missing; run Mac setup to install av>=18.1.0,<19.")
-    if not (3, 11) <= sys.version_info[:2] < (3, 13):
-        failures.append("Use Python 3.11 or 3.12 for this Mac beta.")
+    if not (3, 12) <= sys.version_info[:2] < (3, 13):
+        failures.append("Use Python 3.12 for this Mac beta.")
     expected = os.environ.get("CUTROOM_MAC_ARCH")
     if expected and platform.machine() != expected:
         failures.append(f"Python architecture {platform.machine()} does not match this Mac ({expected}).")

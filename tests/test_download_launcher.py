@@ -17,7 +17,7 @@ def test_download_launcher_is_portable_and_does_not_duplicate_installation():
     assert b"\r\n" in data and b"\n" not in data.replace(b"\r\n", b"")
     assert 'pushd "%~dp0App"' in text
     assert "DisableDelayedExpansion" in text
-    assert "call run_windows.bat" in text
+    assert r'call ".\run_windows.bat"' in text
     assert "popd" in text
     assert "exit /b %CUTROOM_LAUNCH_EXIT%" in text
     assert "Extract All" in text

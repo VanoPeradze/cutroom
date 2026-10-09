@@ -21,7 +21,7 @@ if errorlevel 1 (
   exit /b 1
 )
 
-call run_windows.bat
+call ".\run_windows.bat"
 set "CUTROOM_LAUNCH_EXIT=%ERRORLEVEL%"
 popd
 exit /b %CUTROOM_LAUNCH_EXIT%

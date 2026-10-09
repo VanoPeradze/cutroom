@@ -3,7 +3,7 @@ setlocal EnableExtensions
 cd /d "%~dp0"
 title CUTROOM 1.1 Beta
 
-if exist ".runtime-paths.cmd" call ".runtime-paths.cmd"
+if exist ".runtime-paths.cmd" call ".\.runtime-paths.cmd"
 if defined LOCALAPPDATA set "PATH=%LOCALAPPDATA%\Microsoft\WindowsApps;%LOCALAPPDATA%\Microsoft\WinGet\Links;%LOCALAPPDATA%\Programs\Ollama;%PATH%"
 if defined LOCALAPPDATA if exist "%LOCALAPPDATA%\Programs\Ollama\lib\ollama\cuda_v12\cublas64_12.dll" set "PATH=%LOCALAPPDATA%\Programs\Ollama\lib\ollama\cuda_v12;%PATH%"
 if defined ProgramFiles if exist "%ProgramFiles%\Ollama\lib\ollama\cuda_v12\cublas64_12.dll" set "PATH=%ProgramFiles%\Ollama\lib\ollama\cuda_v12;%PATH%"
@@ -36,7 +36,7 @@ if errorlevel 1 (
   pause
   exit /b 1
 )
-if exist ".runtime-paths.cmd" call ".runtime-paths.cmd"
+if exist ".runtime-paths.cmd" call ".\.runtime-paths.cmd"
 
 :verify
 ".venv\Scripts\python.exe" "scripts\preflight.py" >nul 2>&1
@@ -50,7 +50,7 @@ if errorlevel 1 (
     pause
     exit /b 1
   )
-  if exist ".runtime-paths.cmd" call ".runtime-paths.cmd"
+  if exist ".runtime-paths.cmd" call ".\.runtime-paths.cmd"
   ".venv\Scripts\python.exe" "scripts\preflight.py"
   if errorlevel 1 (
     echo.

@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/images/readme-banner.svg" alt="CUTROOM — Your footage. Your final cut." width="960">
+  <img src="docs/images/readme-banner.svg" alt="CUTROOM — Hours of footage. Minutes to a great clip." width="960">
 </p>
 
 <p align="center">
@@ -58,7 +58,7 @@
 
 <table>
   <tr>
-    <td width="33%"><a href="https://github.com/VanoPeradze/cutroom/blob/master/docs/images/readme/studio-home-20261007.png"><img src="https://raw.githubusercontent.com/VanoPeradze/cutroom/master/docs/images/readme/studio-home-20261007.png" alt="Home: start a Short or Reel, a YouTube video or a manual edit, with recent projects below"></a></td>
+    <td width="33%"><a href="https://github.com/VanoPeradze/cutroom/blob/master/docs/images/readme/studio-home-20261009.png"><img src="https://raw.githubusercontent.com/VanoPeradze/cutroom/master/docs/images/readme/studio-home-20261009.png" alt="Home: start a Short or Reel, a YouTube video or a manual edit, with recent projects below"></a></td>
     <td width="33%"><a href="https://github.com/VanoPeradze/cutroom/blob/master/docs/images/readme/studio-audio-20261007.png"><img src="https://raw.githubusercontent.com/VanoPeradze/cutroom/master/docs/images/readme/studio-audio-20261007.png" alt="Audio workspace: track mixer with Original, Music, Voiceover, Effects and Master channels"></a></td>
     <td width="33%"><a href="https://github.com/VanoPeradze/cutroom/blob/master/docs/images/readme/studio-output-20261007.png"><img src="https://raw.githubusercontent.com/VanoPeradze/cutroom/master/docs/images/readme/studio-output-20261007.png" alt="Output workspace: output presets, resolution, frame rate and quality, with Export video"></a></td>
   </tr>
@@ -86,7 +86,7 @@ To update, extract a fresh copy separately and back up your projects before movi
 
 - **Windows:** run `run_windows.bat` from the repository root.
 - **macOS:** follow the [Mac setup guide](https://github.com/VanoPeradze/cutroom/blob/master/docs/MAC_BETA.md).
-- **Linux:** install **Python 3.11 or 3.12** with `venv` and `pip`, **FFmpeg/FFprobe** and **Bash**, then run:
+- **Linux:** install **Python 3.12** with `venv` and `pip`, **FFmpeg/FFprobe** and **Bash**, then run:
 
 ```sh
 chmod +x setup_linux.sh run_linux.sh
@@ -139,7 +139,7 @@ Setup creates a local virtual environment and installs the Python dependencies. 
 | --- | --- |
 | **Windows** | Beta ZIP with launcher. Testing on fresh computers and a wide range of hardware is ongoing. |
 | **macOS** | Beta ZIP for macOS 15 or later on Apple Silicon and Intel. Automated checks run for both architectures; Finder, Gatekeeper and Safari behavior still need manual verification. |
-| **Linux** | Source checkout only: Python 3.11/3.12, FFmpeg/FFprobe and Bash. No Linux download, and the full Linux installation is not yet verified end to end. |
+| **Linux** | Source checkout only: Python 3.12, FFmpeg/FFprobe and Bash. No Linux download, and the full Linux installation is not yet verified end to end. |
 
 See the [platform guide](docs/PLATFORMS.md) for exact prerequisites, commands and troubleshooting.
 

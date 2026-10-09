@@ -92,6 +92,7 @@ def test_smoke_verifies_selected_pin_before_extraction_or_installation(tmp_path,
     # This is a verifier contract test. Aborting at verification prevents any
     # installation or claim of actual Mac runtime validation on another OS.
     monkeypatch.setattr(smoke.sys, "platform", "darwin")
+    monkeypatch.setattr(smoke.sys, "version_info", (3, 12, 0, "final", 0))
     metadata = tmp_path / "historical-windows.json" if historical else None
     archive_path = tmp_path / "release.zip"
     def verify(path, *, windows_baseline=None):

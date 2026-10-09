@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="340" viewBox="0 0 1200 340" role="img" aria-labelledby="title desc">
-  <title id="title">CUTROOM — Your footage. Your final cut.</title>
+  <title id="title">CUTROOM — Hours of footage. Minutes to a great clip.</title>
   <desc id="desc">CUTROOM banner in the studio design: the cyan and violet mark, the headline, and an abstract editor with a preview, a playhead and colored timeline tracks.</desc>
   <defs>
     <linearGradient id="backdrop" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#121a20"/><stop offset="1" stop-color="#151d26"/></linearGradient>
@@ -15,8 +15,8 @@
   <path d="M66 44h17L71 92H54z" fill="#1bd9ce"/>
   <path d="M93 44h17L98 92H81z" fill="#a38bd0"/>
   <text x="126" y="80" fill="#edf2f5" font-family="Segoe UI,Arial,sans-serif" font-size="30" font-weight="700" letter-spacing="3">CUTROOM</text>
-  <text x="54" y="166" fill="#edf2f5" font-family="Segoe UI,Arial,sans-serif" font-size="56" font-weight="700" letter-spacing="-1.5">Your footage.</text>
-  <text x="54" y="230" fill="url(#headline)" font-family="Segoe UI,Arial,sans-serif" font-size="56" font-weight="700" letter-spacing="-1.5">Your final cut.</text>
+  <text x="54" y="166" fill="#edf2f5" font-family="Segoe UI,Arial,sans-serif" font-size="46" font-weight="700" letter-spacing="-1.2">Hours of footage.</text>
+  <text x="54" y="230" fill="url(#headline)" font-family="Segoe UI,Arial,sans-serif" font-size="46" font-weight="700" letter-spacing="-1.2">Minutes to a great clip.</text>
   <text x="56" y="284" fill="#bfcbd3" font-family="Segoe UI,Arial,sans-serif" font-size="18">Free, local-first video editing for creators.</text>
 
   <g transform="translate(700 40)">
