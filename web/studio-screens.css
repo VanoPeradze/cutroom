@@ -414,8 +414,9 @@ body .home-hub .recent-list .recent-project, body .home-hub .recent-list .recent
 #studioPanelTranscript .caption-option-grid .studio-segmented > button { flex:1 1 auto; min-width:0; }
 .preview-stage .preview-badge[hidden] { display:none; }
 /* Inspector disclosures use flex summaries, which drop the native marker, so
-   collapsed sections read as headings with nothing under them. */
-.studio-workspace :is(.framing-source-preview, .layout-default-disclosure, #trackProtection, #editorMoreTools, .editor-ai-suggestions, .caption-settings-disclosure, #transcriptSection) > summary::after { content:""; flex:0 0 auto; width:7px; height:7px; margin-inline-start:auto; border-right:1.5px solid var(--muted); border-bottom:1.5px solid var(--muted); transform:rotate(-45deg); transition:transform .15s ease; }
+   collapsed sections read as headings with nothing under them. Reserve 2px for
+   the rotated chevron so its painted bounds stay inside the inspector. */
+.studio-workspace :is(.framing-source-preview, .layout-default-disclosure, #trackProtection, #editorMoreTools, .editor-ai-suggestions, .caption-settings-disclosure, #transcriptSection) > summary::after { content:""; flex:0 0 auto; width:7px; height:7px; margin-inline-start:auto; margin-inline-end:2px; border-right:1.5px solid var(--muted); border-bottom:1.5px solid var(--muted); transform:rotate(-45deg); transition:transform .15s ease; }
 [dir="rtl"] .studio-workspace :is(.framing-source-preview, .layout-default-disclosure, #trackProtection, #editorMoreTools, .editor-ai-suggestions, .caption-settings-disclosure, #transcriptSection) > summary::after { transform:rotate(135deg); }
 .studio-workspace :is(.framing-source-preview, .layout-default-disclosure, #trackProtection, #editorMoreTools, .editor-ai-suggestions, .caption-settings-disclosure, #transcriptSection)[open] > summary::after { transform:rotate(45deg); }
 /* Reel option cards used a fixed near-black background, so in Day mode their

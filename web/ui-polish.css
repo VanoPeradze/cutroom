@@ -101,6 +101,12 @@ body.studio-open #setupWorkflowSteps { visibility:hidden; }
   .director-panel .director-action { bottom:0; }
 }
 
+/* Preparation has no panel padding. Legacy negative action-bar margins made
+   the page wider than a narrow window, shifting camera controls while scrolling. */
+#setupPanel .director-action { margin-inline:0; margin-bottom:0; }
+/* Percentages use the visible viewport; 100vw also included its scrollbar. */
+.toast-region { width:min(420px,calc(100% - 24px)); }
+
 /* "Review original footage" keeps its green restore cue, in the day palette too. */
 html[data-theme="light"] .studio-workspace #manualRestore:not(:disabled) { border-color:#7cb898; background:#e2f3e9; color:#14472f; }
 

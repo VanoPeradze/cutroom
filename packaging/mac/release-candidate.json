@@ -1,0 +1,10 @@
+{
+  "filename": "CUTROOM-1.1-Beta-stable-combined-193fee446f1e-20261009.zip",
+  "bytes": 7063977,
+  "sha256": "193fee446f1e0d8dee9b38e7516bb7827a8ee64886c64a573af123b48c88ab9c",
+  "url": "https://cutroom-studio--fmd6p9urhj.expo.app/downloads/CUTROOM-1.1-Beta-stable-combined-193fee446f1e-20261009.zip",
+  "version": "1.1-beta",
+  "layout": "windows-mac-folders-v1",
+  "build_id": "CUTROOM-1.1-beta-mac-stable-critical-20261009-local",
+  "note": "Exact stability candidate for native validation, not a declaration of production publication. Windows and Mac source match the reviewed stable snapshot. Editorial experiments excluded."
+}

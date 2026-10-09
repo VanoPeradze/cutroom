@@ -106,6 +106,23 @@ jobs:
         run: |
           archive="$(python scripts/build_universal_package.py --download-baseline --output-dir "$RUNNER_TEMP/cutroom-universal")"
           python scripts/build_universal_package.py --verify "$archive"
+          echo "CUTROOM_BUILT_ARCHIVE=$archive" >> "$GITHUB_ENV"
+      - name: Verify and select the exact pinned candidate archive
+        timeout-minutes: 3
+        shell: bash
+        run: |
+          archive="$(python scripts/verify_published_package.py --release packaging/mac/release-candidate.json --output "$RUNNER_TEMP/exact-CUTROOM-candidate.zip")"
+          python - "$CUTROOM_BUILT_ARCHIVE" "$archive" <<'PY'
+          import hashlib, pathlib, sys, zipfile
+          exact = pathlib.Path(sys.argv[2])
+          exact.with_suffix(exact.suffix + ".sha256").write_text(hashlib.sha256(exact.read_bytes()).hexdigest() + "  " + exact.name + "\n")
+          with zipfile.ZipFile(sys.argv[1]) as built, zipfile.ZipFile(sys.argv[2]) as pinned:
+              assert set(built.namelist()) == set(pinned.namelist()), "Candidate inventory differs from reviewed source build"
+              for name in built.namelist():
+                  # The independently verified combined manifest has build-time metadata.
+                  if name != "mac/App/TEST_BUILD.json":
+                      assert built.read(name) == pinned.read(name), f"Candidate payload differs: {name}"
+          PY
           echo "CUTROOM_CANDIDATE_ARCHIVE=$archive" >> "$GITHUB_ENV"
       - name: Verify audio, mixer and stabilization from the extracted candidate
         timeout-minutes: 6
