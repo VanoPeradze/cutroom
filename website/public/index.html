@@ -4,13 +4,13 @@
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
   <meta name="referrer" content="no-referrer">
-  <title>CUTROOM — Make the cut. Make it yours.</title>
+  <title>CUTROOM — Hours of footage. Minutes to a great clip.</title>
   <meta name="description" content="A free local video editor. Cut footage, mix sound and add captions. Windows/Mac beta; Linux from source. Optional AI drafts, editable by you.">
   <meta name="theme-color" content="#121a20">
   <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
   <link rel="canonical" href="https://cutroom-studio.expo.app/">
-  <link rel="stylesheet" href="/styles.css?v=20261007-polish">
-  <script src="/site.js?v=20261004-studio" defer></script>
+  <link rel="stylesheet" href="/styles.css?v=20261009-cutroom-site">
+  <script src="/site.js?v=20261009-cutroom-site" defer></script>
 </head>
 <body class="marketing-page">
 <a class="skip" href="#main" data-he="דילוג לתוכן">Skip to content</a>
@@ -21,65 +21,42 @@
 <main id="main">
   <section class="hero" id="download">
     <div class="hero-lead shell">
-      <p class="eyebrow" data-he="עורך וידאו שעובד במחשב שלכם">Local-first video editor</p>
-      <h1><span data-he="הווידאו שלכם.">Your footage.</span><span data-he="הקאט שלכם.">Your final cut.</span></h1>
-      <p class="intro" data-he="חותכים וידאו, מאזנים סאונד ומוסיפים כתוביות, הכול במחשב שלכם. מתחילים ידנית או מטיוטת AI אופציונלית, וכל חיתוך נשאר בשליטתכם.">Trim video, mix audio and add captions on your own computer. Start by hand or from an optional AI draft, then make every cut yours.</p>
-      <div class="download-action" aria-label="Choose your download" data-he-aria="בחירת הורדה">
+      <div class="hero-title">
+        <p class="eyebrow" data-he="עורך וידאו חינמי ליוצרים">Free video editor for creators</p>
+        <h1><span data-he="שעות של חומר.">Hours of footage.</span><span data-he="דקות לקליפ מצוין.">Minutes to a great clip.</span></h1>
+      </div>
+      <div class="hero-action">
+        <p class="intro" data-he="עורך וידאו חינמי לחומרים שכבר צילמת. חיתוכים, סאונד וכתוביות — במחשב שלך.">A free video editor for the footage you already have. Cut, mix and caption, on your computer.</p>
+        <div class="download-action" aria-label="Choose your download" data-he-aria="בחירת הורדה">
         <a id="downloadButton" class="button download-link" href="/downloads/CUTROOM-1.1-Beta-Windows.zip" download><span data-he="הורדה ל־Windows">Download for Windows</span><svg width="18" height="18" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M10 3v10m-4-4 4 4 4-4M4 16h12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
         <a id="macDownloadButton" class="button button-secondary download-link" href="/downloads/CUTROOM-1.1-Beta-Mac.zip" download><span data-he="הורדה ל־Mac">Download for Mac</span><svg width="18" height="18" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M10 3v10m-4-4 4 4 4-4M4 16h12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
       </div>
-      <p class="platform-links"><span class="version-pill" dir="ltr">1.1 Beta</span><a href="#install-help" data-he="איך מתקינים?">Installation help</a><a href="https://github.com/VanoPeradze/cutroom/blob/master/docs/PLATFORMS.md#linux-source-based-development-path" data-he="מדריך Linux מקוד המקור">Linux source guide</a></p>
-      <ul class="promise" aria-label="What you get" data-he-aria="מה מקבלים">
-        <li><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="m3 8.5 3 3 7-7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span data-he="חינם">Free</span></li>
-        <li><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="m3 8.5 3 3 7-7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span data-he="בלי סימן מים">No watermark</span></li>
-        <li><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="m3 8.5 3 3 7-7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span data-he="קוד פתוח, רישיון MIT">MIT open source</span></li>
-        <li><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="m3 8.5 3 3 7-7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span data-he="רץ במחשב שלכם">Runs on your computer</span></li>
-      </ul>
+        <p class="platform-links"><span class="version-pill" dir="ltr">1.1 Beta</span><a href="#install-help" data-he="איך מתקינים?">Installation help</a><a href="https://github.com/VanoPeradze/cutroom/blob/master/docs/PLATFORMS.md#linux-source-based-development-path" data-he="מדריך Linux מקוד המקור">Linux source guide</a></p>
+        <p class="setup-note" data-he="ההתקנה הראשונית דורשת אינטרנט. עריכה ידנית ללא חשבון.">First setup needs internet. Manual editing needs no account.</p>
+      </div>
     </div>
     <figure class="editor-preview shell" id="inside">
-      <div class="preview-frame">
-        <button id="expandShot" class="shot-button" type="button" aria-label="Enlarge editor screenshot" data-he-aria="הגדלת צילום העורך"><img id="editorImage" src="/assets/editor-demo.png?v=20261007-studio" width="1440" height="900" fetchpriority="high" alt="The actual CUTROOM studio with original synthetic gameplay footage: media library, preview, Edit tools and a timeline with cuts, a title and audio" data-he-alt="הסטודיו של CUTROOM עם סרטון משחק סינתטי מקורי: ספריית מדיה, תצוגה מקדימה, כלי עריכה וטיימליין עם חיתוכים, כותרת ואודיו"><span class="enlarge-label"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M2 6V2h4m4 0h4v4M2 10v4h4m4 0h4v-4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg><span data-he="פתיחת העורך בגודל מלא">See the full editor</span></span></button>
-      </div>
-      <figcaption><span data-he="העורך האמיתי · חומר הדגמה סינתטי">Actual editor · Synthetic demo footage</span><span class="preview-note" data-he="מהחומר המקורי עד ה־MP4">From source to MP4</span></figcaption>
+      <button id="expandShot" class="shot-button" type="button" aria-label="Enlarge editor screenshot" data-he-aria="הגדלת צילום העורך">
+        <img id="editorImage" src="/assets/studio-edit.png?v=20261009" width="1600" height="900" fetchpriority="high" alt="The actual CUTROOM editor: synthetic gameplay footage in four timeline clips, a caption and clip timing controls" data-he-alt="עורך CUTROOM בפועל: חומר משחק סינתטי בארבעה קטעים בטיימליין, כתובית וכלי תזמון לקטע">
+        <span class="enlarge-label" data-he="הגדלת העורך">Explore the full editor ↗</span>
+      </button>
+      <figcaption><span data-he="צילום אמיתי של העורך · הדגמת משחק סינתטית">Actual editor · Synthetic gameplay demo</span><span data-he="החומר נוצר במחשב להדגמה. אין בו משחק של צד שלישי.">The footage is generated for this demo. No third-party game is shown.</span></figcaption>
     </figure>
+    <div class="promise shell" aria-label="What you get" data-he-aria="מה מקבלים"><span data-he="חינם. קוד פתוח.">Free. Open source.</span><span data-he="בלי סימן מים.">No watermark.</span><span data-he="הקבצים נשארים אצלך.">Your files stay with you.</span></div>
   </section>
 
   <section class="start shell" id="start" aria-labelledby="start-title">
-    <div class="section-heading">
-      <p class="eyebrow" data-he="בוחרים איך מתחילים">Choose how you start</p>
-      <h2 id="start-title" data-he="שלוש דרכים לאותו עורך.">Three ways into one editor.</h2>
-    </div>
-    <ol class="start-cards">
-      <li class="start-card">
-        <div class="art art-reel" aria-hidden="true"><div class="reel-frame"><span class="ratio">9:16</span><span class="subject"></span></div></div>
-        <h3 data-he="יוצרים Short / Reel">Create a Short / Reel</h3>
-        <p data-he="מוצאים רגע חזק והופכים אותו לסרטון אנכי.">Find a strong moment and make it vertical.</p>
-        <span class="tag" data-he="טיוטת AI אופציונלית">Optional AI draft</span>
-      </li>
-      <li class="start-card">
-        <div class="art art-youtube" aria-hidden="true"><div class="wide-frame"><span class="subject"></span></div><div class="strip"><i></i><i></i><i></i><i class="on"></i><i></i><i></i><i></i></div></div>
-        <h3 data-he="עורכים סרטון YouTube">Edit a YouTube video</h3>
-        <p data-he="בונים טיוטה ראשונה ממוקדת, ואז משפרים אותה.">Build a focused first draft, then refine it.</p>
-        <span class="tag" data-he="טיוטת AI אופציונלית">Optional AI draft</span>
-      </li>
-      <li class="start-card">
-        <div class="art art-manual" aria-hidden="true"><div class="mini-timeline"><span class="lane"><i class="c-video p1"></i><i class="c-video p2"></i></span><span class="lane"><i class="c-text p3"></i></span><span class="lane"><i class="c-audio p4"></i></span><span class="lane"><i class="c-voice p5"></i></span><span class="playhead"></span></div></div>
-        <h3 data-he="עורכים בעצמכם">Edit it yourself</h3>
-        <p data-he="שליטה ידנית מלאה, בלי צורך ב־AI.">Full manual control. No AI required.</p>
-        <span class="tag tag-quiet" data-he="בלי חשבון">No account needed</span>
-      </li>
+    <div class="section-heading"><p class="eyebrow" data-he="בוחרים איך להתחיל">Choose your starting point</p><h2 id="start-title" data-he="אותו חומר. הסיפור שלך.">Same footage.<br>Your kind of story.</h2></div>
+    <ol class="start-options">
+      <li><span class="format" dir="ltr">9:16</span><div><h3 data-he="Short או Reel">A Short or Reel</h3><p data-he="מוצאים רגע טוב ונותנים לו מסגרת אנכית.">Find the moment. Give it a vertical frame.</p></div></li>
+      <li><span class="format" dir="ltr">16:9</span><div><h3 data-he="סרטון YouTube">A YouTube video</h3><p data-he="בונים רצף שאנשים ירצו להמשיך לראות.">Shape a recording into a story worth staying for.</p></div></li>
+      <li><span class="format format-manual" aria-hidden="true">EDIT</span><div><h3 data-he="עריכה בדרך שלך">An edit of your own</h3><p data-he="מתחילים ידנית, עם שליטה בכל חיתוך.">Start by hand. Stay in control of every cut.</p></div></li>
     </ol>
   </section>
 
-  <section class="workspaces" id="workspaces" aria-labelledby="workspaces-title">
-    <div class="shell">
-      <div class="section-heading">
-        <p class="eyebrow" data-he="בתוך העורך">Inside the editor</p>
-        <h2 id="workspaces-title" data-he="שש סביבות עבודה. טיימליין אחד.">Six workspaces. One timeline.</h2>
-        <p data-he="סרגל סביבות העבודה בתחתית שומר על סדר, והנגן והטיימליין נשארים מול העיניים.">The bottom workspace bar keeps every tool in order, while the player and timeline stay in view.</p>
-      </div>
-      <div class="tour">
-        <div class="tour-tabs" aria-label="Editor workspaces" data-he-aria="סביבות העבודה בעורך">
+  <section class="workspaces" id="workspaces" aria-labelledby="workspaces-title"><div class="shell">
+    <div class="section-heading tour-heading"><div><p class="eyebrow" data-he="בתוך CUTROOM">Inside CUTROOM</p><h2 id="workspaces-title" data-he="כל מה שצריך לחיתוך הבא.">Make every cut count.</h2></div><p data-he="שישה אזורי עבודה, נגן אחד וטיימליין שתמיד נשאר מולך.">Six workspaces. One player. Your timeline always in view.</p></div>
+    <div class="tour"><div class="tour-tabs" aria-label="Editor workspaces" data-he-aria="סביבות העבודה בעורך">
           <button type="button" class="tour-tab" id="tab-media" aria-controls="panel-media"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span data-he="מדיה">Media</span></button>
           <button type="button" class="tour-tab" id="tab-edit" aria-controls="panel-edit"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="6" cy="18" r="3"/><circle cx="18" cy="18" r="3"/><path d="M8 16 19 4M16 16 5 4"/></svg><span data-he="עריכה">Edit</span></button>
           <button type="button" class="tour-tab" id="tab-layout" aria-controls="panel-layout"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 12h16M12 4v16"/></svg><span data-he="פריסה">Layout</span></button>
@@ -87,126 +64,51 @@
           <button type="button" class="tour-tab" id="tab-captions" aria-controls="panel-captions"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M8 10h8M12 10v6"/></svg><span data-he="כתוביות">Captions</span></button>
           <button type="button" class="tour-tab" id="tab-output" aria-controls="panel-output"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 15V4m-4 4 4-4 4 4M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/></svg><span data-he="ייצוא">Output</span></button>
         </div>
-
-        <article class="tour-panel" id="panel-media" aria-labelledby="tab-media">
-          <div class="panel-copy">
-            <p class="panel-kicker" data-he="מדיה">Media</p>
-            <h3 data-he="מכניסים את כל החומר.">Bring everything in.</h3>
-            <p data-he="מייבאים הקלטות, מוזיקה ותמונות, ומשלבים מצלמה והקלטת מסך כמקורות A ו־B.">Import recordings, music and images. Combine a camera and a screen recording as sources A and B.</p>
-            <ul><li data-he="הקבצים המקוריים לא משתנים">Your originals stay untouched</li><li data-he="צורות גל של הסאונד, גם בלי AI">Source waveforms, no AI needed</li><li data-he="ייצוב אופציונלי כעותק מקומי נפרד">Optional stabilization as a separate local copy</li></ul>
-          </div>
-          <div class="panel-art art-media" aria-hidden="true">
-            <div class="media-row selected"><span class="thumb t-cam"></span><b>Camera A.mp4</b><small>00:14</small></div>
-            <div class="media-row"><span class="thumb t-screen"></span><b>Screen B.mp4</b><small>00:28</small></div>
-            <div class="media-row"><span class="thumb t-wave"></span><b>Ambient bed.wav</b><small>00:32</small></div>
-          </div>
-        </article>
-
-        <article class="tour-panel" id="panel-edit" aria-labelledby="tab-edit">
-          <div class="panel-copy">
-            <p class="panel-kicker" data-he="עריכה">Edit</p>
-            <h3 data-he="חותכים בדיוק.">Cut with precision.</h3>
-            <p data-he="מפצלים, מקצרים, מזיזים ומשחזרים קליפים בטיימליינים נפרדים של A ו־B, עם ביטול וביצוע מחדש.">Split, trim, move and restore clips on independent A/B timelines, with Undo and Redo.</p>
-            <ul><li data-he="נעילת מסלול שומרת על מקור מפני שינויים">Track protection locks a source</li><li data-he="מסך ירוק עם תצוגה חיה">Green screen with live preview</li><li data-he="רקע של צבע, תמונה או הווידאו שמתחת">Color, image or underlying video backgrounds</li></ul>
-          </div>
-          <div class="panel-art art-key" aria-hidden="true">
-            <div class="key-head"><b>Green screen</b><span class="switch"></span></div>
-            <div class="key-row"><span>Key color</span><span class="swatch"></span></div>
-            <div class="key-row"><span>Tolerance</span><span class="slider v40"></span><small>40</small></div>
-            <div class="key-row"><span>Edge softness</span><span class="slider v15"></span><small>15</small></div>
-            <div class="key-actions"><span class="fake-primary">Apply &amp; preview</span><span class="fake-ghost">Check frame</span></div>
-          </div>
-        </article>
-
-        <article class="tour-panel" id="panel-layout" aria-labelledby="tab-layout">
-          <div class="panel-copy">
-            <p class="panel-kicker" data-he="פריסה">Layout</p>
-            <h3 data-he="ממסגרים כל שוט.">Frame every shot.</h3>
-            <p data-he="בוחרים פריסה מוערמת, זה לצד זה, תמונה בתוך תמונה, מצלמה בלבד או מסך בלבד, לקטע אחד או לכל העריכה.">Choose stacked, side by side, picture in picture, camera only or screen only, for one range or the entire edit.</p>
-            <ul><li data-he="ברילס עם שני מקורות, ברירת המחדל היא 30/70">Two-source Reels default to a 30/70 stack</li><li data-he="מיקוד וזום לכל קליפ">Focus and zoom per clip</li><li data-he="תפקידי מקורות והיסט סנכרון">Source roles and sync offset</li></ul>
-          </div>
-          <div class="panel-art art-layouts" aria-hidden="true">
-            <span class="lay l-stack selected"><i></i><i></i><b>Stacked</b></span><span class="lay l-screen"><i></i><b>Screen only</b></span><span class="lay l-camera"><i></i><b>Camera only</b></span><span class="lay l-side"><i></i><i></i><b>Side by side</b></span><span class="lay l-pip"><i></i><i></i><b>Picture in picture</b></span><span class="lay l-style"><b>Style default</b></span>
-          </div>
-        </article>
-
-        <article class="tour-panel" id="panel-audio" aria-labelledby="tab-audio">
-          <div class="panel-copy">
-            <p class="panel-kicker" data-he="סאונד">Audio</p>
-            <h3 data-he="מערבבים כמו באולפן.">Mix like a studio.</h3>
-            <p data-he="מאזנים מקור, קריינות, מוזיקה, אפקטים ו־Master, עם מדי עוצמה חיים.">Balance Original, Voiceover, Music, Effects and Master with live level meters.</p>
-            <ul><li data-he="השתקה חלה על התצוגה ועל הייצוא">Mute applies to preview and export</li><li data-he="Solo להאזנה בתצוגה בלבד">Solo auditions in preview only</li><li data-he="שכבות של מוזיקה וקריינות">Music and voiceover layers</li></ul>
-          </div>
-          <div class="panel-art art-mixer" aria-hidden="true">
-            <div class="ch"><b>Original</b><span class="fader"><i></i></span><small>0.0 dB</small></div>
-            <div class="ch on"><b>Music</b><span class="fader"><i></i></span><small>-8.0 dB</small></div>
-            <div class="ch"><b>Voice</b><span class="fader"><i></i></span><small>0.0 dB</small></div>
-            <div class="ch"><b>FX</b><span class="fader"><i></i></span><small>-6.0 dB</small></div>
-            <div class="ch"><b>Master</b><span class="fader"><i></i></span><small>0.0 dB</small></div>
-          </div>
-        </article>
-
-        <article class="tour-panel" id="panel-captions" aria-labelledby="tab-captions">
-          <div class="panel-copy">
-            <p class="panel-kicker" data-he="כתוביות">Captions</p>
-            <h3 data-he="המילים על המסך, בדרך שלכם.">Words on screen, your way.</h3>
-            <p data-he="מוסיפים כותרות וכתוביות, מייבאים SRT או VTT, או מתקנים ומעצבים תמלול AI אופציונלי.">Add titles and captions, import SRT or VTT, or correct and style an optional AI transcript.</p>
-            <ul><li data-he="סגנונות מוכנים שאפשר לערוך">Editable style presets</li><li data-he="ייצוא קובץ SRT">Export an SRT file</li><li data-he="בלי AI ובלי חשבון">No AI or account needed</li></ul>
-          </div>
-          <div class="panel-art art-captions" aria-hidden="true">
-            <div class="seg"><small>00:08 – 00:12</small><b>Every cut</b></div>
-            <div class="seg selected"><small>00:12 – 00:16</small><b>tells a story.</b></div>
-            <div class="seg"><small>00:20 – 00:24</small><b>Make it yours.</b></div>
-          </div>
-        </article>
-
-        <article class="tour-panel" id="panel-output" aria-labelledby="tab-output">
-          <div class="panel-copy">
-            <p class="panel-kicker" data-he="ייצוא">Output</p>
-            <h3 data-he="מייצאים בלי סימן מים.">Export without a watermark.</h3>
-            <p data-he="מרנדרים MP4 במחשב שלכם, רוחבי או אנכי, מ־720p ועד 4K ועד 60 פריימים בשנייה.">Render an MP4 on your computer, landscape or vertical, from 720p to 4K at up to 60 FPS.</p>
-            <ul><li data-he="הרינדור נעשה במחשב שלכם">Rendered locally</li><li data-he="רוחבי או אנכי">Landscape or vertical</li><li data-he="רזולוציה גבוהה לא מוסיפה פרטים שלא צולמו">Higher settings do not add missing detail</li></ul>
-          </div>
-          <div class="panel-art art-output" aria-hidden="true">
-            <div class="opt-row"><span>Resolution</span><i>720p</i><i class="on">1080p</i><i>1440p</i><i>2160p</i></div>
-            <div class="opt-row"><span>Frame rate</span><i>24</i><i>25</i><i class="on">30</i><i>50</i><i>60</i></div>
-            <div class="opt-row"><span>Shape</span><i class="on">16:9</i><i>9:16</i></div>
-            <span class="fake-primary wide">Export video</span>
-          </div>
-        </article>
-      </div>
+      <article class="tour-panel" id="panel-media" aria-labelledby="tab-media">
+        <div class="panel-copy"><h3 data-he="כל החומרים, באותו מקום.">Bring it all together.</h3><p data-he="הקלטות, מוזיקה ותמונות — הכול בהישג יד.">Keep your recordings, music and images within reach.</p><p class="panel-features" data-he="חומרי מקור · וידאו · אודיו · תמונות">Source footage · Video · Audio · Images</p></div>
+        <img class="workspace-shot" src="/assets/studio-media.png?v=20261009" width="1600" height="900" loading="lazy" alt="CUTROOM media workspace with a synthetic gameplay demo project" data-he-alt="אזור media ב־CUTROOM עם פרויקט הדגמה של משחק סינתטי">
+      </article>
+<article class="tour-panel" id="panel-edit" aria-labelledby="tab-edit">
+        <div class="panel-copy"><h3 data-he="מוצאים את הקצב.">Find your rhythm.</h3><p data-he="חותכים, מקצרים ומסדרים. שומרים את מה שעובד, ומבטלים את מה שלא.">Cut, trim and reorder. Keep what works, undo what doesn’t.</p><p class="panel-features" data-he="ערוצים נפרדים · ביטול ושחזור · נעילת ערוצים">Independent tracks · Undo & Redo · Track locks</p></div>
+        <img class="workspace-shot" src="/assets/studio-edit.png?v=20261009" width="1600" height="900" loading="lazy" alt="CUTROOM edit workspace with a synthetic gameplay demo project" data-he-alt="אזור edit ב־CUTROOM עם פרויקט הדגמה של משחק סינתטי">
+      </article>
+<article class="tour-panel" id="panel-layout" aria-labelledby="tab-layout">
+        <div class="panel-copy"><h3 data-he="נותנים מקום לכל שוט.">Give every shot its space.</h3><p data-he="ממסגרים הקלטה אחת או משלבים מצלמה ומסך.">Frame a single recording or combine a camera and screen.</p><p class="panel-features" data-he="חיתוך פריים · תמונה בתוך תמונה · מצלמה ומסך">Crop · Picture in picture · Camera & screen</p></div>
+        <img class="workspace-shot" src="/assets/studio-layout.png?v=20261009" width="1600" height="900" loading="lazy" alt="CUTROOM layout workspace with a synthetic gameplay demo project" data-he-alt="אזור layout ב־CUTROOM עם פרויקט הדגמה של משחק סינתטי">
+      </article>
+<article class="tour-panel" id="panel-audio" aria-labelledby="tab-audio">
+        <div class="panel-copy"><h3 data-he="מכוונים את הסאונד.">Make it sound right.</h3><p data-he="מאזנים את ההקלטה, המוזיקה והקריינות במיקסר אחד.">Balance the recording, music and voiceover in one mixer.</p><p class="panel-features" data-he="מדי עוצמה חיים · השתקה · Solo בתצוגה">Live meters · Mute · Preview solo</p></div>
+        <img class="workspace-shot" src="/assets/studio-audio.png?v=20261009" width="1600" height="900" loading="lazy" alt="CUTROOM audio workspace with a synthetic gameplay demo project" data-he-alt="אזור audio ב־CUTROOM עם פרויקט הדגמה של משחק סינתטי">
+      </article>
+<article class="tour-panel" id="panel-captions" aria-labelledby="tab-captions">
+        <div class="panel-copy"><h3 data-he="המילים שלך על המסך.">Put your words on screen.</h3><p data-he="מוסיפים כותרת, מייבאים כתוביות או מתקנים תמלול AI אופציונלי.">Add a title, import captions, or refine an optional AI transcript.</p><p class="panel-features" data-he="כותרות · SRT ו־VTT · כתוביות ניתנות לעריכה">Titles · SRT & VTT · Editable captions</p></div>
+        <img class="workspace-shot" src="/assets/studio-captions.png?v=20261009" width="1600" height="900" loading="lazy" alt="CUTROOM captions workspace with a synthetic gameplay demo project" data-he-alt="אזור captions ב־CUTROOM עם פרויקט הדגמה של משחק סינתטי">
+      </article>
+<article class="tour-panel" id="panel-output" aria-labelledby="tab-output">
+        <div class="panel-copy"><h3 data-he="מוכנים למסך הבא.">Ready for the next screen.</h3><p data-he="מייצאים MP4 במחשב שלך, ללא סימן מים של CUTROOM.">Export an MP4 on your computer, without a CUTROOM watermark.</p><p class="panel-features" data-he="לרוחב ולאורך · עד 4K · עד 60 FPS">Landscape & vertical · Up to 4K · Up to 60 FPS</p></div>
+        <img class="workspace-shot" src="/assets/studio-output.png?v=20261009" width="1600" height="900" loading="lazy" alt="CUTROOM output workspace with a synthetic gameplay demo project" data-he-alt="אזור output ב־CUTROOM עם פרויקט הדגמה של משחק סינתטי">
+      </article>
     </div>
-  </section>
+  </div></section>
 
-  <section class="ai shell" id="ai" aria-labelledby="ai-title">
-    <div class="section-heading">
-      <p class="eyebrow" data-he="AI זו בחירה שלכם">AI is optional</p>
-      <h2 id="ai-title" data-he="משתמשים ב־AI רק כשרוצים.">Use AI only when you want it.</h2>
-      <p data-he="טיוטת AI חדשה לא מחליפה את הטיימליין הידני שלכם עד שתאשרו אותה, ותמיד אפשר לבטל.">A new AI draft never replaces your manual timeline until you apply it, and Undo stays available.</p>
+  <section class="ai" id="ai" aria-labelledby="ai-title"><div class="shell ai-layout">
+    <div class="section-heading"><p class="eyebrow" data-he="AI הוא בחירה">AI is a choice</p><h2 id="ai-title" data-he="הכיוון שלך. ההחלטות שלך.">Your direction.<br>Your decisions.</h2><p data-he="מבקשים טיוטה כשזה עוזר. בודקים אותה, משנים אותה, והופכים אותה לשלך.">Ask for a draft when it helps. Review it, change it, make it yours.</p></div>
+    <div class="ai-options">
+      <article><h3 data-he="לגמרי ידני">All manual</h3><p data-he="עורכים ומייצאים בלי מודלים, מפתח API או חשבון.">Edit and export without models, an API key or an account.</p></article>
+      <article><h3 data-he="AI במחשב שלך">AI on your computer</h3><p data-he="תמלול וטיוטות עם מודלים מקומיים. הורדות רק באישור שלך.">Transcription and drafts with local models. Downloads need your confirmation.</p></article>
+      <article><h3 data-he="הספק שלך, הבחירה שלך">Your provider, your choice</h3><p data-he="אפשר לחבר API משלך. אודיו ותמלול נשלחים רק לאחר הסכמה; ייתכנו חיובים.">Connect your own API. Audio and transcripts are shared only with consent; provider charges may apply.</p></article>
+      <p class="vision-note" data-he="גם למשחקים: Gameplay vision יכול לעזור למצוא אקשן ולדלג על תפריטים. העיבוד מקומי, והבחירות נשארות לבדיקה שלך.">For gaming, too: Gameplay vision can help find action and skip menus. Processing is local; the choices are yours to review.</p>
     </div>
-    <ol class="ai-modes">
-      <li><span class="mode-no">01</span><h3 data-he="ידני">Manual</h3><p data-he="חותכים, מערבבים, מוסיפים כתוביות ומייצאים בלי מודלים, בלי מפתח API ובלי חשבון.">Cut, mix, caption and export with no AI models, API key or account.</p></li>
-      <li><span class="mode-no">02</span><h3 data-he="במחשב שלי">On my computer</h3><p data-he="תמלול ומודל Story שרצים אצלכם. כל הורדה מחכה לאישור שלכם.">Local transcription and Story models. Every download waits for your confirmation.</p></li>
-      <li><span class="mode-no">03</span><h3 data-he="API משלי">My own API</h3><p data-he="Groq או ספק תואם עם מפתח משלכם. אודיו נשלח רק אחרי שתאשרו.">Groq or a compatible provider with your own key. Audio is sent only after your consent.</p></li>
-    </ol>
-    <div class="ai-highlight">
-      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M2.5 12s3.5-6.5 9.5-6.5S21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><circle cx="12" cy="12" r="3.2" fill="none" stroke="currentColor" stroke-width="1.7"/></svg>
-      <div>
-        <h3 data-he="ראייה של המשחק ל־Shorts של גיימינג">Gameplay vision for gaming Shorts</h3>
-        <p data-he="מודל ה־Story המקומי מסתכל על פריימים מתוך ההקלטה, מוצא קרבות ומדלג על תפריטים, מפות ומסכי טעינה. אין מה להוריד בנוסף, והפריימים לא עוזבים את המחשב.">The local Story model looks at frames from your recording to find fights and skip menus, maps and loading screens. Nothing extra to download, and frames never leave your computer.</p>
-      </div>
-    </div>
-  </section>
-
+  </div></section>
   <section class="support shell" id="guide">
     <div><p class="eyebrow" data-he="התקנה">Install</p><h2 data-he="מתחילים מהמחשב שלכם.">Start on your computer.</h2><p class="beta-summary" data-he="Windows ו־Mac בבטא. Linux בהתקנה מהמקור. ההתקנה הראשונה צריכה אינטרנט; עריכה ידנית לא צריכה חשבון או AI.">Windows and Mac in beta. Linux from source. First setup needs internet; manual editing needs no account or AI.</p><div class="guide-links"><a href="/downloads/USER_GUIDE_EN.md" download>English guide</a><a href="/downloads/USER_GUIDE_HE.md" download lang="he">מדריך בעברית</a><a href="/downloads/CUTROOM-1.1-Beta-Windows.zip.sha256" download>Windows SHA-256</a><a href="/downloads/CUTROOM-1.1-Beta-Mac.zip.sha256" download>Mac SHA-256</a></div></div>
     <div class="faq" id="help">
       <details id="install-help"><summary data-he="התקנה ב־Windows, Mac ו־Linux">Install on Windows, Mac or Linux</summary><div class="answer">
-        <p class="release-label">WINDOWS + MAC · 1.1 BETA</p>
+        <p class="beta-note" data-he="CUTROOM משתמש ב־Python 3.12. אם הוא לא מותקן, ההתקנה ב־Windows מורידה עותק פרטי לתוך תיקיית CUTROOM.">CUTROOM uses Python 3.12. If it isn't installed, Windows setup downloads a private copy into the CUTROOM folder.</p><p class="release-label">WINDOWS + MAC · 1.1 BETA</p>
         <p data-he="בחרו את קובץ ה־ZIP למחשב שלכם וחלצו אותו. קובץ ההפעלה, START HERE.html ו־App צריכים להישאר יחד. רכיבי ההפעלה ומודלי AI אינם כלולים.">Choose the ZIP for your computer and extract it. Keep the launcher, START HERE.html and App together. Runtimes and AI models are not bundled.</p>
         <p id="windows-install" data-he="Windows: לחצו פעמיים על START CUTROOM.bat לצד App. ההתקנה מורידה כלים חסרים; השאירו את חלון ההפעלה פתוח.">Windows: Double-click START CUTROOM.bat beside App. Setup downloads missing dependencies; keep the launch window open.</p>
-        <p id="mac-install" data-he="Mac: נדרש macOS 15 ומעלה, Apple Silicon או Intel. פתחו START CUTROOM.command לצד App. נדרשים Python 3.11/3.12 ו־FFmpeg 7; ההתקנה משתמשת ב־Homebrew קיים באישורכם. זו אינה אפליקציית Mac חתומה. תמלול מקומי משתמש ב־CPU. מדריך הבטא מפרט את בדיקות Finder, Gatekeeper ו־Safari שעוד נדרשות.">Mac: macOS 15+, Apple Silicon or Intel. Open START CUTROOM.command beside App. It needs Python 3.11/3.12 and FFmpeg 7; setup uses existing Homebrew with your approval. This is not a signed Mac app. Local transcription uses the CPU. The beta guide lists the remaining Finder, Gatekeeper and Safari checks.</p>
-        <p id="linux-install" data-he="Linux: התקנה מהמקור בלבד; אין חבילה להורדה או בדיקת Linux מקומית מאומתת. נדרשים Python 3.11/3.12, venv/pip ו־FFmpeg/FFprobe עם תמיכה בכתוביות. עקבו אחרי מדריך הפלטפורמות.">Linux: source only, with no packaged download or verified native Linux QA. It needs Python 3.11/3.12, venv/pip and FFmpeg/FFprobe with subtitle support. Follow the platform guide.</p>
+        <p id="mac-install" data-he="Mac: נדרש macOS 15 ומעלה, Apple Silicon או Intel. פתחו START CUTROOM.command לצד App. נדרשים Python 3.12 ו־FFmpeg 7; ההתקנה משתמשת ב־Homebrew קיים באישורכם. זו אינה אפליקציית Mac חתומה. תמלול מקומי משתמש ב־CPU. מדריך הבטא מפרט את בדיקות Finder, Gatekeeper ו־Safari שעוד נדרשות.">Mac: macOS 15+, Apple Silicon or Intel. Open START CUTROOM.command beside App. It needs Python 3.12 and FFmpeg 7; setup uses existing Homebrew with your approval. This is not a signed Mac app. Local transcription uses the CPU. The beta guide lists the remaining Finder, Gatekeeper and Safari checks.</p>
+        <p id="linux-install" data-he="Linux: התקנה מהמקור בלבד; אין חבילה להורדה או בדיקת Linux מקומית מאומתת. נדרשים Python 3.12, venv/pip ו־FFmpeg/FFprobe עם תמיכה בכתוביות. עקבו אחרי מדריך הפלטפורמות.">Linux: source only, with no packaged download or verified native Linux QA. It needs Python 3.12, venv/pip and FFmpeg/FFprobe with subtitle support. Follow the platform guide.</p>
         <p data-he="ההורדה המשולבת הישנה ממשיכה לעבוד: פתחו תחילה windows או mac.">The compatible combined ZIP still has exactly two folders: windows and mac. Open your platform folder first.</p><a href="/downloads/CUTROOM-1.1-Beta.zip" download data-he="החבילה המשולבת">Combined ZIP</a><a href="/downloads/CUTROOM-1.1-Beta.zip.sha256" download>Combined SHA-256</a>
         <a href="https://github.com/VanoPeradze/cutroom/blob/master/docs/PLATFORMS.md" data-he="מדריך התקנה לכל מערכת">Platform installation guide</a><a href="https://github.com/VanoPeradze/cutroom/blob/master/docs/MAC_BETA.md" data-he="מדריך בטא ל־Mac">Mac beta guide</a>
       </div></details>
@@ -222,13 +124,9 @@
     </div>
   </section>
 
-  <section class="closing shell" aria-labelledby="closing-title">
-    <h2 id="closing-title" data-he="כל פריים. בידיים שלכם.">Make the cut. Make it yours.</h2>
-    <p data-he="חינמי, בקוד פתוח, ונבנה בשביל יוצרים.">Free, open source and built for creators.</p>
-    <a class="cta-link" href="#download"><span data-he="להורדת הבטא">Get the beta</span><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M8 13V3M4 7l4-4 4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
-  </section>
+  <section class="closing shell" aria-labelledby="closing-title"><div><p class="eyebrow" data-he="מכאן זה שלך">Over to you</p><h2 id="closing-title" data-he="יש לך חומר טוב.">You have the footage.</h2></div><a class="cta-link" href="#download" data-he="עכשיו לעריכה ↖">Make the cut ↗</a></section>
 </main>
-<footer class="footer"><span class="footer-brand"><img src="/assets/mark.svg" width="22" height="18" alt=""><span data-he="חינם. קוד פתוח. הקאט שלכם.">Free. Open source. Your cut.</span></span><div><a href="https://github.com/VanoPeradze/cutroom" dir="ltr">GitHub</a><a href="https://github.com/VanoPeradze/cutroom/issues/new/choose" data-he="דיווח על תקלה">Report an issue</a><a href="/downloads/LICENSE" download>MIT License</a><a href="/privacy.html" data-he="פרטיות">Privacy</a></div></footer>
-<dialog id="imageDialog" class="image-dialog" aria-label="Editor screenshot" data-he-aria="צילום העורך"><button id="closeImage" type="button" data-he="סגירה">Close</button><img id="expandedImage" src="/assets/editor-demo.png?v=20261007-studio" width="1440" height="900" alt="Actual CUTROOM editor with original synthetic demo footage" data-he-alt="עורך CUTROOM אמיתי עם חומר הדגמה סינתטי מקורי"></dialog>
+<footer class="footer"><span class="footer-brand"><img src="/assets/mark.svg" width="22" height="18" alt=""><span data-he="חינם. קוד פתוח. במחשב שלכם.">Free. Open source. On your computer.</span></span><div><a href="https://github.com/VanoPeradze/cutroom" dir="ltr">GitHub</a><a href="https://github.com/VanoPeradze/cutroom/issues/new/choose" data-he="דיווח על תקלה">Report an issue</a><a href="/downloads/LICENSE" download>MIT License</a><a href="/privacy.html" data-he="פרטיות">Privacy</a></div></footer>
+<dialog id="imageDialog" class="image-dialog" aria-label="Editor screenshot" data-he-aria="צילום העורך"><button id="closeImage" type="button" data-he="סגירה">Close</button><img id="expandedImage" src="/assets/studio-edit.png?v=20261009" width="1600" height="900" alt="The actual CUTROOM editor with synthetic gameplay footage" data-he-alt="עורך CUTROOM בפועל עם חומר משחק סינתטי"></dialog>
 </body>
 </html>

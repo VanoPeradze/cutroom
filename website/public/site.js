@@ -19,7 +19,7 @@
     languageSwitch.lang = language === 'he' ? 'en' : 'he';
     languageSwitch.setAttribute('aria-label', language === 'he' ? 'Read this website in English' : 'קריאת האתר בעברית');
     languageSwitch.href = (language === 'he' ? '?lang=en' : '?lang=he') + location.hash;
-    document.title = language === 'he' ? 'CUTROOM — כל פריים. בידיים שלכם.' : 'CUTROOM — Make the cut. Make it yours.';
+    document.title = language === 'he' ? 'CUTROOM — שעות של חומר. דקות לקליפ מצוין.' : 'CUTROOM — Hours of footage. Minutes to a great clip.';
     document.querySelector('meta[name="description"]').content = language === 'he'
       ? 'עורך וידאו חינמי ומקומי. חיתוכים, סאונד וכתוביות. בטא ל־Windows ול־Mac; Linux מהמקור. AI הוא אפשרות.'
       : 'A free local video editor. Cut footage, mix sound and add captions. Windows/Mac beta; Linux from source. Optional AI drafts, editable by you.';

@@ -81,13 +81,15 @@ test('the concise introduction shows an authentic bilingual dark editor preview'
   lines.forEach(line => { assert.match(line[1], /data-he="[^"]*[\u0590-\u05ff]/); assert.match(line[2], /[A-Za-z]/); });
   const image = hero.match(/<img\b[^>]*id="editorImage"[^>]*>/)?.[0];
   assert.ok(image, 'The first section must show the editor');
-  assert.match(image, /src="\/assets\/editor-demo\.png\?v=[a-zA-Z0-9-]+"/);
-  assert.match(image, /width="1440" height="900"/);
+  assert.match(image, /src="\/assets\/studio-edit\.png\?v=[a-zA-Z0-9-]+"/);
+  assert.match(image, /width="1600" height="900"/);
   assert.match(image, /alt="[^"]+"/);
   assert.match(image, /data-he-alt="[^"]*[\u0590-\u05ff]/);
   assert.match(image, /fetchpriority="high"/);
-  assert.deepEqual(readFileSync(new URL("./public/assets/editor-demo.png", import.meta.url)), readFileSync(new URL("../docs/images/editor.png", import.meta.url)), "Website screenshot must match the current editor guide");
-  assert.match(hero, /Actual editor · Synthetic demo footage/);
+  const imageUrl = image.match(/src="([^"]+)"/)[1];
+  assert.ok(region('dialog', 'imageDialog').includes(`src="${imageUrl}"`), 'Enlargement must show the same real screenshot');
+  assert.match(hero, /Actual editor · Synthetic gameplay demo/);
+  assert.match(hero, /No third-party game is shown\./);
   assert.doesNotMatch(html, /(?:welcome|ai-options)\.png|\bdata-shot=|<table\b/);
 });
 
@@ -102,6 +104,8 @@ test('platform download help remains readable and localized', () => {
   assert.match(setup, /macOS 15\+/);
   assert.match(setup, /Local transcription uses the CPU/);
   assert.match(setup, /not a signed Mac app/);
+  assert.match(setup, /uses Python 3\.12\. If it isn't installed, Windows setup downloads a private copy/);
+  assert.match(setup, /into the CUTROOM folder\./);
   assert.match(setup, /Linux: source only, with no packaged download or verified native Linux QA/);
   assert.ok(linksTo(setup, `${repository}/blob/master/docs/PLATFORMS.md`).length);
   assert.ok(linksTo(setup, `${repository}/blob/master/docs/MAC_BETA.md`).length);
@@ -146,10 +150,22 @@ test('the workspace tour follows the editor order and stays readable without scr
   for (const key of ['ArrowLeft', 'ArrowRight', 'Home', 'End']) assert.match(script, new RegExp(`'${key}'`));
 });
 
-test('illustrations are decorative and inline styles stay out of the strict CSP', () => {
-  const illustrations = [...html.matchAll(/<div\b[^>]*class="(?:art|panel-art)\b[^"]*"[^>]*>/g)];
-  assert.equal(illustrations.length, 9);
-  illustrations.forEach(tag => assert.match(tag[0], /aria-hidden="true"/));
+test('each workspace has a local, full-size, bilingual product screenshot', () => {
+  const shots = [...html.matchAll(/<img\b[^>]*class="workspace-shot"[^>]*>/g)];
+  assert.equal(shots.length, 6);
+  for (const [index, name] of ['media', 'edit', 'layout', 'audio', 'captions', 'output'].entries()) {
+    assert.ok(shots[index][0].includes(`/assets/studio-${name}.png?`));
+    assert.match(shots[index][0], /data-he-alt="[^"]*[\u0590-\u05ff]/);
+    assert.match(shots[index][0], /loading="lazy"/);
+    const png = readFileSync(new URL(`./public/assets/studio-${name}.png`, import.meta.url));
+    assert.equal(png.subarray(1, 4).toString(), 'PNG');
+    assert.equal(png.readUInt32BE(16), 1600);
+    assert.equal(png.readUInt32BE(20), 900);
+  }
+  assert.doesNotMatch(html, /class="(?:art|panel-art)\b/);
+});
+
+test('inline styles stay out of the strict CSP', () => {
   assert.doesNotMatch(html, /\sstyle\s*=/i, 'style-src blocks inline style attributes');
   assert.doesNotMatch(html, /<style\b/i);
 });
