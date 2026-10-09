@@ -3,32 +3,38 @@
   "label": "1.1 Beta",
   "layout": "windows-mac-folders-v1",
   "filename": "CUTROOM-1.1-Beta.zip",
-  "bytes": 7017431,
-  "sha256": "96d431c7e1b17e6cb7743a55c8f383c07a0f7f8d40f1e4e412fe23552277cecb",
-  "build_id": "CUTROOM-1.1-beta-mac-20261009-031749",
+  "bytes": 7066312,
+  "sha256": "32bc0b07308d6514a2380882efbaf8d066d22551499326049b54b09d89416738",
+  "build_id": "CUTROOM-1.1-beta-mac-stability-20261009-r2",
   "release_state": "validated",
-  "source_commit": "62b1ad60b93db83b342d4aacfe86dcce01a0cc17",
-  "base_commit": "c9a8f3750b0cc9e0d2e0cf92c2312589eda33c13",
+  "source_commit": "55b307aa142fe873069c7bcd0512b28005b02069",
+  "base_commit": "697494f569b575b80250f4cccde61ea31f847139",
   "uncommitted_changes": false,
-  "editor_revision": "python312-setup-new-tagline-layout-fixes",
-  "mac_validation_url": "https://github.com/VanoPeradze/cutroom/actions/runs/37878671645",
-  "validated_pr_head": "9baa38547abd626cb30827868dab33592276c286",
+  "editor_revision": "stable-speech-runtime-editor-layout-canonical-mac-packages",
+  "mac_validation_url": "https://github.com/VanoPeradze/cutroom/actions/runs/37982312387",
+  "validated_pr_head": "43bbea4c03c3d50f0ccf7e77b6f8fc22d9c52200",
   "native_mac_validation": "passed",
   "url": "https://cutroom-studio.expo.app/downloads/CUTROOM-1.1-Beta.zip",
   "platforms": {
     "windows": {
       "filename": "CUTROOM-1.1-Beta-Windows.zip",
-      "bytes": 3498162,
-      "sha256": "d88f3355115ce301e927d6baca540c9f7c23c371c9b9389cd585587da60b2dac",
+      "bytes": 3516857,
+      "sha256": "c9a3039b699d68119ea7a35247d0852ecc566aa2ef80e74c5f26f5eb8ae05e89",
       "url": "https://cutroom-studio.expo.app/downloads/CUTROOM-1.1-Beta-Windows.zip"
     },
     "mac": {
       "filename": "CUTROOM-1.1-Beta-Mac.zip",
-      "bytes": 3509634,
-      "sha256": "10d9a37563e8ecb59645b5e5e4565d86a7277e2ff70b502206cff04cda631587",
+      "bytes": 3528261,
+      "sha256": "dffc603fba659ad36dede2aa1aaa488d03042eec0fd50b953f733be3e5573c35",
       "url": "https://cutroom-studio.expo.app/downloads/CUTROOM-1.1-Beta-Mac.zip"
     }
   },
   "update_date": "2026-10-09",
-  "native_tested_merge_commit": "fefbec2faf239d3ad621b778ce13aca2e36e2fb0"
+  "release_summary": "Stability fixes for speech decoding, editor controls and reproducible Mac packages.",
+  "known_limitations": [
+    "AI-selected story continuity and endings still require review.",
+    "Default chroma settings may leave a thin green fringe.",
+    "Mac Finder, Gatekeeper and Safari manual QA remains outstanding."
+  ],
+  "source_merge_commit": "3f72c3376eec574150ad9fedeb2f9a0559599d82"
 }
