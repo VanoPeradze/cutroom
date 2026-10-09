@@ -329,6 +329,16 @@ def _analysis_audio_slot(project: dict[str, Any]) -> str:
     return "A"
 
 
+def _analysis_screen_slot(project: dict[str, Any]) -> str:
+    """Use the same semantic screen/camera pair as the renderer."""
+    mixer = (project.get("manual") or {}).get("source_mixer") or {}
+    screen = str(mixer.get("screen_slot") or "A").upper()
+    camera = str(mixer.get("camera_slot") or ("B" if screen == "A" else "A")).upper()
+    if {screen, camera} != {"A", "B"}:
+        screen = "A"
+    return "B" if screen == "B" and (project.get("sources") or {}).get("B") else "A"
+
+
 def _transcription_duration(source: dict[str, Any], container_duration: float) -> float:
     """Coverage concerns the selected audio stream, not a longer video tail.
 
@@ -427,6 +437,44 @@ def _transcribe_safely(
         return fallback, f"{type(exc).__name__}: {exc}"
 
 
+def _transcription_range_hint(quality: dict[str, Any], *, incomplete: bool) -> str:
+    """Point review at the selected audio file's clock, including for source B."""
+    coverage = quality.get("coverage")
+    if not isinstance(coverage, dict):
+        return ""
+    duration = _finite_number(coverage.get("source_duration"))
+    rows = coverage.get("analyzed_ranges" if incomplete else "vad_mismatch_chunks")
+    if duration <= 0 or not isinstance(rows, list):
+        return ""
+    ranges = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        start = _finite_number(row.get("start"), -1)
+        end = _finite_number(row.get("end"), -1)
+        if 0 <= start < end <= duration + 0.001:
+            ranges.append({"start": start, "end": min(end, duration)})
+    if rows and not ranges:
+        return ""
+    if incomplete:
+        ranges = invert_ranges(ranges, duration)
+    else:
+        ranges = merge_ranges(ranges, gap=0)
+    if not ranges:
+        return ""
+
+    def clock(value: float, *, end: bool = False) -> str:
+        seconds = math.ceil(value) if end else math.floor(value)
+        if seconds >= 3600:
+            return f"{seconds // 3600:02d}:{seconds // 60 % 60:02d}:{seconds % 60:02d}"
+        return f"{seconds // 60:02d}:{seconds % 60:02d}"
+
+    spans = ", ".join(f"{clock(row['start'])}-{clock(row['end'], end=True)}" for row in ranges[:3])
+    more = f" (+{len(ranges) - 3} more)" if len(ranges) > 3 else ""
+    label = "Unverified audio" if incomplete else "Audio to review"
+    return f" {label} in the selected audio file: {spans}{more}. These are source-audio times, before synchronization."
+
+
 def _assert_transcript_complete(quality: dict[str, Any]) -> None:
     reasons = set(quality.get("reasons") or [])
     if "incomplete_transcription" in reasons:
@@ -434,12 +482,14 @@ def _assert_transcript_complete(quality: dict[str, Any]) -> None:
             "Transcription did not finish processing all of the audio. No story was built from partial speech. "
             "Your original footage is safe. Retry transcription with the exact spoken language; "
             "Quality mode keeps the requested model even when it needs to run on CPU."
+            + _transcription_range_hint(quality, incomplete=True)
         )
     if "uncovered_detected_speech" in reasons:
         raise StoryPlanningError(
             "Speech was detected in sections that produced very little transcript. "
             "Choose the exact spoken language and Quality mode, then retry before building the story. "
             "The speech detector is an estimate; background voices or game audio can also need review."
+            + _transcription_range_hint(quality, incomplete=False)
         )
 
 
@@ -2238,6 +2288,7 @@ def analyze_project(
     source_b = _source_path(store, project, "B") if project.get("sources", {}).get("B") else None
     duration = float(project["sources"]["A"]["duration"])
     analysis_audio_slot = _analysis_audio_slot(project)
+    analysis_screen_slot = _analysis_screen_slot(project)
     analysis_source = source_b if analysis_audio_slot == "B" and source_b is not None else source_a
     analysis_source_info = project.get("sources", {}).get(analysis_audio_slot) or project["sources"]["A"]
     analysis_source_duration = max(0.0, _finite_number(analysis_source_info.get("duration"), duration))
@@ -2365,9 +2416,9 @@ def analyze_project(
         and str(((cached_analysis or {}).get("sync") or {}).get("method") or "") not in {"manual", "source_tracks"}
     ):
         sync = copy.deepcopy(cached_analysis.get("sync"))
-    elif source_b and analysis_audio_slot == "B":
+    elif source_b and (analysis_audio_slot == "B" or analysis_screen_slot == "B"):
         if project["sources"]["A"].get("has_audio") and (project["sources"].get("B") or {}).get("has_audio"):
-            context.update(0.01, "Synchronizing the selected speech source")
+            context.update(0.01, "Synchronizing the selected audio and screen sources")
             try:
                 sync = synchronize_sources(
                     source_a,
@@ -2662,9 +2713,16 @@ def analyze_project(
     # Gameplay vision: sampled windows rated by the local Story model's image
     # support. Reused while the source and model are unchanged; it changes the
     # Story input, so cached story decisions are reused only with equal evidence.
+    visual_source = source_b if analysis_screen_slot == "B" else source_a
+    visual_duration = max(0.0, _finite_number(project["sources"][analysis_screen_slot].get("duration"), duration))
+    visual_offset = _finite_number((sync or {}).get("offset")) if analysis_screen_slot == "B" else 0.0
+    # Sound is already in A's edit clock; sampling B needs B-local times.
+    visual_sound = (_map_audio_profile_to_timeline(sound_profile, -visual_offset, visual_duration)
+                    if analysis_screen_slot == "B" else sound_profile)
     visual_moments, visual_plan, visual_computed, visual_warning = _resolve_visual_moments(
         context, settings, brief, cached_analysis, cache_fingerprints.get("source"),
-        source_a, duration, sound_profile,
+        visual_source, visual_duration, visual_sound,
+        source_slot=analysis_screen_slot, timeline_offset=visual_offset, timeline_duration=duration,
     )
     visual_timeline = VisualTimeline(visual_moments)
     visual_key = visual_moments.get("cache_key") if visual_timeline else None
@@ -3190,6 +3248,10 @@ def _resolve_visual_moments(
     source_path: Path,
     duration: float,
     sound_profile: dict[str, Any],
+    *,
+    source_slot: str = "A",
+    timeline_offset: float = 0.0,
+    timeline_duration: float | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any], bool, str | None]:
     """Run or reuse the gameplay vision pass: (result, plan, computed, warning).
 
@@ -3210,9 +3272,15 @@ def _resolve_visual_moments(
         return {}, {"mode": "auto", "run": False, "reason": "status_failed"}, False, None
     if not plan.get("run"):
         return {}, plan, False, None
+    timeline_duration = duration if timeline_duration is None else timeline_duration
+    plan["source_slot"] = source_slot
     key = stable_fingerprint("visual-moments", {
         "version": VISUAL_MOMENTS_VERSION,
         "source": source_fingerprint,
+        "source_slot": source_slot,
+        "source_duration": duration,
+        "timeline_offset": timeline_offset,
+        "timeline_duration": timeline_duration,
         "model": plan["model"],
         "budget": plan["budget"],
     })
@@ -3239,7 +3307,17 @@ def _resolve_visual_moments(
     except Exception as exc:
         return {}, plan, False, f"Gameplay vision was skipped ({type(exc).__name__}); this draft uses speech and sound."
     context.checkpoint()
-    result["cache_key"] = key
+    # Story beats and cuts use A's timeline. Keep original coordinates for
+    # diagnostics, and never spread B evidence beyond its actual overlap.
+    mapped_windows = []
+    for row in result.get("windows") or []:
+        shifted = _shift_range_to_timeline(row, timeline_offset, timeline_duration)
+        if shifted is not None:
+            shifted.update(source_start=row["start"], source_end=row["end"])
+            mapped_windows.append(shifted)
+    result.update(windows=mapped_windows, source_slot=source_slot, source_duration=duration,
+                  timeline_offset=timeline_offset, timeline_duration=timeline_duration,
+                  timestamp_frame="timeline", cache_key=key)
     warning = None
     if result.get("available") is not True and result.get("reason") in {"model_failed", "time_limit", "insufficient_results"}:
         warning = "Gameplay vision did not finish; this draft uses speech and sound. Rebuild to try again."

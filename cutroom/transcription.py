@@ -20,6 +20,7 @@ from .utils import atomic_write_json, normalize_text
 
 _MODEL_CACHE: dict[tuple[str, str, str], Any] = {}
 _MODEL_LOCK = threading.Lock()
+_WINDOWS_CUDA_DLL_HANDLES: dict[str, Any] = {}
 
 
 class TranscriptionIncomplete(RuntimeError):
@@ -548,6 +549,34 @@ def cuda_available(settings: Settings | None = None) -> bool:
         return False
 
 
+
+def _register_windows_cuda_runtime() -> None:
+    """Keep the launcher's installed Ollama CUDA directories in DLL search.
+
+    Store Python can ignore PATH for native-library loading. Directory handles
+    must survive through inference, including inside the isolated worker.
+    Called while holding _MODEL_LOCK; never used for CPU model loading.
+    """
+    if sys.platform != "win32" or not hasattr(os, "add_dll_directory"):
+        return
+    for variable, relative in (("LOCALAPPDATA", "Programs/Ollama/lib/ollama/cuda_v12"),
+                               ("ProgramFiles", "Ollama/lib/ollama/cuda_v12")):
+        base = os.environ.get(variable)
+        if not base or not Path(base).is_absolute():
+            continue
+        directory = Path(base) / relative
+        if not all((directory / name).is_file() for name in ("cublas64_12.dll", "cublasLt64_12.dll")):
+            continue
+        key = str(directory.resolve()).casefold()
+        if key not in _WINDOWS_CUDA_DLL_HANDLES:
+            try:
+                _WINDOWS_CUDA_DLL_HANDLES[key] = os.add_dll_directory(str(directory))
+            except OSError:
+                # The normal model error/fallback still reports an unusable
+                # runtime; optional Ollama integration must not break CPU use.
+                continue
+
+
 def _load_model(settings: Settings, device: str | None = None, compute: str | None = None, model_name: str | None = None) -> tuple[Any, str, str, str]:
     model_name = str(model_name or settings.ai.get("whisper_model", "base"))
     if device is None or compute is None:
@@ -555,6 +584,8 @@ def _load_model(settings: Settings, device: str | None = None, compute: str | No
     key = (model_name, device, compute)
     with _MODEL_LOCK:
         if key not in _MODEL_CACHE:
+            if device == "cuda":
+                _register_windows_cuda_runtime()
             try:
                 from faster_whisper import WhisperModel
             except ImportError as exc:

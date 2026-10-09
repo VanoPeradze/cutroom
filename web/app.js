@@ -4855,22 +4855,28 @@ function updatePreviewUI(time) {
   updatePreviewCaption(time);
 }
 
-function captionPreviewText(segment, sourceTime, wordsPerCaption) {
-  if (!segment) return "";
-  const timedWords = Array.isArray(segment.words) ? segment.words.filter((word) => String(word?.word || "").trim()) : [];
-  if (timedWords.length) {
-    let activeIndex = timedWords.findIndex((word) => sourceTime <= Number(word.end));
-    if (activeIndex < 0) activeIndex = timedWords.length - 1;
-    const chunkStart = Math.floor(activeIndex / wordsPerCaption) * wordsPerCaption;
-    return timedWords.slice(chunkStart, chunkStart + wordsPerCaption).map((word) => String(word.word).trim()).join(" ").trim();
+function captionPreviewChunk(segment, sourceTime, wordsPerCaption) {
+  const words = Array.isArray(segment?.words) ? segment.words : [];
+  const chunks = [[]];
+  for (const word of words) {
+    if (!String(word?.word || "").trim() || !(Number(word.end) > Number(word.start))) continue;
+    const chunk = chunks.at(-1);
+    // Match burned/SRT captions: a long pause starts another phrase, and each
+    // phrase is visible only between its first and last spoken word.
+    if (chunk.length && (Number(word.start) - Number(chunk.at(-1).end) > 0.75 || chunk.length >= wordsPerCaption)) chunks.push([]);
+    chunks.at(-1).push(word);
   }
-  const words = String(segment.text || "").trim().split(/\s+/).filter(Boolean);
-  if (words.length <= wordsPerCaption) return words.join(" ");
-  const duration = Math.max(0.01, Number(segment.end) - Number(segment.start));
-  const progress = Math.max(0, Math.min(0.999, (sourceTime - Number(segment.start)) / duration));
-  const chunkCount = Math.ceil(words.length / wordsPerCaption);
-  const chunkStart = Math.floor(progress * chunkCount) * wordsPerCaption;
-  return words.slice(chunkStart, chunkStart + wordsPerCaption).join(" ");
+  return chunks.find(chunk => chunk.length && sourceTime >= Number(chunk[0].start) && sourceTime < Number(chunk.at(-1).end)) || [];
+}
+
+function captionPreviewText(segment, sourceTime, wordsPerCaption) {
+  if (!segment || sourceTime < Number(segment.start) || sourceTime >= Number(segment.end)) return "";
+  if (Array.isArray(segment.words) && segment.words.length) {
+    return captionPreviewChunk(segment, sourceTime, wordsPerCaption).map(word => String(word.word).trim()).join(" ").trim();
+  }
+  // Without word timings the export shows the whole segment. Inventing timed
+  // subphrases here would promise a different result from the rendered video.
+  return String(segment.text || "").trim();
 }
 
 function updatePreviewCaption(sourceTime) {
@@ -4938,12 +4944,10 @@ function updatePreviewCaption(sourceTime) {
 const HIGHLIGHT_WORDS_PER_CAPTION = 4;
 const RTL_CHARACTERS = /[֐-ࣿיִ-﷿ﹰ-﻿]/;
 function captionActiveWord(segment, sourceTime, wordsPerCaption) {
-  const timedWords = Array.isArray(segment?.words) ? segment.words.filter((word) => String(word?.word || "").trim()) : [];
-  if (!timedWords.length) return -1;
-  // Same rule as captionPreviewText, so the lit word is always in the shown phrase.
-  let activeIndex = timedWords.findIndex((word) => sourceTime <= Number(word.end));
-  if (activeIndex < 0) activeIndex = timedWords.length - 1;
-  return activeIndex % wordsPerCaption;
+  const chunk = captionPreviewChunk(segment, sourceTime, wordsPerCaption);
+  // Export holds the current highlight until the next word starts, including
+  // short pauses within a phrase. A long pause has no active caption.
+  return chunk.findLastIndex(word => sourceTime >= Number(word.start));
 }
 
 function firstKeptTime() {
