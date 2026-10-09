@@ -398,3 +398,43 @@ test('embedded camera virtual B follows the same A source clip across compact ed
   h.run('pauseAllMedia();');
   assert.equal(h.run('elements.previewA.paused && elements.previewB.paused'), true);
 });
+
+
+test('caption phrases match export pause boundaries, word limits and half-open ends', () => {
+  const h = harness();
+  h.run(`globalThis.speech={start:0,end:9,text:'alpha beta gamma delta epsilon',words:[
+    {start:.2,end:.4,word:'alpha'},{start:.6,end:1,word:'beta'},
+    {start:2,end:2.3,word:'gamma'},{start:2.4,end:2.8,word:'delta'},
+    {start:3,end:3.4,word:'epsilon'}]};`);
+  for (const [time, text] of [[0,''],[.2,'alpha beta'],[.5,'alpha beta'],[1,''],[1.99,''],[2,'gamma delta'],[2.8,''],[3,'epsilon'],[3.4,''],[8,'']]) {
+    assert.equal(h.run(`captionPreviewText(speech,${time},2)`), text, `at ${time}s`);
+  }
+  assert.equal(h.run('captionActiveWord(speech,.5,2)'), 0, 'short pause holds current word until next starts');
+  assert.equal(h.run('captionActiveWord(speech,.6,2)'), 1);
+  assert.equal(h.run('captionActiveWord(speech,1.5,2)'), -1, 'long pause clears highlight');
+  assert.equal(h.run('captionActiveWord(speech,2,2)'), 0, 'new phrase resets highlight');
+});
+
+test('wordless caption preview matches whole-segment export without invented subphrase timing', () => {
+  const h = harness();
+  h.run(`globalThis.speech={start:1,end:5,text:'One complete sentence without timed words',words:[]};`);
+  assert.equal(h.run('captionPreviewText(speech,2,2)'), 'One complete sentence without timed words');
+  assert.equal(h.run('captionPreviewText(speech,4.9,2)'), 'One complete sentence without timed words');
+  assert.equal(h.run('captionPreviewText(speech,5,2)'), '');
+  assert.equal(h.run('captionActiveWord(speech,2,2)'), -1);
+});
+
+test('mapped caption preview hides pauses inside a kept source clip', () => {
+  const h = harness();
+  h.run(`state.project.manual.source_tracks.A=[{id:'a',start:0,end:4,source_start:5}];
+    state.project.analysis={audio_source:'A',transcript:{segments:[{start:5,end:9,text:'first next',words:[
+      {start:5.2,end:5.6,word:'first'},{start:7,end:8,word:'next'}]}]}};
+    captionBurnEnabled=()=>true;
+    captionSettingsFromControls=()=>({words:9,style:'clean',position:'top',scale:100});
+    updatePreviewCaption(.3);`);
+  assert.equal(h.run('elements.previewCaption.textContent'), 'first');
+  h.run('updatePreviewCaption(1);');
+  assert.equal(h.run('elements.previewCaption.hidden'), true);
+  h.run('updatePreviewCaption(2.2);');
+  assert.equal(h.run('elements.previewCaption.textContent'), 'next');
+});

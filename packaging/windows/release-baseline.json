@@ -1,10 +1,10 @@
 {
   "version": "1.1-beta",
-  "filename": "CUTROOM-1.1-Beta-windows-62b1ad6-python312-20261009.zip",
-  "build_id": "CUTROOM-1.1-beta-20261008-212522",
-  "bytes": 3498162,
-  "sha256": "d88f3355115ce301e927d6baca540c9f7c23c371c9b9389cd585587da60b2dac",
-  "manifest_sha256": "c9f29dcb693fd8b2ff19c1528b6f8dde67f053c341b64d065bf922a30cc43b0e",
-  "url": "https://cutroom-studio--cievx26r2g.expo.app/downloads/CUTROOM-1.1-Beta-windows-62b1ad6-python312-20261009.zip",
-  "note": "Immutable validation deployment of reviewed product source 62b1ad60b93db83b342d4aacfe86dcce01a0cc17. Setup selects only Python 3.12 on Windows, Mac and Linux (numpy 2.5+ has no Python 3.11 wheels), the private Windows Python stays inside the CUTROOM folder, launchers call helper scripts by explicit path, and the new tagline. Includes the 2026-10-07 layout fixes, gameplay vision and the optional 9B Story model. Verified by a clean Windows install from this ZIP. No private data, runtime or models. Native Apple Silicon/Intel candidate CI required before production."
+  "filename": "CUTROOM-1.1-Beta-windows-runtime-1fc5cf482917-20261009.zip",
+  "build_id": "CUTROOM-1.1-beta-runtime-1b5178141e8e-20261009",
+  "bytes": 3510799,
+  "sha256": "1fc5cf482917cd32c53ab7e219eba75d0aaf64670fb3c30bb52484ba93d99b7c",
+  "manifest_sha256": "d81f80de102fdb61c3595ab852c94e5dcea2b83f40dc7fa69c3e7194d023aaaf",
+  "url": "https://cutroom-studio--smaxwape1n.expo.app/downloads/CUTROOM-1.1-Beta-windows-runtime-1fc5cf482917-20261009.zip",
+  "note": "Immutable non-production validation deployment of source 1b5178141e8e900621723038757b26e3da9d6b18. Application, launcher, tests and guide payloads exactly match the fresh Python 3.12.14 bootstrap-tested Windows candidate. First-run setup, launcher/relaunch, real decoder preflight, 73 packaged regressions and synthetic CPU export passed on the existing Windows machine; no clean-machine or native Mac claim. No private data, runtimes or models. Native Apple Silicon/Intel candidate CI is required before production."
 }

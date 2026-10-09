@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import importlib
+import io
 import os
 import subprocess
 import sys
+import wave
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -28,6 +30,20 @@ def _command_ready(command: str) -> bool:
     return result.returncode == 0
 
 
+def _check_audio_decoder() -> None:
+    """Exercise Whisper's actual media reader without loading an ASR model."""
+    sample = io.BytesIO()
+    with wave.open(sample, "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(16000)
+        wav.writeframes(bytes(1600 * 2))
+    sample.seek(0)
+    audio = importlib.import_module("faster_whisper.audio").decode_audio(sample)
+    if len(audio) != 1600:
+        raise RuntimeError("The speech decoder returned an unexpected audio length")
+
+
 def main() -> int:
     failures: list[str] = []
     for name in REQUIRED_MODULES:
@@ -35,6 +51,11 @@ def main() -> int:
             importlib.import_module(name)
         except Exception as exc:  # Native wheels can exist but still fail to load.
             failures.append(f"Python module {name}: {type(exc).__name__}: {exc}")
+
+    try:
+        _check_audio_decoder()
+    except Exception as exc:
+        failures.append(f"Speech audio decoder: {type(exc).__name__}: {exc}")
 
     try:
         from cutroom.config import load_settings
