@@ -273,7 +273,10 @@ def build_package(root: Path, windows_zip: Path, output_dir: Path, *, build_id: 
         if destination in files:
             raise ValueError("Mac overlay must not replace shared source")
         data = _read_source(root.resolve(), source)
-        files[destination] = data.replace(b"\r\n", b"\n") if destination.endswith((".sh", ".command")) else data
+        # Every Mac overlay entry is text. Canonical LF makes its payload
+        # identical across Windows and macOS checkouts; frozen shared files
+        # retain their independently verified Windows-baseline bytes.
+        files[destination] = data.replace(b"\r\n", b"\n")
     stamp = build_id or datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     identifier = f"CUTROOM-{original['app_version']}-mac-{stamp}"
     if not re.fullmatch(r"CUTROOM-[A-Za-z0-9.-]+", identifier):

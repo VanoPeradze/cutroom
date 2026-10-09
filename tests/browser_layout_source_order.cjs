@@ -59,8 +59,13 @@ async function checkLayout(row, stage) {
   });
   assert.ok(geometry.inPanel); assert.equal(geometry.count,1); assert.ok(geometry.dockHidden); assert.ok(geometry.sameControls);
   assert.ok(geometry.frame.h>0 && geometry.mixer.h>0);
-  assert.ok(geometry.mixer.x+geometry.mixer.w<=geometry.preview.x,'Composition controls occupy the left shelf');
-  assert.ok(geometry.frame.x>=geometry.preview.x+geometry.preview.w,'Clip framing occupies the right inspector');
+  if(row.direction==='rtl') {
+    assert.ok(geometry.mixer.x>=geometry.preview.x+geometry.preview.w,'Composition controls occupy the inline-start shelf in RTL');
+    assert.ok(geometry.frame.x+geometry.frame.w<=geometry.preview.x,'Clip framing occupies the inline-end inspector in RTL');
+  } else {
+    assert.ok(geometry.mixer.x+geometry.mixer.w<=geometry.preview.x,'Composition controls occupy the inline-start shelf in LTR');
+    assert.ok(geometry.frame.x>=geometry.preview.x+geometry.preview.w,'Clip framing occupies the inline-end inspector in LTR');
+  }
   assert.equal(geometry.dir,row.direction); assert.ok(geometry.pageWidth<=geometry.viewport+1);
   assert.ok(geometry.preview.h>=300,'Retain preview-first layout'); assert.equal(geometry.timeline.w,1366); assert.ok(geometry.inspector.w<=420);
   // Disclosure controls remain interactive after their sibling is reparented.

@@ -1,10 +1,10 @@
 {
   "version": "1.1-beta",
-  "filename": "CUTROOM-1.1-Beta-windows-runtime-1fc5cf482917-20261009.zip",
-  "build_id": "CUTROOM-1.1-beta-runtime-1b5178141e8e-20261009",
-  "bytes": 3510799,
-  "sha256": "1fc5cf482917cd32c53ab7e219eba75d0aaf64670fb3c30bb52484ba93d99b7c",
-  "manifest_sha256": "d81f80de102fdb61c3595ab852c94e5dcea2b83f40dc7fa69c3e7194d023aaaf",
-  "url": "https://cutroom-studio--smaxwape1n.expo.app/downloads/CUTROOM-1.1-Beta-windows-runtime-1fc5cf482917-20261009.zip",
-  "note": "Immutable non-production validation deployment of source 1b5178141e8e900621723038757b26e3da9d6b18. Application, launcher, tests and guide payloads exactly match the fresh Python 3.12.14 bootstrap-tested Windows candidate. First-run setup, launcher/relaunch, real decoder preflight, 73 packaged regressions and synthetic CPU export passed on the existing Windows machine; no clean-machine or native Mac claim. No private data, runtimes or models. Native Apple Silicon/Intel candidate CI is required before production."
+  "filename": "CUTROOM-1.1-Beta-stability-windows-c9a3039b699d-20261009.zip",
+  "build_id": "CUTROOM-1.1-beta-stability-20261009-r2",
+  "bytes": 3516857,
+  "sha256": "c9a3039b699d68119ea7a35247d0852ecc566aa2ef80e74c5f26f5eb8ae05e89",
+  "manifest_sha256": "fa134a8976872acb4d8039bbdf656e1e83396b036ce0a305455aaff5fe500ba6",
+  "url": "https://cutroom-studio--9xvon2ygv0.expo.app/downloads/CUTROOM-1.1-Beta-stability-windows-c9a3039b699d-20261009.zip",
+  "note": "Stable critical runtime/layout release; Mac overlay text has canonical LF. Exact source 55b307aa142fe873069c7bcd0512b28005b02069. Native validation pending; no editorial experiments or private data."
 }

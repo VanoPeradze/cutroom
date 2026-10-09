@@ -89,6 +89,28 @@ def test_two_folders_and_exact_windows_preservation(package_source):
     assert archive.with_suffix(".zip.sha256").read_text().split()[0] == combined.sha(archive.read_bytes())
 
 
+def test_mac_overlay_payload_is_identical_from_crlf_and_lf_checkouts(package_source):
+    root, baseline, out = package_source
+    content = "#!/bin/bash\n# UTF-8: caf\u00e9\nexit 0\n".encode("utf-8")
+    for source in combined.MAC_OVERLAY:
+        (root / source).write_bytes(content.replace(b"\n", b"\r\n"))
+    crlf = combined.build_package(root, baseline, out, build_id="crlf")
+    for source in combined.MAC_OVERLAY:
+        (root / source).write_bytes(content)
+    lf = combined.build_package(root, baseline, out, build_id="lf")
+    with zipfile.ZipFile(crlf) as first, zipfile.ZipFile(lf) as second, zipfile.ZipFile(baseline) as windows:
+        assert first.namelist() == second.namelist()
+        for name in first.namelist():
+            if name != combined.MANIFEST:
+                assert first.read(name) == second.read(name), name
+                assert first.getinfo(name).external_attr == second.getinfo(name).external_attr
+        for name in combined.MAC_OVERLAY.values():
+            assert first.read(name) == content
+        for name in windows.namelist():
+            assert first.read("windows/" + name) == windows.read(name)
+    assert combined.verify_package(crlf)["files"] == combined.verify_package(lf)["files"]
+
+
 def test_refuses_wrong_windows_archive(package_source):
     root, baseline, out = package_source
     baseline.write_bytes(b"different Windows build")
