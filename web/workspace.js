@@ -202,7 +202,7 @@ export function initWorkspace({ document: doc = document, window: win = window, 
     // Extra tracks scroll inside the timeline instead of taking height from
     // the monitor. Even a previously oversized timeline preserves the player.
     const minimum = 184;
-    const dockHeight = panel.querySelector(".advanced-tabs") ? 44 : 0;
+    const dockHeight = panel.querySelector(".advanced-tabs")?.getBoundingClientRect().height || 0;
     const monitorMinimum = Math.min(420, Math.max(320, Math.round(height * .5)));
     const maximum = Math.max(minimum, Math.floor(height - headerHeight - dockHeight - 8 - monitorMinimum));
     // 256 px fits the standard lanes (video, layout, original audio, captions) without scrolling.

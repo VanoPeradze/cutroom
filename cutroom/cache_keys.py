@@ -17,6 +17,7 @@ _SOURCE_METADATA_KEYS = (
     "name",
     "size",
     "duration",
+    "audio_duration",
     "width",
     "height",
     "rotation",

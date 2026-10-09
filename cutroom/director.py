@@ -33,7 +33,7 @@ from .visual_moments import (
     resolve_visual_pass,
     summary as visual_summary,
 )
-from .utils import clamp, invert_ranges, merge_ranges, range_duration
+from .utils import atomic_write_json, clamp, invert_ranges, merge_ranges, range_duration
 
 
 def _finite_number(value: Any, fallback: float = 0.0) -> float:
@@ -329,6 +329,28 @@ def _analysis_audio_slot(project: dict[str, Any]) -> str:
     return "A"
 
 
+def _transcription_duration(source: dict[str, Any], container_duration: float) -> float:
+    """Coverage concerns the selected audio stream, not a longer video tail.
+
+    Imported sources retain FFprobe's first audio-stream duration. Missing or
+    invalid metadata stays conservative: the decoder must cover the container.
+    Never substitute the last spoken word or an incomplete decoder's duration.
+    """
+    audio_duration = _finite_number(source.get("audio_duration"))
+    return audio_duration if source.get("has_audio") and audio_duration > 0 else container_duration
+
+
+def _transcription_attempt(transcript: dict[str, Any], warning: str | None) -> dict[str, Any]:
+    return {
+        "warning": warning,
+        "failure": copy.deepcopy(transcript.get("failure")),
+        "model": transcript.get("model"),
+        "device": transcript.get("device"),
+        "execution": copy.deepcopy(transcript.get("execution")),
+        "quality": transcript_quality_report(transcript),
+    }
+
+
 def _manual_sync_offset(project: dict[str, Any]) -> float | None:
     value = (project.get("manual", {}).get("source_mixer") or {}).get("sync_offset")
     if value is None:
@@ -397,6 +419,8 @@ def _transcribe_safely(
             "model": "unavailable",
             "device": "none",
             "compute_type": "none",
+            "failure": {"type": type(exc).__name__, "message": str(exc),
+                        "worker": copy.deepcopy(getattr(exc, "diagnostics", None))},
         })
         if isinstance(getattr(exc, "coverage", None), dict):
             fallback["coverage"] = copy.deepcopy(exc.coverage)
@@ -2217,6 +2241,7 @@ def analyze_project(
     analysis_source = source_b if analysis_audio_slot == "B" and source_b is not None else source_a
     analysis_source_info = project.get("sources", {}).get(analysis_audio_slot) or project["sources"]["A"]
     analysis_source_duration = max(0.0, _finite_number(analysis_source_info.get("duration"), duration))
+    transcription_duration = _transcription_duration(analysis_source_info, analysis_source_duration)
     brief = _effective_brief(project)
     explicit_source_layout = _explicit_source_layout(project)
     pace = str(brief.get("pace", "balanced"))
@@ -2470,7 +2495,7 @@ def analyze_project(
                 language=spoken_language,
                 progress=lambda value, message: context.update(0.20 + value * 0.24, message),
                 performance_mode=performance_mode,
-                duration=analysis_source_duration,
+                duration=transcription_duration,
                 cancel_check=context.check_cancelled,
             )
             if analysis_audio_slot == "B":
@@ -2497,6 +2522,7 @@ def analyze_project(
         vision = {**vision, "embedded_camera": accepted_prepared_embedded}
 
     transcript_quality = transcript_quality_report(transcript)
+    transcription_attempts = [_transcription_attempt(transcript, transcription_warning)]
     edit_style = str(brief.get("edit_style") or "smart")
     semantic_transcript_required = goal in {"short", "podcast"} or (goal == "youtube" and not youtube_cleanup_only)
     transcript_upgraded = False
@@ -2520,12 +2546,13 @@ def analyze_project(
                 language=retry_language,
                 progress=lambda value, message: context.update(retry_start + value * retry_span, message),
                 performance_mode=upgrade_mode,
-                duration=analysis_source_duration,
+                duration=transcription_duration,
                 cancel_check=context.check_cancelled,
             )
             if analysis_audio_slot == "B":
                 upgraded = _map_transcript_to_timeline(upgraded, analysis_timeline_offset, duration)
             upgraded_quality = transcript_quality_report(upgraded)
+            transcription_attempts.append(_transcription_attempt(upgraded, upgrade_warning))
             if upgraded_quality["usable_for_story"]:
                 transcript = upgraded
                 transcript_quality = upgraded_quality
@@ -2534,7 +2561,28 @@ def analyze_project(
                 sound_profile = protect_silence_ranges_from_speech(sound_profile, transcript.get("segments", []))
                 sound_profile = constrain_gain_ranges_to_speech(sound_profile, transcript.get("segments", []))
 
-    _assert_transcript_complete(transcript_quality)
+    try:
+        _assert_transcript_complete(transcript_quality)
+    except StoryPlanningError as exc:
+        # Retain the cause before the gate aborts analysis. Keep this separate
+        # from reusable analysis/drafts so failed speech can never enter a story
+        # and a concurrent manual edit is not overwritten. No speech text/keys.
+        context.check_cancelled()
+        diagnostic_id = re.sub(r"[^a-zA-Z0-9_-]", "_", str(context.job.id))
+        diagnostic_path = store.project_dir(project_id) / "analysis-diagnostics" / f"transcription-{diagnostic_id}.json"
+        try:
+            atomic_write_json(diagnostic_path, {
+                "version": 1, "job_id": context.job.id, "stage": "transcription_gate",
+                "audio_source": analysis_audio_slot,
+                "source_duration": analysis_source_duration,
+                "audio_duration": transcription_duration,
+                "requested_language": spoken_language,
+                "requested_performance_mode": performance_mode,
+                "quality": transcript_quality, "attempts": transcription_attempts,
+            })
+        except OSError as diagnostic_error:
+            exc.add_note(f"Could not retain local transcription diagnostics: {diagnostic_error}")
+        raise
     if not transcript_quality["usable_for_story"] and not (goal == "youtube" and youtube_cleanup_only):
         reasons = list(transcript_quality.get("reasons") or ["unusable_transcript"])
         if goal == "short":

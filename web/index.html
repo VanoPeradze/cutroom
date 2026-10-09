@@ -20,7 +20,7 @@
   <link rel="stylesheet" href="/assets/studio-design.css?v=1.1-beta-design-1">
   <link rel="stylesheet" href="/assets/studio-chrome.css?v=1.1-beta-chrome-1">
   <link rel="stylesheet" href="/assets/studio-screens.css?v=1.1-beta-screens-9">
-  <link rel="stylesheet" href="/assets/ui-polish.css?v=1.1-beta-polish-1">
+  <link rel="stylesheet" href="/assets/ui-polish.css?v=1.1-beta-quality-2">
 </head>
 <body class="welcome-mode">
   <a class="skip-link" href="#main" data-i18n="skip">Skip to content</a>
@@ -141,16 +141,6 @@
         </div>
         <div class="setup-intent" id="setupIntent"><span id="setupIntentCopy">Add your footage to get started.</span><button type="button" class="home-text-link" id="changeWorkflowButton">Back to home</button></div>
         <details class="context-help setup-help"><summary>How to set up this project</summary><p><strong>One recording:</strong> add it as A. If it already contains a camera, mark the camera area in Layout; CUTROOM cannot recover pixels hidden in the original.</p><p><strong>Two recordings:</strong> add your screen and camera, then assign their roles and choose the audio source. Check synchronization before building.</p><p><strong>AI draft:</strong> choose your output, style and spoken language. The quality profile controls local models, not your export resolution. Manual editing skips AI setup.</p></details>
-        <div id="setupRuntimeDock" class="runtime-status-dock">
-          <div class="model-status partial" id="modelStatus" role="status" aria-live="polite">
-            <span class="status-light" aria-hidden="true"></span>
-            <div><b>Checking local AI…</b><small>Story AI downloads need your confirmation.</small></div>
-            <button class="button ghost compact" id="retryAIButton" type="button">Retry AI</button>
-            <button class="button ghost compact" id="modelButton" type="button" hidden>Download model…</button>
-            <button class="button ghost compact model-upgrade" id="modelUpgradeButton" type="button" hidden>Better drafts</button>
-          </div>
-        </div>
-
         <div class="preparation-grid"><div class="preparation-sources">
         <div class="source-bay">
           <article class="source-slot primary-source" id="sourceSlotA" data-slot="A" role="button" tabindex="0" aria-describedby="sourceSlotAHelp">
@@ -221,6 +211,8 @@
         <div class="brief-grid">
 
 
+          <div id="setupFormatDock" class="setup-control-grid"></div>
+
           <fieldset class="brief-group duration-group" id="durationGroup">
             <legend data-i18n="targetLength">Edit length</legend>
             <label for="durationMode" data-i18n="durationIntent">Length intent</label>
@@ -247,6 +239,10 @@
         </div>
 
         </div></div>
+        <details id="setupOptionalSettings" class="setup-options">
+          <summary>Optional AI settings</summary>
+          <div id="setupOptionsDock" class="setup-control-grid"></div>
+        </details>
         <details class="audio-calibration setup-audio-disclosure" id="audioCalibration" hidden>
           <summary><span><strong>Fine-tune silence detection</strong><small>Optional · automatic settings are already applied</small></span></summary>
           <div class="audio-calibration-head">
@@ -264,6 +260,16 @@
             <div class="audio-estimate"><span data-i18n="estimatedAudioCut">With your settings</span><strong id="audioCutEstimate">—</strong><small id="audioProfileSummary">—</small></div>
           </div>
         </details>
+
+        <div id="setupRuntimeDock" class="runtime-status-dock">
+          <div class="model-status partial" id="modelStatus" role="status" aria-live="polite">
+            <span class="status-light" aria-hidden="true"></span>
+            <div><b>Checking local AI…</b><small>Story AI downloads need your confirmation.</small></div>
+            <button class="button ghost compact" id="retryAIButton" type="button">Retry AI</button>
+            <button class="button ghost compact" id="modelButton" type="button" hidden>Download model…</button>
+            <button class="button ghost compact model-upgrade" id="modelUpgradeButton" type="button" hidden>Better drafts</button>
+          </div>
+        </div>
 
         <div class="director-action">
           <div class="readiness" id="readiness"><span></span><p data-i18n="waitingForVideo">Waiting for the main recording</p></div>
@@ -840,7 +846,7 @@
       <footer class="connection-actions"><button class="button ghost" id="forgetCloudKey" type="button">Forget session key</button><button class="button primary" id="saveAIConnection" type="submit">Use this connection</button></footer>
     </form>
   </dialog>
-  <script type="module" src="/assets/app.js?v=1.1-beta-polish-1"></script>
+  <script type="module" src="/assets/app.js?v=1.1-beta-quality-2"></script>
   <script src="/assets/studio-screens.js?v=1.1-beta-polish-1" defer></script>
 </body>
 </html>

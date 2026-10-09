@@ -5,7 +5,7 @@ import { StabilizationStudio } from "./stabilization-studio.js?v=1.1-beta-1";
 import { ChromaStudio } from "./chroma-studio.js?v=1.1-beta-chroma-edit-2";
 import { ChromaPreview } from "./chroma-preview.js?v=1.1-beta-chroma-edit-2";
 import { SourceReview } from "./source-review.js?v=1.1-beta-polish-1";
-import { initWorkspace } from "./workspace.js?v=1.1-beta-polish-1";
+import { initWorkspace } from "./workspace.js?v=1.1-beta-quality-2";
 import { KEYBOARD_PROFILES, resolveEditorShortcut, isEditorTransportSpace, shortcutRows } from "./keyboard.js?v=1.1-beta-2";
 import { AudioThresholdView } from "./audio-meter.js?v=1.1-beta-1";
 import { initWelcome, workflowSettings, cloudProviderName } from "./welcome.js?v=1.1-beta-polish-1";
@@ -3609,7 +3609,30 @@ function layoutRangeEditable() {
   return Boolean(range && range.end - range.start >= minimumEditLength() - 1e-6 && editorProject()?.draft?.keep_ranges?.some((kept) => Number(kept.end) > range.start && Number(kept.start) < range.end));
 }
 
+const setupControlHomes = new Map();
+function placeSetupControls() {
+  const inSetup = !state.project?.draft;
+  for (const [id, dockId] of [["aspectSelect", "setupFormatDock"], ["spokenLanguageSelect", "setupOptionsDock"],
+    ["performanceModeSelect", "setupOptionsDock"], ["visualAiSelect", "setupOptionsDock"]]) {
+    const control = document.getElementById(id)?.closest("label");
+    const dock = document.getElementById(dockId);
+    if (!control || !dock) continue;
+    if (!setupControlHomes.has(id)) {
+      const anchor = document.createComment(`Original home of ${id}`);
+      control.before(anchor);
+      setupControlHomes.set(id, anchor);
+    }
+    const anchor = setupControlHomes.get(id);
+    if (inSetup) {
+      if (control.parentElement !== dock) dock.appendChild(control);
+    } else if (control.previousSibling !== anchor) {
+      anchor.after(control);
+    }
+  }
+}
+
 function placeSourceMixer(hasSource) {
+  placeSetupControls();
   const showBeforeDirector = Boolean(hasSource && !state.project?.draft);
   if (showBeforeDirector && elements.setupSourceMixerDock) {
     if (elements.sourceMixer.parentElement !== elements.setupSourceMixerDock) {
