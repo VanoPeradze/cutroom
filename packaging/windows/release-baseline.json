@@ -1,10 +1,10 @@
 {
   "version": "1.1-beta",
-  "filename": "CUTROOM-1.1-Beta-stable-windows-03f6cdf7d69b-20261009.zip",
-  "build_id": "CUTROOM-1.1-beta-stable-critical-20261009-local",
-  "bytes": 3515642,
-  "sha256": "03f6cdf7d69bcb71465cacecab218a7164893e5779bfbe3d5a9e53390116631d",
-  "manifest_sha256": "0f7fd89d36434ad7a377bddb5f5d686d957197ae212e0f986c40317c3a223517",
-  "url": "https://cutroom-studio--fmd6p9urhj.expo.app/downloads/CUTROOM-1.1-Beta-stable-windows-03f6cdf7d69b-20261009.zip",
-  "note": "Immutable non-production staging of the reviewed stable critical-fix candidate. Product payload matches the repaired Windows installation and local real-media/UI/export checks. Experimental editorial changes excluded. Native validation uses the exact combined archive pinned in packaging/mac/release-candidate.json."
+  "filename": "CUTROOM-1.1-Beta-stability-windows-c9a3039b699d-20261009.zip",
+  "build_id": "CUTROOM-1.1-beta-stability-20261009-r2",
+  "bytes": 3516857,
+  "sha256": "c9a3039b699d68119ea7a35247d0852ecc566aa2ef80e74c5f26f5eb8ae05e89",
+  "manifest_sha256": "fa134a8976872acb4d8039bbdf656e1e83396b036ce0a305455aaff5fe500ba6",
+  "url": "https://cutroom-studio--9xvon2ygv0.expo.app/downloads/CUTROOM-1.1-Beta-stability-windows-c9a3039b699d-20261009.zip",
+  "note": "Stable critical runtime/layout release; Mac overlay text has canonical LF. Exact source 55b307aa142fe873069c7bcd0512b28005b02069. Native validation pending; no editorial experiments or private data."
 }
