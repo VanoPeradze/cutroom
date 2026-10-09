@@ -1434,8 +1434,17 @@ def _run_transcription_worker(
             if stderr_tail:
                 error = f"{error} | {stderr_tail}"
             if isinstance((envelope or {}).get("coverage"), dict):
-                raise TranscriptionIncomplete(error, envelope["coverage"])
-            raise RuntimeError(error)
+                failure = TranscriptionIncomplete(error, envelope["coverage"])
+            else:
+                failure = RuntimeError(error)
+            failure.diagnostics = {
+                "returncode": returncode,
+                "error": str((envelope or {}).get("error") or "Transcription worker exited unexpectedly"),
+                "traceback": str((envelope or {}).get("traceback") or "")[-12000:],
+                "stderr": stderr_tail,
+                "last_progress": _read_worker_progress(progress_path),
+            }
+            raise failure
         except BaseException:
             if process is not None:
                 _stop_process(process)

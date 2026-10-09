@@ -103,3 +103,48 @@ body.studio-open #setupWorkflowSteps { visibility:hidden; }
 
 /* "Review original footage" keeps its green restore cue, in the day palette too. */
 html[data-theme="light"] .studio-workspace #manualRestore:not(:disabled) { border-color:#7cb898; background:#e2f3e9; color:#14472f; }
+
+/* Preparation follows the same order visually, in the DOM and by keyboard:
+   media, source confirmation, goal, style/format/length, optional settings. */
+#setupPanel .preparation-grid { grid-template-columns:minmax(0,1fr); }
+#setupPanel .preparation-sources .source-bay { grid-template-columns:repeat(2,minmax(0,1fr)); }
+#setupPanel .preparation-brief { display:grid; gap:20px; }
+#setupPanel .setup-control-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(220px,100%),1fr)); gap:16px; min-width:0; }
+#setupFormatDock { grid-column:1 / -1; }
+#setupPanel .setup-control-grid label { display:grid; gap:8px; min-width:0; align-content:start; }
+#setupPanel .setup-control-grid label > span { display:grid; gap:5px; }
+#setupPanel .setup-control-grid :is(select,input) { width:100%; min-width:0; }
+#setupPanel .setup-control-grid :is(small,em) { font-size:12px; color:var(--muted); font-style:normal; }
+#setupPanel .setup-control-grid .rebuild-chip { display:none; }
+#setupPanel .setup-options { margin-top:18px; padding:16px 20px; border:1px solid var(--line); border-radius:8px; }
+#setupPanel .setup-options > summary { cursor:pointer; font-weight:600; }
+#setupPanel .setup-options[open] > summary { margin-bottom:18px; }
+#setupPanel[data-workflow="manual"] .setup-options { display:none; }
+#setupSourceMixerDock { container:source-setup / inline-size; }
+.embedded-camera-workspace > * { min-width:0; }
+.embedded-camera-controls { grid-template-columns:minmax(0,1fr); }
+.embedded-camera-controls > * { min-width:0; }
+.embedded-camera-presets { grid-template-columns:repeat(2,minmax(0,1fr)); }
+.embedded-camera-presets button { min-width:0; overflow-wrap:anywhere; }
+@container source-setup (max-width:620px) {
+  .embedded-camera-workspace { grid-template-columns:minmax(0,1fr); }
+}
+@container studio-shelf (max-width:220px) {
+  .embedded-camera-presets { grid-template-columns:minmax(0,1fr); }
+  .studio-shelf .embedded-camera-seek { grid-template-columns:minmax(0,1fr) auto; }
+  .studio-shelf .embedded-camera-seek input { grid-column:1 / -1; grid-row:2; margin-inline:0; }
+  .studio-shelf .embedded-camera-sliders label,.studio-shelf .embedded-content-focus label { grid-template-columns:minmax(0,1fr) auto; min-width:0; }
+  .embedded-camera-sliders input,.embedded-content-focus input { grid-column:1 / -1; grid-row:auto; min-width:0; margin-inline:0; }
+  .embedded-camera-actions { grid-template-columns:minmax(0,1fr); }
+}
+@media (max-width:699px) {
+  #setupPanel .preparation-sources .source-bay { grid-template-columns:minmax(0,1fr); }
+}
+/* All compact editor children span the same track; old rail rules must not
+   reserve a 52px column. The shared navigation height also drives JS sizing. */
+@media (max-width:899px),(max-height:600px) {
+  .advanced-panel.studio-workspace:not([hidden]),.advanced-panel.studio-workspace.studio-transcript:not([hidden]) { grid-template-columns:minmax(0,1fr); }
+  .advanced-panel.studio-workspace :is(.studio-header,.studio-preview-dock,.studio-timeline-dock,.advanced-content,.studio-shelf) { grid-column:1 / -1; }
+  .advanced-panel.studio-workspace .studio-shelf { grid-row:4; }
+  .advanced-panel.studio-workspace .advanced-content { grid-row:5; }
+}

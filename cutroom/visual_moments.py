@@ -33,7 +33,7 @@ from .ai_runtime import open_ollama, read_ollama_json
 from .config import Settings
 from .edit_styles import get_edit_style
 
-VISUAL_MOMENTS_VERSION = "gameplay-vision-v1"
+VISUAL_MOMENTS_VERSION = "gameplay-vision-v2"
 WINDOW_SECONDS = 8.0
 FRAMES_PER_WINDOW = 4
 FRAME_WIDTH = 448
@@ -69,27 +69,32 @@ PLAIN_GAMEPLAY_SCORE = 0.12
 ANSWER_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
-        **{name: {"type": "boolean"} for name in ACTION_FLAGS},
         "screen": {"type": "string", "enum": list(SCREENS)},
         "event": {"type": "string"},
+        **{name: {"type": "boolean"} for name in ACTION_FLAGS},
     },
-    "required": [*ACTION_FLAGS, "screen", "event"],
+    "required": ["screen", "event", *ACTION_FLAGS],
 }
 PROMPT = (
-    "Four frames in time order (left-to-right, then top-to-bottom) from 8 seconds of a video game recording. "
-    "A small streamer webcam box may sit in a corner; ignore it unless the webcam fills the whole screen. "
-    "Answer only from what is visible. shooting: a weapon is firing, muzzle flash, tracers or the player aims and fires. "
-    "enemies_visible: hostile characters, red health bars or enemy markers. "
-    "explosion_fire_or_smoke: blasts, fire, grenades, gunsmoke. "
-    "damage_or_hit_markers: hit markers, damage numbers, red screen edges, armor or health bar dropping. "
-    "player_downed_or_dead: downed, revive prompt, death or mission-failed screen. "
-    "fast_movement: sprinting, vaulting, driving, sliding, falling. "
-    "screen: gameplay (player-controlled, HUD such as health, ammo or objective text visible), "
-    "cutscene (cinematic camera, black letterbox bars, recorded video or no HUD), "
-    "menu_or_map (inventory, map, settings, lobby), loading_or_black, "
-    "webcam_only (a person or room fills the screen), other. "
-    "Flags describe gameplay only and are all false for cutscenes, menus and webcam_only. "
-    "event: at most 8 words naming what happens."
+    "These are four sampled frames in time order, left-to-right then top-to-bottom, from a recording. "
+    "First classify the dominant screen content; do not assume this is gameplay. "
+    "webcam_only: a real person or room fills most of the screen, even with a game behind them. "
+    "menu_or_map: a map, inventory, settings, lobby or other game interface fills most of the screen. "
+    "cutscene: a cinematic sequence, scripted camera views or scene changes rather than a consistent player view. "
+    "A cinematic may contain soldiers, weapons, fire and a streamer overlay; those do NOT make it gameplay. "
+    "gameplay: an active game world viewed through a consistent player-controlled perspective. "
+    "A HUD, crosshair or streamer box alone does not prove gameplay. "
+    "loading_or_black: loading or black frames. other: a desktop, browser, chat app or uncertain content. "
+    "A small corner webcam does not change the dominant screen type. "
+    "event: describe only what is visible, in at most 8 words, without inventing actions. "
+    "Then answer the six gameplay flags. All must be false unless screen is gameplay. "
+    "shooting: visible muzzle flash, projectiles or firing, NOT merely holding or aiming a weapon. "
+    "enemies_visible: visibly hostile characters or enemy markers, NOT every human character. "
+    "explosion_fire_or_smoke: visible blasts, flames or gunsmoke, NOT ordinary lights. "
+    "damage_or_hit_markers: actual hit markers, damage numbers or health loss, NOT a crosshair or map pointer. "
+    "player_downed_or_dead: the controlled player is downed or dead, NOT a cinematic character. "
+    "fast_movement: visible player sprinting, driving or falling, NOT a cinematic camera move. "
+    "If an action is not clearly visible in these frames, answer false."
 )
 
 _CAPABILITIES: dict[tuple[str, str], tuple[float, bool]] = {}
@@ -284,7 +289,11 @@ def parse_answer(content: Any) -> dict[str, Any] | None:
         return None
     if not isinstance(data, dict):
         return None
-    screen = str(data.get("screen") or "").strip().lower()
+    if not isinstance(data.get("screen"), str) or not isinstance(data.get("event"), str):
+        return None
+    if any(type(data.get(name)) is not bool for name in ACTION_FLAGS):
+        return None
+    screen = data["screen"].strip().lower()
     if screen not in SCREENS:
         return None
     flags = [name for name in ACTION_FLAGS if data.get(name) is True] if screen == "gameplay" else []
@@ -296,9 +305,9 @@ def parse_answer(content: Any) -> dict[str, Any] | None:
 
 
 def score_answer(screen: str, flags: list[str]) -> float:
-    weight = SCREEN_WEIGHTS.get(screen, SCREEN_WEIGHTS["other"])
-    if weight <= 0:
+    if screen != "gameplay":
         return 0.0
+    weight = SCREEN_WEIGHTS["gameplay"]
     raw = PLAIN_GAMEPLAY_SCORE + sum(ACTION_FLAGS.get(name, 0.0) for name in flags)
     return round(max(0.0, min(1.0, raw)) * weight, 3)
 
@@ -479,7 +488,7 @@ def analyze_visual_moments(
     elapsed = round(time.monotonic() - started, 2)
     planned = len(windows)
     analyzed = len(results)
-    if analyzed < max(3, math.ceil(planned * 0.25)):
+    if analyzed < min(planned, max(3, math.ceil(planned * 0.25))):
         return _unavailable(stop_reason or "insufficient_results", model=model, planned_windows=planned,
                             analyzed_windows=analyzed, failed_windows=failures, elapsed_seconds=elapsed)
     return {
@@ -511,19 +520,12 @@ def usable_windows(visual: dict[str, Any] | None) -> list[dict[str, Any]]:
             start, end, score = float(row["start"]), float(row["end"]), float(row["score"])
         except (KeyError, TypeError, ValueError):
             continue
-        if end > start and math.isfinite(score):
-            output.append({**row, "start": start, "end": end, "score": max(0.0, min(1.0, score))})
+        screen = row.get("screen")
+        if 0 <= start < end and all(math.isfinite(value) for value in (start, end, score)) and screen in SCREENS:
+            output.append({**row, "start": start, "end": end,
+                           "score": max(0.0, min(1.0, score)) if screen == "gameplay" else 0.0})
     return sorted(output, key=lambda row: row["start"])
 
-
-def _reach(visual: dict[str, Any], windows: list[dict[str, Any]]) -> float:
-    """How far around its analyzed span a sampled window may speak for the timeline."""
-    try:
-        stride = float(visual.get("stride_seconds") or 0.0)
-        window = float(visual.get("window_seconds") or WINDOW_SECONDS)
-    except (TypeError, ValueError):
-        return 0.0
-    return max(0.0, (stride - window) / 2.0) if math.isfinite(stride) else 0.0
 
 
 class VisualTimeline:
@@ -531,19 +533,18 @@ class VisualTimeline:
 
     def __init__(self, visual: dict[str, Any] | None):
         self.windows = usable_windows(visual)
-        self.reach = _reach(visual or {}, self.windows)
-        self._starts = [row["start"] - self.reach for row in self.windows]
+        self._starts = [row["start"] for row in self.windows]
 
     def __bool__(self) -> bool:
         return bool(self.windows)
 
     def _overlapping(self, start: float, end: float) -> list[tuple[dict[str, Any], float]]:
-        if not self.windows or end <= start:
+        if not self.windows or not math.isfinite(start) or not math.isfinite(end) or end <= start:
             return []
         rows: list[tuple[dict[str, Any], float]] = []
         upper = bisect.bisect_right(self._starts, end)
         for row in self.windows[:upper]:
-            left, right = row["start"] - self.reach, row["end"] + self.reach
+            left, right = row["start"], row["end"]
             overlap = min(end, right) - max(start, left)
             if overlap > 0:
                 rows.append((row, overlap))
@@ -556,16 +557,28 @@ class VisualTimeline:
             return None
         total = sum(overlap for _, overlap in rows)
         mean = sum(row["score"] * overlap for row, overlap in rows) / total
-        strongest = max(rows, key=lambda pair: (pair[0]["score"], pair[1]))[0]
         dead = sum(overlap for row, overlap in rows if row.get("screen") in DEAD_SCREENS) / total
         screens: dict[str, float] = {}
         for row, overlap in rows:
             screens[str(row.get("screen") or "other")] = screens.get(str(row.get("screen") or "other"), 0.0) + overlap
+        screen = max(screens, key=screens.get)
+        # A range dominated by a camera or cinematic must not inherit the
+        # action bonus or event of a brief gameplay window within it.
+        matching = [(row, overlap) for row, overlap in rows if row["screen"] == screen]
+        strongest = max(matching, key=lambda pair: (pair[0]["score"], pair[1]))[0]
+        action = strongest["score"] * 0.6 + mean * 0.4 if screen == "gameplay" else 0.0
+        # Sparse observations describe only their observed part of a range.
+        spans = sorted((max(start, row["start"]), min(end, row["end"])) for row, _ in rows)
+        covered, right = 0.0, start
+        for left, edge in spans:
+            covered += max(0.0, edge - max(left, right))
+            right = max(right, edge)
+        fraction = min(1.0, covered / (end - start))
         return {
-            "action": round(strongest["score"] * 0.6 + mean * 0.4, 3),
-            "dead": round(dead, 3),
-            "screen": max(screens, key=screens.get),
-            "event": str(strongest.get("event") or "") if strongest["score"] >= 0.3 else "",
+            "action": round(action * fraction, 3),
+            "dead": round(dead * fraction, 3),
+            "screen": screen,
+            "event": str(strongest.get("event") or "") if screen in {"cutscene", "webcam_only"} or strongest["score"] >= 0.3 else "",
         }
 
     def at(self, time_point: float) -> dict[str, Any] | None:
@@ -583,7 +596,9 @@ def on_screen_note(evidence: dict[str, Any] | None) -> str | None:
     if screen == "cutscene":
         return f"cutscene: {event}" if event else "cutscene"
     action = float(evidence.get("action", 0.0))
-    if action >= 0.45 and event:
+    if screen == "webcam_only":
+        return f"full-screen camera: {event}" if event else "full-screen camera"
+    if screen == "gameplay" and action >= 0.45 and event:
         return f"gameplay action {round(action * 10)}/10: {event}"
     return None
 

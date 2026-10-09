@@ -164,9 +164,11 @@ def test_timeline_evidence_weights_overlap_and_reports_dead_time():
     assert timeline.evidence(8.0, 16.0)["event"] == ""  # nothing notable is named
     assert timeline.evidence(100.0, 110.0) is None
     assert not vm.VisualTimeline({"available": False, "windows": []})
-    # A sparse grid speaks for the gap around each analyzed window.
+    # A sparse grid cannot describe the unobserved gaps between windows.
     sparse = vm.VisualTimeline(visual_result([(26.0, "gameplay", 0.8, "sniper duel")], stride=60.0))
-    assert sparse.evidence(5.0, 8.0)["action"] == 0.8
+    assert sparse.evidence(5.0, 8.0) is None
+    assert sparse.evidence(26.0, 34.0)["action"] == 0.8
+    assert sparse.evidence(0.0, 60.0)["action"] == pytest.approx(0.107)
 
 
 def test_on_screen_notes_are_short_and_only_for_clear_evidence():
@@ -370,3 +372,44 @@ def test_silent_menus_inside_the_edit_are_cut_but_talked_over_menus_stay():
     kept = director.invert_ranges(output, 600.0)
     assert any(row["start"] <= 108.0 and row["end"] >= 124.0 for row in kept)
     assert director._cut_dead_screens(cuts, vm.VisualTimeline(None), segments, 600.0) == (cuts, 0)
+
+
+@pytest.mark.parametrize("duration,planned", [(6.0, 1), (12.0, 2)])
+def test_short_sources_accept_all_planned_observations(tiny_video, duration, planned):
+    result = vm.analyze_visual_moments(tiny_video, duration, Settings(), "local", budget=50,
+                                      ask=lambda *_: vm.parse_answer(answer()))
+    assert result["available"] is True
+    assert result["analyzed_windows"] == result["planned_windows"] == planned
+
+
+@pytest.mark.parametrize("field", [*vm.ACTION_FLAGS, "screen", "event"])
+def test_missing_answer_fields_are_rejected(field):
+    data = answer(); del data[field]
+    assert vm.parse_answer(data) is None
+
+
+@pytest.mark.parametrize("bad", [None, "false", 0, 1, [], {}])
+def test_action_flags_require_real_booleans(bad):
+    data = answer(); data["shooting"] = bad
+    assert vm.parse_answer(data) is None
+
+
+@pytest.mark.parametrize("screen", ["cutscene", "webcam_only", "other"])
+def test_non_gameplay_dominant_ranges_never_inherit_action(screen):
+    timeline = vm.VisualTimeline(visual_result([
+        (0, screen, 1.0, "camera conversation"),
+        (8, screen, 1.0, "camera conversation"),
+        (16, "gameplay", 1.0, "shooting at enemies"),
+    ]))
+    evidence = timeline.evidence(0, 24)
+    assert evidence["screen"] == screen and evidence["action"] == 0
+    assert "shooting" not in evidence["event"]
+    assert "gameplay action" not in (vm.on_screen_note(evidence) or "")
+    assert vm.score_answer(screen, list(vm.ACTION_FLAGS)) == 0
+
+
+@pytest.mark.parametrize("change", [{"start": float("nan")}, {"end": float("inf")}, {"start": -1}, {"screen": "unknown"}])
+def test_malformed_cached_observations_are_ignored(change):
+    result = visual_result([(0, "gameplay", 0.9, "shooting")])
+    result["windows"][0].update(change)
+    assert vm.VisualTimeline(result).evidence(0, 8) is None
