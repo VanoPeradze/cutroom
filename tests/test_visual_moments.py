@@ -64,11 +64,12 @@ def _plan(monkeypatch, brief, *, cloud=False, accelerated=True, vision=True, rea
     return vm.resolve_visual_pass(settings or Settings(), brief, cloud=cloud, accelerated=accelerated, story_status=lambda: status)
 
 
-def test_auto_runs_only_for_streamer_styles_on_accelerated_devices(monkeypatch):
+def test_auto_runs_for_smart_and_streamer_styles_on_accelerated_devices(monkeypatch):
     streamer = {"goal": "short", "edit_style": "stream_highlights", "performance_mode": "balanced"}
     plan = _plan(monkeypatch, streamer)
     assert plan["run"] is True and plan["model"] == "qwen3.5:4b" and plan["budget"] == 120
-    assert _plan(monkeypatch, {**streamer, "edit_style": "smart"})["reason"] == "not_gameplay_style"
+    # Smart is the default Short style; without vision it cannot tell a game from other footage.
+    assert _plan(monkeypatch, {**streamer, "edit_style": "smart"})["run"] is True
     assert _plan(monkeypatch, streamer, accelerated=False)["reason"] == "no_accelerator"
     assert _plan(monkeypatch, {**streamer, "goal": "youtube"})["reason"] == "not_short"
 
@@ -260,7 +261,9 @@ def streamer_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         current["sources"]["A"] = {"slot": "A", "name": "source.mp4", "relative_path": "media/source-A.mp4",
                                    "duration": 600.0, "width": 1920, "height": 1080, "has_audio": True,
                                    "size": source.stat().st_size}
-        current["settings"].update({"goal": "short", "edit_style": "stream_highlights", "target_duration": 60.0,
+        # Stream Story keeps the Story planner on game footage, so these tests
+        # exercise the planner with vision evidence; gameplay moments are below.
+        current["settings"].update({"goal": "short", "edit_style": "stream_story", "target_duration": 60.0,
                                     "duration_mode": "style", "spoken_language": "en", "auto_reframe": False})
 
     store.update(project_id, attach)
@@ -413,3 +416,94 @@ def test_malformed_cached_observations_are_ignored(change):
     result = visual_result([(0, "gameplay", 0.9, "shooting")])
     result["windows"][0].update(change)
     assert vm.VisualTimeline(result).evidence(0, 8) is None
+
+
+def test_gameplay_profile_needs_enough_playable_footage():
+    game = visual_result([(float(t), "gameplay" if t % 24 else "cutscene", 0.2, "") for t in range(0, 160, 8)])
+    assert vm.gameplay_profile(game)["is_gameplay"] is True
+    camera = visual_result([(float(t), "webcam_only" if t % 16 else "gameplay", 0.2, "") for t in range(0, 160, 8)])
+    assert vm.gameplay_profile(camera)["is_gameplay"] is False
+    assert vm.gameplay_profile(visual_result([(0.0, "gameplay", 0.9, "")]))["is_gameplay"] is False
+    assert vm.gameplay_profile(None) == {"windows": 0, "share": {}, "is_gameplay": False}
+
+
+def test_story_styles_and_non_game_footage_keep_the_story_planner():
+    game = visual_result([(float(t), "gameplay", 0.3, "") for t in range(0, 160, 8)])
+    assert director._gameplay_moments_route({"edit_style": "smart"}, "short", game, False)["is_gameplay"]
+    assert director._gameplay_moments_route({"edit_style": "stream_story"}, "short", game, False) is None
+    assert director._gameplay_moments_route({"edit_style": "smart"}, "youtube", game, False) is None
+    assert director._gameplay_moments_route({"edit_style": "smart"}, "short", game, True) is None
+    talk = visual_result([(float(t), "webcam_only", 0.0, "") for t in range(0, 160, 8)])
+    assert director._gameplay_moments_route({"edit_style": "smart"}, "short", talk, False) is None
+
+
+def _gameplay_fixture(fights, *, loud_cutscene=None, loud_menu=None, duration=900):
+    waveform, rows = [], []
+    loud_spans = [span for span in (loud_cutscene, loud_menu) if span]
+    for start in range(0, duration, 2):
+        fight = any(left <= start < right for left, right in fights)
+        loud = any(left <= start < right for left, right in loud_spans)
+        waveform.append({"start": float(start), "end": float(start + 2),
+                         "rms_dbfs": -14.0 if loud else -24.0 if fight else -40.0,
+                         "peak_dbfs": -3.0 if loud else -8.0 if fight else -28.0})
+    for start in range(0, duration, 8):
+        if loud_cutscene and loud_cutscene[0] <= start < loud_cutscene[1]:
+            rows.append((float(start), "cutscene", 0.0, "characters talk"))
+        elif loud_menu and loud_menu[0] <= start < loud_menu[1]:
+            rows.append((float(start), "menu_or_map", 0.0, "inventory"))
+        elif any(left <= start < right for left, right in fights):
+            rows.append((float(start), "gameplay", 0.9, f"firefight at {start}"))
+        else:
+            rows.append((float(start), "gameplay", 0.12, "walking"))
+    return {"waveform": waveform}, vm.VisualTimeline(visual_result(rows))
+
+
+def test_gameplay_moments_skip_loud_cutscenes_and_menus():
+    profile, timeline = _gameplay_fixture([(400, 424)], loud_cutscene=(100, 160), loud_menu=(600, 640))
+    keep = director._select_gameplay_moments(profile, 900.0, 30.0, timeline, [], pace="dynamic")
+    assert keep and all(row["start"] < 424 and row["end"] > 400 for row in keep)
+    assert not any(row["start"] < 160 and row["end"] > 100 for row in keep)
+    assert not any(row["start"] < 640 and row["end"] > 600 for row in keep)
+    assert sum(row["end"] - row["start"] for row in keep) <= 30.05
+
+
+def test_gameplay_moments_fill_the_target_with_separate_fights_in_order():
+    fights = [(80, 100), (250, 266), (420, 444), (700, 716)]
+    profile, timeline = _gameplay_fixture(fights)
+    keep = director._select_gameplay_moments(profile, 900.0, 90.0, timeline, [], pace="balanced",
+                                             selection_policy={"max_moments": 1})
+    total = sum(row["end"] - row["start"] for row in keep)
+    assert 70.0 <= total <= 90.05
+    assert keep == sorted(keep, key=lambda row: row["start"])
+    assert all(left["end"] < right["start"] for left, right in zip(keep, keep[1:]))
+    covered = [fight for fight in fights if any(row["start"] < fight[1] and row["end"] > fight[0] for row in keep)]
+    assert len(covered) >= 3
+
+
+def test_gameplay_moment_boundaries_follow_spoken_words_not_stretched_segments():
+    # Whisper stretched "See ... you in one piece" over 28 seconds of silence.
+    stretched = {"start": 100.0, "end": 128.0, "text": "See you in one piece.", "words": [
+        {"start": 100.0, "end": 100.3, "word": "See"}, {"start": 127.0, "end": 127.2, "word": "you"},
+        {"start": 127.2, "end": 128.0, "word": "in one piece."}]}
+    assert director._snap_moment_to_speech(110.0, 120.0, [stretched], 900.0) == (110.0, 120.0)
+    sentence = {"start": 200.0, "end": 204.0, "text": "They are all over here!", "words": [
+        {"start": 200.0, "end": 201.0, "word": "They"}, {"start": 201.1, "end": 204.0, "word": "are all over here!"}]}
+    assert director._snap_moment_to_speech(201.5, 230.0, [sentence], 900.0) == (200.0, 230.0)
+    assert director._snap_moment_to_speech(150.0, 202.5, [sentence], 900.0) == (150.0, 204.0)
+    long_unworded = {"start": 300.0, "end": 330.0, "text": "a long merged block", "words": []}
+    assert director._snap_moment_to_speech(310.0, 320.0, [long_unworded], 900.0) == (310.0, 320.0)
+
+
+def test_director_builds_gameplay_moments_without_the_story_planner(streamer_project):
+    store, settings, project_id, calls, context = streamer_project
+    result = director.analyze_project(context(), project_id, store, settings, {"edit_style": "stream_highlights"})
+    draft = result["draft"]
+    assert calls["plan"] == []  # the game's dialogue is not turned into a story
+    assert draft["engine"] == "gameplay_moments"
+    assert draft["title"] == "Gameplay highlights"
+    assert "close firefight" in draft["summary"] and "Cutscenes, menus and loading screens" in draft["summary"]
+    assert any(row["start"] < 260 and row["end"] > 200 for row in draft["keep_ranges"])
+    assert draft["output_duration"] <= 60.05
+    assert {"type": "gameplay_moments", "count": len(draft["keep_ranges"])} in draft["decisions"]
+    assert not any(row["type"] == "story_selection" for row in draft["decisions"])
+    assert draft["partial_ai"] is False

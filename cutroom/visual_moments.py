@@ -65,6 +65,10 @@ SCREEN_WEIGHTS = {
     "loading_or_black": 0.0,
 }
 PLAIN_GAMEPLAY_SCORE = 0.12
+# Smart is the default Short style. Gameplay is the commonest Short source, and
+# without vision a game's scripted dialogue is indistinguishable from commentary.
+AUTO_GENERAL_STYLES = frozenset({"smart"})
+GAME_SCREENS = frozenset({"gameplay", "cutscene", *DEAD_SCREENS})
 
 ANSWER_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -182,9 +186,10 @@ def resolve_visual_pass(
 ) -> dict[str, Any]:
     """Decide whether the gameplay vision pass runs, and with which model.
 
-    ``auto`` runs only for streamer styles on a GPU-class device, where it is
-    fast and relevant. ``on`` runs for any Short on any device. ``off`` never
-    runs. Cloud connections never run it: frames are not uploaded.
+    ``auto`` runs for streamer styles and the default Smart style on a
+    GPU-class device, where it is fast and tells a game recording apart from
+    other footage. ``on`` runs for any Short on any device. ``off`` never runs.
+    Cloud connections never run it: frames are not uploaded.
     """
     mode = normalized_visual_mode(brief.get("visual_ai") or settings.ai.get("visual_ai"))
     plan: dict[str, Any] = {"mode": mode, "run": False, "model": None, "budget": 0, "reason": None,
@@ -201,7 +206,8 @@ def resolve_visual_pass(
         return skip("cloud_connection")
     if not settings.ai.get("enabled", True):
         return skip("ai_disabled")
-    if mode == "auto" and get_edit_style(brief.get("edit_style")).get("category") != "streamer":
+    style = get_edit_style(brief.get("edit_style"))
+    if mode == "auto" and style.get("category") != "streamer" and style.get("id") not in AUTO_GENERAL_STYLES:
         return skip("not_gameplay_style")
     if mode == "auto" and not accelerated:
         return skip("no_accelerator")
@@ -583,6 +589,51 @@ class VisualTimeline:
 
     def at(self, time_point: float) -> dict[str, Any] | None:
         return self.evidence(time_point - 0.5, time_point + 0.5)
+
+    def nearest(self, time_point: float, reach: float) -> tuple[dict[str, Any], bool] | None:
+        """The window covering ``time_point``, else the closest one within ``reach``.
+
+        Long recordings are sampled, not tiled, so most moments fall between two
+        analyzed windows. The flag says whether the window actually covers it.
+        """
+        if not self.windows or not math.isfinite(time_point):
+            return None
+        index = bisect.bisect_right(self._starts, time_point)
+        best: dict[str, Any] | None = None
+        best_distance = max(0.0, float(reach))
+        for row in self.windows[max(0, index - 3): index + 2]:
+            if row["start"] <= time_point <= row["end"]:
+                return row, True
+            distance = min(abs(time_point - row["start"]), abs(time_point - row["end"]))
+            if distance <= best_distance:
+                best, best_distance = row, distance
+        return (best, False) if best else None
+
+
+def gameplay_profile(visual: dict[str, Any] | None) -> dict[str, Any]:
+    """How much of the analyzed recording looks like a video game.
+
+    ``is_gameplay`` needs enough windows, a real share of playable footage and
+    a game-shaped mix (gameplay, cutscenes, menus, loading) rather than a
+    camera-led video with an occasional game on screen.
+    """
+    windows = usable_windows(visual)
+    counts: dict[str, int] = {}
+    for row in windows:
+        counts[str(row.get("screen") or "other")] = counts.get(str(row.get("screen") or "other"), 0) + 1
+    total = len(windows)
+    share = {screen: round(count / total, 3) for screen, count in counts.items()} if total else {}
+    game_share = sum(share.get(screen, 0.0) for screen in GAME_SCREENS)
+    return {
+        "windows": total,
+        "share": share,
+        "is_gameplay": bool(
+            total >= 8
+            and share.get("gameplay", 0.0) >= 0.35
+            and game_share >= 0.60
+            and share.get("webcam_only", 0.0) < 0.30
+        ),
+    }
 
 
 def on_screen_note(evidence: dict[str, Any] | None) -> str | None:
