@@ -1,11 +1,11 @@
 {
-  "bytes": 7066312,
-  "sha256": "32bc0b07308d6514a2380882efbaf8d066d22551499326049b54b09d89416738",
-  "filename": "CUTROOM-1.1-Beta-stability-combined-32bc0b07308d-20261009.zip",
-  "url": "https://cutroom-studio--9xvon2ygv0.expo.app/downloads/CUTROOM-1.1-Beta-stability-combined-32bc0b07308d-20261009.zip",
+  "bytes": 7082118,
+  "sha256": "f46fb59b4fdbbf5772c2ca0c2fae5f0503bb33f1b7cccbade2781d8722fcedb0",
+  "filename": "CUTROOM-1.1-Beta-gameplay-combined-f46fb59b4fdb-20261010.zip",
+  "url": "https://cutroom-studio--wxmlhwavz3.expo.app/downloads/CUTROOM-1.1-Beta-gameplay-combined-f46fb59b4fdb-20261010.zip",
   "version": "1.1-beta",
   "layout": "windows-mac-folders-v1",
-  "build_id": "CUTROOM-1.1-beta-mac-stability-20261009-r2",
-  "source_commit": "55b307aa142fe873069c7bcd0512b28005b02069",
-  "note": "Exact stable runtime/layout release candidate. Canonical LF Mac overlays eliminate checkout-dependent bytes; CI retains strict payload comparison. Experimental editorial changes excluded."
+  "build_id": "CUTROOM-1.1-beta-mac-20261010-140324",
+  "source_commit": "391971c028d69ace4682fcf8794682e085aa8803",
+  "note": "Exact gameplay-moments release candidate built from the pinned Windows baseline CUTROOM-1.1-beta-20261010-140135. Gameplay Shorts from on-screen moments, Automatic vision for Smart, proportional transcript gap gate, plus the 2026-10-09 stability release. CI retains strict payload comparison."
 }
