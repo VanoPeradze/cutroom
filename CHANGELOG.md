@@ -7,6 +7,7 @@
 - On the same recording the default Smart Short (60 s) now keeps three firefights: the train station, the street fight and the truck ambush. The 180-second Strong Commentary Short keeps eight moments (176 s), each mostly gameplay, instead of cutscenes and radio dialogue. The Story planner is skipped for these edits, so the draft is ready in seconds once the recording has been analyzed.
 - The draft summary lists the moments it chose and says that cutscenes, menus and loading screens were left out.
 - *Automatic* Gameplay vision now also runs for **CUTROOM Smart**, the default Short style, so a game recording is recognized without picking a streamer style first.
+- A few seconds of skipped speech no longer block a long edit. A 2-hour Counter-Strike 2 recording with Hebrew commentary was refused because one 30-second stretch of laughter produced almost no transcript (18.7 s of 2,633 s of detected speech). Transcription now refuses only when the gap is at least 3% of the detected speech (and at least 15 s, as before); smaller gaps finish the edit and name the time range to review. On that recording the Strong Commentary Short now keeps nine gameplay moments with the players' reactions.
 
 ## 1.1 Beta - 2026-10-09 - Transcription, captions and stability
 

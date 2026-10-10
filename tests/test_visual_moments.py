@@ -501,9 +501,20 @@ def test_director_builds_gameplay_moments_without_the_story_planner(streamer_pro
     assert calls["plan"] == []  # the game's dialogue is not turned into a story
     assert draft["engine"] == "gameplay_moments"
     assert draft["title"] == "Gameplay highlights"
-    assert "close firefight" in draft["summary"] and "Cutscenes, menus and loading screens" in draft["summary"]
+    # No cutscenes in this recording: the summary does not claim game dialogue was set aside.
+    assert "close firefight" in draft["summary"] and "Menus and loading screens were left out" in draft["summary"]
+    assert "dialogue" not in draft["summary"]
     assert any(row["start"] < 260 and row["end"] > 200 for row in draft["keep_ranges"])
     assert draft["output_duration"] <= 60.05
     assert {"type": "gameplay_moments", "count": len(draft["keep_ranges"])} in draft["decisions"]
     assert not any(row["type"] == "story_selection" for row in draft["decisions"])
     assert draft["partial_ai"] is False
+
+
+def test_gameplay_summary_mentions_game_dialogue_only_when_there_were_cutscenes():
+    story_game = director._gameplay_summary(2, ["truck ambush"], "en", cutscenes=True)
+    assert story_game.startswith("2 gameplay moments chosen by on-screen action and sound: truck ambush.")
+    assert "game characters' dialogue was not used" in story_game
+    arena = director._gameplay_summary(1, [], "en", cutscenes=False)
+    assert arena == "1 gameplay moment chosen by on-screen action and sound. Menus and loading screens were left out."
+    assert "דיאלוג" not in director._gameplay_summary(3, [], "he", cutscenes=False)

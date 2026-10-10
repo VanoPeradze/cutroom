@@ -519,6 +519,10 @@ def _edit_quality_review(
         warnings.append({"type": "transcript_coverage", "message":
             "This older transcript has no complete processing record and covers a limited part of the source. "
             "Review the missing sections or run transcription again."})
+    if "minor_uncovered_speech" in (quality.get("warnings") or []):
+        warnings.append({"type": "transcript_gap", "message":
+            "A short stretch where speech was detected produced almost no transcript, so captions and choices "
+            "there may miss what was said." + _transcription_range_hint(quality, incomplete=False)})
     if hierarchy:
         recovery = hierarchy.get("summary_recovery") or {}
         critic = hierarchy.get("critic") or {}
@@ -1558,15 +1562,17 @@ def _gameplay_moment_notes(ranges: list[dict[str, float]], visual: VisualTimelin
     return notes
 
 
-def _gameplay_summary(count: int, notes: list[str], language: str | None) -> str:
+def _gameplay_summary(count: int, notes: list[str], language: str | None, *, cutscenes: bool = True) -> str:
     """Say how a gameplay Short was built, so the choice is not a mystery."""
     if language == "he":
-        return (f"נבחרו {count} רגעי משחק לפי האקשן על המסך והסאונד. "
-                "קטעי וידאו של המשחק, תפריטים ומסכי טעינה הושמטו, ודיאלוג של דמויות המשחק לא שימש כסיפור של הסרטון.")
+        left_out = ("קטעי וידאו של המשחק, תפריטים ומסכי טעינה הושמטו, ודיאלוג של דמויות המשחק לא שימש כסיפור של הסרטון."
+                    if cutscenes else "תפריטים ומסכי טעינה הושמטו.")
+        return f"נבחרו {count} רגעי משחק לפי האקשן על המסך והסאונד. {left_out}"
     moments = "moment" if count == 1 else "moments"
     shown = f": {'; '.join(notes[:4])}" if notes else ""
-    return (f"{count} gameplay {moments} chosen by on-screen action and sound{shown}. "
-            "Cutscenes, menus and loading screens were left out, and the game characters' dialogue was not used as the story.")
+    left_out = ("Cutscenes, menus and loading screens were left out, and the game characters' dialogue was not used as the story."
+                if cutscenes else "Menus and loading screens were left out.")
+    return f"{count} gameplay {moments} chosen by on-screen action and sound{shown}. {left_out}"
 
 
 def _select_style_story_ranges(
@@ -3266,7 +3272,10 @@ def analyze_project(
         )
         if gameplay_route:
             notes = _gameplay_moment_notes(story_keep, visual_timeline)
-            decision["summary"] = _gameplay_summary(len(story_keep), notes, language)
+            decision["summary"] = _gameplay_summary(
+                len(story_keep), notes, language,
+                cutscenes=gameplay_route["share"].get("cutscene", 0.0) >= 0.05,
+            )
         story_cuts = invert_ranges(story_keep, duration)
         if not story_keep and brief.get("duration_mode") == "target":
             raise ValueError("No reliable highlight passages were found. Select a manual range or review the footage; no arbitrary filler was added.")

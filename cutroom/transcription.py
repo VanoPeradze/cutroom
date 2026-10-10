@@ -1661,6 +1661,13 @@ def _transcript_coverage_report(transcript: dict[str, Any], segments: list[dict[
         if detected >= 12.0 and observed < detected * 0.20:
             mismatch_chunks.append({"start": start, "end": end, "vad_seconds": detected, "transcript_seconds": observed})
     mismatch_seconds = sum(row["vad_seconds"] - row["transcript_seconds"] for row in mismatch_chunks)
+    # One skipped stretch of laughter, music or crosstalk must not block a
+    # two-hour edit: refuse only when the gap is a real share of the speech the
+    # detector heard. Smaller gaps are named for review instead.
+    uncovered_limit = max(15.0, vad_seconds * 0.03)
+    suspected_uncovered = mismatch_seconds >= uncovered_limit
+    if mismatch_chunks and not suspected_uncovered:
+        warnings.append("minor_uncovered_speech")
     return {
         **coverage,
         "source_duration": round(duration, 3),
@@ -1678,7 +1685,7 @@ def _transcript_coverage_report(transcript: dict[str, Any], segments: list[dict[
         "vad_analyzed_seconds": round(vad_analyzed_seconds, 3),
         "vad_speech_seconds": round(vad_seconds, 3) if vad_analyzed_seconds else None,
         "vad_mismatch_chunks": mismatch_chunks,
-        "suspected_uncovered_speech": mismatch_seconds >= 15.0,
+        "suspected_uncovered_speech": suspected_uncovered,
         "warnings": warnings,
     }
 
