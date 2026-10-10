@@ -151,3 +151,61 @@ def test_empty_critic_response_keeps_edit_with_review_warning_through_real_pipel
     review = director._edit_quality_review({}, hierarchy, segments, decision["story_ranges"], 30)
     assert review["needs_review"] is True
     assert review["warnings"][0]["type"] == "story_review"
+
+
+def test_budget_fit_does_not_invent_an_unselected_topic_to_fill_a_slot():
+    beats = [
+        {"id": "setup", "start": 0, "end": 30, "text": "The connected setup.", "editorial_score": .7},
+        {"id": "outcome", "start": 100, "end": 120, "text": "The complete related outcome.", "editorial_score": .7},
+        {"id": "advert", "start": 200, "end": 225, "text": "A different topic with a perfect duration fit.", "editorial_score": 1.0},
+    ]
+    plan = {"slots": [
+        {"chapter_ids": ["a"], "desired_seconds": 15},
+        {"chapter_ids": ["b"], "desired_seconds": 25, "purpose": "payoff"},
+    ]}
+    selection = {"keep_beat_ids": ["setup", "outcome"], "slot_map": [
+        {"slot_index": 0, "beat_ids": ["setup"]},
+        {"slot_index": 1, "beat_ids": ["outcome"]},
+    ]}
+    chapters = [{"id": "a", "beats": beats[:1]}, {"id": "b", "beats": beats[1:]}]
+    fitted = intelligence._fit_story_selection_to_budget(selection, beats, plan, 40, chapters)
+    assert fitted["keep_beat_ids"] == ["setup", "outcome"]
+    assert "advert" not in fitted["keep_beat_ids"]
+
+
+def test_budget_fit_honors_critic_replacement_instead_of_restoring_rejected_closure():
+    beats = [
+        {"id": "setup", "start": 0, "end": 20, "text": "Setup with relevant context."},
+        {"id": "outcome", "start": 50, "end": 72, "text": "A complete related outcome."},
+        {"id": "unrelated", "start": 100, "end": 130, "text": "Unrelated banter."},
+    ]
+    plan = {"slots": [
+        {"chapter_ids": ["a"], "desired_seconds": 20},
+        {"chapter_ids": ["b"], "desired_seconds": 30, "purpose": "payoff"},
+    ]}
+    selection = {"keep_beat_ids": ["setup", "outcome", "unrelated"], "slot_map": [
+        {"slot_index": 0, "beat_ids": ["setup"]},
+        {"slot_index": 1, "beat_ids": ["unrelated"]},
+    ], "critic": {"verdict": "revise", "selection_before": ["setup", "unrelated"],
+                   "requested_added": ["outcome"], "requested_removed": ["unrelated"]}}
+    chapters = [{"id": "a", "beats": beats[:1]}, {"id": "b", "beats": beats[1:]}]
+    fitted = intelligence._fit_story_selection_to_budget(selection, beats, plan, 50, chapters)
+    assert fitted["keep_beat_ids"] == ["setup", "outcome"]
+    assert fitted["closing_beat_id"] == "outcome"
+    assert fitted["critic"]["added"] == ["outcome"]
+    assert fitted["critic"]["removed"] == ["unrelated"]
+    assert fitted["critic"]["unapplied_actions"] == []
+
+
+def test_critic_action_schema_keeps_alternatives_and_prose_independent(monkeypatch, story):
+    captured = {}
+    def respond(_settings, payload, *_args):
+        captured.update(payload)
+        return response(verdict="pass", issues=[])
+    monkeypatch.setattr(intelligence, "_call_ollama_story_pass", respond)
+    intelligence._critic_story_selection(Settings(), story[0], story[1], {}, {}, {"target_duration": 30}, "fixture")
+    schema = captured["format"]["properties"]
+    assert schema["add_beat_ids"]["items"]["enum"] == ["b1", "b2", "b3"]
+    assert schema["remove_beat_ids"]["items"]["enum"] == ["b1", "b3"]
+    assert "enum" not in schema["issues"]["items"]
+    assert "enum" not in intelligence.STORY_CRITIC_SCHEMA["properties"]["add_beat_ids"]["items"]

@@ -21,7 +21,7 @@ from .config import Settings
 from .utils import clamp, merge_ranges, normalize_text, range_duration
 
 STORY_CACHE_PIPELINE = "hierarchical-story-2026-09-06.full-chapter-input"
-CRITIC_REVIEW_CONTRACT = "critic-review-2026-10-01.effective-actions-v1"
+CRITIC_REVIEW_CONTRACT = "critic-review-2026-10-09.focused-short-v6"
 
 FILLERS: dict[str, set[str]] = {
     "en": {"um", "uh", "erm", "like", "basically", "actually", "literally", "you know", "i mean", "so"},
@@ -1509,10 +1509,24 @@ def _build_story_plan(
         "A shorter complete story is preferable to unrelated padding. "
         if moment_limit else ""
     )
+    # A short cannot safely satisfy six mandatory chapters by shaving context
+    # from every beat later. Plan fewer complete passages at the source boundary.
+    plan_schema = copy.deepcopy(STORY_PLAN_SCHEMA)
+    if target <= 75:
+        plan_schema["properties"]["slots"]["maxItems"] = 3
+    budget_guidance = (
+        "This is a Short about ONE self-contained moment or takeaway, not a summary of the whole recording. "
+        "Prefer a connected local exchange with enough context over a tour of distant plot threads. "
+        "Use at most three source passages and COMBINE the listed functions: opening WITH context; "
+        "development WITH proof; payoff WITH a complete ending. The last slot MUST resolve the opening. "
+        "Do not spend the available slots on hook/context/proof and omit the resolution. "
+        "Allocate the full target time among those complete passages, without unrelated padding. "
+        if target <= 75 else ""
+    )
     payload = {
         "model": model,
         "stream": False,
-        "format": STORY_PLAN_SCHEMA,
+        "format": plan_schema,
         "_performance_mode": mode,
         "options": {"temperature": 0.05, "num_ctx": 12288, "num_predict": 1300},
         "messages": [
@@ -1521,7 +1535,13 @@ def _build_story_plan(
                 "content": (
                     "You are CUTROOM Story Producer. Turn the global outline into an editorial plan before any exact clips are chosen. "
                     f"The requested story shape is: {shape}. Respect dependencies: never use a payoff that becomes confusing because its setup was removed. "
-                    + style_contract +
+                    + style_contract + budget_guidance +
+                    "Choose one connected story that can be understood within the target time, not a tour of every chapter. "
+                    "The sum of desired_seconds must stay within target_seconds. Keep source passages in chronological order. "
+                    "The opening must introduce the same subject that the ending resolves. Never select unrelated banter, greetings, "
+                    "a different video/topic or an emotional quote merely as a hook or ending. A later source timestamp is not a reason to keep it. "
+                    "End on a complete relevant outcome or conclusion, including its prerequisite context. "
+
                     "Use material from anywhere in the recording when it improves the story. Return JSON only with keys narrative,slots. "
                     "slots is a list of {purpose,chapter_ids,desired_seconds,reason,required_context_chapter_ids}. Only use supplied chapter IDs."
                 ),
@@ -1617,7 +1637,10 @@ def _fit_story_selection_to_budget(
         any(str(identifier) in selected for identifier in row.get("beat_ids", []))
         for row in slot_rows
     )
-    if before <= ceiling + 0.05 and every_slot_represented:
+    critic = selection.get("critic") or {}
+    rejected = {str(value) for value in critic.get("requested_removed", [])}
+    replacements = {str(value) for value in critic.get("requested_added", []) if str(value) in selected}
+    if before <= ceiling + 0.05 and every_slot_represented and not (rejected & set(selected)):
         return selection
 
     highlights = {
@@ -1664,7 +1687,16 @@ def _fit_story_selection_to_budget(
             identifier for identifier in valid
             if primary_chapters and beat_to_chapter.get(identifier) in primary_chapters
         ]
-        choices = primary_choices or model_choices
+        # A duration fitter must not introduce an unselected topic just because
+        # another beat in the chapter is closer to the desired length. Prefer
+        # the model's chosen primary material and explicit critic replacements.
+        reviewed_choices = [identifier for identifier in primary_choices
+                            if identifier in replacements and identifier not in rejected]
+        chosen_primary = [identifier for identifier in model_choices
+                          if identifier in primary_choices and identifier not in rejected]
+        allowed_primary = [identifier for identifier in primary_choices if identifier not in rejected]
+        chosen_context = [identifier for identifier in model_choices if identifier not in rejected]
+        choices = reviewed_choices or chosen_primary or allowed_primary or chosen_context or model_choices
         if not choices:
             continue
         purpose = str(slot.get("purpose") or row.get("purpose") or "").lower()
@@ -1722,7 +1754,7 @@ def _fit_story_selection_to_budget(
         beat_duration = max(0.0, float(beat.get("end", 0.0)) - float(beat.get("start", 0.0)))
         return bonus + quality, -beat_duration, -float(beat.get("start", 0.0))
 
-    for identifier in sorted((item for item in selected if item not in fitted), key=extra_value, reverse=True):
+    for identifier in sorted((item for item in selected if item not in fitted and item not in rejected), key=extra_value, reverse=True):
         proposed = set(fitted)
         proposed.add(identifier)
         if selection_duration(proposed) <= ceiling + 0.05:
@@ -1987,10 +2019,15 @@ def _critic_story_selection(
         for identifier in selected
     ]
     mode = str(brief.get("performance_mode") or settings.ai.get("performance_mode", "auto"))
+    critic_schema = copy.deepcopy(STORY_CRITIC_SCHEMA)
+    # The model sometimes returned chapter IDs in beat-action lists. Constrain
+    # generated actions to the actual supplied beats, not just a generic string.
+    critic_schema["properties"]["add_beat_ids"] = {"type": "array", "items": {"type": "string", "enum": list(valid)}}
+    critic_schema["properties"]["remove_beat_ids"] = {"type": "array", "items": {"type": "string", "enum": selected}}
     payload = {
         "model": model,
         "stream": False,
-        "format": STORY_CRITIC_SCHEMA,
+        "format": critic_schema,
         "_performance_mode": mode,
         "options": {"temperature": 0.03, "num_ctx": 12288, "num_predict": 900},
         "messages": [
@@ -1999,7 +2036,11 @@ def _critic_story_selection(
                 "content": (
                     "You are CUTROOM's continuity critic. Audit the proposed edit as if the viewer has never seen the source. "
                     "Check whether references still make sense, setup exists before payoff, transitions are understandable, claims have enough context, and repeated ideas are not wasting the time budget. "
-                    "You may add or remove only supplied candidate beat IDs. Return JSON only with keys verdict,add_beat_ids,remove_beat_ids,issues,summary. verdict is pass or revise."
+                    "Audit ONLY the selected array: candidates are alternatives, not material already in the edit. "
+                    "The closing beat is the chronologically last selected beat. Verify that it resolves the same subject as the opening, "
+                    "rather than unrelated banter, another video, a greeting or an emotional quote. "
+                    "You may add or remove only supplied candidate beat IDs; remove IDs must be selected. "
+                    "Return JSON only with keys verdict,add_beat_ids,remove_beat_ids,issues,summary. verdict is pass or revise."
                     + _on_screen_guidance(valid.values())
                 ),
             },
@@ -2378,6 +2419,13 @@ def hierarchical_story_edit(
         float(brief.get("target_duration") or 60),
         chapters,
     )
+    # A continuity review may need a setup chapter the first plan omitted.
+    # Keep the review bounded, prioritizing summarized key beats as alternatives.
+    candidate_ids = {str(beat["id"]) for beat in candidates}
+    context_ids = {str(value) for summary in summaries for value in summary.get("key_beat_ids", [])}
+    contextual = sorted((beat for beat in beats if str(beat["id"]) not in candidate_ids),
+                        key=lambda beat: (str(beat["id"]) not in context_ids, float(beat["start"])))
+    candidates = candidates + contextual[:max(0, 96 - len(candidates))]
     _check_cancelled(cancel_check)
     try:
         if cancel_check is None:
@@ -2443,6 +2491,8 @@ def hierarchical_story_edit(
         "outline": outline,
         "plan": plan,
         "selection": {
+            "keep_beat_ids": reviewed.get("keep_beat_ids", []),
+            "slot_map": reviewed.get("slot_map", []),
             "mode": reviewed.get("selection_mode", "model"),
             "recovered_slot_indexes": reviewed.get("recovered_slot_indexes", []),
             "budget_fit": reviewed.get("budget_fit"),
