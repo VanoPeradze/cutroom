@@ -30,6 +30,7 @@ from .visual_moments import (
     VisualTimeline,
     accelerated_inference_available,
     analyze_visual_moments,
+    gameplay_profile,
     resolve_visual_pass,
     summary as visual_summary,
 )
@@ -518,6 +519,10 @@ def _edit_quality_review(
         warnings.append({"type": "transcript_coverage", "message":
             "This older transcript has no complete processing record and covers a limited part of the source. "
             "Review the missing sections or run transcription again."})
+    if "minor_uncovered_speech" in (quality.get("warnings") or []):
+        warnings.append({"type": "transcript_gap", "message":
+            "A short stretch where speech was detected produced almost no transcript, so captions and choices "
+            "there may miss what was said." + _transcription_range_hint(quality, incomplete=False)})
     if hierarchy:
         recovery = hierarchy.get("summary_recovery") or {}
         critic = hierarchy.get("critic") or {}
@@ -1310,6 +1315,264 @@ def _select_audio_highlight_ranges(
     return ranges or _fallback_short_story_ranges(
         duration, target, scene_points, selection_seed=selection_seed,
     )
+
+
+# On a game recording most speech is usually the game's own characters: cutscenes,
+# mission radio and companions. Building a Short "story" from it retells the
+# game's plot instead of showing what happened. These styles explicitly ask for
+# a narrative recap, so they keep the Story planner.
+GAMEPLAY_STORY_STYLES = frozenset({"stream_story", "chill_story"})
+# Length of one moment's core (before pre/post roll), per pace.
+GAMEPLAY_MOMENT_SECONDS = {
+    "dynamic": (6.0, 22.0),
+    "balanced": (8.0, 30.0),
+    "gentle": (12.0, 45.0),
+}
+# How much each screen type can contribute. Cutscenes are loud but are not the
+# player's moment; menus, maps and loading screens are dead time.
+GAMEPLAY_SCREEN_FACTOR = {
+    "gameplay": 1.0,
+    "webcam_only": 0.60,
+    "other": 0.70,
+    "cutscene": 0.30,
+    "menu_or_map": 0.10,
+    "loading_or_black": 0.10,
+}
+
+
+def _gameplay_moments_route(
+    brief: dict[str, Any],
+    goal: str,
+    visual_moments: dict[str, Any] | None,
+    nonverbal: bool,
+) -> dict[str, Any] | None:
+    """Return the gameplay profile when this Short should be built from moments."""
+    if goal != "short" or nonverbal or not visual_moments:
+        return None
+    if str(brief.get("edit_style") or "smart") in GAMEPLAY_STORY_STYLES:
+        return None
+    profile = gameplay_profile(visual_moments)
+    return profile if profile["is_gameplay"] else None
+
+
+def _spoken_phrases(segments: list[dict[str, Any]], max_gap: float = 0.7,
+                    longest_unworded: float = 12.0) -> list[tuple[float, float]]:
+    """Spans where words are actually spoken, from word timings when present.
+
+    Whisper can stretch one segment over a long pause ("See ... you in one
+    piece" across 28 seconds). Words closer than ``max_gap`` form one phrase.
+    A long segment without word timings is not trusted as continuous speech.
+    """
+    phrases: list[tuple[float, float]] = []
+    for segment in segments:
+        words = [word for word in (segment.get("words") or [])
+                 if _finite_number(word.get("end")) > _finite_number(word.get("start"))]
+        if words:
+            left, right = _finite_number(words[0].get("start")), _finite_number(words[0].get("end"))
+            for word in words[1:]:
+                word_start, word_end = _finite_number(word.get("start")), _finite_number(word.get("end"))
+                if word_start - right > max_gap:
+                    phrases.append((left, right))
+                    left = word_start
+                right = max(right, word_end)
+            phrases.append((left, right))
+            continue
+        left, right = _finite_number(segment.get("start")), _finite_number(segment.get("end"))
+        if 0.0 < right - left <= longest_unworded:
+            phrases.append((left, right))
+    return phrases
+
+
+def _snap_moment_to_speech(start: float, end: float, segments: list[dict[str, Any]], duration: float,
+                           reach: float = 2.5) -> tuple[float, float]:
+    """Do not start or end a moment in the middle of a spoken phrase.
+
+    A boundary inside a phrase moves outward when the phrase ends within
+    ``reach`` seconds, otherwise inward to the phrase's edge, so the clip never
+    opens or closes on half a sentence.
+    """
+    for left, right in _spoken_phrases(segments):
+        if left < start < right:
+            start = left if start - left <= reach else right
+        if left < end < right:
+            end = right if right - end <= reach else left
+    return max(0.0, start), min(duration, end)
+
+
+def _select_gameplay_moments(
+    profile: dict[str, Any],
+    duration: float,
+    target_duration: float,
+    visual: VisualTimeline,
+    segments: list[dict[str, Any]] | None = None,
+    *,
+    pace: str = "balanced",
+    selection_policy: dict[str, Any] | None = None,
+) -> list[dict[str, float]]:
+    """Pick the strongest gameplay moments: visible action plus excitement in the sound.
+
+    Every waveform bin gets a value from its loudness relative to the whole
+    recording and from the nearest analyzed vision window. Visible action counts
+    most; cutscenes, menus and loading screens are pushed down whatever their
+    volume. Peaks grow into moments while the activity lasts, get a little
+    context before and after, and are snapped to whole spoken lines. The best
+    moments fill the target in chronological order; weak filler is not added.
+    """
+    policy = selection_policy or {}
+    target = min(float(duration), max(8.0, float(target_duration)))
+    if duration <= target + 0.05:
+        return [{"start": 0.0, "end": round(duration, 3)}]
+    waveform = sorted(
+        (item for item in (profile.get("waveform") or [])
+         if isinstance(item, dict) and _finite_number(item.get("end")) > _finite_number(item.get("start"))),
+        key=lambda item: _finite_number(item.get("start")),
+    )
+    if not waveform or not visual:
+        return []
+    rms_values = sorted(_finite_number(item.get("rms_dbfs"), -120.0) for item in waveform)
+    peak_values = sorted(_finite_number(item.get("peak_dbfs"), -120.0) for item in waveform)
+
+    def percentile(values: list[float], ratio: float) -> float:
+        return values[min(len(values) - 1, max(0, int(round((len(values) - 1) * ratio))))]
+
+    rms_floor, rms_high = percentile(rms_values, 0.25), percentile(rms_values, 0.90)
+    peak_floor, peak_high = percentile(peak_values, 0.25), percentile(peak_values, 0.92)
+    rms_span, peak_span = max(6.0, rms_high - rms_floor), max(6.0, peak_high - peak_floor)
+    first = visual.windows[0]
+    reach = max(4.0, _finite_number(first.get("end")) - _finite_number(first.get("start")))
+
+    values: list[float] = []
+    playable: list[bool] = []
+    for item in waveform:
+        rms = clamp((_finite_number(item.get("rms_dbfs"), -120.0) - rms_floor) / rms_span, 0.0, 1.35)
+        peak = clamp((_finite_number(item.get("peak_dbfs"), -120.0) - peak_floor) / peak_span, 0.0, 1.35)
+        sound = rms * 0.72 + peak * 0.28
+        center = (_finite_number(item.get("start")) + _finite_number(item.get("end"))) / 2.0
+        seen = visual.nearest(center, reach)
+        if seen is None:
+            # Not observed: the sound alone cannot prove gameplay action.
+            values.append(sound * 0.45)
+            playable.append(False)
+            continue
+        window, covered = seen
+        screen = str(window.get("screen") or "other")
+        playable.append(screen == "gameplay")
+        action = _finite_number(window.get("score")) * (1.0 if covered else 0.7)
+        values.append((sound * 0.40 + action * 0.80) * GAMEPLAY_SCREEN_FACTOR.get(screen, 0.70))
+    last = len(values) - 1
+    smoothed = [
+        values[index] * 0.5 + values[max(0, index - 1)] * 0.25 + values[min(last, index + 1)] * 0.25
+        for index in range(len(values))
+    ]
+    best = max(smoothed)
+    if best <= 0.05:
+        return []
+
+    shortest, longest = GAMEPLAY_MOMENT_SECONDS.get(pace, GAMEPLAY_MOMENT_SECONDS["balanced"])
+    typical = (shortest + longest) / 2.0
+    style_limit = int(_finite_number(policy.get("max_moments")))
+    if style_limit == 1:
+        # One complete engagement or reaction may fill the whole Short.
+        longest = max(longest, target)
+    before = max(0.0, _finite_number(policy.get("pre_roll_seconds"), 2.0))
+    after = max(0.0, _finite_number(policy.get("post_roll_seconds"), 2.0))
+    target_mode = policy.get("duration_mode") == "target"
+
+    def span(left: int, right: int) -> float:
+        return _finite_number(waveform[right].get("end")) - _finite_number(waveform[left].get("start"))
+
+    used = [False] * len(waveform)
+    moments: list[dict[str, float]] = []
+    for index in sorted(range(len(smoothed)), key=lambda value: (-smoothed[value], value)):
+        if smoothed[index] < best * (0.25 if target_mode else 0.45):
+            break
+        if used[index]:
+            continue
+        left = right = index
+        edge = smoothed[index] * 0.55
+        while True:
+            grow_left = left > 0 and not used[left - 1] and smoothed[left - 1] >= edge and span(left - 1, right) <= longest
+            grow_right = (right < last and not used[right + 1] and smoothed[right + 1] >= edge
+                          and span(left, right + 1) <= longest)
+            if not grow_left and not grow_right:
+                break
+            # Keep the peak near the middle: grow toward the stronger neighbour.
+            if grow_left and (not grow_right or smoothed[left - 1] >= smoothed[right + 1]):
+                left -= 1
+            else:
+                right += 1
+        for position in range(max(0, left - 1), min(len(used), right + 2)):
+            used[position] = True
+        start = _finite_number(waveform[left].get("start"))
+        end = _finite_number(waveform[right].get("end"))
+        if end - start < shortest:
+            missing = shortest - (end - start)
+            start, end = max(0.0, start - missing / 2.0), min(duration, end + missing / 2.0)
+        core = values[left:right + 1]
+        if sum(playable[left:right + 1]) < len(core) * 0.5:
+            # Mostly cutscene, menu or unobserved footage: not a gameplay moment.
+            continue
+        score = (sum(core) / len(core)) * 0.6 + smoothed[index] * 0.4
+        peak_time = (_finite_number(waveform[index].get("start")) + _finite_number(waveform[index].get("end"))) / 2.0
+        start, end = _snap_moment_to_speech(max(0.0, start - before), min(duration, end + after), segments or [], duration)
+        if end - start >= 2.0:
+            moments.append({"start": start, "end": end, "score": score, "peak": peak_time})
+    if not moments:
+        return []
+
+    natural = max(1, int(round(target / (typical + before + after))))
+    if style_limit and target <= 75.0:
+        cap = style_limit
+    else:
+        cap = max(style_limit, natural)
+    top = max(moment["score"] for moment in moments)
+    chosen: list[dict[str, float]] = []
+    total = 0.0
+    for moment in sorted(moments, key=lambda row: (-row["score"], row["start"])):
+        if len(chosen) >= cap or moment["score"] < top * (0.25 if target_mode else 0.35):
+            break
+        remaining = target - total
+        if remaining < min(shortest, target) * 0.75:
+            break
+        start, end = moment["start"], moment["end"]
+        if any(start < row["end"] + 1.0 and end > row["start"] - 1.0 for row in chosen):
+            continue
+        if end - start > remaining:
+            # Keep the peak: centre the shortened moment on it.
+            start = max(start, min(end - remaining, moment["peak"] - remaining / 2.0))
+            start, end = _snap_moment_to_speech(start, start + remaining, segments or [], duration)
+            end = min(end, start + remaining)
+            if end - start < min(shortest, remaining) * 0.75:
+                continue
+        chosen.append({"start": round(start, 3), "end": round(end, 3)})
+        total += end - start
+    return merge_ranges(sorted(chosen, key=lambda row: row["start"]), gap=0.5)
+
+
+def _gameplay_moment_notes(ranges: list[dict[str, float]], visual: VisualTimeline) -> list[str]:
+    """The strongest on-screen event inside each kept moment, for the draft summary."""
+    notes: list[str] = []
+    for keep in ranges:
+        rows = [row for row in visual.windows
+                if row.get("screen") == "gameplay" and min(keep["end"], row["end"]) - max(keep["start"], row["start"]) > 0.5]
+        if rows:
+            event = str(max(rows, key=lambda row: row["score"]).get("event") or "").strip().rstrip(".")
+            if event and event not in notes:
+                notes.append(event)
+    return notes
+
+
+def _gameplay_summary(count: int, notes: list[str], language: str | None, *, cutscenes: bool = True) -> str:
+    """Say how a gameplay Short was built, so the choice is not a mystery."""
+    if language == "he":
+        left_out = ("קטעי וידאו של המשחק, תפריטים ומסכי טעינה הושמטו, ודיאלוג של דמויות המשחק לא שימש כסיפור של הסרטון."
+                    if cutscenes else "תפריטים ומסכי טעינה הושמטו.")
+        return f"נבחרו {count} רגעי משחק לפי האקשן על המסך והסאונד. {left_out}"
+    moments = "moment" if count == 1 else "moments"
+    shown = f": {'; '.join(notes[:4])}" if notes else ""
+    left_out = ("Cutscenes, menus and loading screens were left out, and the game characters' dialogue was not used as the story."
+                if cutscenes else "Menus and loading screens were left out.")
+    return f"{count} gameplay {moments} chosen by on-screen action and sound{shown}. {left_out}"
 
 
 def _select_style_story_ranges(
@@ -2725,6 +2988,9 @@ def analyze_project(
         source_slot=analysis_screen_slot, timeline_offset=visual_offset, timeline_duration=duration,
     )
     visual_timeline = VisualTimeline(visual_moments)
+    gameplay_route = _gameplay_moments_route(
+        brief, goal, visual_moments if visual_timeline else None, nonverbal_highlights,
+    )
     visual_key = visual_moments.get("cache_key") if visual_timeline else None
     if visual_key:
         cache_fingerprints["visual_moments"] = visual_key
@@ -2845,6 +3111,21 @@ def analyze_project(
             "closing_id": None,
         }
         engine = "audio_visual_highlights"
+    elif gameplay_route:
+        # A game recording: the Short is built from what happens on screen. The
+        # transcript stays for captions and phrase-safe boundaries, but the
+        # game's dialogue is not treated as the creator's story.
+        segments = copy.deepcopy(normalized_editorial_transcript["segments"])
+        decision = {
+            "keep_ids": [],
+            "remove_ids": [],
+            "highlight_ids": [],
+            "title": "רגעים מהמשחק" if language == "he" else "Gameplay highlights",
+            "summary": None,
+            "opening_id": None,
+            "closing_id": None,
+        }
+        engine = "gameplay_moments"
     elif audio_cleanup_fallback or (goal == "youtube" and youtube_cleanup_only):
         segments = list(transcript.get("segments", []))
         decision = {
@@ -2969,18 +3250,45 @@ def analyze_project(
                 selection_policy=selection_policy,
                 story_beats=story_beats,
             )
+            if not gameplay_route
+            else _select_gameplay_moments(
+                sound_profile,
+                duration,
+                target_duration,
+                visual_timeline,
+                segments,
+                pace=pace,
+                selection_policy={**selection_policy, "duration_mode": brief.get("duration_mode")},
+            ) or _select_audio_highlight_ranges(
+                sound_profile,
+                duration,
+                target_duration,
+                scenes_a,
+                selection_seed=selection_seed,
+                pace=pace,
+                selection_policy=selection_policy,
+                visual=visual_timeline,
+            )
         )
+        if gameplay_route:
+            notes = _gameplay_moment_notes(story_keep, visual_timeline)
+            decision["summary"] = _gameplay_summary(
+                len(story_keep), notes, language,
+                cutscenes=gameplay_route["share"].get("cutscene", 0.0) >= 0.05,
+            )
         story_cuts = invert_ranges(story_keep, duration)
         if not story_keep and brief.get("duration_mode") == "target":
             raise ValueError("No reliable highlight passages were found. Select a manual range or review the footage; no arbitrary filler was added.")
         cuts, counts = _short_cleanup_cuts_with_floor(
             story_cuts,
-            _style_cleanup_candidates(candidates, story_keep, selection_policy),
+            # Gameplay moments are continuous action: trimming a pause inside a
+            # fight only adds a jump cut. Dead screens are still removed below.
+            [] if gameplay_route else _style_cleanup_candidates(candidates, story_keep, selection_policy),
             project.get("manual", {}).get("cuts", []),
             duration,
             target_duration,
         )
-        counts["story_selection"] = len(story_keep)
+        counts["gameplay_moments" if gameplay_route else "story_selection"] = len(story_keep)
         cuts, dead_screen_count = _cut_dead_screens(cuts, visual_timeline, segments, duration)
         if dead_screen_count:
             counts["dead_screen"] = dead_screen_count
@@ -3039,6 +3347,11 @@ def analyze_project(
         decision=decision,
         selection_policy=((brief.get("style_profile") or {}).get("selection_policy") or {}),
     )
+    if gameplay_route:
+        # A few strong fights from one stretch are a good gameplay Short, not a
+        # summary that missed most of the recording.
+        quality_review["warnings"] = [row for row in quality_review["warnings"] if row.get("type") != "selection_coverage"]
+        quality_review["needs_review"] = bool(quality_review["warnings"])
     if planner_warnings:
         quality_review["warnings"].extend(planner_warnings)
         quality_review["needs_review"] = True

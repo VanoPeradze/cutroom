@@ -314,14 +314,16 @@ Object.assign(ru, {
 });
 
 Object.assign(en, {
-  visualAi: "Gameplay vision", visualAiAuto: "Automatic (streamer styles)", visualAiOn: "On for every Short", visualAiOff: "Off",
+  visualAi: "Gameplay vision", visualAiAuto: "Automatic (Smart and streamer styles)", visualAiOn: "On for every Short", visualAiOff: "Off",
   decision_visual_ai: "Gameplay vision", visualMomentsWatched: "moments watched",
-  decision_dead_screen: "Silent menus and loading screens removed"
+  decision_dead_screen: "Silent menus and loading screens removed",
+  decision_gameplay_moments: "Gameplay moments chosen by on-screen action and sound"
 });
 Object.assign(he, {
-  visualAi: "ראייה של המשחק", visualAiAuto: "אוטומטי (סגנונות סטרימר)", visualAiOn: "פעיל בכל Short", visualAiOff: "כבוי",
+  visualAi: "ראייה של המשחק", visualAiAuto: "אוטומטי (Smart וסגנונות סטרימר)", visualAiOn: "פעיל בכל Short", visualAiOff: "כבוי",
   decision_visual_ai: "ראייה של המשחק", visualMomentsWatched: "רגעים נצפו",
-  decision_dead_screen: "הוסרו תפריטים ומסכי טעינה בלי דיבור"
+  decision_dead_screen: "הוסרו תפריטים ומסכי טעינה בלי דיבור",
+  decision_gameplay_moments: "רגעי משחק שנבחרו לפי האקשן על המסך והסאונד"
 });
 
 export const dictionaries = { en, he, ar, es, fr, ru };

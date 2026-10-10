@@ -275,3 +275,32 @@ def test_worker_failure_envelope_preserves_coverage(monkeypatch, tmp_path):
     assert envelope["ok"] is False
     assert envelope["coverage"] == coverage
     assert "result" not in envelope
+
+
+def _chunked_source(chunk_count, gap_index, language="he"):
+    duration = chunk_count * 30.0
+    chunks = []
+    for index in range(chunk_count):
+        gap = index == gap_index
+        chunks.append({"start": index * 30.0, "end": (index + 1) * 30.0, "analyzed_end": (index + 1) * 30.0,
+                       "status": "complete", "vad_source": "faster_whisper_silero",
+                       "vad_speech_seconds": 23.3 if gap else 11.0, "transcript_seconds": 4.6 if gap else 11.0})
+    source = _transcript(language, duration=duration, end=20.0)
+    source["coverage"] = transcription._coverage_from_chunks(duration, chunks, chunk_count, "chunked_decoder_exhaustion")
+    return source
+
+
+def test_one_skipped_stretch_in_a_long_recording_is_named_but_does_not_block():
+    # 18.7 s of a 2-hour recording's ~2,600 s of detected speech: laughter the decoder skipped.
+    report = transcription.transcript_quality_report(_chunked_source(240, 160))
+    assert report["usable_for_story"] is True
+    assert "uncovered_detected_speech" not in report["reasons"]
+    assert "minor_uncovered_speech" in report["warnings"]
+    assert [row["start"] for row in report["coverage"]["vad_mismatch_chunks"]] == [4800.0]
+
+
+def test_the_same_gap_in_a_short_recording_still_requests_recovery():
+    report = transcription.transcript_quality_report(_chunked_source(10, 4))
+    assert report["usable_for_story"] is False
+    assert report["reasons"] == ["uncovered_detected_speech"]
+    assert "minor_uncovered_speech" not in report["warnings"]

@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.1 Beta - 2026-10-10 - Gameplay Shorts are built from what happens on screen
+
+- **Shorts from game recordings now show the action instead of the game's plot.** In a gameplay recording most of the speech is usually the game itself: cutscenes, mission radio and companions. The Story model treated that dialogue as the content, so a "Strong Commentary" Short of a 27-minute The Division 2 session became a 3-minute retelling of the mission story, made mostly of cutscenes, radio lines and even an ad; the one fight in it was there by accident, inside 51 seconds of radio dialogue.
+- When Gameplay vision shows a game recording, a Short in any style except **Stream Story** and **Chill Story** is now built from **gameplay moments**: the stretches with the most on-screen action and excitement in the sound. Cutscenes, menus, maps and loading screens are pushed out however loud they are, each moment gets a little context before and after, boundaries never cut a spoken phrase in half, and pauses inside a fight are no longer trimmed into jump cuts. The best moments fill the target in chronological order.
+- On the same recording the default Smart Short (60 s) now keeps three firefights: the train station, the street fight and the truck ambush. The 180-second Strong Commentary Short keeps eight moments (176 s), each mostly gameplay, instead of cutscenes and radio dialogue. The Story planner is skipped for these edits, so the draft is ready in seconds once the recording has been analyzed.
+- The draft summary lists the moments it chose and says that cutscenes, menus and loading screens were left out.
+- *Automatic* Gameplay vision now also runs for **CUTROOM Smart**, the default Short style, so a game recording is recognized without picking a streamer style first.
+- A few seconds of skipped speech no longer block a long edit. A 2-hour Counter-Strike 2 recording with Hebrew commentary was refused because one 30-second stretch of laughter produced almost no transcript (18.7 s of 2,633 s of detected speech). Transcription now refuses only when the gap is at least 3% of the detected speech (and at least 15 s, as before); smaller gaps finish the edit and name the time range to review. On that recording the Strong Commentary Short now keeps nine gameplay moments with the players' reactions.
+
+## 1.1 Beta - 2026-10-09 - Transcription, captions and stability
+
+- A recording whose audio is slightly shorter than its video is no longer rejected as incompletely transcribed. Failed transcriptions keep local diagnostics that name the affected audio ranges.
+- Setup now confirms the media and sources before the editing choices and optional AI settings.
+- Live preview captions follow the same phrase boundaries and silences as the exported video.
+- Gameplay vision follows the selected screen source and its synchronization, including screen B with audio from A.
+- Windows speech setup excludes PyAV 19, which breaks faster-whisper 1.2.1, runs a real decoder check, and registers the CUDA libraries that Store Python could not find.
+- Camera and setup controls, toasts and the inspector chevron no longer overflow narrow panels. The Mac download is now byte-identical whichever system builds it.
+
 ## 1.1 Beta - 2026-10-08 - Setup uses Python 3.12
 
 - New tagline: **Hours of footage. Minutes to a great clip.** It replaces "Your footage. Your next cut." on the home screen and the old taglines in the README banner, guides and download text.
