@@ -1,10 +1,28 @@
-// Repository automation: count installation ZIPs only, then publish after all reads succeed.
+// Fixed observed Expo requests plus current GitHub ZIP counts; publish only after all reads succeed.
+import {readFileSync} from 'node:fs';
 import {pathToFileURL} from 'node:url';
 import {resolve} from 'node:path';
 
 export const repository = 'VanoPeradze/cutroom';
 export const statsBranch = 'download-stats';
 export const installationZip = /^CUTROOM-\d+\.\d+(?:\.\d+)?(?:-Beta)?(?:-(?:Windows|Mac))?\.zip$/;
+export const expoBaseline = JSON.parse(readFileSync(new URL('../download-request-baseline.json', import.meta.url), 'utf8'));
+
+export function baselineRequests(baseline) {
+  const paths = ['/downloads/CUTROOM-1.1-Beta-Windows.zip', '/downloads/CUTROOM-1.1-Beta-Mac.zip', '/downloads/CUTROOM-1.1-Beta.zip'];
+  if (baseline.method !== 'GET' || baseline.http_status !== 200
+    || baseline.window_start_date !== '2026-10-04' || baseline.window_end_utc !== '2026-10-11T10:35:00Z'
+    || Object.keys(baseline.requests_by_path || {}).sort().join(',') !== paths.sort().join(',')) {
+    throw new Error('Invalid historical Expo request coverage');
+  }
+  const values = Object.values(baseline.requests_by_path);
+  if (values.some(value => !Number.isSafeInteger(value) || value < 0)
+    || !Number.isSafeInteger(baseline.total_requests) || baseline.total_requests < 0
+    || values.reduce((sum, value) => sum + value, 0) !== baseline.total_requests) {
+    throw new Error('Invalid historical Expo request total');
+  }
+  return baseline.total_requests;
+}
 
 export function githubApi(token, fetcher = fetch) {
   return async (path, {method = 'GET', body, allowMissing = false} = {}) => {
@@ -35,7 +53,8 @@ async function* pages(api, path) {
   }
 }
 
-export async function collectDownloads(api) {
+export async function collectDownloads(api, baseline = expoBaseline) {
+  const historicalRequests = baselineRequests(baseline);
   let total = 0;
   const releases = new Set();
   const assets = new Set();
@@ -57,7 +76,10 @@ export async function collectDownloads(api) {
       if (!Number.isSafeInteger(total)) throw new Error('Download total exceeds safe integer range');
     }
   }
-  return {schemaVersion: 1, label: 'GitHub downloads', message: total.toLocaleString('en-US'), color: '1bd9ce'};
+  // Recompute from independent sources every time; never add to the previous badge value.
+  const requests = historicalRequests + total;
+  if (!Number.isSafeInteger(requests)) throw new Error('Combined request total exceeds safe integer range');
+  return {schemaVersion: 1, label: 'download requests', message: requests.toLocaleString('en-US'), color: '1bd9ce'};
 }
 
 export async function publishBadge(api, badge) {
@@ -68,7 +90,7 @@ export async function publishBadge(api, badge) {
     if (previous.type !== 'file' || previous.encoding !== 'base64') throw new Error('Invalid previous badge data');
     if (Buffer.from(previous.content, 'base64').toString('utf8') === content) return false;
     await api('contents/downloads.json', {method: 'PUT', body: {
-      message: 'Update GitHub installation download count', branch: statsBranch,
+      message: 'Update download request count', branch: statsBranch,
       sha: previous.sha, content: Buffer.from(content).toString('base64'),
     }});
   } else {
@@ -77,7 +99,7 @@ export async function publishBadge(api, badge) {
       tree: [{path: 'downloads.json', mode: '100644', type: 'blob', content}],
     }});
     const commit = await api('git/commits', {method: 'POST', body: {
-      message: 'Initialize GitHub installation download count', tree: tree.sha, parents: [],
+      message: 'Initialize download request count', tree: tree.sha, parents: [],
     }});
     await api('git/refs', {method: 'POST', body: {ref: `refs/heads/${statsBranch}`, sha: commit.sha}});
   }

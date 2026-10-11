@@ -1,0 +1,16 @@
+{
+  "source": "Expo EAS Hosting request dashboard, verified historical observation",
+  "window_start_date": "2026-10-04",
+  "window_end_utc": "2026-10-11T10:35:00Z",
+  "method": "GET",
+  "http_status": 200,
+  "requests_by_path": {
+    "/downloads/CUTROOM-1.1-Beta-Windows.zip": 46,
+    "/downloads/CUTROOM-1.1-Beta-Mac.zip": 32,
+    "/downloads/CUTROOM-1.1-Beta.zip": 85
+  },
+  "total_requests": 163,
+  "coverage": "Fixed observed window, not lifetime downloads. Later Expo mirror requests are not automatically counted.",
+  "exclusions": ["Checksum files", "Version-specific duplicate paths", "Three HEAD requests"],
+  "limitations": "May include retries, bots and testing; not unique users or completed installations."
+}

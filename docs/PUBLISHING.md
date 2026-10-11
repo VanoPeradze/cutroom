@@ -217,21 +217,41 @@ Immutable recovery URLs remain in `packaging/windows/release-baseline.json` and
 `packaging/mac/release-candidate.json`; the latter can restore the exact combined
 archive, from which the platform packager can reproduce projections for verification.
 
-## GitHub download count
+## Download request count
 
-The README badge reports **GitHub downloads**, not installations or unique people.
-It sums `download_count` only for published installation ZIP assets (including
-prereleases), excludes drafts and all checksum/source/test assets, and never adds
-Expo traffic. In particular, the historical 163 Expo HTTP requests are not GitHub
-downloads. Repeat requests and our verification downloads may be included by GitHub.
+The README badge reports **download requests**, not lifetime downloads,
+installations or unique people. It combines two distinct sources:
+
+- **Fixed Expo baseline: 163 successful HTTP 200 GET requests**, observed from
+  4 October through 11 October 2026 at 10:35 UTC. Windows: 46; Mac: 32; combined: 85.
+  Only the three canonical installation ZIP paths are included. Checksum files,
+  version-specific duplicate paths and three HEAD requests were excluded.
+- **Automatically refreshed GitHub count:** current `download_count` values for
+  installation ZIP assets on published releases, including betas. Drafts and
+  checksum/source/test assets are excluded. These GitHub releases began after
+  the Expo baseline window ended.
+
+The reviewed baseline and its coverage are recorded in
+`.github/download-request-baseline.json`. The counter recomputes
+`163 + current GitHub ZIP count` on every successful run; it never adds the
+baseline to a previously saved badge total. For example, eight GitHub requests
+produce 171 total requests, and rerunning with the same source counts stays at 171.
+The baseline is not a lifetime Expo total, and later Expo mirror requests are
+**not automatically included**. Both sources may include retries, bots and our
+verification/testing. They do not establish unique users or completed installs.
 
 [Shields' asset badge](https://shields.io/badges/git-hub-downloads-specific-asset-all-releases)
 accepts one exact asset name. Its [implementation](https://raw.githubusercontent.com/badges/shields/master/services/github/github-downloads.service.js)
 does not support a glob or regex sum, so the repository supplies the documented
 [Shields endpoint JSON](https://shields.io/badges/endpoint-badge) instead.
 
-`.github/workflows/download-count.yml` runs every six hours, on release publication,
-or manually. `.github/scripts/update_download_badge.mjs` paginates both releases and each
+`.github/workflows/download-count.yml` is scheduled every 15 minutes (minutes
+7, 22, 37 and 52 UTC), on release publication, or manually. This stays above
+[GitHub's five-minute scheduling minimum](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule)
+and uses a standard Ubuntu runner in this public repository, where
+[standard Actions usage is free](https://docs.github.com/en/billing/concepts/product-billing/github-actions).
+There is no artifact upload, paid service or new credential.
+`.github/scripts/update_download_badge.mjs` paginates both releases and each
 release's assets at 100 per page, validates counts and completes every read before
 writing. It selects only `CUTROOM-VERSION[-Beta][-Windows|-Mac].zip` (numeric
 two- or three-part VERSION). Future naming changes must deliberately update this
@@ -246,13 +266,34 @@ create no commit. API errors, rate limits or invalid counts fail the run before
 publication and leave the last good JSON intact. Branch updates are atomic and
 use the previous blob SHA; conflicting writes fail rather than force-push.
 
-The badge refreshes after a successful run plus GitHub/Shields caching (requested
-cache lifetime: one hour). It can be stale during outages or Actions scheduling
-delays; it is not real-time. Inspect the workflow run if the count stops updating.
+The badge requests a 300-second cache lifetime, the minimum enforced by the
+[Shields endpoint implementation](https://raw.githubusercontent.com/badges/shields/master/services/endpoint/endpoint.service.js).
+GitHub raw-file and README image caches also apply. These caches and delayed or
+dropped Actions schedules can make the display older than 15 minutes; this is
+automatic periodic updating, not instant per-request tracking. Inspect the
+workflow run if the count stops updating. API failures never replace an unknown
+GitHub count with zero or publish a misleading baseline-only fallback.
 Run `node --test .github/scripts/update_download_badge.test.mjs` to test filtering,
 pagination and failure preservation, or `node .github/scripts/update_download_badge.mjs`
 for a read-only count. After merging the workflow for the first time, dispatch it
 once and verify both the public JSON and the rendered badge.
+
+### Expo mirror coverage gap
+
+As checked on 11 October 2026, the installed EAS CLI 24.7.0 exposes deployment and
+alias commands, but no Hosting request-history export command. The official
+[Expo monitoring documentation](https://docs.expo.dev/eas/hosting/introduction/)
+describes the authenticated dashboard, and this repository has no Expo credential
+configured for unattended access. No supported automatic mirror-request source
+was established from the available tooling. The workflow does not scrape that
+dashboard, reuse browser cookies, expose tokens or bypass its security policies.
+
+The smallest future requirement is an authorized machine-readable Expo request
+export/API covering the exact canonical paths and a non-overlapping interval
+after the recorded cutoff, with supported secure authentication for the runner.
+Any integration must persist a cutoff and deduplicate overlapping records so it
+does not add a rolling seven-day window repeatedly. Until that exists, the badge
+clearly excludes later mirror traffic; old download URLs remain functional.
 
 ## Website hosting is separate from the editing engine
 
