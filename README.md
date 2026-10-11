@@ -10,12 +10,14 @@
 
 <p align="center">
   <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.1%20Beta-1bd9ce?style=flat-square" alt="Version 1.1 Beta"></a>
-  <a href="https://github.com/VanoPeradze/cutroom/releases"><img src="https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FVanoPeradze%2Fcutroom%2Fdownload-stats%2Fdownloads.json&amp;style=flat-square&amp;cacheSeconds=3600" alt="GitHub downloads of installation ZIPs"></a>
+  <a href="docs/PUBLISHING.md#download-request-count"><img src="https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FVanoPeradze%2Fcutroom%2Fdownload-stats%2Fdownloads.json&amp;style=flat-square&amp;cacheSeconds=300" alt="Download requests: observed Expo window plus GitHub installation ZIPs"></a>
   <a href="docs/BETA_STATUS.md"><img src="https://img.shields.io/badge/status-beta-d6c247?style=flat-square" alt="Beta software"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-a38bd0?style=flat-square" alt="MIT license"></a>
   <a href="docs/PLATFORMS.md"><img src="https://img.shields.io/badge/platforms-Windows%20%7C%20macOS%20%7C%20Linux%20(source)-2b3740?style=flat-square" alt="Windows, macOS and Linux from source"></a>
   <a href="docs/AI_CONNECTIONS.md"><img src="https://img.shields.io/badge/AI-optional-1bd9ce?style=flat-square" alt="AI is optional"></a>
 </p>
+
+<p align="center"><sub>Download requests = 163 observed Expo requests (4–11 October 2026, ending 10:35 UTC) + GitHub ZIP requests, refreshed every 15 minutes plus cache delays. Later Expo mirror traffic is excluded. May include repeats, bots and testing; not unique users or completed installs. <a href="docs/PUBLISHING.md#download-request-count">Count coverage</a>.</sub></p>
 
 <p align="center">
   <a href="https://cutroom-studio.expo.app/"><strong>Website</strong></a> ·
@@ -82,8 +84,6 @@
 **First setup needs internet** to install dependencies. Python, FFmpeg and AI models are not bundled in the ZIPs. Keep **App**, **START HERE.html** and the launcher together. If the browser does not open, copy the address shown in the launch window once setup finishes. The Mac launcher is unsigned and is not a notarized `.app`; the [platform guide](docs/PLATFORMS.md) explains the security prompts.
 
 [Release notes and SHA-256 checksums](https://github.com/VanoPeradze/cutroom/releases/tag/v1.1-beta-20261011). If GitHub is unavailable, use the [Windows mirror](https://cutroom-studio.expo.app/downloads/CUTROOM-1.1-Beta-Windows.zip), [Mac mirror](https://cutroom-studio.expo.app/downloads/CUTROOM-1.1-Beta-Mac.zip) or [combined ZIP mirror](https://cutroom-studio.expo.app/downloads/CUTROOM-1.1-Beta.zip).
-
-The **GitHub downloads** badge counts installation ZIP downloads from published releases, including beta releases. It updates every six hours plus cache delay. It excludes checksum/source/test assets, drafts and Expo mirrors; repeat and verification downloads can count, so it is not a count of people or successful installations. [How the count works](docs/PUBLISHING.md#github-download-count).
 
 To update, extract a fresh copy separately and back up your projects before moving them. The older combined ZIP is still supported: open its `windows` or `mac` folder first.
 

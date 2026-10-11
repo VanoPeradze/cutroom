@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {collectDownloads, githubApi, installationZip, publishBadge, updateBadge} from './update_download_badge.mjs';
+import {baselineRequests, collectDownloads, expoBaseline, githubApi, installationZip, publishBadge, updateBadge} from './update_download_badge.mjs';
 
 const release = (id, draft = false) => ({id, draft, prerelease: true, published_at: draft ? null : '2026-10-11T12:00:00Z'});
 const asset = (id, name, count) => ({id, name, download_count: count, state: 'uploaded'});
@@ -13,7 +13,7 @@ test('counts published installation ZIPs only, including prereleases and excludi
     return [asset(1, windows, 7), asset(2, 'CUTROOM-1.1-Beta-Mac.zip', 3), asset(3, 'CUTROOM-1.1-Beta.zip', 2),
       asset(4, windows + '.sha256', 80), asset(5, 'CUTROOM-source.zip', 90), asset(6, 'CUTROOM-tested-macos-arm64.zip', 100)];
   };
-  assert.equal((await collectDownloads(api)).message, '12');
+  assert.equal((await collectDownloads(api)).message, '175'); // 163 observed Expo + 12 GitHub.
   for (const name of ['CUTROOM-1.1-Beta-tests.zip', 'CUTROOM-1.1-Beta-source.zip', 'source.zip', 'CUTROOM-1.1-Beta.zip.sha256']) {
     assert.equal(installationZip.test(name), false);
   }
@@ -30,7 +30,7 @@ test('paginates both releases and assets and avoids duplicate asset counts', asy
     if (path === 'releases/101/assets?per_page=100&page=1') return [asset(102, windows, 3)];
     throw new Error(`Unexpected path: ${path}`);
   };
-  assert.equal((await collectDownloads(api)).message, '110');
+  assert.equal((await collectDownloads(api)).message, '273'); // Baseline once, not per release/page.
   assert.equal(calls.length, 5);
 });
 
@@ -57,7 +57,7 @@ test('API failures are not interpreted as an empty list or an absent data branch
 });
 
 test('unchanged totals do not create commits; changed totals use the previous blob SHA', async () => {
-  const badge = {schemaVersion: 1, label: 'GitHub downloads', message: '12', color: '1bd9ce'};
+  const badge = {schemaVersion: 1, label: 'download requests', message: '175', color: '1bd9ce'};
   let writes = 0;
   const api = async (path, options) => {
     if (path.startsWith('git/ref/')) return {object: {sha: 'previous-commit'}};
@@ -71,6 +71,42 @@ test('unchanged totals do not create commits; changed totals use the previous bl
   };
   assert.equal(await publishBadge(api, badge), false);
   assert.equal(writes, 0);
-  assert.equal(await publishBadge(api, {...badge, message: '13'}), true);
+  assert.equal(await publishBadge(api, {...badge, message: '176'}), true);
   assert.equal(writes, 1);
+});
+
+test('adds the observed baseline once on every run, including repeat runs with persisted data', async () => {
+  let saved = {schemaVersion: 1, label: 'GitHub downloads', message: '8', color: '1bd9ce'};
+  let writes = 0;
+  const api = async (path, options) => {
+    if (path.startsWith('releases?')) return [release(1)];
+    if (path.startsWith('releases/1/assets?')) return [asset(1, windows, 3), asset(2, 'CUTROOM-1.1-Beta-Mac.zip', 3), asset(3, 'CUTROOM-1.1-Beta.zip', 2)];
+    if (path.startsWith('git/ref/')) return {object: {sha: 'previous-commit'}};
+    if (path === 'contents/downloads.json?ref=previous-commit') return {type: 'file', encoding: 'base64', sha: 'previous-blob', content: Buffer.from(JSON.stringify(saved, null, 2) + '\n').toString('base64')};
+    assert.equal(path, 'contents/downloads.json');
+    assert.equal(options.method, 'PUT');
+    saved = JSON.parse(Buffer.from(options.body.content, 'base64').toString('utf8'));
+    writes++;
+    return {};
+  };
+  assert.equal((await updateBadge(api, true)).message, '171');
+  assert.equal(saved.label, 'download requests');
+  assert.equal((await updateBadge(api, true)).message, '171');
+  assert.equal(writes, 1);
+});
+
+test('baseline is limited to the verified GET/200 window and rejects inconsistent totals', () => {
+  assert.equal(baselineRequests(expoBaseline), 163);
+  assert.deepEqual(Object.values(expoBaseline.requests_by_path), [46, 32, 85]);
+  assert.throws(() => baselineRequests({...expoBaseline, total_requests: 166}), /total/);
+  assert.throws(() => baselineRequests({...expoBaseline, method: 'HEAD'}), /coverage/);
+  assert.throws(() => baselineRequests({...expoBaseline, window_end_utc: '2026-10-12T10:35:00Z'}), /coverage/);
+  assert.throws(() => baselineRequests({...expoBaseline, requests_by_path: {...expoBaseline.requests_by_path, '/downloads/other.zip': 1}}), /coverage/);
+  assert.throws(() => baselineRequests({...expoBaseline, requests_by_path: {...expoBaseline.requests_by_path, '/downloads/CUTROOM-1.1-Beta.zip': -1}}), /total/);
+});
+
+test('a confirmed empty GitHub result keeps the baseline; errors never publish a baseline-only fallback', async () => {
+  assert.equal((await collectDownloads(async () => [])).message, '163');
+  await assert.rejects(updateBadge(async () => { throw new Error('GitHub unavailable'); }, true), /GitHub unavailable/);
+  await assert.rejects(collectDownloads(async () => ({message: 'API error'})), /Invalid GitHub list/);
 });
