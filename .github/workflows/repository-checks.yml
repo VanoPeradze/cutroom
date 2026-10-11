@@ -42,3 +42,5 @@ jobs:
           npm --prefix website run check:assets
       - name: Test website and approved-download validation
         run: npm --prefix website test
+      - name: Test GitHub installation download count
+        run: node --test .github/scripts/update_download_badge.test.mjs

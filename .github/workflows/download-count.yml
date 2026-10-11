@@ -1,0 +1,36 @@
+name: GitHub download count
+
+on:
+  schedule:
+    - cron: '17 */6 * * *'
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: github-download-count
+  cancel-in-progress: false
+
+jobs:
+  update:
+    if: github.repository == 'VanoPeradze/cutroom'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: master
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+      - name: Check counter behavior
+        run: node --test .github/scripts/update_download_badge.test.mjs
+      - name: Update data branch after a complete successful count
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node .github/scripts/update_download_badge.mjs --publish

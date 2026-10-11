@@ -33,16 +33,34 @@ test('one download area offers distinct real Windows and Mac archives, with Linu
   assert.equal(new Set(buttons.map(row => row[0].match(/href="([^"]+)"/)[1])).size, 2);
   for (const platform of ['windows', 'mac']) {
     const entry = release.platforms[platform];
-    const links = linksTo(html, `/downloads/${entry.filename}`);
+    const links = linksTo(html, entry.url);
     assert.equal(links.length, 1);
-    assert.match(links[0][1], /\bdownload\b/);
+    assert.match(links[0][1], /\bdownload-link\b/);
+    assert.doesNotMatch(links[0][1], /\sdownload(?:\s|=|$)/, 'Cross-origin downloads rely on GitHub attachment headers');
     assertLocalized(links[0]);
+    const mirror = linksTo(region('details', 'install-help'), `/downloads/${entry.filename}`);
+    assert.equal(mirror.length, 1);
+    assertLocalized(mirror[0]);
+    assert.match(mirror[0][2], /mirror/i);
     assert.equal(linksTo(html, `/downloads/${entry.filename}.sha256`).length, 1);
   }
+  assert.equal(linksTo(html, release.url).length, 1);
   assert.equal(linksTo(html, `/downloads/${release.filename}`).length, 1);
   assert.equal(linksTo(html, `/downloads/${release.filename}.sha256`).length, 1);
   assert.doesNotMatch(html, /href="[^"]*Linux[^"\n]*\.zip/i);
   assert.ok(linksTo(html, `${repository}/blob/master/docs/PLATFORMS.md#linux-source-based-development-path`).length);
+});
+
+test('download metadata pins a dated release and preserves Expo mirrors and provenance', () => {
+  const release = JSON.parse(readFileSync(new URL('./release.json', import.meta.url), 'utf8'));
+  assert.match(release.github_release.tag, /^v\d+\.\d+-beta-\d{8}$/);
+  assert.equal(release.github_release.tag_commit, release.source_commit);
+  assert.equal(release.github_release.package_bytes_changed, false);
+  assert.equal(release.github_release.url, `${repository}/releases/tag/${release.github_release.tag}`);
+  for (const entry of [release, release.platforms.windows, release.platforms.mac]) {
+    assert.equal(entry.url, `${repository}/releases/download/${release.github_release.tag}/${entry.filename}`);
+    assert.deepEqual(entry.mirrors, [`https://cutroom-studio.expo.app/downloads/${entry.filename}`]);
+  }
 });
 
 test('source and issue links remain visible without competing with download', () => {

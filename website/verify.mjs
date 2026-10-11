@@ -41,9 +41,14 @@ assert.ok(html.includes('/downloads/'+zip+'.sha256"'), 'The checksum link must m
 assert.ok(!html.includes('5.6.1'), 'Stale application version on the public page');
 assert.match(release.sha256, /^[a-f0-9]{64}$/);
 assert.ok(Number.isSafeInteger(release.bytes) && release.bytes > 0);
-assert.equal(release.url, 'https://cutroom-studio.expo.app/downloads/'+zip);
+assert.match(release.github_release.tag, /^v\d+\.\d+-beta-\d{8}$/);
+assert.equal(release.github_release.tag_commit, release.source_commit);
+const releaseBase = `https://github.com/VanoPeradze/cutroom/releases/download/${release.github_release.tag}/`;
 for (const entry of downloadEntries(release)) {
-  assert.ok(html.includes('/downloads/'+entry.filename+'"'), 'Missing exact archive link');
+  assert.equal(entry.url, releaseBase + entry.filename);
+  assert.ok(html.includes('href="'+entry.url+'"'), 'Missing tag-specific GitHub primary download');
+  assert.deepEqual(entry.mirrors, ['https://cutroom-studio.expo.app/downloads/'+entry.filename]);
+  assert.ok(html.includes('href="/downloads/'+entry.filename+'"'), 'Missing preserved Expo mirror link');
   assert.ok(html.includes('/downloads/'+entry.filename+'.sha256"'), 'Missing exact checksum link');
   const bytes = readFileSync(resolve(root,'public/downloads',entry.filename));
   verifyArchive(bytes, entry);
