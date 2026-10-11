@@ -151,7 +151,7 @@ Do not send personal source footage along with the app unless you have permissio
 
 Use a Git checkout and the normal Git workflow to review differences, stage the intended files, and commit the reviewed changes. Check the staged diff and attachments for private content, and run the relevant [contributor checks](CONTRIBUTING.md) before publishing. Leave recordings, local configuration, generated ZIPs and unrelated drafts out of the commit.
 
-Confirm that `origin`, the destination branch and the commit are the ones you intend to publish, then use a normal non-force Git push of that reviewed branch. If the remote has changed, fetch and review it before proceeding. This publishes committed source; it does not upload the beta ZIP, create a GitHub Release or deploy the website. Review and publish the download through the Expo workflow separately.
+Confirm that `origin`, the destination branch and the commit are the ones you intend to publish, then use a normal non-force Git push of that reviewed branch. If the remote has changed, fetch and review it before proceeding. This publishes committed source; it does not upload the beta ZIP, create a GitHub Release or deploy the website. Publish verified download assets through the GitHub Release procedure below, then deploy the website links and retained mirrors separately.
 
 Do not use `PUBLISH.bat git --publish` for this public repository or change visibility to satisfy it. Its private-target restriction is a legacy safeguard, not the public repository's publishing workflow.
 
@@ -179,6 +179,80 @@ A branch that does not yet exist remotely requires an additional explicit `--new
 The checks inspect all reachable file history, not just the newest files. Historical runtime data, private files, large binaries, symlinks/submodules and recognizable credentials stop publishing. Scanner output names the file/reason, never the suspected secret value. The scanner has conservative limits and is **not a complete secret/security audit**. It may reject harmless fixtures; review them rather than weakening the guardrail or committing real keys. It cannot guarantee that prose, commit messages or images contain no personal information.
 
 If the terminal closes or the network fails during a push, inspect GitHub before retrying. Do not assume the push failed just because the final message was not shown. Cancelling cannot undo a push already accepted by GitHub.
+
+## GitHub release assets
+
+The primary installation downloads are assets on a **dated GitHub prerelease**.
+The first is [v1.1-beta-20261011](https://github.com/VanoPeradze/cutroom/releases/tag/v1.1-beta-20261011):
+it republishes the existing 10 October Windows, Mac and combined ZIPs without
+rebuilding them. The tag identifies application source
+`391971c028d69ace4682fcf8794682e085aa8803`, not the newer website commit.
+`website/release.json` retains the original build IDs, hashes and native Mac
+validation head. Do not substitute a build of an unrelated current HEAD.
+
+1. Obtain publication authorization for the exact packages and public destination.
+   Download the currently approved files and compare byte lengths and SHA-256 with
+   `website/release.json` and the tracked checksum sidecars.
+2. Run `scripts/build_universal_package.py --verify COMBINED_ZIP` and
+   `scripts/build_platform_packages.py --combined COMBINED_ZIP --verify PLATFORM_ZIP --platform windows`
+   (repeat with `--platform mac`). These inspect manifests, payloads and permissions;
+   they do not rebuild packages or launch the editor.
+3. Create a uniquely dated draft prerelease with the three ZIPs and their `.sha256`
+   sidecars. Point its tag at the recorded package source. Use `gh release create`
+   with explicit files, `--target`, `--prerelease`, `--draft` and `--notes-file`.
+   Explain source versus validation commits and remaining beta limitations in the notes.
+4. Check uploaded asset names, sizes and GitHub SHA-256 digests. Publish the draft
+   with `gh release edit TAG --draft=false --prerelease --latest=false`, download
+   all three public assets again, and compare their hashes and sidecars.
+5. Update README links, `website/public/index.html`, release URLs, mirror metadata
+   and website assertions. Use `/releases/download/TAG/FILENAME`, not `latest` URLs.
+   Leave `prepare-download.mjs` integrity gates and immutable packaging baselines intact.
+6. Push the scoped source branch, pass the required PR checks, merge, and deploy
+   the existing Expo site. Verify the live primary links and all old mirror URLs.
+
+The GitHub-generated source archives are not installer ZIPs. CI artifact IDs
+`11672296848` and `11671519045` from [Mac validation](https://github.com/VanoPeradze/cutroom/actions/runs/38058537446)
+are evidence bundles, expire on 17 October 2026, and are not release assets.
+Immutable recovery URLs remain in `packaging/windows/release-baseline.json` and
+`packaging/mac/release-candidate.json`; the latter can restore the exact combined
+archive, from which the platform packager can reproduce projections for verification.
+
+## GitHub download count
+
+The README badge reports **GitHub downloads**, not installations or unique people.
+It sums `download_count` only for published installation ZIP assets (including
+prereleases), excludes drafts and all checksum/source/test assets, and never adds
+Expo traffic. In particular, the historical 163 Expo HTTP requests are not GitHub
+downloads. Repeat requests and our verification downloads may be included by GitHub.
+
+[Shields' asset badge](https://shields.io/badges/git-hub-downloads-specific-asset-all-releases)
+accepts one exact asset name. Its [implementation](https://raw.githubusercontent.com/badges/shields/master/services/github/github-downloads.service.js)
+does not support a glob or regex sum, so the repository supplies the documented
+[Shields endpoint JSON](https://shields.io/badges/endpoint-badge) instead.
+
+`.github/workflows/download-count.yml` runs every six hours, on release publication,
+or manually. `.github/scripts/update_download_badge.mjs` paginates both releases and each
+release's assets at 100 per page, validates counts and completes every read before
+writing. It selects only `CUTROOM-VERSION[-Beta][-Windows|-Mac].zip` (numeric
+two- or three-part VERSION). Future naming changes must deliberately update this
+allowlist and its tests; do not broaden it to every ZIP.
+
+The updater uses only the existing repository Actions token. Its single job needs
+`contents: write` to maintain `downloads.json` on the independent, data-only
+`download-stats` branch; other permissions are disabled. It checks out trusted
+`master` without persisted credentials, never writes to `master`, uses no PAT or
+new service, and does not overwrite existing release assets. Unchanged totals
+create no commit. API errors, rate limits or invalid counts fail the run before
+publication and leave the last good JSON intact. Branch updates are atomic and
+use the previous blob SHA; conflicting writes fail rather than force-push.
+
+The badge refreshes after a successful run plus GitHub/Shields caching (requested
+cache lifetime: one hour). It can be stale during outages or Actions scheduling
+delays; it is not real-time. Inspect the workflow run if the count stops updating.
+Run `node --test .github/scripts/update_download_badge.test.mjs` to test filtering,
+pagination and failure preservation, or `node .github/scripts/update_download_badge.mjs`
+for a read-only count. After merging the workflow for the first time, dispatch it
+once and verify both the public JSON and the rendered badge.
 
 ## Website hosting is separate from the editing engine
 

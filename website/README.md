@@ -11,7 +11,7 @@ The previous separate website checkout is not needed for future updates.
 
 - `public/`: the English/Hebrew page, styling, scripts and generated copies of the real product screenshots and user guides.
 - `app.json`: the existing Expo website project identity, not a credential.
-- `release.json`: the approved combined Windows/Mac beta download's exact filename, size and checksum.
+- `release.json`: exact filenames, sizes, checksums and provenance for the three approved ZIPs, their tag-specific GitHub URLs and retained Expo mirrors.
 - `prepare-download.mjs`: restores that approved ZIP locally without committing it to Git.
 - `prepare-assets.mjs`: copies exactly six canonical repository files into `public/`, entirely offline.
 
@@ -78,18 +78,38 @@ npm run check
 
 `npm run check` refreshes canonical assets automatically before checking every public link.
 
-The ZIP is downloaded from the existing public Expo website. If that site is unavailable,
+The ZIPs are downloaded from the pinned GitHub Release. Their old Expo URLs remain
+available as mirrors, and deployment still includes all three verified files under
+`public/downloads/`. Never remove them when changing the primary links. If GitHub is unavailable,
 provide the already-approved local archive instead:
 
 ```sh
 node prepare-download.mjs ../dist/YOUR-BUILD-FOLDER/CUTROOM-1.1-Beta.zip
 ```
 
+The optional local path restores the combined ZIP; restore the two platform files
+from the listed mirrors into `public/downloads/` as needed, then run the normal
+checks. Mirror use never bypasses the pinned size/SHA-256 checks.
+
 An existing ZIP with the wrong checksum is rejected, not overwritten. Review and move it
 out of the download folder yourself before retrying. All ZIP files in that folder remain
 ignored by Git. Canonical source assets and release checksums are tracked; generated copies are not.
 
 ## Change the beta download deliberately
+
+### GitHub download hosting
+
+The 11 October 2026 migration publishes the existing 10 October package bytes as
+[v1.1-beta-20261011](https://github.com/VanoPeradze/cutroom/releases/tag/v1.1-beta-20261011).
+It changes hosting, not application source, build IDs or checksums. Primary buttons
+and the combined link use this exact tag, because a beta release must not depend
+on GitHub's `latest` selection. The installation help exposes all three Expo mirrors.
+`prepare-download.mjs` retains its integrity and native-validation gates.
+
+For a future approved release, publish the verified ZIPs and their checksum sidecars
+to a new dated GitHub prerelease, verify the uploaded bytes, and update the URLs,
+provenance and tests together before deploying. Keep old release assets and Expo
+mirrors available. Follow the [GitHub release procedure and download counter notes](../docs/PUBLISHING.md#github-release-assets).
 
 ### Approved product release
 
