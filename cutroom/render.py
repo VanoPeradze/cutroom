@@ -1737,6 +1737,9 @@ def render_project(context: JobContext, project_id: str, store: ProjectStore, se
                              if normalizes_audio(project) else None),
                 caption_lines=burn_lines if burn_transcript else [], text_clips=text_clips,
                 caption_position=caption_settings["caption_position"],
+                # A sequence's own empty stretches are rendered as black.
+                timeline_gaps=[(float(row["start"]), float(row["end"])) for row in _frame_aligned_plan(project)
+                               if row.get("camera") == "black"] if has_sequence(project) else None,
             )
         except Exception as exc:  # Advice only: a failed check never fails the export.
             record["review"] = {"version": 1, "error": type(exc).__name__, "warnings": 0, "checks": []}

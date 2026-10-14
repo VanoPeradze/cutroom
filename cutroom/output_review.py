@@ -62,7 +62,9 @@ def _audio_checks(ffmpeg: str, output: Path, ceiling_dbtp: float, target_lufs: f
 
 
 def _black_check(ffmpeg: str, output: Path, duration: float, timeout: float) -> dict[str, Any]:
-    log = _run([ffmpeg, "-hide_banner", "-nostats", "-threads", "2", "-i", str(output), "-an",
+    # The render has finished, so decoding may use every core (3.5 s instead of
+    # 17 s for a 3-minute 1080p export on a 24-thread machine).
+    log = _run([ffmpeg, "-hide_banner", "-nostats", "-threads", "0", "-i", str(output), "-an",
                 "-vf", f"fps={VIDEO_SAMPLE_FPS},scale=160:-2,blackdetect=d={BLACK_SECONDS}:pix_th=0.08",
                 "-f", "null", "-"], timeout)
     if log is None:
@@ -74,6 +76,16 @@ def _black_check(ffmpeg: str, output: Path, duration: float, timeout: float) -> 
     shown = ", ".join(f"{start:.1f}–{end:.1f} s" for start, end in stretches[:4])
     return _check("black_video", "warn", f"Black picture at {shown}. Check for a gap or a missing clip.",
                   ranges=[{"start": start, "end": end} for start, end in stretches[:20]])
+
+
+def _gap_check(gaps: list[tuple[float, float]]) -> dict[str, Any]:
+    """Empty stretches of the timeline itself, known exactly from the edit."""
+    long_gaps = [(start, end) for start, end in gaps if end - start >= BLACK_SECONDS]
+    if not long_gaps:
+        return _check("timeline_gaps", "pass", "No empty gap in the timeline.")
+    shown = ", ".join(f"{start:.1f}–{end:.1f} s" for start, end in long_gaps[:4])
+    return _check("timeline_gaps", "warn", f"The timeline is empty at {shown}, so the video is black there. Close the gap or add footage.",
+                  ranges=[{"start": start, "end": end} for start, end in long_gaps[:20]])
 
 
 def _area(position: str | None, template: str | None = None) -> str:
@@ -128,6 +140,7 @@ def review_export(
     caption_lines: list[dict[str, Any]],
     text_clips: list[dict[str, Any]],
     caption_position: str = "auto",
+    timeline_gaps: list[tuple[float, float]] | None = None,
 ) -> dict[str, Any]:
     started = time.monotonic()
     # Each media pass has its own budget, scaled to the export but bounded.
@@ -135,6 +148,8 @@ def review_export(
     checks: list[dict[str, Any]] = []
     if has_audio:
         checks.extend(_audio_checks(ffmpeg, output, ceiling_dbtp, target_lufs, budget))
+    if timeline_gaps is not None:
+        checks.append(_gap_check(timeline_gaps))
     checks.append(_black_check(ffmpeg, output, duration, budget))
     checks.append(_overlap_check(caption_lines, text_clips, caption_position))
     if caption_lines:

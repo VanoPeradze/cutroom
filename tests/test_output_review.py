@@ -55,3 +55,10 @@ def test_review_of_a_real_file_finds_black_picture_and_measures_audio(tmp_path):
     louder = output_review.review_export(ffmpeg, video, duration=4.5, has_audio=True, ceiling_dbtp=-1.0, target_lufs=-16.0,
                                          caption_lines=[], text_clips=[])
     assert {row["id"]: row for row in louder["checks"]}["loudness"]["status"] == "warn"
+
+
+def test_empty_timeline_gaps_are_named_exactly():
+    assert output_review._gap_check([])["status"] == "pass"
+    assert output_review._gap_check([(2.0, 2.5)])["status"] == "pass", "a short gap is not flagged"
+    check = output_review._gap_check([(1.5, 2.0), (4.0, 6.0)])
+    assert check["status"] == "warn" and check["ranges"] == [{"start": 4.0, "end": 6.0}] and "4.0–6.0 s" in check["detail"]
