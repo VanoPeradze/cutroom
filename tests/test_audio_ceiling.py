@@ -63,6 +63,10 @@ def test_every_export_stays_under_the_true_peak_ceiling_at_48_khz(tmp_path, monk
     output = settings.exports_dir / record["name"]
     measured = loudness(ffmpeg, output)
     assert measured["true_peak"] <= render.AUDIO_CEILING_DBTP + 0.05
+    # The export's own check reaches the same verdict and is stored with it.
+    checks = {row["id"]: row for row in record["review"]["checks"]}
+    assert checks["true_peak"]["status"] == "pass"
+    assert checks["loudness"]["status"] == ("pass" if policy else "info")
     streams = subprocess.run([ffmpeg.replace("ffmpeg", "ffprobe"), "-v", "error", "-select_streams", "a:0",
                               "-show_entries", "stream=sample_rate", "-of", "csv=p=0", str(output)],
                              capture_output=True, text=True).stdout.strip()

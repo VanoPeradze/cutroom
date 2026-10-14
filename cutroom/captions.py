@@ -366,6 +366,42 @@ def _ass_style(name: str, width: int, height: int, caption_style: str, caption_p
     return line, font_size, margin_v, outline
 
 
+TEMPLATE_ACCENT = "&H4DE1FF&"  # ASS BGR for #FFE14D, the highlight colour
+
+
+def _template_style(row: dict[str, Any]) -> str:
+    """Lower thirds and callouts always sit on a box, as in the preview."""
+    return "boxed" if row.get("template") in {"lower_third", "callout"} else row["style"]
+
+
+def _text_template(row: dict[str, Any], width: int, height: int, font_size: int) -> str:
+    """Override tags and text for one authored overlay.
+
+    Explicit anchors keep simultaneous overlays where the user put them instead
+    of letting ASS collision avoidance move them. Templates are fixed layouts;
+    every word comes from the user and is escaped.
+    """
+    top = max(32, round(height * .075))
+    text, sub = _ass_escape(row["text"]), _ass_escape(row.get("subtext") or "")
+    small = max(14, round(font_size * .62))
+    template = row.get("template") or "plain"
+    if template == "lower_third":
+        # Name over a smaller role line, bottom-left above the platform controls.
+        x, y = round(width * .06), height - round(height * .16)
+        return f"{{\\q0\\an1\\pos({x},{y})}}{text}" + (f"\\N{{\\fs{small}\\b0}}{sub}" if sub else "")
+    if template == "chapter":
+        # A centred chapter card with an optional label above it.
+        label = f"{{\\fs{small}\\b0}}{sub}\\N{{\\r}}" if sub else ""
+        return f"{{\\q0\\an5\\pos({round(width / 2)},{round(height / 2)})\\fad(250,250)}}{label}{{\\fscx135\\fscy135}}{text}"
+    if template == "callout":
+        # A short note at the top-left with an accent bar.
+        x, y = round(width * .06), top
+        return f"{{\\q0\\an7\\pos({x},{y})}}{{\\c{TEMPLATE_ACCENT}}}\u258c{{\\c&HFFFFFF&}} {text}"
+    y = {"top": top, "center": round(height / 2), "bottom": height - top}[row["position"]]
+    colour = f"\\c{TEMPLATE_ACCENT}" if template == "highlight" else ""
+    return f"{{\\q0\\pos({round(width / 2)},{y}){colour}}}{text}"
+
+
 def build_ass(
     transcript: dict[str, Any],
     keep_ranges: list[dict[str, Any]],
@@ -460,7 +496,7 @@ def build_ass(
             )
     manual_styles: dict[tuple[str, str, int], str] = {}
     for row in text_clips or []:
-        key = (row["style"], row["position"], row["scale"])
+        key = (_template_style(row), row["position"], row["scale"])
         if key not in manual_styles:
             name = f"Text{len(manual_styles)}"
             manual_styles[key] = name
@@ -471,13 +507,11 @@ def build_ass(
     header = f"""[Script Info]\nScriptType: v4.00+\nPlayResX: {width}\nPlayResY: {height}\nScaledBorderAndShadow: yes\nWrapStyle: 0\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n{style_line}\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"""
     lines = [header, *events]
     for row in text_clips or []:
-        name = manual_styles[(row["style"], row["position"], row["scale"])]
-        # Explicit anchors keep simultaneous authored overlays at their chosen
-        # positions instead of letting ASS collision avoidance move them.
-        top = max(32, round(height * .075))
-        y = {"top": top, "center": round(height / 2), "bottom": height - top}[row["position"]]
-        override = f"{{\\q0\\pos({round(width / 2)},{y})}}"
-        lines.append(f"Dialogue: 1,{_ass_timestamp(row['start'])},{_ass_timestamp(row['end'])},{name},,0,0,0,,{override}{_ass_escape(row['text'])}\n")
+        key = (_template_style(row), row["position"], row["scale"])
+        name = manual_styles[key]
+        font_size = _ass_style(name, width, height, *key)[1]
+        lines.append(f"Dialogue: 1,{_ass_timestamp(row['start'])},{_ass_timestamp(row['end'])},{name},,0,0,0,,"
+                     f"{_text_template(row, width, height, font_size)}\n")
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text("".join(lines), encoding="utf-8-sig")
     return target

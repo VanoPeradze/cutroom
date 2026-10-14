@@ -23,6 +23,7 @@ from .jobs import JobCancelled, JobContext
 from .media import probe_media
 from .media_library import safe_asset_path
 from .media_render import append_media_graph, library_input_args, library_clips, library_has_audio, master_gain_db
+from .output_review import review_export
 from .projects import ProjectStore
 from .sequence import editor_keep_ranges
 from .source_tracks import has_sequence, has_source_tracks, source_track_clips, timeline_duration
@@ -1725,6 +1726,20 @@ def render_project(context: JobContext, project_id: str, store: ProjectStore, se
         }
         if caption_ass is not None or project.get("settings", {}).get("captions"):
             record["caption_settings"] = caption_settings
+        context.update(0.98, "Checking the finished video")
+        policy = (project.get("draft") or {}).get("audio_policy") or {}
+        try:
+            record["review"] = review_export(
+                settings.ffmpeg, output, duration=float(metadata["duration"]), has_audio=has_audio,
+                ceiling_dbtp=AUDIO_CEILING_DBTP,
+                # Master moves the normalized level on purpose; check against that.
+                target_lufs=(max(-24.0, min(-10.0, _finite_float(policy.get("target_lufs"), -16.0))) + master_gain_db(project)
+                             if normalizes_audio(project) else None),
+                caption_lines=burn_lines if burn_transcript else [], text_clips=text_clips,
+                caption_position=caption_settings["caption_position"],
+            )
+        except Exception as exc:  # Advice only: a failed check never fails the export.
+            record["review"] = {"version": 1, "error": type(exc).__name__, "warnings": 0, "checks": []}
         srt_lines = caption_lines(automatic_captions, caption_settings["caption_words_per_line"])
         if project.get("settings", {}).get("captions") and (srt_lines or any(row["kind"] == "caption" for row in text_clips)):
             caption_path = output.with_suffix(".srt")

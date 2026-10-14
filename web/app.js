@@ -12,7 +12,7 @@ import { initWelcome, workflowSettings, cloudProviderName } from "./welcome.js?v
 import { initLocalModels } from "./local-models.js?v=1.1-beta-vision-1";
 import { trackClips, trackAt, hasSourceTracks, SourceTimelineClock } from "./source-tracks.js?v=1.1-beta-1";
 import { initTrackProtection } from "./track-protection.js?v=1.1-beta-1";
-import { TextStudio } from "./text-studio.js?v=1.1-beta-2";
+import { TextStudio } from "./text-studio.js?v=1.1-beta-graphics-2";
 import { initNumericScrub } from "./numeric-scrub.js?v=1.1-beta-1";
 
 const $ = (selector, root = document) => root.querySelector(selector);
@@ -147,7 +147,7 @@ function cacheElements() {
     "captionStyleSelect", "captionPositionSelect", "captionScale", "captionScaleOut", "captionWordsPerLine", "captionWordsPerLineOut", "spokenLanguageSelect", "performanceModeSelect", "visualAiSelect", "audioPresetChoices", "audioPresetNote",
     "silenceAction", "silenceMin", "silenceMinOut", "silenceKeep", "silenceKeepOut", "maxRemoveRatio", "maxRemoveOut",
     "quietAction", "quietGain", "quietGainOut", "loudAction", "loudGain", "loudGainOut", "normalizeAudio",
-    "modelStatus", "modelButton", "retryAIButton", "setupRuntimeDock", "studioRuntimeDock", "draftRebuildNotice", "draftRebuildTitle", "draftRebuildText", "rebuildDraftButton", "exportDialog", "closeExportDialog", "exportSummary",
+    "modelStatus", "modelButton", "retryAIButton", "setupRuntimeDock", "studioRuntimeDock", "draftRebuildNotice", "draftRebuildTitle", "draftRebuildText", "rebuildDraftButton", "exportDialog", "closeExportDialog", "exportSummary", "exportReview",
     "activeJobBar", "activeJobLabel", "activeJobDetail", "globalCancelJobButton", "exportTitle", "exportDescription", "exportProgress", "exportActions", "cancelExport", "cancelExportJobButton", "confirmExport", "downloadExport", "toastRegion", "cameraBadge",
     "sourceInsertForm", "sourceInsertTitle", "sourceInsertIn", "sourceInsertOut", "sourceInsertAt", "sourceInsertStatus", "sourceInsertCancel", "sourceInsertSlot", "clipDuplicate", "editorMoreButton", "editorMoreTools", "emptyTimeline", "emptyTimelineAdd",
   ].forEach((id) => { elements[id] = document.getElementById(id); });
@@ -7042,7 +7042,24 @@ function openExportDialog({ progress = false } = {}) {
     elements.downloadExport.hidden = true;
   }
   elements.confirmExport.disabled = foregroundBusy();
+  renderExportReview(progress ? null : latestExport?.review, "Checks of the previous export");
   if (!elements.exportDialog.open) elements.exportDialog.showModal();
+}
+
+// The bounded check run after each export: advice, never a block.
+function renderExportReview(review, title) {
+  const list = elements.exportReview;
+  if (!list) return;
+  const checks = Array.isArray(review?.checks) ? review.checks.filter(check => check?.detail && check.status !== "skipped") : [];
+  const heading = document.createElement("li");
+  heading.className = "export-review-title"; heading.textContent = title;
+  list.replaceChildren(heading, ...checks.map(check => {
+    const item = document.createElement("li");
+    item.dataset.status = check.status;
+    item.textContent = `${check.status === "warn" ? "⚠" : check.status === "pass" ? "✓" : "·"} ${check.detail}`;
+    return item;
+  }));
+  list.hidden = !checks.length;
 }
 
 async function startExport() {
@@ -7144,6 +7161,7 @@ async function completeExportJob(job, projectId) {
       elements.downloadExport.download = result.export.name;
       elements.downloadExport.textContent = `Download video (${result.export.fps || state.project.settings?.fps || 30} FPS)`;
       elements.downloadExport.hidden = false;
+      renderExportReview(result.export.review, "Checks of this video");
     }
   }
   const projectPayload = await api(`/api/projects/${encodeURIComponent(projectId)}`);

@@ -254,3 +254,7 @@ html[data-theme="light"] .caption-item-editor button:not(.primary) { color:var(-
 .gameplay-moment-uncertain { padding:1px 6px; border:1px solid var(--warning, #d6a94a); border-radius:999px; color:var(--warning-text, #e9c46a); font-size:10px; }
 .gameplay-moment-mark { min-height:26px; padding:3px 8px; border:1px solid var(--line-strong); border-radius:6px; background:var(--surface-chrome); color:var(--paper-dim); font-size:11px; cursor:pointer; }
 .gameplay-moment-mark:disabled { opacity:.5; cursor:not-allowed; }
+/* Checks of the finished export. */
+.export-review { display:grid; gap:4px; margin:10px 0 0; padding:0; list-style:none; font-size:12px; color:var(--paper-dim); }
+.export-review li[data-status=warn] { color:var(--warning-text, #e9c46a); }
+.export-review .export-review-title { color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.06em; }
