@@ -358,7 +358,7 @@ test('mixer rows offer a typed value, a 0 dB mark and reset, and explain normali
   let project = {id:'one', sources:{A:{has_audio:true}}, manual:{media_clips:[], audio_mixer:{source_db:-3.5}}, draft:{audio_policy:{normalize:true,target_lufs:-16}}, assets:{}};
   const note = {textContent:''};
   const rows = new Map();
-  for (const role of ['source','music','voice','effects','master']) rows.set(role, {row:{classList:{toggle() {}}}, meter:{}, level:{}, hint:{hidden:true,textContent:''}});
+  for (const role of ['source','music','voice','effects','master']) rows.set(role, {row:{classList:{toggle() {}}, dataset:{}}, meter:{}, level:{}});
   const typed = {dataset:{mixNumber:'source_db'}, value:''}, reset = {dataset:{mixReset:'source_db'}, disabled:false};
   const masterReset = {dataset:{mixReset:'master_db'}, disabled:false};
   Object.assign(studio, {
@@ -371,11 +371,12 @@ test('mixer rows offer a typed value, a 0 dB mark and reset, and explain normali
   assert.equal(typed.value, '-3.5');
   assert.equal(reset.disabled, false); assert.equal(masterReset.disabled, true, 'reset is only offered away from 0 dB');
   assert.match(note.textContent, /normalization is on \(-16 LUFS\).*balance.*Master/i);
-  assert.equal(rows.get('source').hint.hidden, false, 'a lone track explains why its fader does not change the export');
+  assert.match(note.textContent, /Original is the only track playing/, 'a lone track explains why its fader does not change the export');
+  assert.equal(rows.get('source').row.dataset.normalizedAlone, 'true');
   project = {...project, draft:{}};
   studio.renderMixer();
   assert.match(note.textContent, /normalization is off/i);
-  assert.equal(rows.get('source').hint.hidden, true);
+  assert.equal(rows.get('source').row.dataset.normalizedAlone, 'false');
   // Typed values are clamped and kept to 0.1 dB; an empty field changes nothing.
   const queued = [];
   studio.queueMixer = patch => queued.push(patch);

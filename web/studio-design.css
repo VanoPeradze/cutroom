@@ -315,3 +315,9 @@ dialog input,dialog select { min-height:36px; }
   body .app-chrome .topbar { height:auto; min-height:52px; padding:8px 12px; }
 }
 @media (prefers-reduced-motion:reduce) { .home-hub .service-card { transition:none; } }
+/* Channel strips: a compact typed dB value under each name; double-click a fader resets it. */
+.studio-workspace .mixer-db { margin:0; gap:0; }
+.studio-workspace .advanced-content .mixer-db input[type=number] { width:52px; min-height:24px; height:24px; padding:1px 2px; font-size:11px; text-align:center; -moz-appearance:textfield; appearance:textfield; }
+.studio-workspace .mixer-db input[type=number]::-webkit-inner-spin-button, .studio-workspace .mixer-db input[type=number]::-webkit-outer-spin-button { -webkit-appearance:none; margin:0; }
+.studio-workspace .mixer-db > span, .studio-workspace .mixer-db .mixer-reset { display:none; }
+.studio-workspace .mixer-channel[data-normalized-alone=true] input[type=range] { opacity:.55; }

@@ -119,8 +119,7 @@ export class MediaStudio {
       const reset = document.createElement('button'); reset.type = 'button'; reset.className = 'mixer-reset'; reset.textContent = '0'; reset.dataset.mixReset = `${role}_db`;
       reset.title = 'Reset to 0 dB'; reset.setAttribute('aria-label', `Reset ${name} to 0 dB`);
       level.append(typed,unit,reset);
-      const hint = document.createElement('small'); hint.className = 'mixer-channel-hint'; hint.hidden = true;
-      heading.append(title,level); label.append(heading,range,hint); row.append(label);
+      heading.append(title,level); label.append(heading,range); row.append(label);
       const signal = document.createElement('div'); signal.className = 'mixer-signal';
       const meter = document.createElement('meter'); meter.className = role === 'master' ? 'mixer-meter mixer-channel-meter' : 'mixer-channel-meter';
       meter.min = 0; meter.max = 1; meter.high = .95; meter.optimum = .65; meter.value = 0;
@@ -132,7 +131,7 @@ export class MediaStudio {
         const mute = document.createElement('button'); mute.type = 'button'; mute.textContent = 'M'; mute.title = 'Mute in preview and export'; mute.dataset.mute = role; mute.setAttribute('aria-label', `Mute ${name} in preview and export`); actions.append(mute);
         const solo = document.createElement('button'); solo.type = 'button'; solo.textContent = 'S'; solo.title = 'Solo in preview only'; solo.dataset.solo = role; solo.setAttribute('aria-label', `Solo ${name} in preview only`); actions.append(solo);
       }
-      this.channelMeters.set(role,{row,meter,level:peak,hint});
+      this.channelMeters.set(role,{row,meter,level:peak});
       root.querySelector(role === 'master' ? '.mixer-master' : '.mixer-channels').append(row);
     }
     root.querySelector('input[type=file]').addEventListener('change', event => { const file = event.target.files[0]; event.target.value = ''; if (file) this.upload(file); });
@@ -276,15 +275,12 @@ export class MediaStudio {
   renderNormalization(mixer, root) {
     const normalization = mixerNormalization(this.project()), active = this.audibleChannels(mixer);
     const note = root.querySelector('.mixer-normalization');
-    if (note) note.textContent = normalization
-      ? `Loudness normalization is on (${normalization.target} LUFS). Channel faders set the balance between tracks; Master sets the final level.`
-      : 'Loudness normalization is off. Faders set exported levels directly.';
-    for (const [role,{hint}] of this.channelMeters || []) {
-      if (!hint) continue;
-      const alone = normalization && role !== 'master' && active.size === 1 && active.has(role);
-      hint.hidden = !alone;
-      hint.textContent = alone ? 'This is the only track playing, so normalization keeps its exported level. Use Master to change it.' : '';
-    }
+    const names = {source:'Original', music:'Music', voice:'Voiceover', effects:'Effects'};
+    const [alone] = active.size === 1 ? [...active] : [];
+    if (note) note.textContent = !normalization ? 'Loudness normalization is off. Faders set exported levels directly.'
+      : `Loudness normalization is on (${normalization.target} LUFS). Channel faders set the balance between tracks; Master sets the final level.`
+        + (alone ? ` ${names[alone]} is the only track playing, so its fader cannot change the exported level.` : '');
+    for (const [role,{row}] of this.channelMeters || []) row.dataset.normalizedAlone = String(Boolean(normalization && role === alone));
   }
   toggleSolo(role) {
     if (!['source','music','voice','effects'].includes(role)) return;
