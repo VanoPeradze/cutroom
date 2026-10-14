@@ -873,7 +873,30 @@ def _source_track_master(project: dict[str, Any], slot: str, *, audio: bool, out
     return filters
 
 
+# Every export keeps true peaks at or under about -1 dBTP, so players and
+# platforms never clip it. The limiter runs 4x oversampled to see the peaks
+# between samples; a 1 dB margin covers AAC encoding overshoot (up to about
+# 1.4 dB measured on harsh synthetic tones, usually far less). It also
+# returns the audio to 48 kHz (loudnorm works at 192 kHz).
+AUDIO_CEILING_DBTP = -1.0
+
+
+def audio_ceiling_filter() -> str:
+    limit = 10 ** ((AUDIO_CEILING_DBTP - 1.0) / 20)
+    return (f"aresample=192000,alimiter=limit={limit:.6f}:attack=0.5:release=50:level=0:latency=1,"
+            "aresample=48000")
+
+
+def normalizes_audio(project: dict[str, Any]) -> bool:
+    return bool(((project.get("draft") or {}).get("audio_policy") or {}).get("normalize"))
+
+
 def _final_audio_filter(project: dict[str, Any]) -> str:
+    """The second audio pass when the draft normalizes loudness, else ``anull``.
+
+    Faders set the balance before normalization; Master sets the final level
+    after it, and the ceiling comes last.
+    """
     policy = (project.get("draft") or {}).get("audio_policy") or {}
     if not policy.get("normalize"):
         return "anull"
@@ -884,8 +907,8 @@ def _final_audio_filter(project: dict[str, Any]) -> str:
     result = f"loudnorm=I={target:.1f}:LRA=11:TP=-1.5"
     gain_db = master_gain_db(project)
     if gain_db:
-        result += f",volume={gain_db:.6f}dB,alimiter=limit=0.98:level=0:latency=1"
-    return result
+        result += f",volume={gain_db:.6f}dB"
+    return f"{result},{audio_ceiling_filter()}"
 
 
 def _render_effects_payload(project: dict[str, Any]) -> dict[str, Any]:
@@ -1117,6 +1140,10 @@ def build_filter_graph(project: dict[str, Any], width: int, height: int, caption
     )
     filters.extend(media_filters)
     has_audio = audio_map is not None
+    if has_audio and not normalizes_audio(project):
+        # Normalized exports get the ceiling in their final audio pass instead.
+        filters.append(f"{audio_map}{audio_ceiling_filter()}[aceiling]")
+        audio_map = "[aceiling]"
     if caption_ass is not None:
         value = caption_ass.resolve().as_posix().replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'")
         filters.append(f"{video_map}ass=filename='{value}'[vfinal]")

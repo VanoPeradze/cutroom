@@ -301,7 +301,7 @@ def test_shorter_b_positive_offset_is_padded_on_a_timeline_for_video_and_audio()
     assert "[av2]trim=start_frame=150:end_frame=300" in graph
     assert "[1:a]asetpts=PTS-STARTPTS,adelay=2000:all=1,apad,atrim=duration=10.000000" in graph
     assert "asetpts=N/SR/TB[amaster]" in graph
-    assert maps == ["-map", "[vout]", "-map", "[aout]"]
+    assert maps == ["-map", "[vout]", "-map", "[aceiling]"]
     assert has_audio is True
 
 
@@ -335,7 +335,7 @@ def test_audio_only_b_can_supply_sound_while_video_layout_safely_falls_back_to_a
     assert "[1:v]" not in graph
     assert "[av0]trim=start_frame=0:end_frame=300" in graph
     assert "[1:a]asetpts=PTS-STARTPTS,adelay=0:all=1" in graph
-    assert maps == ["-map", "[vout]", "-map", "[aout]"]
+    assert maps == ["-map", "[vout]", "-map", "[aceiling]"]
     assert has_audio is True
 
 
