@@ -1,10 +1,10 @@
 import { applyTranslations, dictionaries } from "./i18n.js?v=1.1-beta-vision-1";
-import { TimelineView, formatTime, editableClips, timelineDuration, sequenceBlocks, sequenceGaps, rippleMoveStart } from "./timeline.js?v=1.1-beta-polish-1";
+import { TimelineView, formatTime, editableClips, timelineDuration, sequenceBlocks, sequenceGaps, rippleMoveStart } from "./timeline.js?v=1.1-beta-captions-1";
 import { MediaStudio } from "./media-studio.js?v=1.1-beta-polish-1";
 import { StabilizationStudio } from "./stabilization-studio.js?v=1.1-beta-1";
 import { ChromaStudio } from "./chroma-studio.js?v=1.1-beta-chroma-edit-2";
 import { ChromaPreview } from "./chroma-preview.js?v=1.1-beta-chroma-edit-2";
-import { SourceReview } from "./source-review.js?v=1.1-beta-polish-1";
+import { SourceReview } from "./source-review.js?v=1.1-beta-captions-1";
 import { initWorkspace } from "./workspace.js?v=1.1-beta-quality-2";
 import { KEYBOARD_PROFILES, resolveEditorShortcut, isEditorTransportSpace, shortcutRows } from "./keyboard.js?v=1.1-beta-2";
 import { AudioThresholdView } from "./audio-meter.js?v=1.1-beta-1";
@@ -57,6 +57,9 @@ const state = {
   transcriptActive: null,
   transcriptAnchor: null,
   transcriptSaving: false,
+  captionSelection: null,
+  captionDirty: false,
+  captionStatus: "",
   manualEditBusy: false,
   manualEditPromise: null,
   sourceMixerLayout: "auto",
@@ -136,6 +139,9 @@ function cacheElements() {
     "timelineRangeForm", "timelineRangeStart", "timelineRangeEnd", "timelineRangeSubmit", "timelineRangeStatus",
     "cameraDetection", "useEmbeddedCamera", "transcriptSearch", "transcriptList", "transcriptLanguage", "aspectSelect", "quickAspectChoices", "resolutionSelect",
     "transcriptFilter", "transcriptResults", "transcriptRemove", "transcriptRestore", "transcriptEditForm", "transcriptEditText", "transcriptEditTime", "transcriptEditStatus", "transcriptSave", "transcriptDiscard", "transcriptPrevious", "transcriptNext", "transcriptSaveAll",
+    "captionItemEditor", "captionItemMeta", "captionItemClose", "captionItemText", "captionItemSourceHelp", "captionItemStart", "captionItemEnd",
+    "captionItemStyle", "captionItemPosition", "captionItemScale", "captionItemHide", "captionItemReset", "captionItemSave", "captionItemStatus",
+    "captionItemPrevious", "captionItemNext",
     "keyboardProfile", "keyboardHelpProfile", "keyboardHelp", "keyboardDialog", "keyboardDescription", "keyboardLimitations", "keyboardShortcutList", "clipTrimForm", "clipTrimIn", "clipTrimOut", "clipTrimTitle", "clipTrimApply", "clipTrimStatus", "timelineTarget", "timelineTargetField", "trackReset", "trackHelp", "clipSourceIn", "clipSourceField", "clipMove",
     "qualitySelect", "fpsSelect", "fpsHelp", "exportFpsSelect", "exportFpsHelp", "exportFrameRateField", "autoReframe", "effectsToggle", "captionsToggle", "burnCaptionsToggle", "studioBurnCaptionsToggle", "captionControlStatus", "captionLanguageStatus",
     "captionStyleSelect", "captionPositionSelect", "captionScale", "captionScaleOut", "captionWordsPerLine", "captionWordsPerLineOut", "spokenLanguageSelect", "performanceModeSelect", "visualAiSelect", "audioPresetChoices", "audioPresetNote",
@@ -498,7 +504,11 @@ async function boot() {
       onMediaSelect: id => { pauseAllMedia(); state.timeline?.clearSelection(); if (id.startsWith("text_")) { void state.textStudio?.select(id); selectAdvancedTab("transcript"); } else { state.mediaStudio?.select(id); selectAdvancedTab("media"); } },
       onMediaEdit: (id, patch) => { const studio = id.startsWith("text_") ? state.textStudio : state.mediaStudio; studio?.queueClip(id,patch); return studio?.flush(); },
       onMediaPreview: (id, patch) => (id.startsWith("text_") ? state.textStudio : state.mediaStudio)?.previewClip(id,patch),
-      onMediaAction: editLayerAction });
+      onMediaAction: editLayerAction,
+      onCaptionSelect: id => { void selectCaptionItem(id); },
+      onCaptionEdit: (id, times) => runCaptionAction("caption_update", { caption_id: id, ...times }),
+      onCaptionAction: (action, detail) => runCaptionAction(action, detail),
+      onCaptionOpen: id => { void selectCaptionItem(id, { seek: true, focus: true }); } });
   initializeKeyboardProfile();
   state.audioMeter = new AudioThresholdView(elements.audioMeterCanvas);
   elements.audioMeterCanvas.addEventListener("cutroom-audio-seek", (event) => {
@@ -763,6 +773,7 @@ function bindEvents() {
   elements.transcriptPrevious.addEventListener("click", () => moveTranscriptLine(-1));
   elements.transcriptNext.addEventListener("click", () => moveTranscriptLine(1));
   elements.transcriptSaveAll.addEventListener("click", () => saveTranscriptBuffers(true));
+  bindCaptionItemEvents();
   elements.transcriptRemove.addEventListener("click", () => runManualRangeEdit("delete_range", "edit"));
   elements.transcriptRestore.addEventListener("click", () => runManualRangeEdit("restore_range", "edit"));
   elements.clipTrimForm.addEventListener("submit", applySelectedClipTrim);
@@ -2984,6 +2995,7 @@ function renderDraft() {
   renderReelCandidates();
   renderTranscript();
   state.timeline.setProject(editorProject());
+  renderCaptionInspector();
   renderCameraDetection();
   renderSourceMixer();
   seekPreview(firstKeptTime());
@@ -4879,9 +4891,212 @@ function captionPreviewText(segment, sourceTime, wordsPerCaption) {
   return String(segment.text || "").trim();
 }
 
+// Automatic captions are timeline items from the server (editor_captions): the
+// items the export burns and writes to SRT, with the user's edits applied.
+function captionItems() {
+  return Array.isArray(state.project?.editor_captions) ? state.project.editor_captions : [];
+}
+
+function selectedCaptionItem() {
+  return captionItems().find(item => item.id === state.captionSelection) || null;
+}
+
+async function selectCaptionItem(id, { seek = false, focus = false } = {}) {
+  const next = id || null;
+  if (next !== state.captionSelection && state.captionDirty && selectedCaptionItem()) await saveCaptionItem();
+  state.captionSelection = next;
+  state.captionDirty = false;
+  state.captionStatus = "";
+  state.timeline?.selectCaption?.(next, false);
+  const item = selectedCaptionItem();
+  if (item) {
+    pauseAllMedia();
+    state.timeline?.clearSelection();
+    selectAdvancedTab("transcript");
+    state.timeline?.revealCaption?.(item.id);
+    const time = previewTimelineTime();
+    if (seek || time < item.start || time >= item.end) seekSourcePreview(item.start + Math.min(.02, (item.end - item.start) / 2));
+  }
+  renderCaptionInspector();
+  if (item && focus) { elements.captionItemText?.focus(); elements.captionItemText?.select(); }
+  updatePreviewCaption(previewPlaybackTime());
+}
+
+function renderCaptionInspector() {
+  const editor = elements.captionItemEditor;
+  if (!editor) return;
+  const items = captionItems(), item = selectedCaptionItem();
+  if (state.captionSelection && !item) { state.captionSelection = null; state.captionDirty = false; state.captionStatus = ""; }
+  editor.hidden = !item;
+  if (!item) return;
+  const uses = items.filter(entry => entry.segment_id === item.segment_id).length;
+  const notes = [item.hidden && "Hidden", item.corrected && "Transcript fixed", item.local_text && "Own text",
+    item.timing_changed && "Retimed", (item.style || item.position || item.scale) && "Own style", uses > 1 && `Speech used ${uses}×`].filter(Boolean);
+  elements.captionItemMeta.textContent = `${formatTime(item.start, true)} – ${formatTime(item.end, true)}${notes.length ? ` · ${notes.join(" · ")}` : ""}`;
+  if (!state.captionDirty) {
+    elements.captionItemText.value = item.text;
+    const scope = item.local_text ? "item" : "source";
+    editor.querySelectorAll('input[name="captionItemScope"]').forEach(input => { input.checked = input.value === scope; });
+    elements.captionItemStart.value = Number(item.start).toFixed(2);
+    elements.captionItemEnd.value = Number(item.end).toFixed(2);
+    elements.captionItemStyle.value = item.style || "";
+    elements.captionItemPosition.value = item.position || "";
+    elements.captionItemScale.value = item.scale ?? "";
+  }
+  elements.captionItemSourceHelp.textContent = uses > 1
+    ? `Fixes the transcript in all ${uses} places this speech is used.`
+    : "Fixes the transcript; a new AI draft keeps the fix.";
+  const busy = foregroundBusy() || state.manualEditBusy || state.transcriptSaving;
+  const index = items.indexOf(item);
+  const changed = item.local_text || item.timing_changed || item.hidden || item.style || item.position || item.scale;
+  elements.captionItemHide.textContent = item.hidden ? "Show caption" : "Hide caption";
+  elements.captionItemHide.disabled = busy;
+  elements.captionItemReset.disabled = busy || !changed;
+  elements.captionItemReset.title = "Remove this caption's own text, timing, style and visibility. Transcript fixes stay.";
+  elements.captionItemSave.disabled = busy || !state.captionDirty;
+  elements.captionItemPrevious.disabled = index <= 0;
+  elements.captionItemNext.disabled = index < 0 || index >= items.length - 1;
+  elements.captionItemStatus.textContent = state.captionStatus || (state.captionDirty ? "Unsaved changes" : "");
+}
+
+async function runCaptionAction(action, detail) {
+  state.captionStatus = "Saving…";
+  renderCaptionInspector();
+  const result = await applyManualEdit(action, detail);
+  state.captionStatus = result ? "Saved" : "";
+  if (result) state.captionDirty = false;
+  renderCaptionInspector();
+  return result;
+}
+
+async function saveCaptionItem() {
+  const item = selectedCaptionItem();
+  if (!item) return null;
+  const fail = (message) => { state.captionStatus = message; renderCaptionInspector(); return null; };
+  const text = elements.captionItemText.value.trim();
+  if (!text) return fail("Caption text cannot be empty. Use Hide caption to remove it.");
+  const scope = elements.captionItemEditor.querySelector('input[name="captionItemScope"]:checked')?.value || "source";
+  const detail = { caption_id: item.id };
+  if (text !== item.text || (scope === "source" && item.local_text)) Object.assign(detail, { text, scope });
+  const start = Number(elements.captionItemStart.value), end = Number(elements.captionItemEnd.value);
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return fail("Enter the start and end in seconds.");
+  if (Math.abs(start - item.start) > .004 || Math.abs(end - item.end) > .004) Object.assign(detail, { start, end });
+  for (const [key, element] of [["style", elements.captionItemStyle], ["position", elements.captionItemPosition]]) {
+    if (element.value !== (item[key] || "")) detail[key] = element.value;
+  }
+  const scaleText = String(elements.captionItemScale.value ?? "").trim();
+  if (scaleText && !Number.isFinite(Number(scaleText))) return fail("Size is a percentage from 75 to 150.");
+  const scale = scaleText ? Math.round(Number(scaleText)) : "";
+  if (scale !== (item.scale ?? "")) detail.scale = scale;
+  if (Object.keys(detail).length === 1) { state.captionDirty = false; renderCaptionInspector(); return null; }
+  return runCaptionAction("caption_update", detail);
+}
+
+function moveCaptionSelection(step) {
+  const items = captionItems(), index = items.findIndex(item => item.id === state.captionSelection);
+  const next = items[index + step];
+  if (next) void selectCaptionItem(next.id, { seek: true });
+}
+
+function bindCaptionItemEvents() {
+  const editor = elements.captionItemEditor;
+  if (!editor) return;
+  const markDirty = () => { state.captionDirty = true; state.captionStatus = ""; renderCaptionInspector(); };
+  editor.addEventListener("input", markDirty);
+  editor.addEventListener("change", markDirty);
+  editor.addEventListener("submit", (event) => { event.preventDefault(); void saveCaptionItem(); });
+  elements.captionItemText.addEventListener("keydown", (event) => {
+    if (event.isComposing) return;
+    if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void saveCaptionItem(); }
+    else if (event.key === "Escape" && state.captionDirty) {
+      event.preventDefault(); event.stopPropagation();
+      state.captionDirty = false; state.captionStatus = ""; renderCaptionInspector();
+    }
+  });
+  elements.captionItemClose.addEventListener("click", () => { void selectCaptionItem(null); });
+  elements.captionItemHide.addEventListener("click", () => {
+    const item = selectedCaptionItem();
+    if (item) void runCaptionAction("caption_visibility", { caption_id: item.id, hidden: !item.hidden });
+  });
+  elements.captionItemReset.addEventListener("click", () => {
+    const item = selectedCaptionItem();
+    if (!item) return;
+    state.captionDirty = false;
+    void runCaptionAction("caption_reset", { caption_id: item.id });
+  });
+  elements.captionItemPrevious.addEventListener("click", () => moveCaptionSelection(-1));
+  elements.captionItemNext.addEventListener("click", () => moveCaptionSelection(1));
+  // The caption on the video is the same item: clicking it selects it for editing.
+  const selectFromPreview = (event) => {
+    const id = elements.previewCaption?.dataset.captionId;
+    if (!id) return;
+    event.stopPropagation();
+    if (event.type === "click") void selectCaptionItem(id, { focus: true });
+  };
+  elements.previewCaption?.addEventListener("pointerdown", selectFromPreview);
+  elements.previewCaption?.addEventListener("click", selectFromPreview);
+}
+
+// One caption line at a time, split exactly as the export splits it.
+function captionItemLine(item, time, wordsPerCaption) {
+  const words = Array.isArray(item.words) ? item.words : [];
+  if (!words.length) return time >= item.start && time < item.end ? { text: item.text, words: [] } : null;
+  const chunks = [[]];
+  for (const word of words) {
+    const chunk = chunks.at(-1);
+    if (chunk.length && (word[0] - chunk.at(-1)[1] > 0.75 || chunk.length >= wordsPerCaption)) chunks.push([]);
+    chunks.at(-1).push(word);
+  }
+  for (const [index, chunk] of chunks.entries()) {
+    let start = chunk[0][0], end = chunk.at(-1)[1];
+    // A moved caption edge keeps the caption on screen until that edge.
+    if (item.timing_changed && index === 0) start = item.start;
+    if (item.timing_changed && index === chunks.length - 1) end = item.end;
+    if (time >= start && time < end) return { text: chunk.map(word => word[2]).join(" "), words: chunk };
+  }
+  return null;
+}
+
+function renderCaptionItemPreview(time) {
+  const caption = elements.previewCaption, settings = captionSettingsFromControls();
+  const active = captionItems().filter(item => !item.hidden && time >= item.start && time < item.end);
+  const item = active.find(entry => entry.id === state.captionSelection) || active.at(-1);
+  const style = item?.style || settings.style, position = item?.position || settings.position, scale = item?.scale || settings.scale;
+  const limit = style === "highlight" ? Math.min(settings.words, HIGHLIGHT_WORDS_PER_CAPTION) : settings.words;
+  const line = item ? captionItemLine(item, time, limit) : null;
+  caption.dataset.captionStyle = style;
+  caption.dataset.captionPosition = position;
+  caption.dataset.captionLayout = cameraAt(time);
+  caption.style.setProperty("--caption-preview-scale", String(scale / 100));
+  caption.classList.toggle("caption-selected", Boolean(line && item.id === state.captionSelection));
+  if (line) caption.dataset.captionId = item.id; else delete caption.dataset.captionId;
+  const text = line?.text || "";
+  // Estimated word timing (a corrected text with a new word count) is never coloured.
+  const activeWord = style === "highlight" && line?.words.length && !item.estimated_words && !RTL_CHARACTERS.test(text)
+    ? Math.max(0, line.words.findLastIndex(word => time >= word[0])) : -1;
+  if (activeWord >= 0) {
+    caption.replaceChildren(...line.words.flatMap((word, index) => {
+      const span = document.createElement("span");
+      span.textContent = word[2];
+      if (index === activeWord) span.className = "caption-active-word";
+      return index ? [" ", span] : [span];
+    }));
+  } else {
+    caption.textContent = text;
+  }
+  caption.hidden = !text;
+}
+
 function updatePreviewCaption(sourceTime) {
   const project = playbackProject();
   if (!elements.previewCaption) return;
+  if (captionBurnEnabled() && Array.isArray(state.project?.editor_captions) && !previewUsesSourceTime()) {
+    renderCaptionItemPreview(sourceTime);
+    return;
+  }
+  // Full-source inspection plays the original recording, outside the edit.
+  delete elements.previewCaption.dataset.captionId;
+  elements.previewCaption.classList.remove("caption-selected");
   const enabled = captionBurnEnabled();
   const segments = project?.analysis?.transcript?.segments || [];
   if (!enabled || !segments.length) { elements.previewCaption.hidden = true; return; }
@@ -5730,6 +5945,21 @@ function handleEditorShortcut(event) {
     return;
   }
   const action = resolveEditorShortcut(event, state.keyboardProfile);
+  const selectedCaption = event.target === elements.timelineCanvas && state.timeline?.captionSelection ? selectedCaptionItem() : null;
+  if (selectedCaption && (["delete_selection", "restore_selection", "split", "clear_selection"].includes(action)
+    || [event.key, event.code].some(key => ["Delete", "Del", "Backspace", "Enter"].includes(key)))) {
+    // A caption is not footage. Its Delete hides that caption and can never
+    // remove an older range selection underneath it.
+    event.preventDefault();
+    event.stopPropagation?.();
+    if (event.repeat || foregroundBusy() || state.transcriptSaving) return;
+    if (action === "clear_selection") void selectCaptionItem(null);
+    else if (event.key === "Enter") void selectCaptionItem(selectedCaption.id, { focus: true });
+    else if ((action === "delete_selection" || ["Delete", "Del", "Backspace"].includes(event.key)) && !selectedCaption.hidden) {
+      void runCaptionAction("caption_visibility", { caption_id: selectedCaption.id, hidden: true });
+    }
+    return;
+  }
   const selectedMedia = event.target === elements.timelineCanvas && state.timeline?.mediaSelection
     ? [...(state.project.manual?.media_clips || []), ...(state.project.manual?.text_clips || [])].find(item => item.id === state.timeline.mediaSelection) : null;
   if (event.target === elements.timelineCanvas && state.timeline?.mediaSelection && !selectedMedia
@@ -6019,7 +6249,8 @@ async function applyManualEdit(action, detail = {}, { isCurrent = () => true } =
   const preservedTime = previewTimelineTime();
   // Mixer and layer adjustments do not change the main playback clock. Keep
   // auditioning while their automatic saves run, without reloading the video.
-  const liveMediaAction = action === "media_update" || action === "set_audio_mixer" || action === "set_track_lock" || action.startsWith("text_");
+  const liveMediaAction = action === "media_update" || action === "set_audio_mixer" || action === "set_track_lock" || action.startsWith("text_")
+    || action.startsWith("caption_");
   let finishManualEdit;
   const manualEditPromise = new Promise((resolve) => { finishManualEdit = resolve; });
   state.manualEditPromise = manualEditPromise;
@@ -6070,6 +6301,11 @@ async function applyManualEdit(action, detail = {}, { isCurrent = () => true } =
       state.textStudio?.render();
       if (state.timeline) { state.timeline.project = editorProject(); state.timeline.scheduleDraw(); }
       updateMediaPreview();
+      if (action.startsWith("caption_")) {
+        if (detail.scope === "source") renderTranscript();
+        renderCaptionInspector();
+        updatePreviewCaption(previewPlaybackTime());
+      }
       return state.project;
     }
     elements.projectName.value = projectLabel(state.project);
@@ -6102,6 +6338,7 @@ async function applyManualEdit(action, detail = {}, { isCurrent = () => true } =
   } finally {
     state.manualEditBusy = false;
     state.textStudio?.render();
+    renderCaptionInspector();
     finishManualEdit();
     if (state.manualEditPromise === manualEditPromise) state.manualEditPromise = null;
     renderReadiness();
@@ -6122,6 +6359,11 @@ function pendingTranscriptBuffers() {
 }
 
 function requireSavedTranscript() {
+  if (state.captionDirty && selectedCaptionItem()) {
+    toast("Save or discard your caption changes before rebuilding or exporting.");
+    openStudioTab("transcript");
+    return false;
+  }
   if (!pendingTranscriptBuffers().length) return true;
   toast("Save or discard your transcript changes before rebuilding or exporting.");
   openStudioTab("transcript");

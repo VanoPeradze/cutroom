@@ -16,7 +16,7 @@
   <link rel="stylesheet" href="/assets/text-studio.css?v=1.1-beta-2">
   <link rel="stylesheet" href="/assets/welcome.css?v=1.1-beta-2">
   <link rel="stylesheet" href="/assets/creator-ui.css?v=1.1-beta-12">
-  <link rel="stylesheet" href="/assets/editor-panels.css?v=1.1-beta-focused-3">
+  <link rel="stylesheet" href="/assets/editor-panels.css?v=1.1-beta-captions-1">
   <link rel="stylesheet" href="/assets/studio-design.css?v=1.1-beta-design-1">
   <link rel="stylesheet" href="/assets/studio-chrome.css?v=1.1-beta-chrome-1">
   <link rel="stylesheet" href="/assets/studio-screens.css?v=1.1-beta-screens-10">
@@ -601,6 +601,24 @@
           </div>
           <div class="tab-panel" id="studioPanelTranscript" role="tabpanel" aria-labelledby="studioTabTranscript" tabindex="0" data-panel="transcript">
             <header class="studio-tool-intro"><div><p>TEXT &amp; CAPTIONS</p><h3>Captions</h3></div><span>Add text to the edit, or work with the recorded speech below.</span></header>
+            <form id="captionItemEditor" class="caption-item-editor" aria-labelledby="captionItemTitle" hidden>
+              <div class="caption-item-head"><div><h4 id="captionItemTitle">Selected caption</h4><p id="captionItemMeta"></p></div><button type="button" id="captionItemClose">Done</button></div>
+              <label class="caption-item-text" for="captionItemText">Caption text</label>
+              <textarea id="captionItemText" dir="auto" rows="3" maxlength="2000"></textarea>
+              <fieldset class="caption-item-scope"><legend>Apply a text change to</legend>
+                <label><input type="radio" name="captionItemScope" value="source" checked><span><b>What was said</b><small id="captionItemSourceHelp">Fixes the transcript wherever this speech is used.</small></span></label>
+                <label><input type="radio" name="captionItemScope" value="item"><span><b>Only this caption</b><small>The transcript stays as transcribed.</small></span></label>
+              </fieldset>
+              <div class="caption-item-grid">
+                <label><span>Start (s)</span><input id="captionItemStart" type="number" step="0.01" min="0" inputmode="decimal"></label>
+                <label><span>End (s)</span><input id="captionItemEnd" type="number" step="0.01" min="0" inputmode="decimal"></label>
+                <label><span>Style</span><select id="captionItemStyle"><option value="">Project style</option><option value="highlight">Word highlight</option><option value="clean">Clean</option><option value="bold">Bold</option><option value="boxed">Boxed</option></select></label>
+                <label><span>Position</span><select id="captionItemPosition"><option value="">Project position</option><option value="auto">Automatic safe area</option><option value="top">Top</option><option value="center">Center</option><option value="bottom">Bottom</option></select></label>
+                <label><span>Size (%)</span><input id="captionItemScale" type="number" min="75" max="150" step="5" placeholder="Project" inputmode="numeric"></label>
+              </div>
+              <div class="caption-item-actions"><button type="button" id="captionItemHide">Hide caption</button><button type="button" id="captionItemReset">Reset caption</button><button type="submit" class="button primary compact" id="captionItemSave">Save caption</button></div>
+              <div class="caption-item-footer"><span id="captionItemStatus" role="status"></span><button type="button" id="captionItemPrevious">&larr; Previous</button><button type="button" id="captionItemNext">Next &rarr;</button></div>
+            </form>
             <section id="textStudio" class="text-studio" aria-label="Custom text and captions"></section>
             <details class="caption-settings-disclosure inspector-section"><summary>AI subtitle style &amp; speech language</summary>
             <section class="caption-control-panel" aria-labelledby="captionControlTitle">
@@ -846,7 +864,7 @@
       <footer class="connection-actions"><button class="button ghost" id="forgetCloudKey" type="button">Forget session key</button><button class="button primary" id="saveAIConnection" type="submit">Use this connection</button></footer>
     </form>
   </dialog>
-  <script type="module" src="/assets/app.js?v=1.1-beta-quality-3"></script>
+  <script type="module" src="/assets/app.js?v=1.1-beta-captions-1"></script>
   <script src="/assets/studio-screens.js?v=1.1-beta-polish-1" defer></script>
 </body>
 </html>

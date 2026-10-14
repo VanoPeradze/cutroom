@@ -10,6 +10,7 @@ from .cache_keys import build_analysis_cache_fingerprints, cache_fingerprints_ma
 from .composition import default_reels_stack, select_embedded_candidate
 from .config import Settings
 from .edit_styles import enrich_brief_with_style
+from .caption_items import apply_corrections, corrections as caption_corrections
 from .editing import SOURCE_MIXER_DEFAULT_LAYOUTS, apply_camera_overrides, apply_timeline_overrides
 from .audio import analyze_audio, audio_policy, build_audio_actions, constrain_gain_ranges_to_speech, protect_silence_ranges_from_speech
 from .intelligence import CRITIC_REVIEW_CONTRACT, PACE_LIMITS, StoryPlanningError, build_story_beats, language_from_text, plan_edit
@@ -3068,7 +3069,10 @@ def analyze_project(
     story_hierarchy: dict[str, Any] | None = None
     model_selection: dict[str, Any] | None = None
     planner_warnings: list[dict[str, str]] = []
-    normalized_editorial_transcript, _ = _normalize_transcript(transcript, spoken_language, duration)
+    # The user's caption corrections fix what was said; editorial decisions read
+    # the corrected words while the stored transcription stays as transcribed.
+    editorial_source, _ = apply_corrections(transcript, caption_corrections(project))
+    normalized_editorial_transcript, _ = _normalize_transcript(editorial_source, spoken_language, duration)
     editorial_transcript_fingerprint = stable_fingerprint(
         "director-editorial-transcript", normalized_editorial_transcript["segments"],
     )
