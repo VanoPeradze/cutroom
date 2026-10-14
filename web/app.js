@@ -1,4 +1,4 @@
-import { applyTranslations, dictionaries } from "./i18n.js?v=1.1-beta-vision-1";
+import { applyTranslations, dictionaries } from "./i18n.js?v=1.1-beta-ai-1";
 import { TimelineView, formatTime, editableClips, timelineDuration, sequenceBlocks, sequenceGaps, rippleMoveStart } from "./timeline.js?v=1.1-beta-captions-1";
 import { MediaStudio } from "./media-studio.js?v=1.1-beta-mixer-2";
 import { StabilizationStudio } from "./stabilization-studio.js?v=1.1-beta-1";
@@ -3094,7 +3094,10 @@ function renderDurationReview() {
   const replacements = {selected:number(review.selected_seconds), requested:number(review.requested_seconds),
     available:number(review.available_source_seconds), limit:number(review.style_moment_limit)};
   const key = review.reason === "style_moment_limit" ? "durationStyleLimit" : review.reason === "source_shorter" ? "durationSourceLimit" : "durationEvidenceLimit";
-  const message = t("durationDraftSummary") + " " + t(key);
+  // Each step that changed the length, so a short draft shows where time went.
+  const chain = (Array.isArray(review.chain) ? review.chain : []).filter(row => row && Number.isFinite(Number(row.seconds)))
+    .map(row => `${t(`durationStage_${row.stage}`) || row.stage} ${number(row.seconds)}s${row.passages ? ` (${row.passages})` : ""}`);
+  const message = t("durationDraftSummary") + " " + t(key) + (chain.length > 2 ? ` ${t("durationChain")} ${chain.join(" → ")}.` : "");
   const text = node.querySelector("p");
   if (text) text.textContent = message.replace(/\{(selected|requested|available|limit)\}/g,(_match,key)=>String(replacements[key]));
   const button = document.getElementById("reviewDurationSettings");

@@ -718,8 +718,13 @@ def _decode_with_model(
     *,
     bilingual_hint: bool = False,
     recovery: bool = False,
+    vad: bool = True,
 ) -> dict[str, Any]:
-    """Decode one bounded media unit with cooperative checks between segments."""
+    """Decode one bounded media unit with cooperative checks between segments.
+
+    ``vad=False`` decodes the whole unit without Silero VAD; it is used only to
+    recover speech that VAD detected but the first decode did not transcribe.
+    """
 
     if cancel_check:
         cancel_check()
@@ -729,8 +734,8 @@ def _decode_with_model(
         task="transcribe",
         initial_prompt=_BILINGUAL_TRANSCRIPTION_HINT if requested_language == "he" or bilingual_hint else None,
         beam_size=5 if recovery else (1 if mode == "lite" else (3 if mode == "balanced" else 5)),
-        vad_filter=True,
-        vad_parameters={"min_silence_duration_ms": 350, "speech_pad_ms": 180},
+        vad_filter=vad,
+        **({"vad_parameters": {"min_silence_duration_ms": 350, "speech_pad_ms": 180}} if vad else {}),
         word_timestamps=mode != "lite",
         # Long recordings are split before this call. Quality mode can still use
         # prior text within each bounded unit without making cancellation wait for
@@ -821,7 +826,148 @@ def _decode_with_model(
     }
 
 
+# A unit whose VAD heard at least this much speech, of which the decode
+# transcribed under this share, is decoded once more without VAD.
+VAD_GAP_MIN_SPEECH_SECONDS = 8.0
+VAD_GAP_MAX_TRANSCRIBED_SHARE = 0.35
+VAD_GAP_MAX_UNITS = 24
+
+
+def _vad_gap(decoded: dict[str, Any]) -> tuple[float, float] | None:
+    chunks = (decoded.get("coverage") or {}).get("chunks") or []
+    chunk = chunks[0] if chunks and isinstance(chunks[0], dict) else {}
+    detected = _finite_number(chunk.get("vad_speech_seconds"), -1.0)
+    if detected < VAD_GAP_MIN_SPEECH_SECONDS:
+        return None
+    duration = _finite_number(decoded.get("duration"))
+    observed = sum(row["end"] - row["start"] for row in _merged_time_ranges(decoded.get("segments"), duration))
+    return (detected, observed) if observed < detected * VAD_GAP_MAX_TRANSCRIBED_SHARE else None
+
+
+def _plausible_recovered_segments(original: dict[str, Any], candidate: dict[str, Any]) -> list[dict[str, Any]]:
+    """Segments the second decode adds where the first heard nothing.
+
+    Whisper without VAD can invent text over music or silence; such lines have
+    a high no-speech probability with low confidence, or repeat themselves.
+    """
+    taken = _merged_time_ranges(original.get("segments"), _finite_number(original.get("duration")) or 1e9)
+    rows = [row for row in candidate.get("segments") or [] if isinstance(row, dict)]
+    repeats: dict[str, int] = {}
+    for row in rows:
+        key = normalize_text(str(row.get("text") or ""))
+        repeats[key] = repeats.get(key, 0) + 1
+    added = []
+    for row in rows:
+        start, end = _finite_number(row.get("start")), _finite_number(row.get("end"))
+        text = str(row.get("text") or "").strip()
+        if not text or end - start < 0.3 or repeats.get(normalize_text(text), 0) >= 3:
+            continue
+        if _finite_number(row.get("no_speech_prob")) >= 0.6 and _finite_number(row.get("avg_logprob")) <= -1.0:
+            continue
+        if _finite_number(row.get("avg_logprob")) < -1.5:
+            continue
+        overlap = sum(max(0.0, min(end, span["end"]) - max(start, span["start"])) for span in taken)
+        if overlap > (end - start) * 0.5:
+            continue
+        added.append(row)
+    return added
+
+
+def _recover_vad_gap(
+    model: Any,
+    media_path: Path,
+    model_name: str,
+    device: str,
+    compute: str,
+    requested_language: str | None,
+    mode: str,
+    progress: Callable[[float, str], None] | None,
+    cancel_check: Callable[[], None] | None,
+    recovery_state: dict[str, Any],
+    decoded: dict[str, Any],
+    source_start: float,
+) -> dict[str, Any]:
+    """Decode a unit again without VAD when VAD heard speech that was not transcribed.
+
+    The first decode's text is kept; only plausible new segments in its silent
+    stretches are added. The VAD evidence of the unit stays as measured.
+    """
+    gap = _vad_gap(decoded)
+    state = recovery_state.setdefault("vad_gap", {
+        "version": 1, "attempted_units": 0, "recovered_units": 0, "max_units": VAD_GAP_MAX_UNITS, "units": [],
+    })
+    if gap is None or mode == "lite" or state["attempted_units"] >= state.get("max_units", VAD_GAP_MAX_UNITS):
+        return decoded
+    detected, observed = gap
+    duration = _finite_number(decoded.get("duration"))
+    state["attempted_units"] += 1
+    outcome = {"start": round(source_start, 3), "end": round(source_start + duration, 3),
+               "vad_seconds": round(detected, 3), "before_seconds": round(observed, 3), "status": "kept_original"}
+    state["units"].append(outcome)
+    if cancel_check:
+        cancel_check()
+    if progress:
+        progress(0.96, "Recovering speech the first pass missed")
+    try:
+        candidate = _decode_with_model(
+            model, media_path, model_name, device, compute, requested_language, mode,
+            (lambda _value, message: progress(0.96, message)) if progress else None,
+            cancel_check, recovery=True, vad=False,
+        )
+    except JobCancelled:
+        raise
+    except Exception:
+        outcome["status"] = "retry_failed"
+        return decoded
+    added = _plausible_recovered_segments(decoded, candidate)
+    added_seconds = sum(row["end"] - row["start"] for row in _merged_time_ranges(added, duration or 1e9))
+    outcome["added_seconds"] = round(added_seconds, 3)
+    if added_seconds < max(2.0, 0.25 * (detected - observed)):
+        return decoded
+    segments = sorted([*decoded.get("segments", []), *[dict(row) for row in added]],
+                      key=lambda row: (_finite_number(row.get("start")), _finite_number(row.get("end"))))
+    for index, row in enumerate(segments):
+        row["id"] = f"s{index + 1:04d}"
+    words = sorted([word for row in segments for word in row.get("words") or []],
+                   key=lambda word: (_finite_number(word.get("start")), _finite_number(word.get("end"))))
+    state["recovered_units"] += 1
+    outcome["status"] = "recovered"
+    recovered = {**decoded, "segments": segments, "words": words,
+                 "text": " ".join(str(row.get("text") or "").strip() for row in segments).strip()}
+    if isinstance(decoded.get("coverage"), dict):
+        coverage = copy.deepcopy(decoded["coverage"])
+        for chunk in coverage.get("chunks") or []:
+            chunk["transcript_seconds"] = round(sum(
+                row["end"] - row["start"] for row in _merged_time_ranges(segments, duration)
+            ), 3)
+        recovered["coverage"] = coverage
+    return recovered
+
+
 def _decode_with_quality_retry(
+    model: Any,
+    media_path: Path,
+    model_name: str,
+    device: str,
+    compute: str,
+    requested_language: str | None,
+    mode: str,
+    progress: Callable[[float, str], None] | None,
+    cancel_check: Callable[[], None] | None,
+    recovery_state: dict[str, Any],
+    source_start: float = 0.0,
+) -> dict[str, Any]:
+    decoded = _decode_with_language_retry(
+        model, media_path, model_name, device, compute, requested_language, mode, progress, cancel_check,
+        recovery_state, source_start,
+    )
+    return _recover_vad_gap(
+        model, media_path, model_name, device, compute, requested_language, mode, progress, cancel_check,
+        recovery_state, decoded, source_start,
+    )
+
+
+def _decode_with_language_retry(
     model: Any,
     media_path: Path,
     model_name: str,
