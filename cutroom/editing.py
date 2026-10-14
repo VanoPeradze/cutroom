@@ -896,6 +896,24 @@ def _set_embedded_camera(project: dict[str, Any], payload: dict[str, Any]) -> No
 
 
 CAPTION_LAYERS = ("caption_corrections", "caption_overrides")
+VISUAL_SCREENS = frozenset({"gameplay", "cutscene", "menu_or_map", "loading_or_black", "webcam_only", "other"})
+
+
+def _prepare_visual_override(project: dict[str, Any], payload: dict[str, Any]) -> list[dict[str, Any]] | None:
+    """Replace the screen type of a source range for the next AI draft ("" clears it)."""
+    start, end = _number(payload, "start"), _number(payload, "end")
+    duration = _duration(project)
+    if start < 0 or end > duration + 1e-6 or end - start < 0.5:
+        raise ManualEditError("Choose a range of at least 0.5 s inside the recording")
+    screen = payload.get("screen")
+    if screen != "" and screen not in VISUAL_SCREENS:
+        raise ManualEditError("Unknown screen type")
+    current = [dict(row) for row in (project.get("manual") or {}).get("visual_overrides") or [] if isinstance(row, dict)]
+    kept = [row for row in current if float(row.get("end", 0)) <= start or float(row.get("start", 0)) >= end]
+    if screen:
+        kept.append({"start": round(start, 3), "end": round(end, 3), "screen": screen})
+    kept.sort(key=lambda row: (float(row["start"]), float(row["end"])))
+    return None if kept == current else kept
 
 
 def _caption_snapshot(project: dict[str, Any]) -> dict[str, Any]:
@@ -932,6 +950,13 @@ def _prepare_caption_change(project: dict[str, Any], payload: dict[str, Any], ac
 
 
 def _apply_history_entry(project: dict[str, Any], entry: dict[str, Any], side: str) -> None:
+    if entry.get("kind") == "visual":
+        manual = project.setdefault("manual", {})
+        if entry[side]:
+            manual["visual_overrides"] = copy.deepcopy(entry[side])
+        else:
+            manual.pop("visual_overrides", None)
+        return
     if entry.get("kind") == "captions":
         _restore_captions(project, entry[side])
         if isinstance(project.get("draft"), dict):
@@ -1031,6 +1056,11 @@ def _apply_manual_edit(project: dict[str, Any], payload: dict[str, Any]) -> dict
     trimmed = _prepare_clip_trim(project, payload) if action == "trim_clip" else None
     if action == "trim_clip" and trimmed is None:
         return project
+    visual_change = None
+    if action == "visual_override":
+        visual_change = _prepare_visual_override(project, payload)
+        if visual_change is None:
+            return project
     caption_change = None
     if action in CAPTION_ACTION_FIELDS or action == "transcript_text":
         caption_change = _prepare_caption_change(project, payload, action)
@@ -1067,6 +1097,15 @@ def _apply_manual_edit(project: dict[str, Any], payload: dict[str, Any]) -> dict
             project["draft"]["edited_at"] = now_iso()
         entry = {"kind": "chroma", "before": before,
                  "after": {"present": True, "value": copy.deepcopy(chroma_edit)}}
+    elif visual_change is not None:
+        # A correction for the next AI draft; the current timeline is unchanged.
+        manual = project.setdefault("manual", {})
+        before = copy.deepcopy(manual.get("visual_overrides") or [])
+        if visual_change:
+            manual["visual_overrides"] = visual_change
+        else:
+            manual.pop("visual_overrides", None)
+        entry = {"kind": "visual", "before": before, "after": copy.deepcopy(visual_change)}
     elif caption_change is not None:
         # Corrections and per-caption changes are layers over the transcript; the
         # transcribed text itself is never rewritten, so every change can be undone.

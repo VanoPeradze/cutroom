@@ -1053,6 +1053,15 @@ def create_app(settings: Settings | None = None) -> Flask:
         media_fields = MEDIA_ACTION_FIELDS.get(action)
         text_fields = TEXT_ACTION_FIELDS.get(action)
         caption_fields = CAPTION_ACTION_FIELDS.get(action)
+        if action == "visual_override":
+            # A screen-type correction for the next AI draft.
+            text_fields = {"start", "end", "screen"}
+            if payload.get("screen") is not None:
+                _require_optional_string(payload, "screen", max_length=24)
+            for key in ("start", "end"):
+                if key not in payload:
+                    raise APIInputError("invalid_field", f"Required field: {key}")
+                _validate_finite_number(payload[key], key, minimum=0.0, maximum=604_800.0)
         if caption_fields is not None:
             text_fields = caption_fields
             _require_optional_string(payload, "caption_id", max_length=160)

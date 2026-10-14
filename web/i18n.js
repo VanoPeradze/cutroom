@@ -430,6 +430,23 @@ Object.assign(he, {
 });
 
 Object.assign(en, {
+  gameplayMomentsTitle: "Gameplay moments in this draft",
+  gameplayMomentUncertain: "Uncertain",
+  gameplayMomentNotLive: "Not live gameplay",
+  gameplayMomentNotLiveHelp: "For a replay, camera feed or cutscene the AI read as play. Rebuild the Draft to leave it out.",
+  gameplayMomentUnmark: "Undo mark",
+  gameplayMomentMarkedHelp: "Marked as not live gameplay. Rebuild the Draft to apply."
+});
+Object.assign(he, {
+  gameplayMomentsTitle: "רגעי המשחק בטיוטה",
+  gameplayMomentUncertain: "לא בטוח",
+  gameplayMomentNotLive: "לא משחק חי",
+  gameplayMomentNotLiveHelp: "לשידור חוזר, מצלמת אבטחה או קטע וידאו שה־AI פירש כמשחק. בנו את ה־Draft מחדש כדי להשמיט אותו.",
+  gameplayMomentUnmark: "ביטול הסימון",
+  gameplayMomentMarkedHelp: "סומן כלא משחק חי. בנו את ה־Draft מחדש כדי להחיל."
+});
+
+Object.assign(en, {
   durationChain: "Length at each step:",
   durationStage_requested: "requested", durationStage_story_selection: "story passages", durationStage_gameplay_moments: "gameplay moments",
   durationStage_audio_highlights: "audio highlights", durationStage_pause_cleanup: "after removing pauses",

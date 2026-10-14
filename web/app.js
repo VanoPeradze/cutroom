@@ -1,4 +1,4 @@
-import { applyTranslations, dictionaries } from "./i18n.js?v=1.1-beta-ai-1";
+import { applyTranslations, dictionaries } from "./i18n.js?v=1.1-beta-ai-2";
 import { TimelineView, formatTime, editableClips, timelineDuration, sequenceBlocks, sequenceGaps, rippleMoveStart } from "./timeline.js?v=1.1-beta-captions-1";
 import { MediaStudio } from "./media-studio.js?v=1.1-beta-mixer-2";
 import { StabilizationStudio } from "./stabilization-studio.js?v=1.1-beta-1";
@@ -119,7 +119,7 @@ function cacheElements() {
     "advancedButton", "advancedPanel", "closeAdvanced", "studioPreviewDock", "studioDirectorDock", "studioRenderButton", "studioDraftStatus", "studioPanelFraming", "renderButton", "resultRenderButton", "setupPanel", "setupSourceMixerDock", "analysisPanel", "resultPanel", "resultGrid", "previewColumn", "verdictColumn",
     "sourceSlotA", "sourceSlotB", "sourceInputA", "sourceInputB", "cancelUploadA", "cancelUploadB", "audioCalibration", "audioMeterCanvas", "recommendedThreshold", "useRecommendedThreshold", "silenceThreshold", "silenceThresholdOut", "preSilenceMin", "preSilenceMinOut", "preSilenceKeep", "preSilenceKeepOut", "audioCutEstimate", "audioProfileSummary", "editStyleChoices", "editStyleNote", "goalChoices", "goalExplainer", "goalExplainerTitle", "goalExplainerText", "durationGroup", "targetDuration", "durationMode", "durationOutput", "paceChoices", "paceNote",
     "directorInstruction", "readiness", "generateButton", "jobMessage", "jobProgress", "cancelJobButton", "analysisError", "analysisErrorTitle", "analysisErrorMessage", "retryDirectorButton", "backFromErrorButton", "draftTitle", "draftSummary", "draftEngineBadge",
-    "reelCandidates", "reelCandidatesTitle", "reelCandidateList", "draftWarning", "draftWarningText", "reviewSpeechSettings",
+    "reelCandidates", "reelCandidatesTitle", "reelCandidateList", "draftWarning", "draftWarningText", "reviewSpeechSettings", "gameplayMoments",
     "beforeDuration", "afterDuration", "decisionCount", "decisionList", "previewStage", "previewA", "previewB", "previewPaneA", "previewPaneB", "previewPlay", "playButton",
     "previewTime", "previewSeek", "previewMode", "previewModeHint", "previewCaption", "restartPreview", "backToBriefButton", "timelineCanvas", "timelineScroll", "timelineFit", "timelineZoomOut",
     "timelineZoomIn", "timelineZoomLabel", "timelineZoomSelection", "timelineSnap", "timelineSelectionHint", "timelineCutStatus", "timelineCutHint", "cancelTimelineCut", "manualSelectionLabel", "manualClear", "manualRestore", "manualDelete", "manualSplit", "manualUndo", "manualRedo",
@@ -3162,6 +3162,61 @@ function renderDecisions() {
     $("span", item).textContent = value;
     elements.decisionList.append(item);
   }
+  renderGameplayMoments();
+}
+
+// The gameplay moments a draft kept, with their on-screen evidence. A moment
+// the model misread (a camera feed or replay read as a fight) can be marked as
+// not live play; the next Rebuild leaves it out. Weak evidence is named.
+function renderGameplayMoments() {
+  const section = elements.gameplayMoments;
+  if (!section) return;
+  const moments = Array.isArray(state.project?.draft?.gameplay_moments) ? state.project.draft.gameplay_moments : [];
+  section.replaceChildren();
+  section.hidden = !moments.length;
+  if (!moments.length) return;
+  const overrides = state.project?.manual?.visual_overrides || [];
+  const heading = document.createElement("strong");
+  heading.textContent = t("gameplayMomentsTitle");
+  section.append(heading);
+  for (const moment of moments) {
+    const marked = overrides.find(row => row.start <= moment.start + .001 && row.end >= moment.end - .001 && row.screen !== "gameplay");
+    const row = document.createElement("div");
+    row.className = "gameplay-moment";
+    row.dataset.uncertain = String(Boolean(moment.uncertain));
+    const seek = document.createElement("button");
+    seek.type = "button"; seek.className = "gameplay-moment-seek";
+    seek.textContent = `${formatTime(moment.start)}–${formatTime(moment.end)}${moment.event ? ` · ${moment.event}` : ""}`;
+    seek.addEventListener("click", () => {
+      const time = sourceToEditorTime(Number(moment.start));
+      if (time != null) { pauseAllMedia(); seekSourcePreview(time + .05); }
+    });
+    row.append(seek);
+    if (moment.uncertain && !marked) {
+      const badge = document.createElement("span");
+      badge.className = "gameplay-moment-uncertain"; badge.textContent = t("gameplayMomentUncertain");
+      row.append(badge);
+    }
+    const action = document.createElement("button");
+    action.type = "button"; action.className = "gameplay-moment-mark";
+    action.textContent = marked ? t("gameplayMomentUnmark") : t("gameplayMomentNotLive");
+    action.title = marked ? t("gameplayMomentMarkedHelp") : t("gameplayMomentNotLiveHelp");
+    action.disabled = foregroundBusy() || state.manualEditBusy;
+    action.addEventListener("click", () => runUiAction(async () => {
+      const result = await applyManualEdit("visual_override", { start: moment.start, end: moment.end, screen: marked ? "" : "cutscene" });
+      if (result) markDraftRebuild("visual");
+    }, t("gameplayMomentsTitle")));
+    row.append(action);
+    section.append(row);
+  }
+  if (state.draftDirtyReasons.has("visual")) {
+    const rebuild = document.createElement("button");
+    rebuild.type = "button"; rebuild.className = "button primary compact gameplay-moments-rebuild";
+    rebuild.textContent = uiCopy("בנה Draft מחדש", "Rebuild Draft");
+    rebuild.disabled = foregroundBusy() || state.manualEditBusy;
+    rebuild.addEventListener("click", rebuildDraftFromStudio);
+    section.append(rebuild);
+  }
 }
 
 function sourceMixerSettings() {
@@ -5296,6 +5351,7 @@ function renderDraftRebuildNotice() {
   $$('[data-rebuild-chip]').forEach((chip) => { chip.textContent = uiCopy("דורש Rebuild", "Rebuild Draft"); });
   updateStudioStatus();
   renderDraftActions();
+  renderGameplayMoments();
 }
 
 async function rebuildDraftFromStudio() {

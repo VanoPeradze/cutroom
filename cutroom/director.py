@@ -31,6 +31,7 @@ from .visual_moments import (
     VisualTimeline,
     accelerated_inference_available,
     analyze_visual_moments,
+    apply_visual_overrides,
     gameplay_profile,
     resolve_visual_pass,
     summary as visual_summary,
@@ -1550,6 +1551,25 @@ def _select_gameplay_moments(
     return merge_ranges(sorted(chosen, key=lambda row: row["start"]), gap=0.5)
 
 
+def _gameplay_moment_review(ranges: list[dict[str, float]], visual: VisualTimeline) -> list[dict[str, Any]]:
+    """Each kept gameplay moment with its evidence, so the user can correct it.
+
+    A moment is uncertain when no analyzed window covers it, its dominant screen
+    is not gameplay, or its action evidence is weak.
+    """
+    review = []
+    for keep in ranges:
+        evidence = visual.evidence(keep["start"], keep["end"])
+        action = float((evidence or {}).get("action") or 0.0)
+        screen = (evidence or {}).get("screen")
+        review.append({
+            "start": round(float(keep["start"]), 3), "end": round(float(keep["end"]), 3),
+            "screen": screen, "action": round(action, 3), "event": (evidence or {}).get("event") or "",
+            "uncertain": evidence is None or screen != "gameplay" or action < 0.25,
+        })
+    return review
+
+
 def _gameplay_moment_notes(ranges: list[dict[str, float]], visual: VisualTimeline) -> list[str]:
     """The strongest on-screen event inside each kept moment, for the draft summary."""
     notes: list[str] = []
@@ -3053,7 +3073,10 @@ def analyze_project(
         visual_source, visual_duration, visual_sound,
         source_slot=analysis_screen_slot, timeline_offset=visual_offset, timeline_duration=duration,
     )
-    visual_timeline = VisualTimeline(visual_moments)
+    # The user's screen corrections (for example a camera feed the model read as a
+    # fight) win over the model; the cached model answers stay untouched.
+    visual_timeline = VisualTimeline(apply_visual_overrides(
+        visual_moments, (project.get("manual") or {}).get("visual_overrides")))
     gameplay_route = _gameplay_moments_route(
         brief, goal, visual_moments if visual_timeline else None, nonverbal_highlights,
     )
@@ -3294,6 +3317,7 @@ def analyze_project(
     # Build a story-shaped set of source passages first, then apply measured audio
     # cleanup and defensible transcript cleanup inside those passages.
     duration_chain: list[dict[str, Any]] = [{"stage": "requested", "seconds": round(float(target_duration), 3)}]
+    gameplay_review: list[dict[str, Any]] = []
     if goal == "short" and (duration > target_duration or brief.get("duration_mode") == "target"):
         selection_policy = ((brief.get("style_profile") or {}).get("selection_policy") or {})
         selection_segments = _with_visual_evidence(segments, visual_timeline)
@@ -3341,6 +3365,7 @@ def analyze_project(
             )
         )
         if gameplay_route:
+            gameplay_review = _gameplay_moment_review(story_keep, visual_timeline)
             notes = _gameplay_moment_notes(story_keep, visual_timeline)
             decision["summary"] = _gameplay_summary(
                 len(story_keep), notes, language,
@@ -3456,6 +3481,7 @@ def analyze_project(
         "embedded_layout_confirmed": embedded_layout_confirmed,
         "target_duration": target_duration,
         "duration_review": duration_review,
+        **({"gameplay_moments": gameplay_review} if gameplay_review else {}),
         "source_duration": duration,
         "output_duration": output_duration,
         "removed_duration": round(max(0.0, duration - output_duration), 3),
