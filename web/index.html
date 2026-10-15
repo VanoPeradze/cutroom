@@ -5,22 +5,22 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#081013">
   <meta name="color-scheme" content="dark light">
-  <script src="/assets/ui-shell.js?v=1.1-beta-2"></script>
-  <title>CUTROOM 1.1 Beta — Your editing workspace</title>
+  <script src="/assets/ui-shell.js?v=1.2-beta"></script>
+  <title>CUTROOM 1.2 Beta — Your editing workspace</title>
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/assets/styles.css?v=1.1-beta-polish-2">
-  <link rel="stylesheet" href="/assets/workspace.css?v=1.1-beta-3">
-  <link rel="stylesheet" href="/assets/media-studio.css?v=1.1-beta-5">
-  <link rel="stylesheet" href="/assets/stabilization-studio.css?v=1.1-beta-1">
-  <link rel="stylesheet" href="/assets/chroma-studio.css?v=1.1-beta-chroma-edit-3">
-  <link rel="stylesheet" href="/assets/text-studio.css?v=1.1-beta-2">
-  <link rel="stylesheet" href="/assets/welcome.css?v=1.1-beta-2">
-  <link rel="stylesheet" href="/assets/creator-ui.css?v=1.1-beta-12">
-  <link rel="stylesheet" href="/assets/editor-panels.css?v=1.1-beta-focused-3">
-  <link rel="stylesheet" href="/assets/studio-design.css?v=1.1-beta-design-1">
-  <link rel="stylesheet" href="/assets/studio-chrome.css?v=1.1-beta-chrome-1">
-  <link rel="stylesheet" href="/assets/studio-screens.css?v=1.1-beta-screens-10">
-  <link rel="stylesheet" href="/assets/ui-polish.css?v=1.1-beta-quality-3">
+  <link rel="stylesheet" href="/assets/styles.css?v=1.2-beta">
+  <link rel="stylesheet" href="/assets/workspace.css?v=1.2-beta">
+  <link rel="stylesheet" href="/assets/media-studio.css?v=1.2-beta">
+  <link rel="stylesheet" href="/assets/stabilization-studio.css?v=1.2-beta">
+  <link rel="stylesheet" href="/assets/chroma-studio.css?v=1.2-beta">
+  <link rel="stylesheet" href="/assets/text-studio.css?v=1.2-beta">
+  <link rel="stylesheet" href="/assets/welcome.css?v=1.2-beta">
+  <link rel="stylesheet" href="/assets/creator-ui.css?v=1.2-beta">
+  <link rel="stylesheet" href="/assets/editor-panels.css?v=1.2-beta">
+  <link rel="stylesheet" href="/assets/studio-design.css?v=1.2-beta">
+  <link rel="stylesheet" href="/assets/studio-chrome.css?v=1.2-beta">
+  <link rel="stylesheet" href="/assets/studio-screens.css?v=1.2-beta">
+  <link rel="stylesheet" href="/assets/ui-polish.css?v=1.2-beta">
 </head>
 <body class="welcome-mode">
   <a class="skip-link" href="#main" data-i18n="skip">Skip to content</a>
@@ -124,7 +124,7 @@
         <p class="home-processing-note" id="homePrivacyNote">Local AI selected. Your footage stays on this computer. Online AI is optional; editing and export still run locally.</p>
       </section>
       </details>
-      <footer class="home-footer"><strong>CUTROOM 1.1 Beta <span>Free to create. Open to build on.</span></strong><p>AI drafts need your review · No CUTROOM subscription</p><p class="provider-credit">Thanks to <a href="https://groq.com/" target="_blank" rel="noopener noreferrer">Groq</a> for making a free API tier available. Quotas apply. CUTROOM is independent; no sponsorship or endorsement is implied.</p></footer>
+      <footer class="home-footer"><strong>CUTROOM 1.2 Beta <span>Free to create. Open to build on.</span></strong><p>AI drafts need your review · No CUTROOM subscription</p><p class="provider-credit">Thanks to <a href="https://groq.com/" target="_blank" rel="noopener noreferrer">Groq</a> for making a free API tier available. Quotas apply. CUTROOM is independent; no sponsorship or endorsement is implied.</p></footer>
     </section>
 
     <section class="workspace" id="workspaceView" hidden>
@@ -343,6 +343,7 @@
               <p id="draftWarningText"></p>
               <button class="button ghost compact" id="reviewSpeechSettings" type="button" data-i18n="reviewSpeechSettings">Review speech settings</button>
             </div>
+            <div class="verdict-block gameplay-moments" id="gameplayMoments" hidden></div>
             <div class="draft-tools" role="group" aria-label="Fine-tune your draft">
               <div class="section-label"><span>Make it yours</span><small>Open Studio</small></div>
               <div class="draft-tool-grid">
@@ -601,6 +602,24 @@
           </div>
           <div class="tab-panel" id="studioPanelTranscript" role="tabpanel" aria-labelledby="studioTabTranscript" tabindex="0" data-panel="transcript">
             <header class="studio-tool-intro"><div><p>TEXT &amp; CAPTIONS</p><h3>Captions</h3></div><span>Add text to the edit, or work with the recorded speech below.</span></header>
+            <form id="captionItemEditor" class="caption-item-editor" aria-labelledby="captionItemTitle" hidden>
+              <div class="caption-item-head"><div><h4 id="captionItemTitle">Selected caption</h4><p id="captionItemMeta"></p></div><button type="button" id="captionItemClose">Done</button></div>
+              <label class="caption-item-text" for="captionItemText">Caption text</label>
+              <textarea id="captionItemText" dir="auto" rows="3" maxlength="2000"></textarea>
+              <fieldset class="caption-item-scope"><legend>Apply a text change to</legend>
+                <label><input type="radio" name="captionItemScope" value="source" checked><span><b>What was said</b><small id="captionItemSourceHelp">Fixes the transcript wherever this speech is used.</small></span></label>
+                <label><input type="radio" name="captionItemScope" value="item"><span><b>Only this caption</b><small>The transcript stays as transcribed.</small></span></label>
+              </fieldset>
+              <div class="caption-item-grid">
+                <label><span>Start (s)</span><input id="captionItemStart" type="number" step="0.01" min="0" inputmode="decimal"></label>
+                <label><span>End (s)</span><input id="captionItemEnd" type="number" step="0.01" min="0" inputmode="decimal"></label>
+                <label><span>Style</span><select id="captionItemStyle"><option value="">Project style</option><option value="highlight">Word highlight</option><option value="clean">Clean</option><option value="bold">Bold</option><option value="boxed">Boxed</option></select></label>
+                <label><span>Position</span><select id="captionItemPosition"><option value="">Project position</option><option value="auto">Automatic safe area</option><option value="top">Top</option><option value="center">Center</option><option value="bottom">Bottom</option></select></label>
+                <label><span>Size (%)</span><input id="captionItemScale" type="number" min="75" max="150" step="5" placeholder="Project" inputmode="numeric"></label>
+              </div>
+              <div class="caption-item-actions"><button type="button" id="captionItemHide">Hide caption</button><button type="button" id="captionItemReset">Reset caption</button><button type="submit" class="button primary compact" id="captionItemSave">Save caption</button></div>
+              <div class="caption-item-footer"><span id="captionItemStatus" role="status"></span><button type="button" id="captionItemPrevious">&larr; Previous</button><button type="button" id="captionItemNext">Next &rarr;</button></div>
+            </form>
             <section id="textStudio" class="text-studio" aria-label="Custom text and captions"></section>
             <details class="caption-settings-disclosure inspector-section"><summary>AI subtitle style &amp; speech language</summary>
             <section class="caption-control-panel" aria-labelledby="captionControlTitle">
@@ -786,6 +805,7 @@
       <p class="eyebrow" data-i18n="export">Export</p>
       <h2 id="exportTitle" data-i18n="readyToExport">Ready to export?</h2>
       <p id="exportDescription" data-i18n="exportHelp">Export uses the original full-quality files, not a proxy.</p>
+      <ul id="exportReview" class="export-review" aria-label="Checks of the finished video" hidden></ul>
       <div class="export-summary" id="exportSummary"></div>
       <label class="export-fps-field" id="exportFrameRateField"><span id="exportFpsLabel">Frame rate</span><select id="exportFpsSelect" aria-labelledby="exportFpsLabel" aria-describedby="exportFpsHelp"><option value="24">24 FPS</option><option value="25">25 FPS</option><option value="30" selected>30 FPS</option><option value="50">50 FPS</option><option value="60">60 FPS</option></select><small id="exportFpsHelp">30 FPS balances smooth playback and render time.</small></label>
       <div class="export-progress" id="exportProgress" hidden><span></span><b>0%</b><small></small><button class="button danger compact" id="cancelExportJobButton" type="button" data-i18n="stopProcess">Stop process</button></div>
@@ -846,7 +866,7 @@
       <footer class="connection-actions"><button class="button ghost" id="forgetCloudKey" type="button">Forget session key</button><button class="button primary" id="saveAIConnection" type="submit">Use this connection</button></footer>
     </form>
   </dialog>
-  <script type="module" src="/assets/app.js?v=1.1-beta-quality-3"></script>
-  <script src="/assets/studio-screens.js?v=1.1-beta-polish-1" defer></script>
+  <script type="module" src="/assets/app.js?v=1.2-beta"></script>
+  <script src="/assets/studio-screens.js?v=1.2-beta" defer></script>
 </body>
 </html>

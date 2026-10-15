@@ -33,6 +33,7 @@ from cutroom.edit_styles import UnknownEditStyle, get_edit_style, public_edit_st
 from cutroom.editing import ManualEditError, apply_manual_edit, strip_private_edit_history
 from cutroom.sequence import SEQUENCE_ACTION_FIELDS, editor_sequence_snapshot
 from cutroom.source_tracks import SourceTrackError
+from cutroom.caption_items import CAPTION_ACTION_FIELDS, apply_corrections, corrections
 from cutroom.composition import CHROMA_KEY_ACTION_FIELDS, chroma_background_asset, chroma_source, chroma_video_source, source_chroma_key
 from cutroom.effects import build_chroma_key_nodes, chroma_key_capability
 from cutroom.stabilization import StabilizationError, stabilization_capability
@@ -61,7 +62,7 @@ from cutroom.media_library import (
 )
 from cutroom.projects import ProjectStateError, ProjectStore, apply_automatic_name, display_name, name_from_source
 from cutroom.text_clips import MAX_CAPTION_IMPORT_BYTES, TEXT_ACTION_FIELDS
-from cutroom.render import InsufficientStorageError, available_encoders, ensure_render_storage, render_project
+from cutroom.render import InsufficientStorageError, available_encoders, ensure_render_storage, project_caption_items, render_project
 from cutroom.utils import sanitize_filename
 from cutroom.vision import VISION_ANALYSIS_VERSION, analyze_faces_and_embedded_camera, normalized_vision_sample_count
 
@@ -1051,6 +1052,27 @@ def create_app(settings: Settings | None = None) -> Flask:
         track_fields = {"slot", "locked"} if action == "set_track_lock" else SEQUENCE_ACTION_FIELDS.get(action, SOURCE_TRACK_EDIT_FIELDS.get(action, CHROMA_KEY_ACTION_FIELDS.get(action)))
         media_fields = MEDIA_ACTION_FIELDS.get(action)
         text_fields = TEXT_ACTION_FIELDS.get(action)
+        caption_fields = CAPTION_ACTION_FIELDS.get(action)
+        if action == "visual_override":
+            # A screen-type correction for the next AI draft.
+            text_fields = {"start", "end", "screen"}
+            if payload.get("screen") is not None:
+                _require_optional_string(payload, "screen", max_length=24)
+            for key in ("start", "end"):
+                if key not in payload:
+                    raise APIInputError("invalid_field", f"Required field: {key}")
+                _validate_finite_number(payload[key], key, minimum=0.0, maximum=604_800.0)
+        if caption_fields is not None:
+            text_fields = caption_fields
+            _require_optional_string(payload, "caption_id", max_length=160)
+            if not payload.get("caption_id"):
+                raise APIInputError("invalid_field", "Required caption field: caption_id")
+            for key in ("style", "position", "scope"):
+                if payload.get(key) is not None:
+                    _require_optional_string(payload, key, max_length=16)
+            for key in ("start", "end"):
+                if key in payload:
+                    _validate_finite_number(payload[key], key, minimum=0.0, maximum=604_800.0)
         _reject_unknown_fields(
             payload,
             {"action", "expected_revision", *text_fields} if text_fields is not None else {"action", "expected_revision", *media_fields} if media_fields is not None else {"action", "expected_revision", *track_fields} if track_fields is not None else {
@@ -2714,6 +2736,42 @@ def _prepare_source_impl(
     }
 
 
+def _public_captions(project: dict[str, Any], public: dict[str, Any]) -> None:
+    """Show corrected speech, and the automatic captions as editable timeline items.
+
+    Items come from the saved project (its transcript is the uncorrected one the
+    corrections refer to); the editor sees the transcript with corrections applied.
+    """
+    try:
+        items = project_caption_items(project, aligned=False)
+    except (ValueError, TypeError, KeyError):
+        items = []
+    # Times are on the editor timeline the user sees, plays and edits.
+    public["editor_captions"] = [
+        {
+            **{key: item[key] for key in (
+                "id", "segment_id", "start", "end", "natural_start", "natural_end", "source_start", "source_end",
+                "text", "source_text", "language", "direction", "hidden", "corrected", "local_text", "timing_changed",
+                "style", "position", "scale",
+            )},
+            # Compact [start, end, word] rows keep long transcripts light.
+            "words": [[round(word["start"], 3), round(word["end"], 3), word["word"]] for word in item["words"]],
+            "estimated_words": any(word.get("estimated") for word in item["words"]),
+        }
+        for item in items
+    ]
+    analysis = public.get("analysis")
+    fixes = corrections(project)
+    if not isinstance(analysis, dict) or not fixes:
+        return
+    if isinstance(analysis.get("transcript"), dict):
+        analysis["transcript"], stale = apply_corrections(analysis["transcript"], fixes)
+        if stale:
+            public["caption_corrections_stale"] = stale
+    if isinstance(analysis.get("segments"), list):
+        analysis["segments"] = apply_corrections({"segments": analysis["segments"]}, fixes)[0]["segments"]
+
+
 def _public_project(project: dict[str, Any]) -> dict[str, Any]:
     public = json.loads(json.dumps(project))
     public["display_name"] = display_name(public)
@@ -2724,6 +2782,7 @@ def _public_project(project: dict[str, Any]) -> dict[str, Any]:
         # A malformed old draft must remain openable; report the editor issue
         # without silently replacing its footage with a different sequence.
         public["editor_sequence"] = {"error": "The saved timeline is invalid. Review your clips or restore an earlier edit."}
+    _public_captions(project, public)
     project_id = public["id"]
     asset_fields = {"id", "name", "kind", "duration", "width", "height", "has_audio", "status", "waveform", "stabilized"}
     for asset_id, asset in public.setdefault("assets", {}).items():

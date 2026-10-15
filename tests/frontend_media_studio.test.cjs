@@ -324,3 +324,64 @@ test('moving a clip between audio groups reroutes its signal without reconnectin
   assert.equal(second.analyser.connections[0],studio.audioBuses.get('music').gain);
   assert.equal(attempts.length,2,'one media source connection for each of the two players');
 });
+
+function loadMixer(globals = {}) {
+  const source = fs.readFileSync(path.join(__dirname, '../web/media-studio.js'), 'utf8').replace(/^export /gm, '');
+  const context = vm.createContext({window: {}, document: {}, FormData: class {append() {}}, performance: {now: () => 1000}, setTimeout: () => 1, clearTimeout() {}, ...globals});
+  vm.runInContext(source + '\nglobalThis.api = {MediaStudio, previewNormalizationGain, mixerNormalization, PREVIEW_LOUDNESS_WINDOW_MS};', context);
+  return context.api;
+}
+
+test('preview normalization follows the export: target minus measured loudness, held in silence', () => {
+  const {previewNormalizationGain, mixerNormalization} = loadMixer();
+  assert.equal(mixerNormalization({draft:{}}), null);
+  assert.equal(mixerNormalization({draft:{audio_policy:{normalize:true,target_lufs:-14}}}).target, -14);
+  assert.equal(mixerNormalization({draft:{audio_policy:{normalize:true,target_lufs:-40}}}).target, -24, 'targets stay in the export range');
+  assert.equal(mixerNormalization({draft:{audio_policy:{normalize:true}}}).target, -16);
+  // A long, steady signal converges to exactly the gain the export applies.
+  let gain = 0;
+  for (let step = 0; step < 100; step++) gain = previewNormalizationGain(gain, -28, -16, .1);
+  assert.ok(Math.abs(gain - 12) < .01);
+  // Lowering a fader by 12 dB on the only track: the measured level drops by
+  // 12 dB and the normalizer gives it back, so the result does not change.
+  let lowered = gain;
+  for (let step = 0; step < 100; step++) lowered = previewNormalizationGain(lowered, -40, -16, .1);
+  assert.ok(Math.abs((lowered - 40) - (gain - 28)) < .01);
+  assert.equal(previewNormalizationGain(5, -Infinity, -16, 1), 5, 'silence holds the gain');
+  assert.equal(previewNormalizationGain(5, -80, -16, 1), 5);
+  assert.equal(previewNormalizationGain(0, 10, -16, 100) <= -26, true, 'gain is bounded');
+});
+
+test('mixer rows offer a typed value, a 0 dB mark and reset, and explain normalization', () => {
+  const {MediaStudio} = loadMixer();
+  const studio = Object.create(MediaStudio.prototype);
+  let project = {id:'one', sources:{A:{has_audio:true}}, manual:{media_clips:[], audio_mixer:{source_db:-3.5}}, draft:{audio_policy:{normalize:true,target_lufs:-16}}, assets:{}};
+  const note = {textContent:''};
+  const rows = new Map();
+  for (const role of ['source','music','voice','effects','master']) rows.set(role, {row:{classList:{toggle() {}}, dataset:{}}, meter:{}, level:{}});
+  const typed = {dataset:{mixNumber:'source_db'}, value:''}, reset = {dataset:{mixReset:'source_db'}, disabled:false};
+  const masterReset = {dataset:{mixReset:'master_db'}, disabled:false};
+  Object.assign(studio, {
+    options: {project: () => project, audioSlot: () => 'A', busy: () => false, preview() {}},
+    overrides:new Map(), pending:new Map(), channelMeters: rows, mixerOverride:null, solo:null,
+    audioRoot: {querySelector(selector) { return selector === '.mixer-normalization' ? note : selector === '[data-ducking]' ? {} : null; },
+      querySelectorAll(selector) { return selector === '[data-mix-number]' ? [typed] : selector === '[data-mix-reset]' ? [reset, masterReset] : []; }},
+  });
+  studio.renderMixer();
+  assert.equal(typed.value, '-3.5');
+  assert.equal(reset.disabled, false); assert.equal(masterReset.disabled, true, 'reset is only offered away from 0 dB');
+  assert.match(note.textContent, /normalization is on \(-16 LUFS\).*balance.*Master/i);
+  assert.match(note.textContent, /Original is the only track playing/, 'a lone track explains why its fader does not change the export');
+  assert.equal(rows.get('source').row.dataset.normalizedAlone, 'true');
+  project = {...project, draft:{}};
+  studio.renderMixer();
+  assert.match(note.textContent, /normalization is off/i);
+  assert.equal(rows.get('source').row.dataset.normalizedAlone, 'false');
+  // Typed values are clamped and kept to 0.1 dB; an empty field changes nothing.
+  const queued = [];
+  studio.queueMixer = patch => queued.push(patch);
+  studio.change({dataset:{mixNumber:'music_db'}, value:'-7.26', hasAttribute: () => false});
+  studio.change({dataset:{mixNumber:'music_db'}, value:'40', hasAttribute: () => false});
+  studio.change({dataset:{mixNumber:'music_db'}, value:'', hasAttribute: () => false});
+  assert.deepEqual(JSON.parse(JSON.stringify(queued)), [{music_db:-7.3}, {music_db:12}]);
+});

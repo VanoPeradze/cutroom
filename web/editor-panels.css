@@ -218,3 +218,43 @@ input[type=number],label:has(input[type=range]) output { cursor:ns-resize; }
   .studio-workspace .advanced-content .tab-panel { scroll-margin-bottom:60px; }
 }
 @media (prefers-reduced-motion:reduce) { .advanced-panel.studio-workspace .advanced-tabs { scroll-behavior:auto; } }
+/* Selected automatic caption: one item from the Captions lane. */
+.caption-item-editor { display:flex; flex-direction:column; gap:12px; margin:0 0 20px; padding:16px; border:1px solid var(--cyan); border-radius:12px; background:var(--surface-inset, #0d171c); }
+.caption-item-head, .caption-item-actions, .caption-item-footer { display:flex; align-items:center; flex-wrap:wrap; gap:8px; }
+.caption-item-head { justify-content:space-between; align-items:flex-start; }
+.caption-item-head h4 { margin:0; font-size:15px; }
+.caption-item-head p { margin:2px 0 0; color:var(--muted); font:12px/1.5 var(--mono); }
+.caption-item-text { font-weight:600; }
+.caption-item-editor textarea { width:100%; min-height:72px; resize:vertical; padding:10px 12px; color:var(--paper); background:#091317; border:1px solid var(--line-strong); border-radius:8px; font:16px/1.6 var(--font); }
+.caption-item-editor textarea:focus-visible { outline:2px solid var(--cyan-text); outline-offset:1px; }
+.caption-item-scope { display:grid; gap:6px; margin:0; padding:0; border:0; }
+.caption-item-scope legend { margin-bottom:6px; font-weight:600; }
+.caption-item-scope label { display:flex; gap:10px; align-items:flex-start; padding:8px 10px; border:1px solid var(--line); border-radius:8px; cursor:pointer; }
+.caption-item-scope label:has(input:checked) { border-color:var(--cyan); }
+.caption-item-scope span { display:flex; flex-direction:column; }
+.caption-item-scope small { color:var(--muted); }
+.caption-item-grid { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:10px; }
+.caption-item-grid label { display:flex; flex-direction:column; gap:4px; min-width:0; }
+.caption-item-grid :is(input,select) { width:100%; min-width:0; }
+.caption-item-actions { justify-content:flex-end; }
+.caption-item-footer > span { flex:1 1 140px; color:var(--muted); font-size:12px; }
+.caption-item-editor button:not(.primary) { min-height:32px; border:1px solid var(--line-strong); border-radius:6px; padding:5px 10px; background:#17242c; color:var(--paper-dim); font:12px var(--font); cursor:pointer; }
+.caption-item-editor button:disabled { opacity:.5; cursor:not-allowed; }
+.preview-caption[data-caption-id] { pointer-events:auto; cursor:pointer; }
+.preview-caption.caption-selected { outline:2px dashed rgba(255,225,116,.85); outline-offset:4px; }
+@container editor-tools (max-width: 300px) { .caption-item-grid { grid-template-columns:1fr; } }
+html[data-theme="light"] .caption-item-editor button:not(.primary) { color:var(--paper); background:var(--surface-inset); border-color:var(--line-strong); }
+/* Gameplay moments kept by the draft, each correctable. */
+.gameplay-moments { display:grid; grid-template-columns:minmax(0,1fr); gap:6px; margin-top:12px; padding-top:10px; border-top:1px solid var(--line); }
+.gameplay-moments[hidden] { display:none; }
+.gameplay-moments > strong { font-size:12px; }
+.gameplay-moment { display:flex; align-items:center; flex-wrap:wrap; gap:6px; min-width:0; }
+.gameplay-moment-seek { flex:1 1 160px; min-width:0; text-align:start; padding:4px 6px; border:0; background:none; color:var(--paper-dim); font:11px var(--mono); cursor:pointer; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.gameplay-moment-seek:hover { color:var(--paper); }
+.gameplay-moment-uncertain { padding:1px 6px; border:1px solid var(--warning, #d6a94a); border-radius:999px; color:var(--warning-text, #e9c46a); font-size:10px; }
+.gameplay-moment-mark { min-height:26px; padding:3px 8px; border:1px solid var(--line-strong); border-radius:6px; background:var(--surface-chrome); color:var(--paper-dim); font-size:11px; cursor:pointer; }
+.gameplay-moment-mark:disabled { opacity:.5; cursor:not-allowed; }
+/* Checks of the finished export. */
+.export-review { display:grid; gap:4px; margin:10px 0 0; padding:0; list-style:none; font-size:12px; color:var(--paper-dim); }
+.export-review li[data-status=warn] { color:var(--warning-text, #e9c46a); }
+.export-review .export-review-title { color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.06em; }

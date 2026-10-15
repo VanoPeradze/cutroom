@@ -65,3 +65,12 @@
 .picture-speed p { margin-block:6px 0; color:var(--muted); font-size:11px; line-height:1.5; }
 .transcript-quality-note,.transcript-line-review { margin:8px 0; padding:8px 10px; border-inline-start:2px solid var(--warning); background:var(--surface-chrome); color:var(--paper-dim); font-size:11px; line-height:1.55; }
 .transcript-review-badge { display:inline-block; margin-inline-start:7px; padding:1px 5px; border:1px solid var(--warning); border-radius:4px; color:var(--warning-text); font:10px/1.5 var(--font); text-decoration:none; vertical-align:middle; }
+/* Typed fader value, 0 dB reset and what a fader does under normalization. */
+.mixer-channel .mixer-fader { display:flex; flex-direction:column; gap:4px; color:var(--paper-dim); font-size:11px; min-width:0; }
+.mixer-db { display:inline-flex; align-items:center; gap:4px; margin-inline-start:auto; font:10px var(--mono); }
+.mixer-db input[type=number] { width:64px; min-width:0; padding:2px 6px; border:1px solid var(--line-strong); border-radius:5px; background:var(--surface-chrome); color:var(--paper); font:12px var(--mono); text-align:end; }
+.mixer-db input[type=number]:focus-visible { outline:2px solid var(--cyan-text); outline-offset:1px; }
+.mixer-channel .mixer-reset { width:auto; min-width:27px; padding:0 6px; }
+.mixer-channel .mixer-reset:disabled { opacity:.45; cursor:default; }
+.mixer-channel-hint { color:var(--warning-text, var(--muted)); font-size:11px; line-height:1.4; }
+.mixer-normalization { color:var(--paper-dim); }

@@ -109,6 +109,11 @@ def main():
             "goal": "short", "aspect": "9:16", "source_duration": 12, "output_duration": 10,
             "keep_ranges": keeps, "cuts": [{"start": 4, "end": 6}],
             "camera_plan": [{**item, "camera": "A"} for item in keeps], "decisions": []}
+        if "--normalized" in sys.argv:
+            # As a Director draft: export normalizes loudness. The synthetic sine
+            # (amplitude 1/8) measures -21.1 dBFS RMS, as audio analysis would report.
+            project["draft"]["audio_policy"] = {"normalize": True, "target_lufs": -16.0}
+            project["analysis"]["audio"] = {"summary": {"integrated_rms_dbfs": -21.1}}
         if "--gaps" in sys.argv:
             from cutroom.editing import apply_manual_edit
             for slot in project["sources"]:

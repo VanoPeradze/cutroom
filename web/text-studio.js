@@ -25,7 +25,9 @@ export class TextStudio {
       <section class="text-inspector" hidden data-editor-shortcuts="off"><h4>Edit selected text</h4>
         <label>Text<textarea data-text="text" dir="auto" rows="3" maxlength="1000"></textarea></label>
         <div class="text-fields"><label>Start (seconds)<input type="number" data-text="start" min="0" step="0.01"></label><label>End (seconds)<input type="number" data-text="end" min="0.08" step="0.01"></label>
-        <label>Position<select data-text="position"><option value="top">Top</option><option value="center">Center</option><option value="bottom">Bottom</option></select></label>
+        <label>Template<select data-text="template"><option value="plain">Plain text</option><option value="lower_third">Lower third (name + role)</option><option value="chapter">Chapter card</option><option value="callout">Callout</option><option value="highlight">Highlight</option></select></label>
+        <label data-template-field="subtext">Second line<input type="text" data-text="subtext" dir="auto" maxlength="200" placeholder="Role, label or date"></label>
+        <label data-template-field="position">Position<select data-text="position"><option value="top">Top</option><option value="center">Center</option><option value="bottom">Bottom</option></select></label>
         <label>Style<select data-text="style"><option value="clean">Clean</option><option value="bold">Bold</option><option value="boxed">Boxed</option></select></label>
         <label>Size (%)<input type="number" data-text="scale" min="75" max="150" step="5"></label></div>
         <div class="text-actions"><button type="button" data-preview>Preview at start</button><button type="button" data-remove>Remove text</button></div>
@@ -50,6 +52,7 @@ export class TextStudio {
     root.addEventListener('input',event=>{
       const key=event.target.dataset.text; if(!key||!this.selected)return;
       const value=['start','end','scale'].includes(key) ? (event.target.value==='' ? NaN : Number(event.target.value)) : event.target.value;
+      if(key==='template')this.showTemplateFields(value);
       this.queueClip(this.selected,{[key]:value});
     });
     this.observer=new ResizeObserver(()=>this.options.preview()); this.observer.observe(stage);
@@ -73,12 +76,18 @@ export class TextStudio {
     if(previousSelection&&previousSelection!==this.selected)this.options.selectionRemoved?.(previousSelection);
     this.inspector.hidden=!clip;
     if(clip) for(const input of this.root.querySelectorAll('[data-text]')) {
-      if(force||document.activeElement!==input)input.value=clip[input.dataset.text] ?? '';
+      if(force||document.activeElement!==input)input.value=clip[input.dataset.text] ?? (input.dataset.text==='template' ? 'plain' : '');
       input.disabled=this.importing;
     }
+    this.showTemplateFields(clip?.template||'plain');
     this.find('.text-recovery').hidden=!this.pending.size;
     this.find('.text-search').hidden = !this.clips().length;
     this.renderList();
+  }
+  // Lower thirds and chapter cards have a second line; they and callouts have a fixed place.
+  showTemplateFields(template){
+    for(const field of this.root.querySelectorAll('[data-template-field]'))
+      field.hidden=field.dataset.templateField==='subtext' ? !['lower_third','chapter'].includes(template) : ['lower_third','callout','chapter'].includes(template);
   }
   renderList(){
     const list=this.find('.text-clip-list'), query=this.find('[data-search]').value.trim().toLocaleLowerCase();
@@ -87,7 +96,8 @@ export class TextStudio {
     for(const clip of clips.slice(0,this.limit)) {
       const button=document.createElement('button');button.type='button';button.dataset.textId=clip.id;button.setAttribute('aria-pressed',String(clip.id===this.selected));
       const label=document.createElement('span');label.textContent=clip.text;label.dir='auto';
-      const time=document.createElement('small');time.textContent=`${clip.kind==='title'?'Text':'Caption'} · ${clip.start.toFixed(2)}–${clip.end.toFixed(2)}s`;
+      const kind={lower_third:'Lower third',chapter:'Chapter',callout:'Callout',highlight:'Highlight'}[clip.template]||(clip.kind==='title'?'Text':'Caption');
+      const time=document.createElement('small');time.textContent=`${kind} · ${clip.start.toFixed(2)}–${clip.end.toFixed(2)}s`;
       button.append(label,time);list.append(button);
     }
     this.find('[data-more]').hidden=clips.length<=this.limit;
@@ -166,7 +176,14 @@ export class TextStudio {
     const previewHeight=this.stage.getBoundingClientRect().height;
     for(const clip of clips){
       const item=document.createElement('div'),style=textStyle(clip,w,h,previewHeight);item.className='custom-text-cue';item.dataset.position=clip.position;item.dataset.style=clip.style;item.dir='auto';
-      item.textContent=clip.text;item.style.fontSize=`${style.font}px`;item.style.left=`${style.horizontal}%`;item.style.right=`${style.horizontal}%`;
+      item.dataset.template=clip.template||'plain';
+      const main=document.createElement('span');main.className='custom-text-main';main.textContent=clip.text;
+      if(clip.subtext&&['lower_third','chapter'].includes(clip.template)){
+        const sub=document.createElement('span');sub.className='custom-text-sub';sub.textContent=clip.subtext;
+        if(clip.template==='chapter')item.append(sub,main);else item.append(main,sub);
+      } else item.append(main);
+      if(clip.template==='callout')item.prepend(Object.assign(document.createElement('span'),{className:'custom-text-accent',textContent:'\u258c '}));
+      item.style.fontSize=`${style.font}px`;item.style.left=`${style.horizontal}%`;item.style.right=`${style.horizontal}%`;
       item.style.setProperty('--text-stroke',`${style.stroke}px`);item.style.setProperty('--text-margin',`${style.margin}px`);item.style.setProperty('--text-box',`${style.box}px`);this.layer.append(item);
     }
   }
