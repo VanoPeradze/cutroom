@@ -1,6 +1,6 @@
 # Private testing on another Windows PC
 
-This is CUTROOM 1.1 Beta. It runs on the receiving PC and opens in a browser. The tester does not need Codex, a ChatGPT account or a development environment. Local AI and manual editing do not need an API key; optional cloud AI does. This ZIP requires first-run setup; it is not an offline, self-contained executable. A successful installation on a clean PC has not been verified by these instructions.
+This is CUTROOM 1.2 Beta. It runs on the receiving PC and opens in a browser. The tester does not need Codex, a ChatGPT account or a development environment. Local AI and manual editing do not need an API key; optional cloud AI does. This ZIP requires first-run setup; it is not an offline, self-contained executable. A successful installation on a clean PC has not been verified by these instructions.
 
 ## First run
 

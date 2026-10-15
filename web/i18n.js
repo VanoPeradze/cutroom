@@ -430,6 +430,38 @@ Object.assign(he, {
 });
 
 Object.assign(en, {
+  gameplayMomentsTitle: "Gameplay moments in this draft",
+  gameplayMomentUncertain: "Uncertain",
+  gameplayMomentNotLive: "Not live gameplay",
+  gameplayMomentNotLiveHelp: "For a replay, camera feed or cutscene the AI read as play. Rebuild the Draft to leave it out.",
+  gameplayMomentUnmark: "Undo mark",
+  gameplayMomentMarkedHelp: "Marked as not live gameplay. Rebuild the Draft to apply."
+});
+Object.assign(he, {
+  gameplayMomentsTitle: "רגעי המשחק בטיוטה",
+  gameplayMomentUncertain: "לא בטוח",
+  gameplayMomentNotLive: "לא משחק חי",
+  gameplayMomentNotLiveHelp: "לשידור חוזר, מצלמת אבטחה או קטע וידאו שה־AI פירש כמשחק. בנו את ה־Draft מחדש כדי להשמיט אותו.",
+  gameplayMomentUnmark: "ביטול הסימון",
+  gameplayMomentMarkedHelp: "סומן כלא משחק חי. בנו את ה־Draft מחדש כדי להחיל."
+});
+
+Object.assign(en, {
+  durationChain: "Length at each step:",
+  durationStage_requested: "requested", durationStage_story_selection: "story passages", durationStage_gameplay_moments: "gameplay moments",
+  durationStage_audio_highlights: "audio highlights", durationStage_pause_cleanup: "after removing pauses",
+  durationStage_dead_screens: "after removing dead screens", durationStage_target_trim: "after trimming to length",
+  durationStage_micro_fragments: "after dropping tiny fragments", durationStage_final: "final"
+});
+Object.assign(he, {
+  durationChain: "האורך בכל שלב:",
+  durationStage_requested: "התבקש", durationStage_story_selection: "קטעי סיפור", durationStage_gameplay_moments: "רגעי משחק",
+  durationStage_audio_highlights: "היילייטס מסאונד", durationStage_pause_cleanup: "אחרי הסרת הפסקות",
+  durationStage_dead_screens: "אחרי הסרת מסכים מתים", durationStage_target_trim: "אחרי קיצור לאורך",
+  durationStage_micro_fragments: "אחרי הסרת קטעים זעירים", durationStage_final: "סופי"
+});
+
+Object.assign(en, {
   editClipTools:'Clip', editVideoEffects:'Effects', chromaFineTune:'Fine-tune edges', chromaHow:'How layers work',
     chromaHelp:'Choose the foreground video, choose what appears behind it, then remove the color and apply.',
   chromaSource:'1 · Foreground video', chromaColor:'2 · Color to remove', chromaMode:'3 · Background',

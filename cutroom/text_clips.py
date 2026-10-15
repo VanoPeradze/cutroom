@@ -15,7 +15,11 @@ MAX_SIMULTANEOUS_TEXT_CLIPS = 16
 MAX_TEXT_LENGTH = 1000
 MAX_CAPTION_IMPORT_BYTES = 1024 * 1024
 TEXT_ID_RE = re.compile(r"text_[0-9a-f]{32}\Z")
-TEXT_FIELDS = {"kind", "start", "end", "text", "position", "scale", "style"}
+TEXT_FIELDS = {"kind", "start", "end", "text", "position", "scale", "style", "template", "subtext"}
+# Finite graphics presets. Each is drawn the same way in the preview and the
+# export; the user writes every word (nothing is generated or looked up).
+TEXT_TEMPLATES = ("plain", "lower_third", "chapter", "callout", "highlight")
+MAX_SUBTEXT_LENGTH = 200
 TEXT_ACTION_FIELDS = {
     "text_add": set(TEXT_FIELDS),
     "text_update": {"clip_id", *TEXT_FIELDS},
@@ -69,11 +73,25 @@ def validate_text_clip(row: Any, duration: float) -> dict[str, Any]:
     value = row.get("text")
     if not isinstance(value, str) or not value.strip() or len(value) > MAX_TEXT_LENGTH:
         raise TextClipError(f"Text must contain 1 to {MAX_TEXT_LENGTH} characters")
+    result["text"] = _clean_text(value)
+    template = row.get("template", "plain")
+    if template not in TEXT_TEMPLATES:
+        raise TextClipError("Unknown text template")
+    if template != "plain":
+        result["template"] = template
+    subtext = row.get("subtext", "")
+    if not isinstance(subtext, str) or len(subtext) > MAX_SUBTEXT_LENGTH:
+        raise TextClipError(f"The second line can have at most {MAX_SUBTEXT_LENGTH} characters")
+    if subtext.strip() and template in {"lower_third", "chapter"}:
+        result["subtext"] = _clean_text(subtext)
+    return result
+
+
+def _clean_text(value: str) -> str:
     value = value.replace("\r\n", "\n").replace("\r", "\n")
     if any((ord(char) < 32 and char not in "\n\t") or 0xD800 <= ord(char) <= 0xDFFF for char in value):
         raise TextClipError("Text contains unsupported control characters")
-    result["text"] = value.strip()
-    return result
+    return value.strip()
 
 
 def _new_clip(**fields: Any) -> dict[str, Any]:

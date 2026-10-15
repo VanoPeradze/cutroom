@@ -301,3 +301,25 @@ def test_duration_intent_survives_style_changes_and_keeps_old_projects_explicit(
     assert old["style_profile"]["selection_policy"]["max_moments"]==1
     review=director._duration_review(target,360,12,nonverbal=True)
     assert review["duration_is_ceiling"] is False and review["reason"]=="limited_selection"
+
+
+def test_target_mode_tops_up_a_short_planner_selection_with_relevant_complete_beats():
+    decision = {}
+    planned = [{"start": 10.0, "end": 40.0}]
+    candidates = [
+        {"start": 12.0, "end": 30.0, "score": 0.9},   # overlaps the planned passage
+        {"start": 100.0, "end": 140.0, "score": 0.8},
+        {"start": 200.0, "end": 260.0, "score": 0.7},
+        {"start": 300.0, "end": 330.0, "score": 0.2},  # below the median: never added
+        {"start": 400.0, "end": 410.0, "score": 0.1},
+    ]
+    result = director._top_up_to_target(planned, candidates, 120.0, decision)
+    assert result == [{"start": 10.0, "end": 40.0}, {"start": 100.0, "end": 140.0}]
+    assert decision["_selection_trace"] == [
+        {"stage": "planner_passages", "seconds": 30.0, "passages": 1},
+        {"stage": "relevant_top_up", "seconds": 70.0, "passages": 1},
+    ]
+    # Already near the target: nothing is added.
+    decision = {}
+    assert director._top_up_to_target([{"start": 0.0, "end": 110.0}], candidates, 120.0, decision) == [{"start": 0.0, "end": 110.0}]
+    assert [row["stage"] for row in decision["_selection_trace"]] == ["planner_passages"]

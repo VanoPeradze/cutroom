@@ -1,6 +1,6 @@
 # Editing quality: current safeguards and remaining work
 
-For CUTROOM 1.1 Beta's readiness and editing controls, see [Beta status](BETA_STATUS.md) and the [user guide](USER_GUIDE_EN.md).
+For CUTROOM 1.2 Beta's readiness and editing controls, see [Beta status](BETA_STATUS.md) and the [user guide](USER_GUIDE_EN.md).
 
 This development pass fixes specific correctness and evidence-handling failures. It is not a claim of equal transcription accuracy across languages, professional editorial judgment, or release readiness. No new model was downloaded or benchmarked during implementation.
 

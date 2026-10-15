@@ -2,7 +2,7 @@ $ErrorActionPreference = "Stop"
 Set-StrictMode -Version 2.0
 Set-Location -LiteralPath $PSScriptRoot
 
-$script:CutroomVersion = "1.1 Beta"
+$script:CutroomVersion = "1.2 Beta"
 $script:UvVersion = "0.12.5"
 # numpy 2.5 and later publish wheels only for Python 3.12+, so 3.11 cannot install requirements.txt.
 $script:PythonVersion = "3.12"
