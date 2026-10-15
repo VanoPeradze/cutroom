@@ -180,3 +180,19 @@ html[data-theme="light"] .studio-workspace #manualRestore:not(:disabled) { borde
 .studio-workspace .mixer-channel-heading { margin-inline-end:-14px; }
 .studio-workspace .mixer-channel-heading > span[data-channel-name] { display:block; max-width:100%; overflow:hidden; text-overflow:ellipsis; font-size:10px; }
 .studio-workspace .advanced-content .mixer-db input[type=number] { width:100%; max-width:52px; }
+/* The export summary uses the same rounded frame as the frame-rate box below it. */
+#exportDialog .export-summary { border-radius:12px; }
+/* Project overview: captions are sized to the picture, as in the studio
+   preview, instead of to the browser window. */
+.result-panel .preview-stage { container-type:inline-size; }
+.result-panel .preview-stage .preview-caption { font-size:3.8cqw; padding:.2em .3em; text-shadow:0 .06em .08em #000,0 0 .15em #000; }
+.result-panel .preview-stage[data-aspect="9:16"] .preview-caption { font-size:6.7cqw; }
+.result-panel .preview-stage[data-aspect="4:5"] .preview-caption,
+.result-panel .preview-stage[data-aspect="1:1"] .preview-caption { font-size:4.8cqw; }
+.result-panel .preview-caption[data-caption-style="boxed"] { border-width:.07em; border-radius:.2em; }
+/* Overview blocks are open sections in both themes, not filled boxes. */
+html[data-theme="light"] .result-panel .verdict-block { background:transparent; }
+@media (min-width:1100px) and (min-height:601px) {
+  /* Leave room for the transport row, so only the side column scrolls. */
+  .result-panel .preview-stage { --review-height:clamp(240px,calc(100dvh - 400px),560px); }
+}

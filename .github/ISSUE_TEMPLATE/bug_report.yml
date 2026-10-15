@@ -12,7 +12,7 @@ body:
     attributes:
       label: CUTROOM version / beta build
       description: Include the version, exact downloaded ZIP filename, or Git commit. Avoid just "latest".
-      placeholder: "1.1 Beta / CUTROOM-1.1-beta-….zip / commit SHA"
+      placeholder: "1.2 Beta / CUTROOM-1.2-beta-….zip / commit SHA"
     validations:
       required: true
   - type: textarea

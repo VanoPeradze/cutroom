@@ -2,6 +2,12 @@
 
 **An exploratory Windows/macOS beta, with a Linux source development path, for feedback from creators and editors. Not a production release, security certification or promise of professional-quality automatic edits.** Public access to a download does not change those quality boundaries.
 
+## 1.2 Beta - 2026-10-15
+
+- New in this version: caption items you can select, move, trim, hide and correct on the timeline; a mixer with typed values, preview loudness normalization and an export limiter at about −1 dBTP; length top-up and per-step length notes for Shorts; gameplay moments with **Uncertain** and **Not live gameplay**; text templates; and a local check of each export. Details: [changelog](../CHANGELOG.md) and the stage reports in `docs/plans/STAGE1` to `STAGE5`.
+- Local checks on Windows 10: the full Python suite (2,162 tests) and 617 frontend tests passed. Browser checks used an isolated synthetic project. The talk and gameplay AI changes were measured on private recordings that stayed on the test computer; no transcript text, frames or descriptions from them are in this repository.
+- Not verified for this version: macOS on real hardware (the macOS CI jobs run before publication), CPU-only and 16 GB computers, variable-frame-rate sources, a full-screen facecam read as gameplay, and whether talk Shorts read as a coherent story. A person has not listened to the mixer changes or reviewed the length top-up for editorial quality.
+
 ## Continuity review quality pass - 2026-10-01
 
 Missing or contradictory AI continuity responses require review. Requested repairs are distinguished from changes that survive the final story selection; ignored or restored actions remain visible as unresolved. An explicit AI rebuild refreshes older reviews without repeating cached transcription or forcing model setup when opening a project. These are verified pipeline safeguards, not a claim that every preset produces a coherent finished story.

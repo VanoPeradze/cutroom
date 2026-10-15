@@ -1,11 +1,11 @@
-# CUTROOM 1.1 Beta for Mac
+# CUTROOM 1.2 Beta for Mac
 
 The same free, MIT-licensed editor, with a separate Mac setup and launcher.
 The separate Mac ZIP contains **START CUTROOM.command**, **START HERE.html**, and **App**. The compatible combined download still contains exactly two folders: **windows** and **mac**.
-The current **1.1 Beta editor revision** updates the shared application in both
-folders: source waveforms, the A/B duration boundary fix, live mixer meters,
-Unicode media-name handling and optional local stabilization. It has a new build
-ID/checksums; it is not a documentation-only refresh.
+**1.2 Beta** updates the shared application in both folders: editable caption
+items, the mixer with typed values and an export limiter, gameplay-moment
+corrections, text templates and the export check. It has a new build ID and
+checksums; it is not a documentation-only refresh.
 
 ## Start on a Mac
 
@@ -119,4 +119,4 @@ use `--windows-zip PATH`. Use `--verify PATH` to check the final package.
 The legacy Windows-only builder remains available. This editor update uses a new,
 intentionally built and approved Windows baseline; the combined builder preserves
 that baseline while adding the Mac overlay. Package manifests identify the exact
-build rather than relying on the unchanged public 1.1 Beta filename.
+build rather than relying on the public filename.
