@@ -42,6 +42,7 @@ Qwen3.5 Story models also accept images, so **Gameplay vision** uses the Story m
 - **When it runs:** *Automatic* runs for CUTROOM Smart and the streamer styles on an NVIDIA GPU or Apple Silicon. *On for every Short* runs for any Short on any device; on CPU it uses the Lite window count and can take much longer. *Off* never runs. It never runs with a cloud connection: video frames are never uploaded. A model without image support is skipped.
 - **Cost:** on an RTX 4070 Ti Super, 120 windows of a 27-minute 1080p60 recording took about 2 minutes. Results are cached per source and model, and reused by variations and rebuilds.
 - **Limits:** a small model is a noisy observer. In testing it mistook an in-game recorded scene for a fight and a full-screen webcam for gameplay. Gaps between sampled windows are inferred from the nearest window. It is evidence for selection, not ground truth; a failure leaves the draft to speech and sound.
+- **Correcting it:** gameplay drafts list their moments in **Edit → AI suggestions**. A moment is marked **Uncertain** when no analyzed window covers it, its main screen is not gameplay, or its action evidence is under 0.25. **Not live gameplay** stores a correction in the project (undoable); the next **Rebuild Draft** treats that range as non-interactive. The cached model answers are not changed.
 
 ## Camera detection and other processing
 

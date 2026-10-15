@@ -5,6 +5,9 @@ export function timelineDuration(project) {
   return Number.isFinite(duration) ? Math.max(0, duration) : 0;
 }
 
+const CAPTION_ROW_HEIGHT = 26;
+const MIN_CAPTION_SECONDS = .1;
+
 function selectionMinimum(project) { return project?.manual?.sequence || project?.__sourceReview ? 1 / 60 - 1e-9 : .03; }
 
 // The longest prefix of `text` that fits `width`, ending in an ellipsis when cut.
@@ -120,6 +123,11 @@ export class TimelineView {
     this.onMediaEdit = options.onMediaEdit;
     this.onMediaPreview = options.onMediaPreview;
     this.onMediaAction = options.onMediaAction;
+    this.onCaptionSelect = options.onCaptionSelect;
+    this.onCaptionEdit = options.onCaptionEdit;
+    this.onCaptionAction = options.onCaptionAction;
+    this.onCaptionOpen = options.onCaptionOpen;
+    this.captionSelection = null;
     this.getTrackClips = options.getTrackClips;
     this.getAudioSlot = options.getAudioSlot;
     this.sourceReview = Boolean(options.sourceReview);
@@ -154,7 +162,11 @@ export class TimelineView {
     canvas.addEventListener("keydown", (event) => this.keyDown(event));
     scroll.addEventListener("wheel", (event) => this.handleWheel(event), { passive: false });
     scroll.addEventListener("scroll", () => this.scheduleDraw(), { passive: true });
-    canvas.addEventListener("dblclick", () => { if (!["blade", "remove_between"].includes(this.tool)) this.fit(); });
+    canvas.addEventListener("dblclick", (event) => {
+      const caption = this.captionAtEvent(event);
+      if (caption) { this.onCaptionOpen?.(caption.item.id); return; }
+      if (!["blade", "remove_between"].includes(this.tool)) this.fit();
+    });
   }
 
   setProject(project) {
@@ -163,6 +175,8 @@ export class TimelineView {
     this.cancelGesture(false);
     this.cancelPendingCut();
     this.project = project;
+    // A caption keeps its selection across edits while it is still on the timeline.
+    if (this.captionSelection && !this.captionItems()?.some(item => item.id === this.captionSelection)) this.selectCaption(null, true);
     if (!this.hasTrackLanes() || (this.editTarget !== "edit" && !project?.sources?.[this.editTarget])) this.setEditTarget("edit");
     this.clearSelection(false);
     const duration = timelineDuration(project);
@@ -421,9 +435,69 @@ export class TimelineView {
   mediaLayout() {
     const rows = this.mediaRows();
     const top = rows.at(-1)?.bottom ?? this.baseHeight();
-    const caption = (this.project?.settings?.burn_captions !== false || this.project?.settings?.captions)
-      && this.project?.analysis?.transcript?.segments?.length ? {top,bottom:top+30,height:30,label:'CAPTIONS'} : null;
+    const items = this.captionItems();
+    const enabled = (this.project?.settings?.burn_captions !== false || this.project?.settings?.captions)
+      && (items ? items.length : this.project?.analysis?.transcript?.segments?.length);
+    // Overlapping captions (a lengthened one, or speech used twice) stack in rows.
+    const lines = items ? Math.max(1, ...this.captionPlacement(items).map(entry => entry.row + 1)) : 1;
+    const height = 4 + lines * CAPTION_ROW_HEIGHT;
+    const caption = enabled ? {top,bottom:top+height,height,label:'CAPTIONS'} : null;
     return {rows,caption,height:caption?.bottom ?? top};
+  }
+
+  // Automatic captions from the server: the same items the export burns.
+  captionItems() {
+    // Source review shows the original recording; edit-clock items do not apply there.
+    const items = this.sourceReview ? null : this.project?.editor_captions;
+    return Array.isArray(items) ? items : null;
+  }
+
+  captionPlacement(items) {
+    if (this.captionPlacementCache?.items === items) return this.captionPlacementCache.placement;
+    const ends = [];
+    const placement = items.map(item => {
+      let row = ends.findIndex(end => end <= Number(item.start) + 1e-6);
+      if (row < 0) { row = ends.length; ends.push(0); }
+      ends[row] = Number(item.end);
+      return {item,row};
+    });
+    this.captionPlacementCache = {items,placement};
+    return placement;
+  }
+
+  captionAtEvent(event) {
+    const items = this.captionItems(), layout = items && this.mediaLayout();
+    if (!layout?.caption) return null;
+    const y = event.clientY-this.canvas.getBoundingClientRect().top, time=this.timeFromEvent(event), {px}=this.geometry();
+    if (y < layout.caption.top || y >= layout.caption.bottom) return null;
+    const row = Math.floor((y-layout.caption.top-2)/CAPTION_ROW_HEIGHT);
+    const tolerance = 4/Math.max(px,.0001);
+    const hit = this.captionPlacement(items).filter(entry => entry.row === row
+      && time >= entry.item.start-tolerance && time < entry.item.end+tolerance)
+      .sort((a,b) => (a.item.id === this.captionSelection ? -1 : 0) - (b.item.id === this.captionSelection ? -1 : 0))[0];
+    if (!hit) return null;
+    const {item} = hit, wide = (item.end-item.start)*px >= 18;
+    const edge = wide ? (Math.abs(time-item.start)*px < 7 ? 'start' : Math.abs(time-item.end)*px < 7 ? 'end' : null) : null;
+    return {item,edge};
+  }
+
+  selectCaption(id, notify = false) {
+    const next = id || null;
+    if (next) this.mediaSelection = null;
+    if (this.captionSelection === next) return;
+    this.captionSelection = next;
+    if (notify) this.onCaptionSelect?.(next);
+    this.scheduleDraw();
+  }
+
+  revealCaption(id) {
+    const item = this.captionItems()?.find(entry => entry.id === id), layout = this.mediaLayout();
+    if (!item || !layout.caption) return;
+    const {px} = this.geometry(), left = item.start*px, right = item.end*px;
+    if (left < this.scroll.scrollLeft || right > this.scroll.scrollLeft + this.scroll.clientWidth)
+      this.scroll.scrollLeft = Math.max(0, left - this.scroll.clientWidth/3);
+    if (layout.caption.bottom > this.scroll.scrollTop + this.scroll.clientHeight)
+      this.scroll.scrollTop = Math.max(0, layout.caption.bottom - this.scroll.clientHeight + 8);
   }
 
   mediaAtEvent(event) {
@@ -486,7 +560,8 @@ export class TimelineView {
         if(this.mediaSelection===clip.id){ctx.fillStyle='#fff';ctx.fillRect(x,row.top+18,3,row.height-26);ctx.fillRect(x+w-3,row.top+18,3,row.height-26);}
       }
     }
-    if(layout.caption) {
+    if(layout.caption && this.captionItems()) this.drawCaptionItems(ctx,px,width,layout.caption,left,right);
+    else if(layout.caption) {
       const {top,height}=layout.caption;
       ctx.fillStyle='#141d24';ctx.fillRect(0,top,width,height-2);
       for(const caption of this.audioTimelineRanges(this.project.analysis.transcript.segments)) {
@@ -499,6 +574,33 @@ export class TimelineView {
         const label=fitCanvasLabel(ctx,caption.text,x+w-5-textX);
         if(label){ctx.save();ctx.beginPath();ctx.rect(x+2,top,Math.max(0,w-4),height-2);ctx.clip();ctx.fillStyle='#f6eed6';ctx.fillText(label,textX,top+17);ctx.restore();}
       }
+    }
+  }
+
+  drawCaptionItems(ctx, px, width, lane, left, right) {
+    ctx.fillStyle='#141d24';ctx.fillRect(0,lane.top,width,lane.height-2);
+    for (const {item:saved,row} of this.captionPlacement(this.captionItems())) {
+      const item = this.gesture?.kind==='caption' && this.gesture.caption.id===saved.id ? {...saved,...this.gesture.patch} : saved;
+      const x=item.start*px, w=Math.max(2,(item.end-item.start)*px), top=lane.top+2+row*CAPTION_ROW_HEIGHT, height=CAPTION_ROW_HEIGHT-2;
+      if (x+w<left || x>right) continue;
+      const selected = this.captionSelection === item.id, edited = item.corrected || item.local_text || item.timing_changed || item.style || item.position || item.scale;
+      ctx.save();
+      if (item.hidden) { ctx.fillStyle='#252b30'; ctx.setLineDash([4,3]); ctx.strokeStyle='#7d878c'; }
+      else { ctx.fillStyle=edited ? '#5d5a24' : '#6b5722'; ctx.strokeStyle='#c9a94a'; }
+      ctx.fillRect(x+1,top,Math.max(1,w-2),height);
+      ctx.lineWidth=selected ? 2 : 1; if (selected) { ctx.setLineDash([]); ctx.strokeStyle='#ffe174'; }
+      ctx.strokeRect(x+1.5,top+.5,Math.max(0,w-3),height-1);
+      ctx.setLineDash([]);
+      if (selected && w >= 18) { ctx.fillStyle='#fff'; ctx.fillRect(x+1,top+4,3,height-8); ctx.fillRect(x+w-4,top+4,3,height-8); }
+      // The lane header already says Captions: give the block's width to the words.
+      ctx.font='11px sans-serif';
+      const textX=Math.max(x+6,left+this.labelInset(70)), label=fitCanvasLabel(ctx,`${item.hidden ? 'Hidden · ' : edited ? '✎ ' : ''}${item.text}`,x+w-6-textX);
+      if (label) {
+        ctx.beginPath(); ctx.rect(x+2,top,Math.max(0,w-4),height); ctx.clip();
+        ctx.direction=item.direction==='rtl' ? 'rtl' : 'ltr'; ctx.textAlign='left';
+        ctx.fillStyle=item.hidden ? '#9aa4a9' : '#f6eed6'; ctx.fillText(label,textX,top+height/2+4);
+      }
+      ctx.restore();
     }
   }
 
@@ -1265,6 +1367,7 @@ export class TimelineView {
     if(this.gesture?.kind==='media')this.onMediaPreview?.(this.gesture.media.id,null);
     const gesture = this.gesture;
     if (!gesture) return false;
+    if (gesture.kind === 'caption') { this.gesture = null; this.releasePointer(gesture.pointerId); this.scheduleDraw(); return true; }
     this.gesture = null;
     this.scrubbing = false;
     this.selecting = false;
@@ -1344,6 +1447,7 @@ export class TimelineView {
     this.snapGuide = null;
     const media = this.mediaAtEvent(event);
     if (media) {
+      this.selectCaption(null, true);
       this.mediaSelection=media.clip.id; this.onMediaSelect?.(media.clip.id);
       if(this.tool==='blade'){
         if(time-media.clip.start>=.08-1e-9 && media.clip.end-time>=.08-1e-9)this.onMediaAction?.('media_split',{clip_id:media.clip.id,time});
@@ -1355,6 +1459,17 @@ export class TimelineView {
         clientX:event.clientX,clientY:event.clientY,dragged:false,
         previousSelection:this.selection ? {...this.selection} : null,previousRangeSelection:this.selectionIsRange};this.scheduleDraw();return;
     }
+    const caption = this.captionAtEvent(event);
+    if (caption) {
+      this.selectCaption(caption.item.id, true);
+      // Captions follow speech; Blade and range tools never cut them.
+      if (this.tool !== 'select' && this.tool !== 'move') { this.releasePointer(event.pointerId); return; }
+      this.gesture={kind:'caption',pointerId:event.pointerId,caption:{...caption.item},edge:caption.edge,startTime:time,patch:{},
+        clientX:event.clientX,clientY:event.clientY,dragged:false,snapPlayhead:this.playhead};
+      this.canvas.style.cursor = caption.edge ? 'ew-resize' : 'grab';
+      this.scheduleDraw(); return;
+    }
+    this.selectCaption(null, true);
     this.mediaSelection=null;
     this.hoverTime = time;
     const target = this.targetAtEvent(event);
@@ -1417,6 +1532,26 @@ export class TimelineView {
   pointerMove(event) {
     if (this.gesture && this.gesture.pointerId !== event.pointerId) return;
     this.snapGuide = null;
+    if (this.gesture?.kind === 'caption') {
+      const g = this.gesture;
+      if (Math.hypot(event.clientX-g.clientX,event.clientY-g.clientY) > 6) g.dragged = true;
+      if (!g.dragged) return; // A click selects; it never nudges the caption.
+      // Whole output frames: a pixel of hand jitter is never a timing change.
+      const frame = sequenceFrame(this.project);
+      const item = g.caption, delta = Math.round((this.timeFromEvent(event)-g.startTime)/frame)*frame, limit = timelineDuration(this.project);
+      let start = Number(item.start), end = Number(item.end);
+      if (g.edge === 'start') start = Math.max(0, Math.min(end-MIN_CAPTION_SECONDS, this.snappedTime(start+delta,event)));
+      else if (g.edge === 'end') end = Math.max(start+MIN_CAPTION_SECONDS, Math.min(limit, this.snappedTime(end+delta,event)));
+      else {
+        const length = end-start;
+        start = Math.max(0, Math.min(limit-length, this.snappedTime(start+delta,event,[0,length])));
+        end = start+length;
+      }
+      this.validateSnap(g.edge ? [g.edge === 'start' ? start : end] : [start,end]);
+      g.patch = {start,end};
+      this.canvas.style.cursor = g.edge ? 'ew-resize' : 'grabbing';
+      this.scheduleDraw(); return;
+    }
     if(this.gesture?.kind==='media') {
       if (Math.hypot(event.clientX-this.gesture.clientX,event.clientY-this.gesture.clientY)>6) this.gesture.dragged=true;
       if (!this.gesture.dragged) return; // Selecting near a magnet must not edit the media.
@@ -1500,6 +1635,18 @@ export class TimelineView {
   pointerUp(event) {
     const gesture = this.gesture;
     if (!gesture || gesture.pointerId !== event.pointerId) return;
+    if (gesture.kind === 'caption') {
+      this.pointerMove(event);
+      this.gesture = null; this.snapGuide = null; this.releasePointer(event.pointerId);
+      this.canvas.style.cursor = '';
+      const {caption,patch} = gesture;
+      if (gesture.dragged && Number.isFinite(patch.start)) {
+        const {start,end} = patch;
+        if ((Math.abs(start-caption.start) > 1e-4 || Math.abs(end-caption.end) > 1e-4) && this.canEdit() && !this.editPending)
+          Promise.resolve(this.onCaptionEdit?.(caption.id,{start,end})).catch(()=>{});
+      }
+      this.scheduleDraw(); return;
+    }
     if(this.gesture?.kind==='media') {
       this.pointerMove(event);
       const g=this.gesture;this.gesture=null;this.releasePointer(event.pointerId);this.onMediaPreview?.(g.media.id,null);
@@ -1553,7 +1700,18 @@ export class TimelineView {
     if (event.key === "Escape" && this.cancelPendingCut()) {
       event.preventDefault(); event.stopPropagation?.(); return;
     }
+    if (event.key === "Escape" && this.captionSelection) {
+      event.preventDefault(); event.stopPropagation?.(); this.selectCaption(null, true); return;
+    }
     if (!this.canEdit() || this.editPending || event.ctrlKey || event.metaKey || event.altKey) return;
+    if (this.captionSelection && ['Delete','Backspace','Enter'].includes(event.key)) {
+      event.preventDefault(); event.stopPropagation?.();
+      const item = this.captionItems()?.find(entry => entry.id === this.captionSelection);
+      if (event.repeat || !item) return;
+      if (event.key === 'Enter') this.onCaptionOpen?.(item.id);
+      else if (!item.hidden) this.onCaptionAction?.('caption_visibility',{caption_id:item.id,hidden:true});
+      return;
+    }
     if(this.mediaSelection && ['Delete','Backspace'].includes(event.key)) {
       event.preventDefault();event.stopPropagation?.();
       if(!event.repeat)this.onMediaAction?.('media_remove',{clip_id:this.mediaSelection});return;

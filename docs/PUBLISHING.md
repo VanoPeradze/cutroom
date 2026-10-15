@@ -34,8 +34,8 @@ guide without rebuilding application or launcher files, provide the exact combin
 ZIP approved by the current `website/release.json`:
 
 ```sh
-python scripts/build_universal_package.py --refresh-docs PATH/TO/CUTROOM-1.1-Beta.zip --output-dir dist
-python scripts/build_universal_package.py --verify PATH/TO/NEW/CUTROOM-1.1-Beta.zip
+python scripts/build_universal_package.py --refresh-docs PATH/TO/CUTROOM-1.2-Beta.zip --output-dir dist
+python scripts/build_universal_package.py --verify PATH/TO/NEW/CUTROOM-1.2-Beta.zip
 ```
 
 This explicit action reads `packaging/common/README.md` into both `App/README.md`
@@ -67,8 +67,8 @@ builds and their CI downloads continue to use the current baseline by default.
 
 ### Approved product releases
 
-An application change is a product release, even if the user-facing version stays
-`1.1 Beta`. Freeze the reviewed application, launchers, tests and guides; run the
+An application change is a product release, even if the user-facing version (now
+`1.2 Beta`) stays the same. Freeze the reviewed application, launchers, tests and guides; run the
 relevant regression and synthetic-media checks on that source. Build and verify a
 fresh Windows archive:
 
@@ -86,7 +86,7 @@ documentation-only path and must not weaken or overwrite historical validation p
 Mac CI needs a downloadable, immutable copy of this new Windows baseline before
 the PR's combined-package check can pass. With explicit release authorization,
 stage the archive in the existing Expo website project under a distinct filename
-such as `downloads/CUTROOM-1.1-Beta-windows-editor-20260930.zip`, retaining the
+such as `downloads/CUTROOM-1.2-Beta-windows-<commit>-20261015.zip`, retaining the
 existing landing page and production combined ZIP. Publish a non-production
 deployment from `website/` with the official CLI's
 `deploy --export-dir public --non-interactive` command, **without `--prod`**.
@@ -139,7 +139,7 @@ The existing allowlist builder includes application source, user guides, tests a
 
 The ZIP contains your **current source files**, including intentional uncommitted changes. A ZIP and a Git push are different operations: the Git workflow only accepts a clean, committed checkout. Review the displayed inventory before sharing either one.
 
-The download is named `CUTROOM-1.1-Beta.zip`. Each build is stored under its own timestamped folder inside `dist`, so older packages are preserved. The internal `App/TEST_BUILD.json` records the build ID and file checksums.
+The download is named after the version label, for example `CUTROOM-1.2-Beta.zip`. Each build is stored under its own timestamped folder inside `dist`, so older packages are preserved. The internal `App/TEST_BUILD.json` records the build ID and file checksums.
 
 Send the ZIP together with its `.sha256` file. Ask the tester to use **Extract All** and double-click **START CUTROOM.bat**. The extracted folder has three top-level entries: **START CUTROOM.bat**, **START HERE.html** (offline help), and **App** (source, technical files and saved work). Keep them together. The launcher runs the existing `App/run_windows.bat` setup/startup flow; Git source checkouts and older flat packages still use `run_windows.bat` directly.
 

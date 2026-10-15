@@ -12,6 +12,24 @@ export function mediaGain(clip, mixer, time) {
   return clipEnvelope(clip, time) * 10 ** ((Number(clip.volume_db || 0) + Number(mixer[`${role}_db`] || 0)) / 20);
 }
 
+// Export normalizes loudness after the channel faders when the draft asks for
+// it (draft.audio_policy), then applies Master. The preview follows with a slow
+// gain from loudness measured on the summed mix (K-weighted, 3 s window), so a
+// fader changes the balance, not the overall level, exactly as in the export.
+export const PREVIEW_LOUDNESS_WINDOW_MS = 3000;
+export function previewNormalizationGain(previousDb, measuredLufs, targetLufs, elapsed) {
+  if (!Number.isFinite(measuredLufs) || measuredLufs < -70) return previousDb; // Silence holds the gain.
+  const desired = Math.max(-30, Math.min(30, targetLufs - measuredLufs));
+  return previousDb + (desired - previousDb) * (1 - Math.exp(-Math.max(0, elapsed) / 0.8));
+}
+
+export function mixerNormalization(project) {
+  const policy = project?.draft?.audio_policy;
+  if (!policy?.normalize) return null;
+  const target = Number(policy.target_lufs);
+  return { target: Number.isFinite(target) ? Math.max(-24, Math.min(-10, target)) : -16 };
+}
+
 export function visualMotion(clip, time) {
   const progress = Math.max(0, Math.min(1, (time - clip.start) / Math.max(.001, clip.end - clip.start)));
   if (clip.motion === 'zoom_in') return `scale(${1 + .12 * progress})`;
@@ -76,7 +94,9 @@ export class MediaStudio {
         <div class="mixer-master"></div>
         <label class="ducking-choice"><input type="checkbox" data-ducking> Lower music while speech plays</label>
         <p class="mixer-level-text">Play to monitor the mix.</p>
-        <p class="mixer-help mixer-export-note">Live sample peaks, before the preview limiter. Export normalization can change final loudness.</p>
+        <p class="mixer-help mixer-normalization" role="note"></p>
+        <p class="mixer-help mixer-export-note">Meters show live sample peaks of the browser mix, before the preview limiter. The export keeps true peaks under −1 dBTP.</p>
+        <datalist id="mixerZeroMark"><option value="0" label="0 dB"></option></datalist>
         </div>
       </details>`;
     const mediaStatus = root.querySelector('.media-status');
@@ -86,30 +106,42 @@ export class MediaStudio {
     this.channelMeters = new Map();
     for (const [role, name] of [['source','Original'],['music','Music'],['voice','Voiceover'],['effects','Effects'],['master','Master']]) {
       const row = document.createElement('div'); row.className = 'mixer-channel'; row.dataset.channel = role;
-      const label = document.createElement('label'); label.className = 'mixer-fader';
+      const label = document.createElement('div'); label.className = 'mixer-fader';
       const heading = document.createElement('span'); heading.className = 'mixer-channel-heading';
       const title = document.createElement('span'); title.textContent = name; title.dataset.channelName = role;
-      const range = document.createElement('input'); range.type = 'range'; range.min = '-60'; range.max = '12'; range.step = '1'; range.dataset.mix = `${role}_db`; range.setAttribute('aria-label', `${name} volume`);
-      const out = document.createElement('output'); out.dataset.mixValue = `${role}_db`;
-      heading.append(title,out); label.append(heading,range); row.append(label);
+      const range = document.createElement('input'); range.type = 'range'; range.min = '-60'; range.max = '12'; range.step = '0.5'; range.dataset.mix = `${role}_db`; range.setAttribute('aria-label', `${name} volume`);
+      range.setAttribute('list', 'mixerZeroMark'); range.title = 'Double-click to reset to 0 dB';
+      // A typed value (0.1 dB), the same value the fader and the export use.
+      const level = document.createElement('span'); level.className = 'mixer-db';
+      const typed = document.createElement('input'); typed.type = 'number'; typed.min = '-60'; typed.max = '12'; typed.step = '0.1'; typed.dataset.mixNumber = `${role}_db`;
+      typed.setAttribute('aria-label', `${name} level in dB`); typed.inputMode = 'decimal';
+      const unit = document.createElement('span'); unit.textContent = 'dB'; unit.setAttribute('aria-hidden', 'true');
+      const reset = document.createElement('button'); reset.type = 'button'; reset.className = 'mixer-reset'; reset.textContent = '0'; reset.dataset.mixReset = `${role}_db`;
+      reset.title = 'Reset to 0 dB'; reset.setAttribute('aria-label', `Reset ${name} to 0 dB`);
+      level.append(typed,unit,reset);
+      heading.append(title,level); label.append(heading,range); row.append(label);
       const signal = document.createElement('div'); signal.className = 'mixer-signal';
       const meter = document.createElement('meter'); meter.className = role === 'master' ? 'mixer-meter mixer-channel-meter' : 'mixer-channel-meter';
       meter.min = 0; meter.max = 1; meter.high = .95; meter.optimum = .65; meter.value = 0;
       meter.setAttribute('aria-label', `${name} live sample peak`);
-      const level = document.createElement('output'); level.className = 'mixer-signal-value'; level.textContent = '-inf dBFS';
-      signal.append(meter,level); row.append(signal);
+      const peak = document.createElement('output'); peak.className = 'mixer-signal-value'; peak.textContent = '-inf dBFS';
+      signal.append(meter,peak); row.append(signal);
       const actions = document.createElement('div'); actions.className = 'mixer-channel-actions'; row.append(actions);
       if (role !== 'master') {
         const mute = document.createElement('button'); mute.type = 'button'; mute.textContent = 'M'; mute.title = 'Mute in preview and export'; mute.dataset.mute = role; mute.setAttribute('aria-label', `Mute ${name} in preview and export`); actions.append(mute);
         const solo = document.createElement('button'); solo.type = 'button'; solo.textContent = 'S'; solo.title = 'Solo in preview only'; solo.dataset.solo = role; solo.setAttribute('aria-label', `Solo ${name} in preview only`); actions.append(solo);
       }
-      this.channelMeters.set(role,{row,meter,level});
+      this.channelMeters.set(role,{row,meter,level:peak});
       root.querySelector(role === 'master' ? '.mixer-master' : '.mixer-channels').append(row);
     }
     root.querySelector('input[type=file]').addEventListener('change', event => { const file = event.target.files[0]; event.target.value = ''; if (file) this.upload(file); });
     this.audioRoot = root.querySelector('.audio-mixer');
     if (options.audioPanel) options.audioPanel.append(this.audioRoot);
     const onInput = event => { if (event.target.matches('input[type=range]')) this.change(event.target); };
+    const onDoubleClick = event => {
+      const fader = event.target.closest?.('[data-mix]');
+      if (fader && !this.options.busy()) this.queueMixer({[fader.dataset.mix]: 0});
+    };
     const onChange = event => { if (!event.target.matches('input[type=range],input[type=file]')) this.change(event.target); };
     const onClick = event => {
       const button = event.target.closest('button'); if (!button) return;
@@ -118,6 +150,7 @@ export class MediaStudio {
       if (button.dataset.asset) this.add(button.dataset.asset);
       if (button.dataset.select) this.select(button.dataset.select);
       if (button.dataset.mute) { const key = `${button.dataset.mute}_muted`; this.queueMixer({[key]: !this.mixer()[key]}); }
+      if (button.dataset.mixReset && !this.options.busy()) this.queueMixer({[button.dataset.mixReset]: 0});
       if (button.dataset.solo) this.toggleSolo(button.dataset.solo);
       if (button.dataset.action) this.action(button.dataset.action);
     };
@@ -130,6 +163,7 @@ export class MediaStudio {
       eventRoot.addEventListener('input',onInput);
       eventRoot.addEventListener('change',onChange);
       eventRoot.addEventListener('click',onClick);
+      eventRoot.addEventListener('dblclick',onDoubleClick);
     }
   }
   openMixer() { if (this.audioRoot) this.audioRoot.open = true; }
@@ -217,12 +251,36 @@ export class MediaStudio {
     if (sourceName) sourceName.textContent = `Original · ${this.options.audioSlot?.() || this.project()?.manual?.source_mixer?.audio_slot || this.project()?.settings?.audio_source || 'A'}`;
     root.querySelector('[data-ducking]').checked=Boolean(mixer.ducking);
     for (const input of root.querySelectorAll('[data-mix]')) { if (document.activeElement !== input) input.value = mixer[input.dataset.mix] || 0; }
-    for (const out of root.querySelectorAll('[data-mix-value]')) out.textContent = `${mixer[out.dataset.mixValue] || 0} dB`;
+    for (const input of root.querySelectorAll('[data-mix-number]')) { if (document.activeElement !== input) input.value = (Number(mixer[input.dataset.mixNumber]) || 0).toFixed(1); }
+    for (const button of root.querySelectorAll('[data-mix-reset]')) button.disabled = !Number(mixer[button.dataset.mixReset] || 0);
+    this.renderNormalization(mixer, root);
     for (const button of root.querySelectorAll('[data-mute]')) button.setAttribute('aria-pressed', String(Boolean(mixer[`${button.dataset.mute}_muted`])));
     for (const button of root.querySelectorAll('[data-solo]')) button.setAttribute('aria-pressed', String(this.solo === button.dataset.solo));
     for (const [role,{row}] of this.channelMeters || []) {
       row.classList.toggle('is-muted',Boolean(mixer[`${role}_muted`]) || Boolean(this.solo && role !== 'master' && this.solo !== role));
     }
+  }
+  // Which channels carry sound in this edit, so the panel can say what a fader does.
+  audibleChannels(mixer = this.mixer()) {
+    const project = this.project(), active = new Set();
+    const slot = this.options.audioSlot?.() || project?.manual?.source_mixer?.audio_slot || project?.settings?.audio_source || 'A';
+    if (project?.sources?.[slot]?.has_audio && !mixer.source_muted) active.add('source');
+    for (const clip of this.clips()) {
+      const asset = project?.assets?.[clip.asset_id], role = clip.role || 'music';
+      if (!asset || clip.muted || mixer[`${role}_muted`]) continue;
+      if (asset.kind === 'audio' || (asset.has_audio && clip.audio_enabled)) active.add(role);
+    }
+    return active;
+  }
+  renderNormalization(mixer, root) {
+    const normalization = mixerNormalization(this.project()), active = this.audibleChannels(mixer);
+    const note = root.querySelector('.mixer-normalization');
+    const names = {source:'Original', music:'Music', voice:'Voiceover', effects:'Effects'};
+    const [alone] = active.size === 1 ? [...active] : [];
+    if (note) note.textContent = !normalization ? 'Loudness normalization is off. Faders set exported levels directly.'
+      : `Loudness normalization is on (${normalization.target} LUFS). Channel faders set the balance between tracks; Master sets the final level.`
+        + (alone ? ` ${names[alone]} is the only track playing, so its fader cannot change the exported level.` : '');
+    for (const [role,{row}] of this.channelMeters || []) row.dataset.normalizedAlone = String(Boolean(normalization && role === alone));
   }
   toggleSolo(role) {
     if (!['source','music','voice','effects'].includes(role)) return;
@@ -233,6 +291,12 @@ export class MediaStudio {
     if (this.options.busy()) { this.render(); return; }
     if (input.hasAttribute('data-ducking')) { this.queueMixer({ducking:input.checked}); return; }
     if (input.dataset.mix) { this.queueMixer({[input.dataset.mix]:Number(input.value)}); return; }
+    if (input.dataset.mixNumber) {
+      const value = Number(input.value);
+      if (input.value === '' || !Number.isFinite(value)) { this.renderMixer(); return; }
+      this.queueMixer({[input.dataset.mixNumber]: Math.round(Math.max(-60, Math.min(12, value)) * 10) / 10});
+      return;
+    }
     const key = input.dataset.media; if (!key || !this.selected || !input.checkValidity()) return;
     let value = input.type === 'checkbox' ? input.checked : ['role','fit','motion'].includes(key) ? input.value : Number(input.value);
     if (['x','y','w','h'].includes(key)) value /= 100;
@@ -297,6 +361,17 @@ export class MediaStudio {
         // Meter the actual summed signal before limiting, so clipping/headroom
         // remains visible instead of being hidden by the preview compressor.
         this.master.connect(this.analyser).connect(this.limiter).connect(this.context.destination);
+        // Channels -> mix -> loudness normalization (as in export) -> Master.
+        this.mixInput = this.context.createGain();
+        this.mixInput.channelCount = 2; this.mixInput.channelCountMode = 'explicit'; this.mixInput.channelInterpretation = 'speakers';
+        this.normalizer = this.context.createGain();
+        this.mixInput.connect(this.normalizer).connect(this.master);
+        // ITU-R BS.1770 K-weighting (approximated with Web Audio biquads), per channel.
+        const shelf = this.context.createBiquadFilter(); shelf.type = 'highshelf'; shelf.frequency.value = 1681.97; shelf.gain.value = 4;
+        const highpass = this.context.createBiquadFilter(); highpass.type = 'highpass'; highpass.frequency.value = 38.13; highpass.Q.value = 20 * Math.log10(.5);
+        const split = this.context.createChannelSplitter(2);
+        this.loudnessAnalysers = [0, 1].map(channel => { const analyser = this.context.createAnalyser(); analyser.fftSize = 2048; split.connect(analyser, channel); return analyser; });
+        this.mixInput.connect(shelf).connect(highpass).connect(split);
       }
       if (this.context.state !== 'running') await this.context.resume();
     } catch { /* Browsers without Web Audio still support attenuation via volume. */ }
@@ -353,7 +428,7 @@ export class MediaStudio {
     let bus = this.audioBuses.get(role);
     if (!bus) {
       const gain = this.context.createGain(), analyser = this.context.createAnalyser(); analyser.fftSize = 2048;
-      gain.connect(analyser); analyser.connect(this.master);
+      gain.connect(analyser); analyser.connect(this.mixInput || this.master);
       bus = {gain,analyser}; this.audioBuses.set(role,bus);
     }
     item.analyser.disconnect(); item.analyser.connect(bus.gain); item.busRole = role;
@@ -380,6 +455,7 @@ export class MediaStudio {
     const now=performance.now(),elapsed=Math.max(0,Math.min(.2,(now-(this.duckTime||now))/1000));this.duckTime=now;
     this.duckGain=(this.duckGain??1)+(desiredDuck-(this.duckGain??1))*(1-Math.exp(-elapsed/(desiredDuck < (this.duckGain??1) ? .02 : .35)));
     if (this.master) this.master.gain.value = 10 ** (Number(mixer.master_db || 0)/20);
+    this.updateNormalizer(playing, mixer);
     const soloGain = role => !this.solo || this.solo === role ? 1 : 0;
     for (const [index,clip] of clips.entries()) {
       const asset = project.assets?.[clip.asset_id]; if (!asset?.url || asset.status !== 'ready' || time < clip.start || time >= clip.end) continue;
@@ -413,6 +489,39 @@ export class MediaStudio {
     }
     for (const [key,item] of this.players) if (!active.has(key)) this.releasePlayer(key,item);
     this.updateMeters(playing);
+  }
+  meanSquare(analyser) {
+    if (!analyser?.getFloatTimeDomainData) return 0;
+    this.signalBuffers ||= new WeakMap();
+    let samples = this.signalBuffers.get(analyser);
+    if (samples?.length !== analyser.fftSize) { samples = new Float32Array(analyser.fftSize); this.signalBuffers.set(analyser,samples); }
+    analyser.getFloatTimeDomainData(samples);
+    return samples.reduce((sum,value)=>sum+value*value,0) / samples.length;
+  }
+  updateNormalizer(playing, mixer) {
+    if (!this.normalizer) return;
+    const normalization = mixerNormalization(this.project()), now = performance.now();
+    const elapsed = Math.max(0, Math.min(.5, (now - (this.normalizerTime ?? now)) / 1000)); this.normalizerTime = now;
+    if (!normalization || this.audioFallback) {
+      this.normalizerDb = 0; this.loudnessWindow = []; this.normalizer.gain.value = 1; return;
+    }
+    this.loudnessWindow ||= [];
+    if (playing && now >= (this.meterResetUntil || 0)) {
+      this.loudnessWindow.push([now, this.meanSquare(this.loudnessAnalysers?.[0]) + this.meanSquare(this.loudnessAnalysers?.[1])]);
+    }
+    while (this.loudnessWindow.length && now - this.loudnessWindow[0][0] > PREVIEW_LOUDNESS_WINDOW_MS) this.loudnessWindow.shift();
+    const covered = this.loudnessWindow.length ? now - this.loudnessWindow[0][0] : 0;
+    const energy = this.loudnessWindow.reduce((sum,[,value])=>sum+value,0) / Math.max(1,this.loudnessWindow.length);
+    let measured = energy > 0 ? -0.691 + 10 * Math.log10(energy) : -Infinity;
+    // Before a second of playback is measured, start from the analyzed level of
+    // the recording so the first words are not played at the wrong level.
+    const summary = this.project()?.analysis?.audio?.summary;
+    if (covered < 1000 && Number.isFinite(Number(summary?.integrated_rms_dbfs)) && !mixer.source_muted) {
+      measured = Number(summary.integrated_rms_dbfs) + Number(mixer.source_db || 0) + 2.3;
+    }
+    if (this.normalizerDb == null) this.normalizerDb = Number.isFinite(measured) && measured >= -70 ? Math.max(-30, Math.min(30, normalization.target - measured)) : 0;
+    this.normalizerDb = previewNormalizationGain(this.normalizerDb, measured, normalization.target, playing ? elapsed : 0);
+    this.normalizer.gain.value = 10 ** (this.normalizerDb / 20);
   }
   signalPeak(analyser) {
     if (!analyser?.getFloatTimeDomainData) return 0;

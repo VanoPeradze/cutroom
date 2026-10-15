@@ -518,3 +518,56 @@ def test_gameplay_summary_mentions_game_dialogue_only_when_there_were_cutscenes(
     arena = director._gameplay_summary(1, [], "en", cutscenes=False)
     assert arena == "1 gameplay moment chosen by on-screen action and sound. Menus and loading screens were left out."
     assert "דיאלוג" not in director._gameplay_summary(3, [], "he", cutscenes=False)
+
+
+def test_user_screen_corrections_override_the_model_without_touching_its_cache():
+    visual = visual_result([
+        (0.0, "gameplay", 0.46, "camera feed of soldiers"),
+        (8.0, "gameplay", 0.9, "firefight at the gate"),
+        (16.0, "cutscene", 0.0, "briefing"),
+    ])
+    original = copy.deepcopy(visual)
+    corrected = vm.apply_visual_overrides(visual, [
+        {"start": 0.0, "end": 8.0, "screen": "cutscene"},     # a recorded feed, not live play
+        {"start": 18.0, "end": 24.0, "screen": "gameplay"},   # the user says this is play
+        {"start": 9.0, "end": 10.0, "screen": "menu_or_map"}, # covers too little of a window
+        {"start": 5.0, "end": 1.0, "screen": "other"},        # invalid, ignored
+    ])
+    assert visual == original, "the cached model answers are not modified"
+    rows = corrected["windows"]
+    assert (rows[0]["screen"], rows[0]["score"], rows[0]["user_override"]) == ("cutscene", 0.0, True)
+    assert rows[1] == original["windows"][1]
+    assert (rows[2]["screen"], rows[2]["score"]) == ("gameplay", vm.PLAIN_GAMEPLAY_SCORE)
+    timeline = vm.VisualTimeline(corrected)
+    assert timeline.evidence(0.0, 8.0)["action"] == 0.0
+    assert vm.apply_visual_overrides(visual, None) is visual
+
+
+def test_gameplay_moments_name_weak_evidence_as_uncertain():
+    timeline = vm.VisualTimeline(visual_result([
+        (0.0, "gameplay", 0.9, "firefight at the gate"),
+        (8.0, "gameplay", 0.12, "walking"),
+        (16.0, "cutscene", 0.0, "briefing"),
+    ]))
+    review = director._gameplay_moment_review([
+        {"start": 0.0, "end": 8.0}, {"start": 8.0, "end": 16.0}, {"start": 16.0, "end": 24.0}, {"start": 90.0, "end": 98.0},
+    ], timeline)
+    assert [row["uncertain"] for row in review] == [False, True, True, True]
+    assert review[0]["event"] == "firefight at the gate" and review[0]["action"] == 0.9
+
+
+def test_screen_corrections_are_undoable_project_edits():
+    from cutroom.editing import ManualEditError, apply_manual_edit
+    project = {"sources": {"A": {"duration": 60.0}}, "draft": {"keep_ranges": [{"start": 0, "end": 60}]}, "manual": {}}
+    apply_manual_edit(project, {"action": "visual_override", "start": 10.0, "end": 18.0, "screen": "cutscene"})
+    assert project["manual"]["visual_overrides"] == [{"start": 10.0, "end": 18.0, "screen": "cutscene"}]
+    apply_manual_edit(project, {"action": "visual_override", "start": 12.0, "end": 14.0, "screen": "gameplay"})
+    assert project["manual"]["visual_overrides"] == [{"start": 12.0, "end": 14.0, "screen": "gameplay"}]
+    apply_manual_edit(project, {"action": "undo"})
+    assert project["manual"]["visual_overrides"] == [{"start": 10.0, "end": 18.0, "screen": "cutscene"}]
+    apply_manual_edit(project, {"action": "visual_override", "start": 0.0, "end": 60.0, "screen": ""})
+    assert "visual_overrides" not in project["manual"]
+    for bad in ({"start": 10.0, "end": 10.2, "screen": "cutscene"}, {"start": 50.0, "end": 70.0, "screen": "cutscene"},
+                {"start": 1.0, "end": 9.0, "screen": "explosion"}):
+        with pytest.raises(ManualEditError):
+            apply_manual_edit(project, {"action": "visual_override", **bad})

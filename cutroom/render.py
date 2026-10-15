@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from .config import Settings
+from .caption_items import caption_items, caption_lines
 from .captions import build_ass, build_srt, normalize_caption_settings
 from .composition import chroma_background_asset, chroma_source, chroma_video_targets, select_embedded_candidate, source_chroma_key
 from .effects import build_chroma_key_nodes, chroma_key_capability, compile_automatic_effects
@@ -22,7 +23,9 @@ from .jobs import JobCancelled, JobContext
 from .media import probe_media
 from .media_library import safe_asset_path
 from .media_render import append_media_graph, library_input_args, library_clips, library_has_audio, master_gain_db
+from .output_review import review_export
 from .projects import ProjectStore
+from .sequence import editor_keep_ranges
 from .source_tracks import has_sequence, has_source_tracks, source_track_clips, timeline_duration
 from .text_clips import validated_text_clips
 from .utils import new_id, now_iso, sanitize_filename
@@ -754,6 +757,50 @@ def _caption_transcript(project: dict[str, Any]) -> dict[str, Any]:
     return {**transcript, "segments": segments}
 
 
+def caption_context(project: dict[str, Any], *, aligned: bool = True) -> dict[str, Any]:
+    """Where transcribed speech sits in the edit.
+
+    Clips follow the analyzed audio track (offset undoes the analyzed B sync);
+    the kept ranges then lay the timeline end to end. The export snaps them to
+    whole frames (``aligned``); the editor shows a draft unsnapped. Caption
+    edits are stored relative to the speech, so they apply to either clock.
+    """
+    analysis = project.get("analysis") or {}
+    ranges: list[dict[str, float]] = []
+    if aligned:
+        try:
+            ranges = _caption_ranges(project)
+        except ValueError:
+            aligned = False  # The export refuses this edit; follow the editor instead.
+    if not aligned and isinstance(project.get("draft"), dict) and not has_sequence(project):
+        ranges = editor_keep_ranges(project)
+    elif not aligned:
+        source = (project.get("sources") or {}).get("A") or {}
+        ranges = [{"start": 0.0, "end": _finite_float(source.get("duration"))}]
+    duration = sum(row["end"] - row["start"] for row in ranges)
+    if has_sequence(project) and not aligned:
+        duration = timeline_duration(project)
+    if has_sequence(project) or has_source_tracks(project):
+        slot = _effective_audio_slot(project)
+        analyzed_slot = str(analysis.get("audio_source") or (project.get("draft") or {}).get("audio_source") or "A").upper()
+        if slot != analyzed_slot:
+            slot = None
+        offset = _finite_float(analysis.get("audio_timeline_offset")) if slot == "B" else 0.0
+        # A sequence is already the export clock; independent tracks without one
+        # still pass through the kept ranges of the source A clock.
+        keeps = None if has_sequence(project) else ranges
+        return {"slot": slot, "offset": offset, "keeps": keeps, "duration": duration or timeline_duration(project)}
+    return {"slot": "A", "offset": 0.0, "keeps": ranges, "duration": duration}
+
+
+def project_caption_items(project: dict[str, Any], *, include_hidden: bool = True, aligned: bool = True) -> list[dict[str, Any]]:
+    """Automatic caption items shared by the timeline, the preview and the export.
+
+    ``aligned=False`` places them on the editor's clock (timeline and preview).
+    """
+    return caption_items(project, include_hidden=include_hidden, **caption_context(project, aligned=aligned))
+
+
 def _source_track_master(project: dict[str, Any], slot: str, *, audio: bool, output: str, video_input: str | None = None) -> list[str]:
     """Assemble one track on the full A clock; gaps are generated, not frozen.
 
@@ -827,7 +874,33 @@ def _source_track_master(project: dict[str, Any], slot: str, *, audio: bool, out
     return filters
 
 
+# Every export keeps true peaks at or under about -1 dBTP, so players and
+# platforms never clip it. The limiter runs 4x oversampled to see the peaks
+# between samples; a 1 dB margin covers AAC encoding overshoot (up to about
+# 1.4 dB measured on harsh synthetic tones, usually far less). It also
+# returns the audio to 48 kHz (loudnorm works at 192 kHz).
+AUDIO_CEILING_DBTP = -1.0
+
+
+STAGE_PCM_BYTES_PER_SECOND = 48_000 * 2 * 3
+
+
+def audio_ceiling_filter() -> str:
+    limit = 10 ** ((AUDIO_CEILING_DBTP - 1.0) / 20)
+    return (f"aresample=192000,alimiter=limit={limit:.6f}:attack=0.5:release=50:level=0:latency=1,"
+            "aresample=48000")
+
+
+def normalizes_audio(project: dict[str, Any]) -> bool:
+    return bool(((project.get("draft") or {}).get("audio_policy") or {}).get("normalize"))
+
+
 def _final_audio_filter(project: dict[str, Any]) -> str:
+    """The second audio pass when the draft normalizes loudness, else ``anull``.
+
+    Faders set the balance before normalization; Master sets the final level
+    after it, and the ceiling comes last.
+    """
     policy = (project.get("draft") or {}).get("audio_policy") or {}
     if not policy.get("normalize"):
         return "anull"
@@ -838,8 +911,8 @@ def _final_audio_filter(project: dict[str, Any]) -> str:
     result = f"loudnorm=I={target:.1f}:LRA=11:TP=-1.5"
     gain_db = master_gain_db(project)
     if gain_db:
-        result += f",volume={gain_db:.6f}dB,alimiter=limit=0.98:level=0:latency=1"
-    return result
+        result += f",volume={gain_db:.6f}dB"
+    return f"{result},{audio_ceiling_filter()}"
 
 
 def _render_effects_payload(project: dict[str, Any]) -> dict[str, Any]:
@@ -1071,6 +1144,10 @@ def build_filter_graph(project: dict[str, Any], width: int, height: int, caption
     )
     filters.extend(media_filters)
     has_audio = audio_map is not None
+    if has_audio and not normalizes_audio(project):
+        # Normalized exports get the ceiling in their final audio pass instead.
+        filters.append(f"{audio_map}{audio_ceiling_filter()}[aceiling]")
+        audio_map = "[aceiling]"
     if caption_ass is not None:
         value = caption_ass.resolve().as_posix().replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'")
         filters.append(f"{video_map}ass=filename='{value}'[vfinal]")
@@ -1214,7 +1291,10 @@ def _estimate_render_storage(
     project_json_bytes = _serialized_size(project, fallback=512 * 1024)
     project_commit_bytes = max(1024**2, project_json_bytes * 2 + 256 * 1024)
     normalize_audio = has_audio and _final_audio_filter(project) != "anull"
-    normalization_stage_bytes = output_bytes if normalize_audio else 0
+    # The normalization stage keeps the mix as lossless 24-bit PCM (288 kB/s),
+    # so the final export encodes the audio once.
+    normalization_stage_bytes = (output_bytes - audio_bytes + int(math.ceil(duration * STAGE_PCM_BYTES_PER_SECOND))
+                                 if normalize_audio else 0)
     export_work_bytes = output_bytes + normalization_stage_bytes + srt_bytes
     project_work_bytes = filter_graph_bytes + ass_bytes + project_commit_bytes
 
@@ -1355,6 +1435,9 @@ def _render_input_fingerprint(project: dict[str, Any]) -> str:
                 "media_clips": manual.get("media_clips"),
                 "text_clips": manual.get("text_clips"),
                 "audio_mixer": manual.get("audio_mixer"),
+                # Only present once the user edits a caption, so older exports stay current.
+                **({key: manual.get(key) for key in ("caption_corrections", "caption_overrides") if manual.get(key)}
+                   if settings.get("captions") or settings.get("burn_captions") else {}),
             },
             "transcript": analysis.get("transcript") if settings.get("captions") or settings.get("burn_captions") else None,
             "caption_provenance": {
@@ -1509,16 +1592,19 @@ def render_project(context: JobContext, project_id: str, store: ProjectStore, se
     encoder, encoder_args = _software_encoder(quality) if options.get("_force_software") else choose_encoder(settings, quality)
     export_id = new_id("export")
     caption_ass: Path | None = None
-    transcript = _caption_transcript(project)
     caption_ranges = _caption_ranges(project)
     caption_settings = normalize_caption_settings(project.get("settings"))
     text_clips = validated_text_clips(project)
+    # The same items the timeline shows, with the user's caption edits applied.
+    automatic_captions = project_caption_items(project, include_hidden=False)
+    burn_lines = caption_lines(automatic_captions, caption_settings["caption_words_per_line"],
+                               default_style=caption_settings["caption_style"])
     try:
-        burn_transcript = bool(project.get("settings", {}).get("burn_captions") and transcript and transcript.get("segments"))
+        burn_transcript = bool(project.get("settings", {}).get("burn_captions") and burn_lines)
         if burn_transcript or text_clips:
             caption_ass = store.project_dir(project_id) / "cache" / f"captions-{export_id}.ass"
             build_ass(
-                transcript if burn_transcript else {},
+                {},
                 caption_ranges,
                 caption_ass,
                 width,
@@ -1529,6 +1615,7 @@ def render_project(context: JobContext, project_id: str, store: ProjectStore, se
                 caption_scale=caption_settings["caption_scale"],
                 words_per_caption=caption_settings["caption_words_per_line"],
                 text_clips=text_clips,
+                caption_lines=burn_lines if burn_transcript else [],
             )
         graph, maps, has_audio = build_filter_graph(project, width, height, caption_ass)
     except BaseException:
@@ -1538,7 +1625,9 @@ def render_project(context: JobContext, project_id: str, store: ProjectStore, se
     safe_name = sanitize_filename(project.get("name", "cutroom-edit"))
     output = settings.exports_dir / f"{safe_name}-{export_id[-8:]}.mp4"
     partial = output.with_suffix(".partial.mp4")
-    normalization_stage = settings.exports_dir / f".{safe_name}-{export_id[-8:]}.render-stage.mp4"
+    # QuickTime holds the lossless PCM mix next to the encoded picture and keeps
+    # exact frame timing (Matroska's millisecond clock gave 30.001 FPS on copy).
+    normalization_stage = settings.exports_dir / f".{safe_name}-{export_id[-8:]}.render-stage.mov"
     caption_path: Path | None = None
     output_committed = False
     graph_path = store.project_dir(project_id) / "cache" / f"filter-{export_id}.txt"
@@ -1569,7 +1658,10 @@ def render_project(context: JobContext, project_id: str, store: ProjectStore, se
         "-vsync", "1", "-r:v", str(fps),
         "-threads", str(max(1, int(settings.raw.get("ffmpeg_threads", 4)))),
     ]
-    if has_audio:
+    if has_audio and normalize_audio:
+        # Lossless until the normalization pass, which encodes AAC once.
+        command += ["-c:a", "pcm_s24le"]
+    elif has_audio:
         command += ["-c:a", "aac", "-b:a", str(settings.render.get("audio_bitrate", "192k"))]
     command += [
         "-movflags", "+faststart", "-map_metadata", "-1", "-map_chapters", "-1",
@@ -1645,15 +1737,33 @@ def render_project(context: JobContext, project_id: str, store: ProjectStore, se
         }
         if caption_ass is not None or project.get("settings", {}).get("captions"):
             record["caption_settings"] = caption_settings
-        caption_transcript = transcript or {}
-        if project.get("settings", {}).get("captions") and (caption_transcript.get("segments") or any(row["kind"] == "caption" for row in text_clips)):
+        context.update(0.98, "Checking the finished video")
+        policy = (project.get("draft") or {}).get("audio_policy") or {}
+        try:
+            record["review"] = review_export(
+                settings.ffmpeg, output, duration=float(metadata["duration"]), has_audio=has_audio,
+                ceiling_dbtp=AUDIO_CEILING_DBTP,
+                # Master moves the normalized level on purpose; check against that.
+                target_lufs=(max(-24.0, min(-10.0, _finite_float(policy.get("target_lufs"), -16.0))) + master_gain_db(project)
+                             if normalizes_audio(project) else None),
+                caption_lines=burn_lines if burn_transcript else [], text_clips=text_clips,
+                caption_position=caption_settings["caption_position"],
+                # A sequence's own empty stretches are rendered as black.
+                timeline_gaps=[(float(row["start"]), float(row["end"])) for row in _frame_aligned_plan(project)
+                               if row.get("camera") == "black"] if has_sequence(project) else None,
+            )
+        except Exception as exc:  # Advice only: a failed check never fails the export.
+            record["review"] = {"version": 1, "error": type(exc).__name__, "warnings": 0, "checks": []}
+        srt_lines = caption_lines(automatic_captions, caption_settings["caption_words_per_line"])
+        if project.get("settings", {}).get("captions") and (srt_lines or any(row["kind"] == "caption" for row in text_clips)):
             caption_path = output.with_suffix(".srt")
             build_srt(
-                caption_transcript,
+                {},
                 caption_ranges,
                 caption_path,
                 words_per_caption=caption_settings["caption_words_per_line"],
                 text_clips=text_clips,
+                caption_lines=srt_lines,
             )
             record["captions_name"] = caption_path.name
             record["captions_url"] = f"/api/exports/{caption_path.name}"
