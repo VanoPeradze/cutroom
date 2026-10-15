@@ -1,4 +1,4 @@
-# CUTROOM 1.1 Beta — Windows, macOS and Linux source
+# CUTROOM 1.2 Beta — Windows, macOS and Linux source
 
 CUTROOM is a free, MIT-licensed video editor for YouTube, Shorts and Reels. It runs on your computer and opens its editing interface in your browser. Import footage, trim and move clips, add media and captions, mix audio, and export MP4 video. Manual editing needs no AI account or models.
 
@@ -34,9 +34,9 @@ Cloud AI requires your own compatible provider account, endpoint and API key. Se
 
 ## What this editor revision changes
 
-This **1.1 Beta** editor update fixes source waveforms in manual/A/B projects, the sub-frame A/B duration rejection and Unicode media-name handling. The mixer has compact faders and live audio meters. **Media > Stabilize footage** can create a separate local MP4 copy when your installed FFmpeg has `vidstabdetect` and `vidstabtransform`; it may zoom/crop edges and never replaces the original or your existing edit. No AI or upload is needed. [Stabilization guide](docs/STABILIZATION.md).
+**1.2 Beta** makes automatic captions timeline items you can select, move, trim, hide and correct, either as a fix of what was said or for one caption only. The mixer takes typed values and resets to 0 dB, its preview follows export loudness normalization, and every export ends with a limiter that keeps true peaks at or below −1 dBTP. Gameplay drafts list their moments with an **Uncertain** flag and a **Not live gameplay** correction. Text has Lower third, Chapter card, Callout and Highlight templates, and each export gets a quick local check. See the [changelog](CHANGELOG.md) for details.
 
-The public version and ZIP filename stay **1.1 Beta**; package manifests identify this revision with a new build ID/checksums. Existing users need the new download to receive the editor changes. Extract it separately and back up projects before migrating saved work; do not overwrite an installed runtime.
+The ZIP filename is **CUTROOM-1.2-Beta.zip**; package manifests identify each build with a build ID and checksums. Extract it separately and back up projects before migrating saved work; do not overwrite an installed runtime.
 
 Local Windows regression, browser and actual FFmpeg synthetic-media checks passed, including A/B boundary renders at 30/60 FPS. This editor revision requires current-source Apple Silicon/Intel macOS 15 checks before publication; [GitHub Actions](https://github.com/VanoPeradze/cutroom/actions/workflows/macos.yml) records results by commit. Earlier passing runs apply to their earlier payloads. Added media/text still fit within the edit and do not automatically ripple with source changes. AI accuracy, source sync and real-footage performance still need review.
 

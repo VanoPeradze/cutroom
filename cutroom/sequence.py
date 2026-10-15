@@ -56,6 +56,11 @@ def _legacy_keeps(project: dict[str, Any]) -> list[tuple[float, float]]:
     return result
 
 
+def editor_keep_ranges(project: dict[str, Any]) -> list[dict[str, float]]:
+    """The draft's kept ranges exactly as the editor lays them end to end."""
+    return [{"start": start, "end": end} for start, end in _legacy_keeps(project)]
+
+
 def materialize_sequence(project: dict[str, Any]) -> tuple[dict[str, Any], float]:
     """Return a detached sequence project and its edit duration; never save it.
 

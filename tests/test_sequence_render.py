@@ -165,7 +165,7 @@ def test_real_render_project_burns_and_exports_remapped_sequence_captions(tmp_pa
     captured = []
     original_ass = render.build_ass
     def capture_ass(transcript, *args, **kwargs):
-        captured.extend(row["start"] for row in transcript["segments"])
+        captured.extend(row["start"] for row in kwargs["caption_lines"])
         return original_ass(transcript, *args, **kwargs)
     monkeypatch.setattr(render, "build_ass", capture_ass)
     context = JobContext(Job("sequence-export", "render", saved["id"]), threading.Lock())

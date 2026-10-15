@@ -21,7 +21,7 @@ Choose the **Windows** or **Mac** download. Each ZIP contains its launcher, **ST
 
 Setup accepts an existing Python 3.12 or downloads a private Python 3.12 runtime, then installs the Python dependencies. FFmpeg and FFprobe are required; setup can attempt installation through Windows Package Manager. It may also attempt to install/start Ollama, but manual editing does not require it. Dependencies and local AI models are not bundled. See [Windows setup and troubleshooting](TEST_ON_ANOTHER_PC.md) for download behavior and diagnostics.
 
-For a GitHub source checkout, run **`run_windows.bat` from the repository root**. Do not rearrange an existing working installation to match the ZIP: its runtime paths and Python environment can depend on its current folder. To receive this editor revision, download a fresh copy and extract it separately. Back up projects before migration; the public 1.1 Beta filename stays the same, while the manifest records a new build ID/checksums.
+For a GitHub source checkout, run **`run_windows.bat` from the repository root**. Do not rearrange an existing working installation to match the ZIP: its runtime paths and Python environment can depend on its current folder. To receive this editor revision, download a fresh copy and extract it separately. Back up projects before migration; the manifest records each build's ID and checksums.
 
 ## macOS beta
 

@@ -517,6 +517,34 @@ def analyze_visual_moments(
     }
 
 
+def apply_visual_overrides(visual: dict[str, Any] | None, overrides: Any) -> dict[str, Any] | None:
+    """The user's screen corrections replace the model's answer where they overlap.
+
+    A window takes the corrected screen when at least half of it is inside a
+    correction. Non-gameplay screens carry no action; a window confirmed as
+    gameplay keeps at least plain-gameplay evidence.
+    """
+    rows = [row for row in overrides or [] if isinstance(row, dict) and row.get("screen") in SCREENS
+            and math.isfinite(float(row.get("start", math.nan))) and math.isfinite(float(row.get("end", math.nan)))
+            and float(row["end"]) > float(row["start"])]
+    if not rows or not isinstance(visual, dict) or not isinstance(visual.get("windows"), list):
+        return visual
+    corrected = {**visual, "windows": []}
+    for window in visual["windows"]:
+        window = dict(window) if isinstance(window, dict) else window
+        if isinstance(window, dict):
+            start, end = float(window.get("start", 0.0)), float(window.get("end", 0.0))
+            for row in rows:
+                overlap = min(end, float(row["end"])) - max(start, float(row["start"]))
+                if end > start and overlap >= (end - start) * 0.5:
+                    screen = row["screen"]
+                    flags = list(window.get("flags") or []) if screen == "gameplay" and window.get("screen") == "gameplay" else []
+                    window.update(screen=screen, flags=flags, user_override=True,
+                                  score=max(score_answer(screen, flags), PLAIN_GAMEPLAY_SCORE if screen == "gameplay" else 0.0))
+        corrected["windows"].append(window)
+    return corrected
+
+
 def usable_windows(visual: dict[str, Any] | None) -> list[dict[str, Any]]:
     if not isinstance(visual, dict) or visual.get("available") is not True:
         return []

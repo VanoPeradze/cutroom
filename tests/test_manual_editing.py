@@ -109,7 +109,9 @@ def test_new_reel_candidate_respects_durable_restores_even_if_candidate_is_stale
 def test_transcript_correction_changes_exported_words_and_undo_restores_timing(tmp_path, corrected):
     import copy
 
-    from cutroom.captions import _caption_entries, build_srt
+    from cutroom.caption_items import caption_lines, effective_transcript
+    from cutroom.captions import build_srt
+    from cutroom.render import project_caption_items
 
     value = project()
     segment = value["analysis"]["transcript"]["segments"][0]
@@ -121,29 +123,36 @@ def test_transcript_correction_changes_exported_words_and_undo_restores_timing(t
     segment["words"] = copy.deepcopy(original_words)
     value["analysis"]["segments"][0] = copy.deepcopy(segment)
     apply_manual_edit(value, {"action": "transcript_text", "segment_id": "s0", "text": corrected})
-    transcript = value["analysis"]["transcript"]
-    keep = [{"start": 0.0, "end": 2.0}]
-    assert _caption_entries(transcript, keep)[0][2] == corrected
-    srt = build_srt(transcript, keep, tmp_path / "corrected.srt").read_text(encoding="utf-8")
+    # The transcription itself is kept; the correction is a separate layer.
+    assert segment["words"] == original_words and segment["text"] == "hello world"
+    assert effective_transcript(value)[0]["segments"][0]["text"] == corrected
+    first = project_caption_items(value)[0]
+    assert (first["text"], first["start"], first["end"]) == (corrected, 0.2, 1.8)
+    srt = build_srt({}, [], tmp_path / "corrected.srt", caption_lines=caption_lines(project_caption_items(value), 9)).read_text(encoding="utf-8")
     assert corrected in srt
     assert "hello" not in srt
 
     apply_manual_edit(value, {"action": "undo"})
-    assert segment["words"] == original_words
-    assert _caption_entries(transcript, keep)[0] == (0.2, 1.8, "hello world")
+    first = project_caption_items(value)[0]
+    assert (first["text"], first["start"], first["end"]) == ("hello world", 0.2, 1.8)
+    assert [word["word"] for word in first["words"]] == ["hello", "world"]
     apply_manual_edit(value, {"action": "redo"})
-    assert _caption_entries(transcript, keep)[0][2] == corrected
+    assert project_caption_items(value)[0]["text"] == corrected
 
 
 def test_transcript_correction_updates_captions_source_and_is_undoable():
+    from cutroom.caption_items import effective_transcript
+
     value = project()
     apply_manual_edit(value, {"action": "transcript_text", "segment_id": "s1", "text": "CUTROOM"})
-    assert value["analysis"]["transcript"]["text"] == "hello CUTROOM"
-    assert value["analysis"]["segments"][1]["text"] == "CUTROOM"
+    assert effective_transcript(value)[0]["text"] == "hello CUTROOM"
+    assert value["manual"]["caption_corrections"] == {"s1": {"original": "world", "text": "CUTROOM"}}
+    assert value["analysis"]["transcript"]["segments"][1]["text"] == "world"
     assert "story_hierarchy" not in value["analysis"]
 
     apply_manual_edit(value, {"action": "undo"})
-    assert value["analysis"]["transcript"]["segments"][1]["text"] == "world"
+    assert "caption_corrections" not in value["manual"]
+    assert effective_transcript(value)[0]["text"] == "hello world"
 
 
 def test_split_adds_a_real_camera_edit_point_without_changing_duration():

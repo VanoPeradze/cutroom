@@ -238,3 +238,78 @@ def test_existing_hebrew_model_refinement_cannot_transliterate_trusted_english(m
     assert result["text"] == MIXED_TEXT
     assert result["model"] == "turbo"
     assert "English terms" in result["hebrew_refine_warning"]
+
+
+def _unit(segments, *, vad_seconds, duration=30.0):
+    coverage = transcription._coverage_from_chunks(duration, [
+        {"start": 0.0, "end": duration, "analyzed_end": duration, "status": "complete",
+         "vad_speech_seconds": vad_seconds, "vad_source": "faster_whisper_silero"},
+    ], 1, "decoder_exhaustion")
+    rows = [{"id": f"s{index + 1:04d}", "start": start, "end": end, "text": text, "avg_logprob": logprob,
+             "no_speech_prob": no_speech, "words": []}
+            for index, (start, end, text, logprob, no_speech) in enumerate(segments)]
+    return {"text": " ".join(row["text"] for row in rows), "language": "en", "language_probability": .9,
+            "duration": duration, "segments": rows, "words": [], "coverage": coverage}
+
+
+def _gap_decode(monkeypatch, original, candidate, *, mode="balanced"):
+    calls = []
+
+    def decode(*args, **kwargs):
+        calls.append(kwargs)
+        return copy.deepcopy(candidate if kwargs.get("vad") is False else original)
+
+    monkeypatch.setattr(transcription, "_decode_with_model", decode)
+    state = transcription._new_quality_recovery()
+    result = transcription._decode_with_quality_retry(object(), Path("unit.wav"), "turbo", "cuda", "float16", "en",
+                                                      mode, None, None, state, 60.0)
+    return result, state, calls
+
+
+def test_speech_vad_heard_but_the_decode_missed_is_recovered_without_vad(monkeypatch):
+    original = _unit([(1.0, 4.0, "Opening line.", -0.3, 0.1)], vad_seconds=23.3)
+    candidate = _unit([(1.0, 4.0, "Opening line.", -0.3, 0.1), (6.0, 14.0, "The part that was skipped.", -0.4, 0.2),
+                       (15.0, 26.0, "And the rest of the answer.", -0.5, 0.1)], vad_seconds=0)
+    result, state, calls = _gap_decode(monkeypatch, original, candidate)
+    assert [call.get("vad", True) for call in calls] == [True, False]
+    assert calls[1]["recovery"] is True
+    assert [row["text"] for row in result["segments"]] == ["Opening line.", "The part that was skipped.", "And the rest of the answer."]
+    assert [row["id"] for row in result["segments"]] == ["s0001", "s0002", "s0003"]
+    assert result["coverage"]["chunks"][0]["vad_speech_seconds"] == 23.3, "VAD evidence stays as measured"
+    assert result["coverage"]["chunks"][0]["transcript_seconds"] == 22.0
+    assert state["vad_gap"]["recovered_units"] == 1
+    assert state["vad_gap"]["units"][0] == {"start": 60.0, "end": 90.0, "vad_seconds": 23.3, "before_seconds": 3.0,
+                                           "status": "recovered", "added_seconds": 19.0}
+
+
+def test_invented_or_repeated_text_without_vad_is_not_accepted(monkeypatch):
+    original = _unit([(1.0, 3.0, "Hello.", -0.3, 0.1)], vad_seconds=20.0)
+    candidate = _unit([(5.0, 9.0, "Thanks for watching!", -1.2, 0.8),
+                       *[(10.0 + index * 4, 13.0 + index * 4, "la la la", -0.4, 0.1) for index in range(3)],
+                       (24.0, 28.0, "garbled", -1.8, 0.3)], vad_seconds=0)
+    result, state, _ = _gap_decode(monkeypatch, original, candidate)
+    assert [row["text"] for row in result["segments"]] == ["Hello."]
+    assert state["vad_gap"]["units"][0]["status"] == "kept_original"
+    assert state["vad_gap"]["units"][0]["added_seconds"] == 0.0
+
+
+def test_a_well_transcribed_unit_or_lite_mode_is_not_decoded_twice(monkeypatch):
+    covered = _unit([(0.0, 20.0, "Plenty of words here.", -0.2, 0.05)], vad_seconds=22.0)
+    _, state, calls = _gap_decode(monkeypatch, covered, covered)
+    assert len(calls) == 1 and state["vad_gap"]["attempted_units"] == 0
+    gap = _unit([(1.0, 2.0, "Hi.", -0.2, 0.05)], vad_seconds=22.0)
+    _, state, calls = _gap_decode(monkeypatch, gap, gap, mode="lite")
+    assert len(calls) == 1
+
+
+def test_no_vad_decode_omits_vad_parameters():
+    calls = []
+
+    class Model:
+        def transcribe(self, _path, **kwargs):
+            calls.append(kwargs)
+            return iter([]), SimpleNamespace(duration=30.0, language="en", language_probability=0.9)
+
+    transcription._decode_with_model(Model(), Path("unit.wav"), "turbo", "cuda", "float16", "en",
+                                     "balanced", None, None, recovery=True, vad=False)
+    assert calls[0]["vad_filter"] is False and "vad_parameters" not in calls[0]
