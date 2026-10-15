@@ -154,3 +154,29 @@ html[data-theme="light"] .studio-workspace #manualRestore:not(:disabled) { borde
   .advanced-panel.studio-workspace .studio-shelf { grid-row:4; }
   .advanced-panel.studio-workspace .advanced-content { grid-row:5; }
 }
+
+/* 1.2 frame audit: one frame per group. Two parallel edges a few pixels apart
+   read as a broken double border, so the inner or the following edge goes. */
+/* Panel intros: the section below draws the separator. */
+.studio-workspace .advanced-content .studio-tool-intro { border-bottom:0; padding-bottom:0; }
+/* Welcome: the project list's own frame is the only line under its heading. */
+.home-hub .recent-strip .section-label { border-bottom:0; padding-bottom:0; }
+/* The timeline corner follows the track header column in both themes. */
+.timeline-track-rows::before { background:var(--surface-chrome); }
+/* Captions: the subtitle panel already sits in a disclosure; its option cards are the frames. */
+.studio-workspace .caption-settings-disclosure .caption-control-panel { border:0; border-radius:0; background:transparent; box-shadow:none; padding:0; }
+/* Output: inside a framed section, rows and status are separated by lines, not boxed again. */
+.studio-workspace .advanced-content details.finishing-section .toggle-row { border:0; border-top:1px solid var(--line); border-radius:0; background:transparent; padding-inline:0; }
+.studio-workspace .advanced-content details.ai-draft-settings .runtime-status-dock .model-status { border:0; border-radius:0; background:transparent; padding-inline:0; }
+/* Import caption file: the checkbox sits beside its label. */
+.studio-shelf .text-replace { display:flex; align-items:flex-start; gap:8px; text-align:start; }
+.studio-shelf .text-replace input { flex:0 0 auto; width:auto; margin-top:2px; }
+/* Mixer strips: a real gap between cards; titles and values stay inside them,
+   so the panel keeps its width on the Audio tab. */
+.studio-workspace .mixer-body { column-gap:6px; }
+#studioPanelAudio .mixer-channel { margin:0; }
+.studio-workspace .mixer-channel { padding:10px 4px; }
+/* The meter column is empty beside the title, so the title may use it. */
+.studio-workspace .mixer-channel-heading { margin-inline-end:-14px; }
+.studio-workspace .mixer-channel-heading > span[data-channel-name] { display:block; max-width:100%; overflow:hidden; text-overflow:ellipsis; font-size:10px; }
+.studio-workspace .advanced-content .mixer-db input[type=number] { width:100%; max-width:52px; }
