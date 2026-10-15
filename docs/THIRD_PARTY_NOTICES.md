@@ -22,7 +22,7 @@ CUTROOM does not bundle Python, uv, FFmpeg, Ollama or model weights inside this 
 - License: Apache License 2.0 according to the upstream model card.
 - Model weights are not bundled in the CUTROOM ZIP; faster-whisper downloads them on first use when selected.
 
-See [the model inventory](MODELS.md) for configured tags and upstream sources. The MIT-licensed CUTROOM source is included in CUTROOM 1.1 Beta; this does not relicense third-party tools or weights.
+See [the model inventory](MODELS.md) for configured tags and upstream sources. The MIT-licensed CUTROOM source is included in CUTROOM 1.2 Beta; this does not relicense third-party tools or weights.
 
 ## Optional cloud providers
 

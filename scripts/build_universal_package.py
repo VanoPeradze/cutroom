@@ -188,13 +188,20 @@ def verify_package(archive: Path, *, windows_baseline: Path | None = None) -> di
     return manifest
 
 
+def _public_name(label: str) -> str:
+    """The public download name, e.g. "1.2 Beta" -> CUTROOM-1.2-Beta.zip."""
+    if not re.fullmatch(r"\d+\.\d+(?: Beta)?", label):
+        raise ValueError(f"Unexpected version label: {label!r}")
+    return "CUTROOM-" + label.replace(" ", "-") + ".zip"
+
+
 def refresh_documentation(root: Path, archive: Path, output_dir: Path, *, build_id: str | None = None,
                           windows_baseline: Path | None = None) -> Path:
     """Refresh only reviewed documentation in the exact currently approved ZIP."""
     root = root.resolve()
     release = json.loads(_read_source(root, "website/release.json"))
     data = archive.read_bytes()
-    if (release.get("layout") != LAYOUT or release.get("filename") != "CUTROOM-1.1-Beta.zip"
+    if (release.get("layout") != LAYOUT or not re.fullmatch(r"CUTROOM-\d+\.\d+(?:-Beta)?\.zip", str(release.get("filename") or ""))
             or len(data) != release.get("bytes") or sha(data) != release.get("sha256")):
         raise ValueError("Documentation input is not the exact approved combined release")
     previous = verify_package(archive, windows_baseline=windows_baseline)
@@ -231,7 +238,7 @@ def refresh_documentation(root: Path, archive: Path, output_dir: Path, *, build_
                     windows_files_unchanged=False, windows_product_files_unchanged=True,
                     files={name: sha(content) for name, content in sorted(files.items()) if name != MANIFEST})
     files[MANIFEST] = _bytes_json(manifest)
-    target = output_dir / identifier / "CUTROOM-1.1-Beta.zip"
+    target = output_dir / identifier / _public_name(original["app_version_label"])
     checksum = target.with_suffix(".zip.sha256")
     if target.exists() or checksum.exists():
         raise FileExistsError("Refusing to overwrite an existing documentation package")
@@ -294,7 +301,7 @@ def build_package(root: Path, windows_zip: Path, output_dir: Path, *, build_id: 
     files[MANIFEST] = _bytes_json(manifest)
     archive_dir = output_dir / identifier
     archive_dir.mkdir(parents=True, exist_ok=True)
-    target = archive_dir / "CUTROOM-1.1-Beta.zip"
+    target = archive_dir / _public_name(original["app_version_label"])
     checksum = target.with_suffix(".zip.sha256")
     if target.exists() or checksum.exists():
         raise FileExistsError("Refusing to overwrite an existing package")

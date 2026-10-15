@@ -10,6 +10,7 @@ from .cache_keys import build_analysis_cache_fingerprints, cache_fingerprints_ma
 from .composition import default_reels_stack, select_embedded_candidate
 from .config import Settings
 from .edit_styles import enrich_brief_with_style
+from .caption_items import apply_corrections, corrections as caption_corrections
 from .editing import SOURCE_MIXER_DEFAULT_LAYOUTS, apply_camera_overrides, apply_timeline_overrides
 from .audio import analyze_audio, audio_policy, build_audio_actions, constrain_gain_ranges_to_speech, protect_silence_ranges_from_speech
 from .intelligence import CRITIC_REVIEW_CONTRACT, PACE_LIMITS, StoryPlanningError, build_story_beats, language_from_text, plan_edit
@@ -30,6 +31,7 @@ from .visual_moments import (
     VisualTimeline,
     accelerated_inference_available,
     analyze_visual_moments,
+    apply_visual_overrides,
     gameplay_profile,
     resolve_visual_pass,
     summary as visual_summary,
@@ -1549,6 +1551,25 @@ def _select_gameplay_moments(
     return merge_ranges(sorted(chosen, key=lambda row: row["start"]), gap=0.5)
 
 
+def _gameplay_moment_review(ranges: list[dict[str, float]], visual: VisualTimeline) -> list[dict[str, Any]]:
+    """Each kept gameplay moment with its evidence, so the user can correct it.
+
+    A moment is uncertain when no analyzed window covers it, its dominant screen
+    is not gameplay, or its action evidence is weak.
+    """
+    review = []
+    for keep in ranges:
+        evidence = visual.evidence(keep["start"], keep["end"])
+        action = float((evidence or {}).get("action") or 0.0)
+        screen = (evidence or {}).get("screen")
+        review.append({
+            "start": round(float(keep["start"]), 3), "end": round(float(keep["end"]), 3),
+            "screen": screen, "action": round(action, 3), "event": (evidence or {}).get("event") or "",
+            "uncertain": evidence is None or screen != "gameplay" or action < 0.25,
+        })
+    return review
+
+
 def _gameplay_moment_notes(ranges: list[dict[str, float]], visual: VisualTimeline) -> list[str]:
     """The strongest on-screen event inside each kept moment, for the draft summary."""
     notes: list[str] = []
@@ -1575,75 +1596,18 @@ def _gameplay_summary(count: int, notes: list[str], language: str | None, *, cut
     return f"{count} gameplay {moments} chosen by on-screen action and sound{shown}. {left_out}"
 
 
-def _select_style_story_ranges(
+def _style_beat_candidates(
     segments: list[dict[str, Any]],
     decision: dict[str, Any],
     duration: float,
     target: float,
     selection_policy: dict[str, Any],
-    story_beats: list[dict[str, Any]] | None = None,
-    *,
-    selection_seed: Any = None,
-) -> list[dict[str, float]] | None:
-    """Keep complete local passages instead of filling a style with isolated lines.
-
-    Semantic selections remain authoritative. The deterministic path uses actual
-    speech boundaries and existing cue hints as bounded context evidence; it does
-    not claim to identify a kill, joke or causal relationship from audio energy.
-    """
-    target_mode = selection_policy.get("duration_mode") == "target"
-    moment_limit = (max(1, len(segments), len(decision.get("story_ranges") or []))
-                    if target_mode else selection_policy.get("max_moments"))
-    if not moment_limit:
-        return None
-    moment_limit = max(1, int(moment_limit))
-    semantic = merge_ranges(decision.get("story_ranges") or [], gap=0.75)
-    if semantic:
-        if moment_limit == 1 and semantic[-1]["end"] - semantic[0]["start"] <= target + 0.05:
-            # Preserve the pauses and action between setup and payoff when one
-            # continuous story fits. Never bridge distant chapters blindly.
-            return [{"start": semantic[0]["start"], "end": semantic[-1]["end"]}]
-        model_beat_ids = {str(value) for value in decision.get("story_beat_ids") or []}
-        model_passages = merge_ranges([
-            row for row in decision.get("story_ranges") or []
-            if row.get("beat_id") and str(row["beat_id"]) in model_beat_ids
-        ], gap=0.75)
-        anchors = _planned_story_anchors(segments, decision, model_passages)
-        anchor_passages = [passage for passage in semantic if any(
-            passage["start"] <= float(anchor["start"]) + 0.0005
-            and passage["end"] >= float(anchor["end"]) - 0.0005 for anchor in anchors
-        )]
-        if moment_limit == 1 and len(anchor_passages) > 1 and range_duration(semantic) <= target + 0.05:
-            # A single story can use source passages separated by material the
-            # planner omitted. Do not erase its explicit ending to satisfy a
-            # range-count limit. Final review exposes the style constraint.
-            return semantic
-        if len(semantic) <= moment_limit and range_duration(semantic) <= target + 0.05:
-            return semantic
-        # A valid model selection can still exceed the preset's moment count.
-        # Rank its existing complete passages; never fill the unused budget with
-        # another story or split a setup/payoff just to hit the requested length.
-        def passage_score(passage: dict[str, float]) -> float:
-            values = [_short_segment_value(row, decision) for row in segments
-                      if float(row["start"]) < passage["end"] and float(row["end"]) > passage["start"]]
-            return max(values) * 0.65 + sum(values) / len(values) * 0.35 if values else 0.0
-
-        selected_semantic: list[dict[str, float]] = []
-        for passage in sorted(semantic, key=lambda row: (-round(passage_score(row), 4), row["start"])):
-            if range_duration(selected_semantic) + passage["end"] - passage["start"] > target + 0.05:
-                continue
-            selected_semantic.append(passage)
-            if len(selected_semantic) >= moment_limit:
-                break
-        if selected_semantic:
-            return sorted(selected_semantic, key=lambda row: row["start"])
-        # A single over-budget passage still needs the existing speech-boundary
-        # budget handling. Do not invent a shorter complete moment here.
-        return None
-
+    story_beats: list[dict[str, Any]] | None,
+) -> list[dict[str, float]]:
+    """Complete story beats with their style context and a relevance score."""
     ordered = sorted(segments, key=lambda row: (float(row["start"]), float(row["end"])))
     if not ordered:
-        return None
+        return []
     beats = story_beats or build_story_beats(
         ordered, language_from_text(" ".join(str(row.get("text", "")) for row in ordered), "en"),
     )
@@ -1694,6 +1658,122 @@ def _select_style_story_ranges(
         if beat.get("role_hint") in {"result", "conclusion"}:
             score += 0.15
         candidates.append({"start": start, "end": end, "score": score})
+
+    return candidates
+
+
+def _top_up_to_target(
+    selected: list[dict[str, float]],
+    candidates: list[dict[str, float]],
+    target: float,
+    decision: dict[str, Any],
+) -> list[dict[str, float]]:
+    """In "aim for this length" mode, add the strongest remaining complete beats.
+
+    Only beats at or above the median relevance of all candidates qualify; they
+    never overlap a selected passage and never push the edit past the target, so
+    nothing is repeated and no filler is added. The step is recorded for review.
+    """
+    planned = range_duration(selected)
+    trace = [{"stage": "planner_passages", "seconds": round(planned, 3), "passages": len(selected)}]
+    decision["_selection_trace"] = trace
+    if planned >= target * 0.9 or not candidates:
+        return selected
+    scores = sorted(row["score"] for row in candidates)
+    floor = scores[len(scores) // 2]
+    taken = [dict(row) for row in selected]
+    total, added = planned, []
+    for candidate in sorted(candidates, key=lambda row: (-round(row["score"], 4), row["start"])):
+        if candidate["score"] < floor:
+            break
+        length = candidate["end"] - candidate["start"]
+        # A margin keeps a new beat from touching the context of another one.
+        if any(candidate["start"] < row["end"] + 1.0 and candidate["end"] > row["start"] - 1.0 for row in taken):
+            continue
+        if total + length > target + 0.05:
+            continue
+        taken.append({"start": candidate["start"], "end": candidate["end"]})
+        added.append(candidate)
+        total += length
+        if total >= target * 0.95:
+            break
+    if added:
+        trace.append({"stage": "relevant_top_up", "seconds": round(total, 3), "passages": len(added)})
+    return merge_ranges(sorted(taken, key=lambda row: row["start"]), gap=0.0)
+
+
+def _select_style_story_ranges(
+    segments: list[dict[str, Any]],
+    decision: dict[str, Any],
+    duration: float,
+    target: float,
+    selection_policy: dict[str, Any],
+    story_beats: list[dict[str, Any]] | None = None,
+    *,
+    selection_seed: Any = None,
+) -> list[dict[str, float]] | None:
+    """Keep complete local passages instead of filling a style with isolated lines.
+
+    Semantic selections remain authoritative. The deterministic path uses actual
+    speech boundaries and existing cue hints as bounded context evidence; it does
+    not claim to identify a kill, joke or causal relationship from audio energy.
+    """
+    target_mode = selection_policy.get("duration_mode") == "target"
+    moment_limit = (max(1, len(segments), len(decision.get("story_ranges") or []))
+                    if target_mode else selection_policy.get("max_moments"))
+    if not moment_limit:
+        return None
+    moment_limit = max(1, int(moment_limit))
+    semantic = merge_ranges(decision.get("story_ranges") or [], gap=0.75)
+    if semantic:
+        if moment_limit == 1 and semantic[-1]["end"] - semantic[0]["start"] <= target + 0.05:
+            # Preserve the pauses and action between setup and payoff when one
+            # continuous story fits. Never bridge distant chapters blindly.
+            return [{"start": semantic[0]["start"], "end": semantic[-1]["end"]}]
+        model_beat_ids = {str(value) for value in decision.get("story_beat_ids") or []}
+        model_passages = merge_ranges([
+            row for row in decision.get("story_ranges") or []
+            if row.get("beat_id") and str(row["beat_id"]) in model_beat_ids
+        ], gap=0.75)
+        anchors = _planned_story_anchors(segments, decision, model_passages)
+        anchor_passages = [passage for passage in semantic if any(
+            passage["start"] <= float(anchor["start"]) + 0.0005
+            and passage["end"] >= float(anchor["end"]) - 0.0005 for anchor in anchors
+        )]
+        if moment_limit == 1 and len(anchor_passages) > 1 and range_duration(semantic) <= target + 0.05:
+            # A single story can use source passages separated by material the
+            # planner omitted. Do not erase its explicit ending to satisfy a
+            # range-count limit. Final review exposes the style constraint.
+            return semantic
+        if len(semantic) <= moment_limit and range_duration(semantic) <= target + 0.05:
+            if target_mode:
+                return _top_up_to_target(semantic, _style_beat_candidates(
+                    segments, decision, duration, target, selection_policy, story_beats), target, decision)
+            return semantic
+        # A valid model selection can still exceed the preset's moment count.
+        # Rank its existing complete passages; never fill the unused budget with
+        # another story or split a setup/payoff just to hit the requested length.
+        def passage_score(passage: dict[str, float]) -> float:
+            values = [_short_segment_value(row, decision) for row in segments
+                      if float(row["start"]) < passage["end"] and float(row["end"]) > passage["start"]]
+            return max(values) * 0.65 + sum(values) / len(values) * 0.35 if values else 0.0
+
+        selected_semantic: list[dict[str, float]] = []
+        for passage in sorted(semantic, key=lambda row: (-round(passage_score(row), 4), row["start"])):
+            if range_duration(selected_semantic) + passage["end"] - passage["start"] > target + 0.05:
+                continue
+            selected_semantic.append(passage)
+            if len(selected_semantic) >= moment_limit:
+                break
+        if selected_semantic:
+            return sorted(selected_semantic, key=lambda row: row["start"])
+        # A single over-budget passage still needs the existing speech-boundary
+        # budget handling. Do not invent a shorter complete moment here.
+        return None
+
+    candidates = _style_beat_candidates(segments, decision, duration, target, selection_policy, story_beats)
+    if not candidates:
+        return None
 
     selected: list[dict[str, float]] = []
     for candidate in sorted(candidates, key=lambda row: (
@@ -2438,8 +2518,12 @@ def _explicit_source_layout(project: dict[str, Any]) -> str | None:
     return layout
 
 
+def _kept_seconds(cuts: list[dict[str, Any]], duration: float) -> float:
+    return range_duration(invert_ranges(cuts, duration))
+
+
 def _duration_review(brief: dict[str, Any], source_duration: float, output_duration: float,
-                     *, nonverbal: bool = False) -> dict[str, Any] | None:
+                     *, nonverbal: bool = False, chain: list[dict[str, Any]] | None = None) -> dict[str, Any] | None:
     """Explain a Short's real budget without claiming all footage was assessed."""
     if brief.get("goal", "short") != "short":
         return None
@@ -2455,7 +2539,9 @@ def _duration_review(brief: dict[str, Any], source_duration: float, output_durat
             "duration_is_ceiling": brief.get("duration_mode") != "target", "duration_mode": brief.get("duration_mode", "style"),
             "shortfall": shortfall, "reason": reason,
             "style_moment_limit": int(limit) if limit else None,
-            "nonverbal": nonverbal, "can_try_more_moments": bool(shortfall and limit)}
+            "nonverbal": nonverbal, "can_try_more_moments": bool(shortfall and limit),
+            # Each step that changed the length, so a short result names its cause.
+            "chain": chain or []}
 
 
 def _effective_brief(project: dict[str, Any]) -> dict[str, Any]:
@@ -2987,7 +3073,10 @@ def analyze_project(
         visual_source, visual_duration, visual_sound,
         source_slot=analysis_screen_slot, timeline_offset=visual_offset, timeline_duration=duration,
     )
-    visual_timeline = VisualTimeline(visual_moments)
+    # The user's screen corrections (for example a camera feed the model read as a
+    # fight) win over the model; the cached model answers stay untouched.
+    visual_timeline = VisualTimeline(apply_visual_overrides(
+        visual_moments, (project.get("manual") or {}).get("visual_overrides")))
     gameplay_route = _gameplay_moments_route(
         brief, goal, visual_moments if visual_timeline else None, nonverbal_highlights,
     )
@@ -3068,7 +3157,10 @@ def analyze_project(
     story_hierarchy: dict[str, Any] | None = None
     model_selection: dict[str, Any] | None = None
     planner_warnings: list[dict[str, str]] = []
-    normalized_editorial_transcript, _ = _normalize_transcript(transcript, spoken_language, duration)
+    # The user's caption corrections fix what was said; editorial decisions read
+    # the corrected words while the stored transcription stays as transcribed.
+    editorial_source, _ = apply_corrections(transcript, caption_corrections(project))
+    normalized_editorial_transcript, _ = _normalize_transcript(editorial_source, spoken_language, duration)
     editorial_transcript_fingerprint = stable_fingerprint(
         "director-editorial-transcript", normalized_editorial_transcript["segments"],
     )
@@ -3224,6 +3316,8 @@ def analyze_project(
     # Shorts are selections from the entire recording, not "the first N seconds".
     # Build a story-shaped set of source passages first, then apply measured audio
     # cleanup and defensible transcript cleanup inside those passages.
+    duration_chain: list[dict[str, Any]] = [{"stage": "requested", "seconds": round(float(target_duration), 3)}]
+    gameplay_review: list[dict[str, Any]] = []
     if goal == "short" and (duration > target_duration or brief.get("duration_mode") == "target"):
         selection_policy = ((brief.get("style_profile") or {}).get("selection_policy") or {})
         selection_segments = _with_visual_evidence(segments, visual_timeline)
@@ -3271,12 +3365,17 @@ def analyze_project(
             )
         )
         if gameplay_route:
+            gameplay_review = _gameplay_moment_review(story_keep, visual_timeline)
             notes = _gameplay_moment_notes(story_keep, visual_timeline)
             decision["summary"] = _gameplay_summary(
                 len(story_keep), notes, language,
                 cutscenes=gameplay_route["share"].get("cutscene", 0.0) >= 0.05,
             )
         story_cuts = invert_ranges(story_keep, duration)
+        duration_chain.extend(decision.pop("_selection_trace", None) or [])
+        duration_chain.append({"stage": "gameplay_moments" if gameplay_route else
+                               "audio_highlights" if nonverbal_highlights else "story_selection",
+                               "seconds": range_duration(story_keep), "passages": len(story_keep)})
         if not story_keep and brief.get("duration_mode") == "target":
             raise ValueError("No reliable highlight passages were found. Select a manual range or review the footage; no arbitrary filler was added.")
         cuts, counts = _short_cleanup_cuts_with_floor(
@@ -3289,15 +3388,19 @@ def analyze_project(
             target_duration,
         )
         counts["gameplay_moments" if gameplay_route else "story_selection"] = len(story_keep)
+        duration_chain.append({"stage": "pause_cleanup", "seconds": _kept_seconds(cuts, duration)})
         cuts, dead_screen_count = _cut_dead_screens(cuts, visual_timeline, segments, duration)
         if dead_screen_count:
             counts["dead_screen"] = dead_screen_count
+            duration_chain.append({"stage": "dead_screens", "seconds": _kept_seconds(cuts, duration), "count": dead_screen_count})
         cuts, target_trim_count = _enforce_short_target(cuts, selection_segments, decision, duration, target_duration)
         if target_trim_count:
             counts["target_trim"] = target_trim_count
+            duration_chain.append({"stage": "target_trim", "seconds": _kept_seconds(cuts, duration), "count": target_trim_count})
         cuts, micro_count = _drop_isolated_micro_keeps(cuts, duration)
         if micro_count:
             counts["micro_fragments"] = micro_count
+            duration_chain.append({"stage": "micro_fragments", "seconds": _kept_seconds(cuts, duration), "count": micro_count})
     else:
         cuts, counts = _bounded_cuts(
             candidates,
@@ -3341,7 +3444,10 @@ def analyze_project(
             has_b=bool(source_b),
         )
     output_duration = range_duration(keep_ranges)
-    duration_review = _duration_review(brief, duration, output_duration, nonverbal=nonverbal_highlights)
+    if len(duration_chain) > 1:
+        duration_chain.append({"stage": "final", "seconds": output_duration})
+    duration_review = _duration_review(brief, duration, output_duration, nonverbal=nonverbal_highlights,
+                                       chain=duration_chain if len(duration_chain) > 1 else None)
     quality_review = _edit_quality_review(
         transcript_quality, story_hierarchy, segments, keep_ranges, duration,
         decision=decision,
@@ -3375,6 +3481,7 @@ def analyze_project(
         "embedded_layout_confirmed": embedded_layout_confirmed,
         "target_duration": target_duration,
         "duration_review": duration_review,
+        **({"gameplay_moments": gameplay_review} if gameplay_review else {}),
         "source_duration": duration,
         "output_duration": output_duration,
         "removed_duration": round(max(0.0, duration - output_duration), 3),

@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.1%20Beta-1bd9ce?style=flat-square" alt="Version 1.1 Beta"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.2%20Beta-1bd9ce?style=flat-square" alt="Version 1.2 Beta"></a>
   <a href="docs/PUBLISHING.md#download-request-count"><img src="https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2FVanoPeradze%2Fcutroom%2Fdownload-stats%2Fdownloads.json&amp;style=flat-square&amp;cacheSeconds=300" alt="Download requests: observed Expo window plus GitHub installation ZIPs"></a>
   <a href="docs/BETA_STATUS.md"><img src="https://img.shields.io/badge/status-beta-d6c247?style=flat-square" alt="Beta software"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-a38bd0?style=flat-square" alt="MIT license"></a>
@@ -21,8 +21,8 @@
 
 <p align="center">
   <a href="https://cutroom-studio.expo.app/"><strong>Website</strong></a> ·
-  <a href="https://github.com/VanoPeradze/cutroom/releases/download/v1.1-beta-20261011/CUTROOM-1.1-Beta-Windows.zip"><strong>Download for Windows</strong></a> ·
-  <a href="https://github.com/VanoPeradze/cutroom/releases/download/v1.1-beta-20261011/CUTROOM-1.1-Beta-Mac.zip"><strong>Download for Mac</strong></a> ·
+  <a href="https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261015/CUTROOM-1.2-Beta-Windows.zip"><strong>Download for Windows</strong></a> ·
+  <a href="https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261015/CUTROOM-1.2-Beta-Mac.zip"><strong>Download for Mac</strong></a> ·
   <a href="docs/USER_GUIDE_EN.md">User guide</a> ·
   <a href="docs/README_HE.md">Hebrew README</a>
 </p>
@@ -76,14 +76,14 @@
 
 ### Download for Windows or macOS
 
-1. Download the ZIP for your computer: [Windows](https://github.com/VanoPeradze/cutroom/releases/download/v1.1-beta-20261011/CUTROOM-1.1-Beta-Windows.zip) or [Mac](https://github.com/VanoPeradze/cutroom/releases/download/v1.1-beta-20261011/CUTROOM-1.1-Beta-Mac.zip).
+1. Download the ZIP for your computer: [Windows](https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261015/CUTROOM-1.2-Beta-Windows.zip) or [Mac](https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261015/CUTROOM-1.2-Beta-Mac.zip).
 2. Extract the entire archive.
 3. Open the launcher beside the **App** folder: **START CUTROOM.bat** on Windows, **START CUTROOM.command** on macOS.
 4. CUTROOM opens in your browser. Keep the launch window open while you edit; closing the browser alone does not stop CUTROOM.
 
 **First setup needs internet** to install dependencies. Python, FFmpeg and AI models are not bundled in the ZIPs. Keep **App**, **START HERE.html** and the launcher together. If the browser does not open, copy the address shown in the launch window once setup finishes. The Mac launcher is unsigned and is not a notarized `.app`; the [platform guide](docs/PLATFORMS.md) explains the security prompts.
 
-[Release notes and SHA-256 checksums](https://github.com/VanoPeradze/cutroom/releases/tag/v1.1-beta-20261011). If GitHub is unavailable, use the [Windows mirror](https://cutroom-studio.expo.app/downloads/CUTROOM-1.1-Beta-Windows.zip), [Mac mirror](https://cutroom-studio.expo.app/downloads/CUTROOM-1.1-Beta-Mac.zip) or [combined ZIP mirror](https://cutroom-studio.expo.app/downloads/CUTROOM-1.1-Beta.zip).
+[Release notes and SHA-256 checksums](https://github.com/VanoPeradze/cutroom/releases/tag/v1.2-beta-20261015). If GitHub is unavailable, use the [Windows mirror](https://cutroom-studio.expo.app/downloads/CUTROOM-1.2-Beta-Windows.zip), [Mac mirror](https://cutroom-studio.expo.app/downloads/CUTROOM-1.2-Beta-Mac.zip) or [combined ZIP mirror](https://cutroom-studio.expo.app/downloads/CUTROOM-1.2-Beta.zip).
 
 To update, extract a fresh copy separately and back up your projects before moving them. The older combined ZIP is still supported: open its `windows` or `mac` folder first.
 
@@ -150,7 +150,7 @@ See the [platform guide](docs/PLATFORMS.md) for exact prerequisites, commands an
 
 ## Beta status
 
-CUTROOM 1.1 Beta is beta software. Start with a short recording and keep your originals. Review transcripts, AI selections, source roles, synchronization and the exported MP4 before you publish. AI proposes a draft for you to edit; the default YouTube cleanup keeps your recording's order.
+CUTROOM 1.2 Beta is beta software. Start with a short recording and keep your originals. Review transcripts, AI selections, source roles, synchronization and the exported MP4 before you publish. AI proposes a draft for you to edit; the default YouTube cleanup keeps your recording's order.
 
 The editor has two main video sources plus media and text layers. Added layers stay within the existing edit and do not automatically follow source reordering. Automated checks and synthetic renders do not prove real-footage quality, installation on every computer or AI accuracy.
 

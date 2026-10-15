@@ -574,6 +574,11 @@ def test_duration_intent_replans_from_cached_context_without_retranscription(sem
     store.update(project_id,lambda current:current["settings"].update({"duration_mode":"target"}))
     director.analyze_project(context(),project_id,store,settings)
     assert calls == {"transcribe":1,"plan":2}
-    assert store.load(project_id)["draft"]["duration_review"]["duration_mode"]=="target"
+    review = store.load(project_id)["draft"]["duration_review"]
+    assert review["duration_mode"]=="target"
+    # Every step that changed the length is recorded, from the request to the final edit.
+    stages = [row["stage"] for row in review["chain"]]
+    assert stages[0] == "requested" and "story_selection" in stages and stages[-1] == "final"
+    assert review["chain"][-1]["seconds"] == store.load(project_id)["draft"]["output_duration"]
     director.analyze_project(context(),project_id,store,settings)
     assert calls == {"transcribe":1,"plan":2}

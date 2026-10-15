@@ -3,10 +3,12 @@ from __future__ import annotations
 import copy
 from typing import Any
 
+from .caption_items import CAPTION_ACTION_FIELDS, CaptionError, correct_segment_text, prepare_caption_edit
 from .composition import CHROMA_KEY_ACTION_FIELDS, build_manual_embedded_candidate, prepare_chroma_key_edit
 from .source_tracks import TRACK_ACTIONS, SourceTrackError, prepare_source_track_edit, validate_source_track_sync
 from .sequence import SEQUENCE_ACTIONS, prepare_sequence_edit
 from .media_library import MEDIA_ACTION_FIELDS, MediaLibraryError, prepare_media_edit, validate_media_bounds
+from .render import caption_context, project_caption_items
 from .text_clips import TEXT_ACTION_FIELDS, TextClipError, prepare_text_edit, public_text_clips, validate_text_bounds
 from .track_locks import locked_tracks, require_tracks_unlocked, validate_locked_track_changes
 from .utils import clamp, invert_ranges, merge_ranges, now_iso, range_duration
@@ -893,7 +895,73 @@ def _set_embedded_camera(project: dict[str, Any], payload: dict[str, Any]) -> No
     draft["status"] = "ready"
 
 
+CAPTION_LAYERS = ("caption_corrections", "caption_overrides")
+VISUAL_SCREENS = frozenset({"gameplay", "cutscene", "menu_or_map", "loading_or_black", "webcam_only", "other"})
+
+
+def _prepare_visual_override(project: dict[str, Any], payload: dict[str, Any]) -> list[dict[str, Any]] | None:
+    """Replace the screen type of a source range for the next AI draft ("" clears it)."""
+    start, end = _number(payload, "start"), _number(payload, "end")
+    duration = _duration(project)
+    if start < 0 or end > duration + 1e-6 or end - start < 0.5:
+        raise ManualEditError("Choose a range of at least 0.5 s inside the recording")
+    screen = payload.get("screen")
+    if screen != "" and screen not in VISUAL_SCREENS:
+        raise ManualEditError("Unknown screen type")
+    current = [dict(row) for row in (project.get("manual") or {}).get("visual_overrides") or [] if isinstance(row, dict)]
+    kept = [row for row in current if float(row.get("end", 0)) <= start or float(row.get("start", 0)) >= end]
+    if screen:
+        kept.append({"start": round(start, 3), "end": round(end, 3), "screen": screen})
+    kept.sort(key=lambda row: (float(row["start"]), float(row["end"])))
+    return None if kept == current else kept
+
+
+def _caption_snapshot(project: dict[str, Any]) -> dict[str, Any]:
+    manual = project.get("manual") or {}
+    return {key: copy.deepcopy(manual[key]) for key in CAPTION_LAYERS if key in manual}
+
+
+def _restore_captions(project: dict[str, Any], snapshot: dict[str, Any]) -> None:
+    manual = project.setdefault("manual", {})
+    for key in CAPTION_LAYERS:
+        if key in snapshot:
+            manual[key] = copy.deepcopy(snapshot[key])
+        else:
+            manual.pop(key, None)
+
+
+def _prepare_caption_change(project: dict[str, Any], payload: dict[str, Any], action: str) -> dict[str, Any] | None:
+    """New caption layers for one caption action, or None when nothing changes."""
+    try:
+        if action == "transcript_text":
+            new_text = str(payload.get("text") or "").strip()[:4000]
+            if not new_text:
+                raise ManualEditError("Transcript text cannot be empty")
+            fixes = correct_segment_text(project, payload.get("segment_id"), new_text)
+            if fixes is None:
+                return None
+            return {"caption_corrections": fixes, "caption_overrides": (project.get("manual") or {}).get("caption_overrides") or {}}
+        # Times come from the editor timeline, so validate against the editor clock.
+        context = caption_context(project, aligned=False)
+        return prepare_caption_edit(project, {**payload, "action": action}, project_caption_items(project, aligned=False),
+                                    float(context["duration"] or 0.0))
+    except CaptionError as exc:
+        raise ManualEditError(str(exc)) from exc
+
+
 def _apply_history_entry(project: dict[str, Any], entry: dict[str, Any], side: str) -> None:
+    if entry.get("kind") == "visual":
+        manual = project.setdefault("manual", {})
+        if entry[side]:
+            manual["visual_overrides"] = copy.deepcopy(entry[side])
+        else:
+            manual.pop("visual_overrides", None)
+        return
+    if entry.get("kind") == "captions":
+        _restore_captions(project, entry[side])
+        if isinstance(project.get("draft"), dict):
+            project["draft"]["edited_at"] = now_iso()
+        return
     if entry.get("kind") == "chroma":
         snapshot = entry[side]
         manual = project.setdefault("manual", {})
@@ -988,6 +1056,16 @@ def _apply_manual_edit(project: dict[str, Any], payload: dict[str, Any]) -> dict
     trimmed = _prepare_clip_trim(project, payload) if action == "trim_clip" else None
     if action == "trim_clip" and trimmed is None:
         return project
+    visual_change = None
+    if action == "visual_override":
+        visual_change = _prepare_visual_override(project, payload)
+        if visual_change is None:
+            return project
+    caption_change = None
+    if action in CAPTION_ACTION_FIELDS or action == "transcript_text":
+        caption_change = _prepare_caption_change(project, payload, action)
+        if caption_change is None:
+            return project
     history = _history(project)
 
     if action in {"set_source_mixer", "set_embedded_camera"} and not isinstance(project.get("draft"), dict):
@@ -1019,22 +1097,27 @@ def _apply_manual_edit(project: dict[str, Any], payload: dict[str, Any]) -> dict
             project["draft"]["edited_at"] = now_iso()
         entry = {"kind": "chroma", "before": before,
                  "after": {"present": True, "value": copy.deepcopy(chroma_edit)}}
-    elif action == "transcript_text":
-        segment_id = payload.get("segment_id")
-        segment, _ = _find_transcript_segment(project, segment_id)
-        old_text = str(segment.get("text") or "")
-        new_text = str(payload.get("text") or "").strip()[:4000]
-        if not new_text:
-            raise ManualEditError("Transcript text cannot be empty")
-        if new_text == old_text:
-            _set_history_counts(project, history)
-            return project
-        entry = {
-            "kind": "transcript", "segment_id": segment_id, "before": old_text, "after": new_text,
-            "before_words": {"present": "words" in segment, "words": copy.deepcopy(segment.get("words"))},
-        }
-        _set_transcript_text(project, segment_id, new_text)
-        entry["after_words"] = {"present": "words" in segment, "words": copy.deepcopy(segment.get("words"))}
+    elif visual_change is not None:
+        # A correction for the next AI draft; the current timeline is unchanged.
+        manual = project.setdefault("manual", {})
+        before = copy.deepcopy(manual.get("visual_overrides") or [])
+        if visual_change:
+            manual["visual_overrides"] = visual_change
+        else:
+            manual.pop("visual_overrides", None)
+        entry = {"kind": "visual", "before": before, "after": copy.deepcopy(visual_change)}
+    elif caption_change is not None:
+        # Corrections and per-caption changes are layers over the transcript; the
+        # transcribed text itself is never rewritten, so every change can be undone.
+        before = _caption_snapshot(project)
+        _restore_captions(project, {key: value for key, value in caption_change.items() if value})
+        # A later AI draft must read the corrected words, not an older story pass.
+        if action == "transcript_text" or caption_change["caption_corrections"] != before.get("caption_corrections", {}):
+            (project.get("analysis") or {}).pop("story_hierarchy", None)
+            (project.get("analysis") or {}).pop("editorial_cache", None)
+        if isinstance(project.get("draft"), dict):
+            project["draft"]["edited_at"] = now_iso()
+        entry = {"kind": "captions", "before": before, "after": _caption_snapshot(project)}
     elif action in SEQUENCE_ACTIONS | TRACK_ACTIONS | set(MEDIA_ACTION_FIELDS) | set(TEXT_ACTION_FIELDS) | {"delete_range", "restore_range", "trim_clip", "split", "set_camera_layout", "set_source_mixer", "set_embedded_camera", "apply_reel_candidate"}:
         if not isinstance(project.get("draft"), dict):
             raise ManualEditError("Generate a draft before editing the timeline")

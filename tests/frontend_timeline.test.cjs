@@ -1778,3 +1778,104 @@ test("Zoom selection centers a bounded source-time range without changing select
   assert.equal(timeline.zoom, 1);
   assert.equal(scroll.scrollLeft, 0);
 });
+
+function captionFixture(items) {
+  const h = sequenceFixture();
+  h.project.editor_captions = items || [
+    { id: 's0:w0', segment_id: 's0', start: 1, end: 3, text: 'Hello there', words: [[1, 1.5, 'Hello'], [2, 3, 'there']], hidden: false, direction: 'ltr' },
+    { id: 's1:w0', segment_id: 's1', start: 4, end: 6, text: 'שלום עולם', words: [], hidden: true, direction: 'rtl' },
+  ];
+  h.timeline.setProject(h.project);
+  h.captionEvents = [];
+  h.timeline.onCaptionSelect = id => h.captionEvents.push(['select', id]);
+  h.timeline.onCaptionEdit = (id, times) => h.captionEvents.push(['edit', id, plain(times)]);
+  h.timeline.onCaptionAction = (action, detail) => h.captionEvents.push([action, plain(detail)]);
+  h.timeline.onCaptionOpen = id => h.captionEvents.push(['open', id]);
+  h.captionY = (row = 0) => h.timeline.mediaLayout().caption.top + 2 + row * 26 + 12;
+  h.key = key => ({ key, preventDefault() { this.defaultPrevented = true; }, stopPropagation() {} });
+  return h;
+}
+
+test('automatic captions are selectable items: click selects without editing or seeking', () => {
+  const h = captionFixture();
+  const lane = h.timeline.mediaLayout().caption;
+  assert.equal(lane.height, 30, 'one row keeps the existing lane height');
+  const hit = h.timeline.captionAtEvent(h.point(2, h.captionY()));
+  assert.equal(hit.item.id, 's0:w0'); assert.equal(hit.edge, null);
+  assert.equal(h.timeline.captionAtEvent(h.point(1.02, h.captionY())).edge, 'start');
+  assert.equal(h.timeline.captionAtEvent(h.point(2.98, h.captionY())).edge, 'end');
+  const seeks = h.seeks.length;
+  h.timeline.pointerDown(h.point(2, h.captionY())); h.timeline.pointerUp(h.point(2, h.captionY()));
+  assert.deepEqual(h.captionEvents, [['select', 's0:w0']]);
+  assert.equal(h.timeline.captionSelection, 's0:w0');
+  assert.equal(h.seeks.length, seeks, 'selecting a caption does not move the playhead');
+  assert.equal(h.edits.length, 0);
+  h.timeline.pointerDown(h.point(8, 80)); h.timeline.pointerUp(h.point(8, 80));
+  assert.equal(h.timeline.captionSelection, null, 'clicking footage deselects the caption');
+});
+
+test('dragging a caption moves or trims it as one edit on the edit clock', () => {
+  const h = captionFixture();
+  h.timeline.pointerDown(h.point(2, h.captionY())); h.timeline.pointerMove(h.point(3, h.captionY())); h.timeline.pointerUp(h.point(3, h.captionY()));
+  assert.deepEqual(h.captionEvents.at(-1), ['edit', 's0:w0', { start: 2, end: 4 }]);
+  h.timeline.pointerDown(h.point(3, h.captionY())); h.timeline.pointerUp(h.point(3.5, h.captionY()));
+  const [, trimmedId, trimmed] = h.captionEvents.at(-1);
+  assert.equal(trimmedId, 's0:w0'); assert.equal(trimmed.start, 1); assert.ok(Math.abs(trimmed.end - 3.5) < 1e-9);
+  h.timeline.pointerDown(h.point(1.02, h.captionY())); h.timeline.pointerUp(h.point(5, h.captionY()));
+  const [, , times] = h.captionEvents.at(-1);
+  assert.equal(times.end, 3); assert.ok(Math.abs(times.start - 2.9) < 1e-9, 'a caption stays at least 0.1 s long');
+  assert.equal(h.edits.length, 0, 'caption gestures never edit footage');
+});
+
+test('caption keys hide, open and deselect only the caption', () => {
+  const h = captionFixture();
+  h.timeline.selectCaption('s0:w0');
+  h.timeline.keyDown(h.key('Delete'));
+  assert.deepEqual(h.captionEvents.at(-1), ['caption_visibility', { caption_id: 's0:w0', hidden: true }]);
+  h.timeline.keyDown(h.key('Enter'));
+  assert.deepEqual(h.captionEvents.at(-1), ['open', 's0:w0']);
+  h.timeline.selectCaption('s1:w0');
+  const count = h.captionEvents.length;
+  h.timeline.keyDown(h.key('Backspace'));
+  assert.equal(h.captionEvents.length, count, 'an already hidden caption is left alone');
+  h.timeline.keyDown(h.key('Escape'));
+  assert.deepEqual(h.captionEvents.at(-1), ['select', null]);
+  assert.equal(h.edits.length, 0);
+});
+
+test('blade never cuts captions and double-click opens the caption editor', () => {
+  const h = captionFixture();
+  h.timeline.setTool('blade');
+  h.timeline.pointerDown(h.point(2, h.captionY())); h.timeline.pointerUp(h.point(2, h.captionY()));
+  assert.deepEqual(h.captionEvents, [['select', 's0:w0']]); assert.equal(h.edits.length, 0);
+  h.listeners.dblclick(h.point(2, h.captionY()));
+  assert.deepEqual(h.captionEvents.at(-1), ['open', 's0:w0']);
+});
+
+test('overlapping captions stack, hidden captions stay visible as hidden, selection survives edits', () => {
+  const h = captionFixture([
+    { id: 'a:w0', segment_id: 'a', start: 1, end: 4, text: 'Long one', words: [], hidden: false },
+    { id: 'b:w0', segment_id: 'b', start: 3, end: 5, text: 'Second', words: [], hidden: true },
+  ]);
+  assert.equal(h.timeline.mediaLayout().caption.height, 56);
+  assert.equal(h.timeline.captionAtEvent(h.point(3.5, h.captionY(1))).item.id, 'b:w0');
+  assert.equal(h.timeline.captionAtEvent(h.point(3.5, h.captionY(0))).item.id, 'a:w0');
+  h.draws.length = 0; h.timeline.draw();
+  assert.ok(h.draws.some(draw => String(draw.text).startsWith('Hidden · ')));
+  h.timeline.selectCaption('b:w0');
+  h.project.editor_captions = h.project.editor_captions.map(item => ({ ...item }));
+  h.timeline.setProject(h.project);
+  assert.equal(h.timeline.captionSelection, 'b:w0');
+  h.project.editor_captions = h.project.editor_captions.slice(0, 1);
+  h.timeline.setProject(h.project);
+  assert.equal(h.timeline.captionSelection, null);
+  assert.deepEqual(h.captionEvents.at(-1), ['select', null]);
+});
+
+test('a caption drag that ends where it started commits nothing', () => {
+  const h = captionFixture();
+  h.timeline.pointerDown(h.point(2, h.captionY()));
+  h.timeline.pointerMove(h.point(2.004, h.captionY() + 10));
+  h.timeline.pointerUp(h.point(2.004, h.captionY() + 10));
+  assert.deepEqual(h.captionEvents, [['select', 's0:w0']], 'sub-frame jitter is not a timing change');
+});

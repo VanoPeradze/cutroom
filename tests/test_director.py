@@ -230,7 +230,7 @@ def test_single_source_analysis_with_null_sync_can_build_render_graph():
     }
     graph, maps, has_audio = build_filter_graph(project, 720, 1280)
     assert "[vout]" in graph
-    assert maps == ["-map", "[vout]", "-map", "[aout]"]
+    assert maps == ["-map", "[vout]", "-map", "[aceiling]"]
     assert has_audio is True
 
 

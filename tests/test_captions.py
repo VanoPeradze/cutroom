@@ -180,7 +180,7 @@ def test_render_graph_can_burn_ass_into_final_video(tmp_path):
     graph, maps, has_audio = build_filter_graph(project, 720, 1280, ass)
     assert "ass=filename='" in graph
     assert "[vfinal]" in graph
-    assert maps == ["-map", "[vfinal]", "-map", "[aout]"]
+    assert maps == ["-map", "[vfinal]", "-map", "[aceiling]"]
     assert has_audio is True
 
 

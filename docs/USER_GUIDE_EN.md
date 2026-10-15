@@ -123,6 +123,8 @@ The overview shows the draft, before/after duration and **What changed**. If **R
 
 If an AI rebuild reports **New draft ready; your manual timeline was kept**, playback/export still use your manual edit. Choose **Apply new AI draft** and confirm to replace it, or **Keep manual timeline** to leave it in place. Undo can restore the previous manual timeline after applying.
 
+**Gameplay moments.** When a Short is built from gameplay moments, **Edit → AI suggestions** lists them under **Gameplay moments in this draft**, each with its time range and the model's short description; click a row to jump to it. **Uncertain** means weak evidence: no analyzed frames cover the moment, its main screen was not read as gameplay, or it shows little action. If a moment is a replay, a camera feed or a cutscene, choose **Not live gameplay** and then **Rebuild Draft**: the next draft leaves that range out and fills the time with other moments. **Undo mark** removes the correction. The mark is saved with the project and can be undone; it does not change the model's stored answers.
+
 ## 6. Find your way around Studio
 
 | Area | Purpose |
@@ -186,6 +188,8 @@ The timeline waveform shows measured audio from the selected original A/B source
 
 Open **Audio mixer** to balance Original, Voiceover, Music, Effects and Master. Original is the selected A/B audio source; the other channels group media by audio role. Mute and volume affect preview and export; Solo auditions a channel in preview only. Live meters show browser sample peaks and reset on pause/seek. Leave headroom; export normalization can change final loudness. Media layers fit inside the existing edit duration; adding a file does not extend the whole edit or create more main A/B sources.
 
+Faders move in 0.5 dB steps and show a 0 dB mark. Type an exact value in the box under a fader (−60 to +12 dB). Double-click a fader, or use its reset button where the panel shows one, to return to 0 dB. The mouse wheel changes a value only while that control is focused. When the draft normalizes loudness, channel faders set the balance between tracks before normalization and **Master** sets the final level after it; the panel says when a fader cannot change the exported level, for example when only one track is playing. The preview applies the same normalization, so what you hear is close to the export. Every export ends with a limiter that keeps true peaks at or below −1 dBTP, so loud sources no longer clip.
+
 **Stabilize footage** makes an optional local copy without replacing your original or edit. Support depends on your FFmpeg build, and smoothing may crop edges. [Steps and limits](STABILIZATION.md).
 
 For a selected main A/B clip, **Picture speed** changes only the picture, from 0.25× to 4×. Clip length and speech timing stay in place. It can lose lip sync, and reaching the end of the source can hold the last frame. Check the result before export; this control does not speed up the entire picture-and-sound edit.
@@ -210,6 +214,8 @@ Open **Captions → Your text & captions** after creating a draft or opening the
 
 Each item appears on its own timeline layer. Drag the item to move it or drag its edges to change its duration; **Start / End (seconds)** provide exact placement. **Preview at start** seeks to it. Choose **Top**, **Center** or **Bottom**, **Clean**, **Bold** or **Boxed**, and a size from 75% to 150%. Use **Find custom text** to search, **Remove text** to delete an item, and Undo/Redo to reverse saved text edits.
 
+**Template** gives a text item a ready layout: **Plain text** (the default), **Lower third (name + role)** with a **Second line** under the name, bottom left on a box, **Chapter card** (a centred title with an optional label above it, faded in and out), **Callout** (a short boxed note at the top left) and **Highlight** (text in the accent colour). Templates with a fixed place hide **Position**. The preview and the export draw them in the same place. Every word comes from you: CUTROOM does not fill names, numbers or facts into templates.
+
 These times refer to the **edited video**, not the original recording. Custom text stays at its edit time when you reorder source footage; it does not automatically ripple with A/B. Text must fit inside the current edit. If shortening the video would leave text past its new end, CUTROOM rejects that edit: first trim, move or remove the affected text.
 
 ### Import SRT or VTT
@@ -220,11 +226,26 @@ Imports add to your custom captions by default. Select **Replace my existing cus
 
 Custom titles and captions are always burned into the exported video. The AI **Burn into video** switch does not hide them. Optional **Export SRT file** combines timed AI and custom captions, excluding titles. To avoid duplicate subtitles, turn off AI burning when you use custom captions instead; importing does not remove the AI transcript or its captions from an enabled SRT export. These text tools require no AI processing or paid account.
 
+### Edit automatic captions on the timeline
+
+Automatic captions appear as blocks in the **Captions** lane. Click a block to select it; the playhead does not move. The preview outlines that caption and **Captions** opens **Selected caption**. You can also click the caption on the video. Drag a block to move it, or drag its edges to trim it (in whole frames, at least 0.1 s). Double-click or press Enter to edit its text; Delete or Backspace hides it; Esc deselects. Blade and range tools do not cut captions.
+
+In **Selected caption**, choose where a text change applies:
+
+- **What was said** fixes the transcript wherever this speech is used, including the transcript list and what the AI reads for the next draft. The original transcription is kept, so the fix survives a rebuild.
+- **Only this caption** changes this one caption; the transcript stays as transcribed.
+
+**Start / End (s)**, **Style**, **Position** and **Size (%)** apply to this caption only; leave them empty to follow the project setting. **Hide caption** leaves it out of the preview and export without removing footage; a hidden caption stays on the lane as a dashed **Hidden** block. **Reset caption** returns it to the automatic version. **Previous / Next** step through captions. Enter saves, Shift+Enter adds a line and Esc reverts. Each change is one Undo step, and edited captions show ✎.
+
+A caption longer than about 84 characters (two lines) is split into several captions. When the speech has no word timing, the time of each part is estimated from its length.
+
+Limits: trimming a clip so that a caption loses its first word can give that caption a new identity, and its own change stops applying (Undo brings it back). Swapping the order of two uses of the same speech also swaps their caption changes.
+
 ### Correct an AI transcript
 
 Search the transcript or filter **All lines / In the edit / Removed**. Click a line to seek; Shift-click selects a passage. **Remove passage / Restore passage** changes footage. Correcting text alone neither removes footage nor generates replacement speech.
 
-Edit **Correct selected line**, then **Save text**. **Save all changes** saves pending line edits; **Discard changes** drops the current unsaved correction. Check Saved/Unsaved before closing the browser—unsaved text buffers are not a backup.
+Edit **Correct selected line**, then **Save text**. **Save all changes** saves pending line edits; **Discard changes** drops the current unsaved correction. Check Saved/Unsaved before closing the browser—unsaved text buffers are not a backup. A saved line correction is the same fix as **What was said**: the original transcription is kept, and the correction reaches every caption that uses that speech.
 
 Under **AI subtitle style & speech language**:
 
@@ -248,6 +269,8 @@ Controls marked **Draft rebuild** change editorial decisions and require **Rebui
 
 Choose **Export**, check the summary, then **Start export**. Rendering uses original media rather than preview proxies. **Stop process** cancels export; closing the dialog alone does not. When ready, **Download video** and save the file. Before sharing, watch the start/end, cuts, captions, sync and frame shape outside the app.
 
+After each export CUTROOM runs a quick local check and shows it in the export dialog under **Checks of this video**: true peak (passes at −1 dBTP or lower), loudness against the normalization target, black picture lasting a second or longer, your text over burned captions, and very long caption lines. Warnings name the times. A check that runs out of time is skipped. The checks never block or change the export, and they do not replace watching it.
+
 ## 10. Save, recover and report a problem
 
 Projects live on the computer running CUTROOM, not in a cloud account. Default folders are `data/projects` for projects/imported media, `data/exports` for exports and `data/cache` for caches. Keep backups. Do not delete these folders as a generic fix. Use the confirmed **Delete** action in the lobby or Projects when you intend to remove a project and its imported copies/exports; original files outside CUTROOM remain untouched.
@@ -270,3 +293,5 @@ Report the exact action/error, build name, input length/language and a redacted 
 
 ### Edit length
 Choose **Highlight sequence — aim for this length** to combine distinct relevant passages toward the duration. **Follow style — maximum length** keeps the style’s moment limit: Competitive Clutch keeps one engagement. A target is approximate, never permission to repeat footage or add irrelevant filler. Review shortfall notices and source ranges; audio-only selection identifies activity, not the meaning of a fight. Older projects retain their prior style limit until you change this choice.
+
+In **Highlight sequence — aim for this length**, after the passages the story planner chose, CUTROOM adds the strongest remaining relevant beats with their context. It never repeats a passage, never adds a beat below the median relevance and never passes the target; it stops at about 95% of it. When a draft is still shorter than requested, its notice shows **Length at each step**, from the requested length to the final one, so you can see where time was lost.
