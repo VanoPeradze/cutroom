@@ -1,11 +1,11 @@
 {
-  "bytes": 7195446,
-  "sha256": "9431fb282bfff6d40fa8d09592aa8b4c8717aaab4c372f796237a655e3fb8cdd",
-  "filename": "CUTROOM-1.2-Beta-combined-9431fb282bff-20261015.zip",
-  "url": "https://cutroom-studio--b5zxem8olo.expo.app/downloads/CUTROOM-1.2-Beta-combined-9431fb282bff-20261015.zip",
+  "bytes": 7195525,
+  "sha256": "17857919c2315cfe01db2e6c6695220cc8949c7759cf66860672e4df5ea3811b",
+  "filename": "CUTROOM-1.2-Beta-combined-17857919c231-20261015.zip",
+  "url": "https://cutroom-studio--o6igksvb01.expo.app/downloads/CUTROOM-1.2-Beta-combined-17857919c231-20261015.zip",
   "version": "1.2-beta",
   "layout": "windows-mac-folders-v1",
-  "build_id": "CUTROOM-1.2-beta-mac-20261015-041643",
-  "source_commit": "75a70fb94bd046319b006ebe345c83a45c34b029",
-  "note": "Exact 1.2 Beta release candidate built from the pinned Windows baseline CUTROOM-1.2-beta-20261015-040951. Caption items, mixer and export limiter, Short length top-up, gameplay-moment corrections, text templates, export check, long-caption splitting and layout fixes. CI retains strict payload comparison."
+  "build_id": "CUTROOM-1.2-beta-mac-20261015-083307",
+  "source_commit": "0a67e3ce56224aa3e6d12f2179ccbd4b889e9bed",
+  "note": "Exact 1.2 Beta release candidate built from the pinned Windows baseline CUTROOM-1.2-beta-20261015-083237. Caption items, mixer and export limiter, Short length top-up, gameplay-moment corrections, text templates, export check, long-caption splitting and layout fixes. CI retains strict payload comparison."
 }
