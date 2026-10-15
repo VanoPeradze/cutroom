@@ -1,11 +1,11 @@
 {
-  "bytes": 7082118,
-  "sha256": "f46fb59b4fdbbf5772c2ca0c2fae5f0503bb33f1b7cccbade2781d8722fcedb0",
-  "filename": "CUTROOM-1.1-Beta-gameplay-combined-f46fb59b4fdb-20261010.zip",
-  "url": "https://cutroom-studio--wxmlhwavz3.expo.app/downloads/CUTROOM-1.1-Beta-gameplay-combined-f46fb59b4fdb-20261010.zip",
-  "version": "1.1-beta",
+  "bytes": 7195446,
+  "sha256": "9431fb282bfff6d40fa8d09592aa8b4c8717aaab4c372f796237a655e3fb8cdd",
+  "filename": "CUTROOM-1.2-Beta-combined-9431fb282bff-20261015.zip",
+  "url": "https://cutroom-studio--b5zxem8olo.expo.app/downloads/CUTROOM-1.2-Beta-combined-9431fb282bff-20261015.zip",
+  "version": "1.2-beta",
   "layout": "windows-mac-folders-v1",
-  "build_id": "CUTROOM-1.1-beta-mac-20261010-140324",
-  "source_commit": "391971c028d69ace4682fcf8794682e085aa8803",
-  "note": "Exact gameplay-moments release candidate built from the pinned Windows baseline CUTROOM-1.1-beta-20261010-140135. Gameplay Shorts from on-screen moments, Automatic vision for Smart, proportional transcript gap gate, plus the 2026-10-09 stability release. CI retains strict payload comparison."
+  "build_id": "CUTROOM-1.2-beta-mac-20261015-041643",
+  "source_commit": "75a70fb94bd046319b006ebe345c83a45c34b029",
+  "note": "Exact 1.2 Beta release candidate built from the pinned Windows baseline CUTROOM-1.2-beta-20261015-040951. Caption items, mixer and export limiter, Short length top-up, gameplay-moment corrections, text templates, export check, long-caption splitting and layout fixes. CI retains strict payload comparison."
 }
