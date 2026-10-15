@@ -882,6 +882,9 @@ def _source_track_master(project: dict[str, Any], slot: str, *, audio: bool, out
 AUDIO_CEILING_DBTP = -1.0
 
 
+STAGE_PCM_BYTES_PER_SECOND = 48_000 * 2 * 3
+
+
 def audio_ceiling_filter() -> str:
     limit = 10 ** ((AUDIO_CEILING_DBTP - 1.0) / 20)
     return (f"aresample=192000,alimiter=limit={limit:.6f}:attack=0.5:release=50:level=0:latency=1,"
@@ -1288,7 +1291,10 @@ def _estimate_render_storage(
     project_json_bytes = _serialized_size(project, fallback=512 * 1024)
     project_commit_bytes = max(1024**2, project_json_bytes * 2 + 256 * 1024)
     normalize_audio = has_audio and _final_audio_filter(project) != "anull"
-    normalization_stage_bytes = output_bytes if normalize_audio else 0
+    # The normalization stage keeps the mix as lossless 24-bit PCM (288 kB/s),
+    # so the final export encodes the audio once.
+    normalization_stage_bytes = (output_bytes - audio_bytes + int(math.ceil(duration * STAGE_PCM_BYTES_PER_SECOND))
+                                 if normalize_audio else 0)
     export_work_bytes = output_bytes + normalization_stage_bytes + srt_bytes
     project_work_bytes = filter_graph_bytes + ass_bytes + project_commit_bytes
 
@@ -1619,7 +1625,9 @@ def render_project(context: JobContext, project_id: str, store: ProjectStore, se
     safe_name = sanitize_filename(project.get("name", "cutroom-edit"))
     output = settings.exports_dir / f"{safe_name}-{export_id[-8:]}.mp4"
     partial = output.with_suffix(".partial.mp4")
-    normalization_stage = settings.exports_dir / f".{safe_name}-{export_id[-8:]}.render-stage.mp4"
+    # QuickTime holds the lossless PCM mix next to the encoded picture and keeps
+    # exact frame timing (Matroska's millisecond clock gave 30.001 FPS on copy).
+    normalization_stage = settings.exports_dir / f".{safe_name}-{export_id[-8:]}.render-stage.mov"
     caption_path: Path | None = None
     output_committed = False
     graph_path = store.project_dir(project_id) / "cache" / f"filter-{export_id}.txt"
@@ -1650,7 +1658,10 @@ def render_project(context: JobContext, project_id: str, store: ProjectStore, se
         "-vsync", "1", "-r:v", str(fps),
         "-threads", str(max(1, int(settings.raw.get("ffmpeg_threads", 4)))),
     ]
-    if has_audio:
+    if has_audio and normalize_audio:
+        # Lossless until the normalization pass, which encodes AAC once.
+        command += ["-c:a", "pcm_s24le"]
+    elif has_audio:
         command += ["-c:a", "aac", "-b:a", str(settings.render.get("audio_bitrate", "192k"))]
     command += [
         "-movflags", "+faststart", "-map_metadata", "-1", "-map_chapters", "-1",

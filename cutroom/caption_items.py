@@ -39,6 +39,9 @@ MIN_CAPTION_SECONDS = 0.1
 MAX_CAPTION_TEXT = 2000
 # A pause longer than this starts a new caption line, as in the export.
 LINE_PAUSE_SECONDS = 0.75
+# One caption shows at most two lines of about 42 characters, the common
+# subtitle reading limit; longer speech is split into several captions.
+MAX_CAPTION_CHARACTERS = 84
 _RTL = re.compile("[֐-ࣿיִ-﷿ﹰ-﻿]")
 _STYLE_KEYS = ("style", "position", "scale")
 
@@ -322,12 +325,23 @@ def caption_lines(items: list[dict[str, Any]], words_per_caption: int, *,
             limit = min(limit, HIGHLIGHT_WORDS_PER_CAPTION)
         words = item.get("words") or []
         if not words:
-            lines.append({"start": item["start"], "end": item["end"], "text": item["text"], "words": [],
-                          "item_id": item["id"], **style})
+            # Without word timing a long text is still split at word boundaries;
+            # each part's time is estimated from its share of the characters.
+            parts = _character_parts(item["text"])
+            total = sum(len(part) for part in parts) or 1
+            cursor = item["start"]
+            for index, part in enumerate(parts):
+                end = item["end"] if index == len(parts) - 1 else cursor + (item["end"] - item["start"]) * len(part) / total
+                if end > cursor:
+                    lines.append({"start": cursor, "end": end, "text": part, "words": [], "item_id": item["id"],
+                                  "estimated": len(parts) > 1, **style})
+                cursor = end
             continue
         chunks: list[list[dict[str, Any]]] = [[]]
         for word in words:
-            if chunks[-1] and (word["start"] - chunks[-1][-1]["end"] > LINE_PAUSE_SECONDS or len(chunks[-1]) >= limit):
+            length = sum(len(entry["word"]) + 1 for entry in chunks[-1]) + len(word["word"])
+            if chunks[-1] and (word["start"] - chunks[-1][-1]["end"] > LINE_PAUSE_SECONDS or len(chunks[-1]) >= limit
+                               or length > MAX_CAPTION_CHARACTERS):
                 chunks.append([])
             chunks[-1].append(word)
         chunks = [chunk for chunk in chunks if chunk]
@@ -343,6 +357,17 @@ def caption_lines(items: list[dict[str, Any]], words_per_caption: int, *,
                               "words": chunk, "item_id": item["id"], **style})
     lines.sort(key=lambda line: (line["start"], line["end"]))
     return lines
+
+
+def _character_parts(text: str) -> list[str]:
+    """Split text at word boundaries into parts of at most MAX_CAPTION_CHARACTERS."""
+    parts: list[str] = []
+    for word in text.split():
+        if parts and len(parts[-1]) + 1 + len(word) <= MAX_CAPTION_CHARACTERS:
+            parts[-1] += " " + word
+        else:
+            parts.append(word)
+    return parts or [text]
 
 
 def _item(project: dict[str, Any], caption_id: Any, items: list[dict[str, Any]]) -> dict[str, Any]:

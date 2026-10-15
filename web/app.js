@@ -5095,14 +5095,37 @@ function bindCaptionItemEvents() {
   elements.previewCaption?.addEventListener("click", selectFromPreview);
 }
 
-// One caption line at a time, split exactly as the export splits it.
+// One caption line at a time, split exactly as the export splits it: by
+// pauses, words per caption and at most two lines of about 42 characters.
+const MAX_CAPTION_CHARACTERS = 84;
+function captionCharacterParts(text) {
+  const parts = [];
+  for (const word of String(text || "").split(/\s+/).filter(Boolean)) {
+    if (parts.length && parts.at(-1).length + 1 + word.length <= MAX_CAPTION_CHARACTERS) parts[parts.length - 1] += ` ${word}`;
+    else parts.push(word);
+  }
+  return parts.length ? parts : [String(text || "")];
+}
+
 function captionItemLine(item, time, wordsPerCaption) {
   const words = Array.isArray(item.words) ? item.words : [];
-  if (!words.length) return time >= item.start && time < item.end ? { text: item.text, words: [] } : null;
+  if (!words.length) {
+    if (time < item.start || time >= item.end) return null;
+    // Without word timing, each part's time is its share of the characters.
+    const parts = captionCharacterParts(item.text), total = parts.reduce((sum, part) => sum + part.length, 0) || 1;
+    let cursor = item.start;
+    for (const [index, part] of parts.entries()) {
+      const end = index === parts.length - 1 ? item.end : cursor + (item.end - item.start) * part.length / total;
+      if (time >= cursor && time < end) return { text: part, words: [] };
+      cursor = end;
+    }
+    return null;
+  }
   const chunks = [[]];
   for (const word of words) {
     const chunk = chunks.at(-1);
-    if (chunk.length && (word[0] - chunk.at(-1)[1] > 0.75 || chunk.length >= wordsPerCaption)) chunks.push([]);
+    const length = chunk.reduce((sum, entry) => sum + entry[2].length + 1, 0) + word[2].length;
+    if (chunk.length && (word[0] - chunk.at(-1)[1] > 0.75 || chunk.length >= wordsPerCaption || length > MAX_CAPTION_CHARACTERS)) chunks.push([]);
     chunks.at(-1).push(word);
   }
   for (const [index, chunk] of chunks.entries()) {

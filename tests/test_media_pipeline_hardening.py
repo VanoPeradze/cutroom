@@ -714,7 +714,8 @@ def test_render_storage_estimate_accounts_for_every_written_sidecar_and_intermed
     assert estimate["caption_srt_bytes"] > 0
     assert estimate["filter_graph_bytes"] > 0
     assert estimate["project_commit_bytes"] > 0
-    assert estimate["normalization_stage_bytes"] == estimate["output_bytes"]
+    # The stage holds lossless PCM instead of the encoded AAC.
+    assert estimate["normalization_stage_bytes"] > estimate["output_bytes"] - estimate["audio_bytes"]
     assert estimate["export_work_bytes"] == (
         estimate["output_bytes"]
         + estimate["normalization_stage_bytes"]
@@ -854,11 +855,12 @@ def test_loudness_normalization_runs_as_bounded_audio_only_second_pass(
     result = render.render_project(context, value["id"], store, settings)
 
     assert len(commands) == 2
-    assert commands[0][-1].endswith(".render-stage.mp4")
+    assert commands[0][-1].endswith(".render-stage.mov")
+    assert commands[0][commands[0].index("-c:a") + 1] == "pcm_s24le"
     assert commands[1][commands[1].index("-c:v") + 1] == "copy"
     assert commands[1][commands[1].index("-af") + 1].startswith("loudnorm=I=-16.0")
     assert result["export"]["duration"] == 1.0
-    assert not list(settings.exports_dir.glob("*.render-stage.mp4"))
+    assert not list(settings.exports_dir.glob("*.render-stage.*"))
     assert not list(settings.exports_dir.glob("*.partial.mp4"))
 
 

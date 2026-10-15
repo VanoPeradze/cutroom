@@ -275,3 +275,19 @@ def test_splitting_a_clip_keeps_caption_identity_and_overrides():
         ("s0:w0", 2.1, 2.9, "First words"),
         ("s1:w0~1", 4.1, 4.9, "Second time"),
     ]
+
+
+def test_long_captions_split_into_readable_parts_with_or_without_word_timing():
+    from cutroom.caption_items import MAX_CAPTION_CHARACTERS
+    long_text = " ".join(f"word{index:02d}" for index in range(30))  # 209 characters
+    wordless = [{"id": "s0:t0.0", "start": 0.0, "end": 9.0, "text": long_text, "words": [], "hidden": False}]
+    lines = caption_lines(wordless, 12)
+    assert [len(line["text"]) <= MAX_CAPTION_CHARACTERS for line in lines] == [True] * len(lines) and len(lines) == 3
+    assert " ".join(line["text"] for line in lines) == long_text
+    assert lines[0]["start"] == 0.0 and lines[-1]["end"] == 9.0 and all(line["estimated"] for line in lines)
+    assert all(left["end"] == pytest.approx(right["start"]) for left, right in zip(lines, lines[1:]))
+    timed = [{"id": "s1:w0", "start": 0.0, "end": 12.0, "text": long_text, "hidden": False,
+              "words": [{"start": index * 0.4, "end": index * 0.4 + 0.3, "word": f"word{index:02d}"} for index in range(30)]}]
+    lines = caption_lines(timed, 12)
+    assert all(len(line["text"]) <= MAX_CAPTION_CHARACTERS for line in lines) and len(lines) == 3
+    assert caption_lines([{**wordless[0], "text": "Short line"}], 9)[0]["text"] == "Short line"
