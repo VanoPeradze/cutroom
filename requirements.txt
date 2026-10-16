@@ -6,5 +6,5 @@ faster-whisper>=1.2.1,<2
 # PyAV 19 removed av.open(metadata_errors), used by faster-whisper 1.2.1.
 av>=19.0.1,<20
 # Keep the Windows CUDA wheel aligned with the verified runtime build.
-ctranslate2==4.8.1; sys_platform == "win32"
+ctranslate2==4.8.2; sys_platform == "win32"
 opencv-python-headless>=5.0.0.93,<6
