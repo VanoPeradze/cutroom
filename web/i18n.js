@@ -486,5 +486,22 @@ Object.assign(he, {
   chromaPlayback:'הנגן במצב עריכה מציג את המסך הירוק. הפריים המעובד בודק את הקצוות המדויקים; משבצות מסמנות שקיפות לסרטון שמתחת.'
 });
 
+Object.assign(en, {
+  durationDraftTargetSummary: 'AI draft: {selected}s / target {requested}s.',
+  durationDraftMaximumSummary: 'AI draft: {selected}s / maximum {requested}s.',
+  durationTargetLimitedReady: 'Current selection: {selected}s of the requested {requested}s. The target was not met; review the passages and length.',
+  durationStoryIncompleteReady: 'Draft needs review: required story material remains unresolved.',
+  durationAssessmentLimit: 'Supported by the current selection: {supported}s. Review the remaining story requirements.',
+  durationOverTarget: 'The draft exceeds the requested length. Review the selected passages before exporting.'
+});
+Object.assign(he, {
+  durationDraftTargetSummary: 'טיוטת AI: {selected} שניות / יעד {requested} שניות.',
+  durationDraftMaximumSummary: 'טיוטת AI: {selected} שניות / אורך מרבי {requested} שניות.',
+  durationTargetLimitedReady: 'הבחירה הנוכחית: {selected} שניות מתוך יעד של {requested}. היעד לא הושג; יש לבדוק את הקטעים ואת האורך.',
+  durationStoryIncompleteReady: 'נדרשת בדיקה: הבחירה עדיין לא ממלאת את כל דרישות הסיפור.',
+  durationAssessmentLimit: 'הבחירה הנוכחית תומכת ב־{supported} שניות. יש לבדוק את דרישות הסיפור שנותרו.',
+  durationOverTarget: 'הטיוטה ארוכה מהאורך שהתבקש. יש לבדוק את הקטעים שנבחרו לפני הייצוא.'
+});
+
 Object.assign(en, {chromaOriginalPlayback:'Original footage; switch to Edited cut to see chroma key.',chromaLivePlayback:'Chroma-key playback preview; check the processed frame for exact edges.'});
 Object.assign(he, {chromaOriginalPlayback:'חומר מקורי; עברו לתצוגת עריכה כדי לראות מסך ירוק.',chromaLivePlayback:'תצוגת מסך ירוק בנגן; בדקו את הפריים המעובד לקצוות מדויקים.'});
