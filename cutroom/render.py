@@ -1436,7 +1436,7 @@ def _render_input_fingerprint(project: dict[str, Any]) -> str:
                 "text_clips": manual.get("text_clips"),
                 "audio_mixer": manual.get("audio_mixer"),
                 # Only present once the user edits a caption, so older exports stay current.
-                **({key: manual.get(key) for key in ("caption_corrections", "caption_overrides") if manual.get(key)}
+                **({key: manual.get(key) for key in ("caption_corrections", "caption_overrides", "caption_override_anchors") if manual.get(key)}
                    if settings.get("captions") or settings.get("burn_captions") else {}),
             },
             "transcript": analysis.get("transcript") if settings.get("captions") or settings.get("burn_captions") else None,

@@ -30,6 +30,15 @@ def _lane_data(container: Any, slot: str) -> Any:
     return container.get(slot) if isinstance(container, dict) else container
 
 
+def _clip_media_state(clips: Any) -> Any:
+    # Caption ownership is private bookkeeping, not an edit to protected media.
+    # Retain all other keys and malformed rows so locks still fail closed.
+    if not isinstance(clips, list):
+        return clips
+    return [{key: value for key, value in clip.items() if key != "caption_origin"}
+            if isinstance(clip, dict) else clip for clip in clips]
+
+
 def validate_locked_track_changes(before: dict[str, Any], after: dict[str, Any]) -> None:
     """Check the old lock state, even when the candidate also removes a lock.
 
@@ -58,11 +67,11 @@ def validate_locked_track_changes(before: dict[str, Any], after: dict[str, Any])
         # or changing its duration/stream properties is not.
         changed |= _source_identity(old_source) != _source_identity(new_source)
         changed |= bool(before.get("draft")) != bool(after.get("draft"))
-        changed |= source_track_clips(old_view, slot) != source_track_clips(new_view, slot)
+        changed |= _clip_media_state(source_track_clips(old_view, slot)) != _clip_media_state(source_track_clips(new_view, slot))
         if old_sequence == new_sequence:
             # Preserve even malformed legacy rows that the safe read projection
             # omits. They cannot be silently replaced while their lane is locked.
-            changed |= _lane_data(old_manual.get("source_tracks"), slot) != _lane_data(new_manual.get("source_tracks"), slot)
+            changed |= _clip_media_state(_lane_data(old_manual.get("source_tracks"), slot)) != _clip_media_state(_lane_data(new_manual.get("source_tracks"), slot))
         changed |= _lane_data(old_manual.get("crop"), slot) != _lane_data(new_manual.get("crop"), slot)
         changed |= _lane_data(old_manual.get("chroma_key"), slot) != _lane_data(new_manual.get("chroma_key"), slot)
         if slot == "A":

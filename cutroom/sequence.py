@@ -244,6 +244,8 @@ def _slice_rows(rows: list[dict[str, Any]], start: float, end: float, *,
             piece["source_start"] = round(row["source_start"] + left - row["start"], 9)
             if duplicate or left > row["start"] + EPSILON:
                 piece["id"] = _new_id(slot)
+            if duplicate and "caption_origin" in piece:
+                piece["caption_origin"] = piece["id"]
         result.append(piece)
     return result
 
@@ -640,6 +642,8 @@ def prepare_sequence_edit(project: dict[str, Any], payload: dict[str, Any]) -> d
             clip = copy.deepcopy(clip)
             if action == "sequence_duplicate":
                 clip["id"] = _new_id(slot)
+                if "caption_origin" in clip:
+                    clip["caption_origin"] = clip["id"]
         start = _number(payload.get("start"), "start")
         if start < 0 or start > MAX_SEQUENCE_SECONDS:
             raise SourceTrackError("Place clips between zero and 24 hours")

@@ -119,6 +119,13 @@ def _validate_clip(project: dict[str, Any], slot: str, item: Any) -> dict[str, A
     if source_start < 0 or source_start + end - start > _duration(project, slot) + EPSILON:
         raise SourceTrackError(f"The clip extends beyond source {slot}'s media")
     result = {"id": clip_id, "start": start, "end": end, "source_start": source_start}
+    if "caption_origin" in item:
+        origin = item["caption_origin"]
+        if not isinstance(origin, str) or not origin.strip() or len(origin) > 128:
+            raise SourceTrackError("Source clips require a valid caption origin")
+        # Splits keep their caption ancestry even when their selection ID changes.
+        # Leave older clips unchanged until a caption edit needs this provenance.
+        result["caption_origin"] = origin
     if "video_speed" in item or "video_source_start" in item:
         speed = _number(item.get("video_speed", 1), "video speed")
         video_start = _number(item.get("video_source_start", source_start), "video source start")
