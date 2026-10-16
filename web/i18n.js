@@ -488,6 +488,8 @@ Object.assign(he, {
 
 Object.assign(en, {
   durationDraftTargetSummary: 'AI draft: {selected}s / target {requested}s.',
+  durationStage_planner_passages: 'approved story passages',
+  durationStage_speech_pause_fit: 'after shortening speech pauses',
   durationDraftMaximumSummary: 'AI draft: {selected}s / maximum {requested}s.',
   durationTargetLimitedReady: 'Current selection: {selected}s of the requested {requested}s. The target was not met; review the passages and length.',
   durationStoryIncompleteReady: 'Draft needs review: required story material remains unresolved.',
@@ -495,6 +497,8 @@ Object.assign(en, {
   durationOverTarget: 'The draft exceeds the requested length. Review the selected passages before exporting.'
 });
 Object.assign(he, {
+  durationStage_planner_passages: 'קטעי הסיפור שאושרו',
+  durationStage_speech_pause_fit: 'לאחר קיצור הפסקות בדיבור',
   durationDraftTargetSummary: 'טיוטת AI: {selected} שניות / יעד {requested} שניות.',
   durationDraftMaximumSummary: 'טיוטת AI: {selected} שניות / אורך מרבי {requested} שניות.',
   durationTargetLimitedReady: 'הבחירה הנוכחית: {selected} שניות מתוך יעד של {requested}. היעד לא הושג; יש לבדוק את הקטעים ואת האורך.',

@@ -90,19 +90,18 @@ def test_effective_nonessential_removal_is_recorded_exactly(monkeypatch, story):
     assert reviewed["critic"]["verdict"] == "revise"
 
 
-def test_later_budget_pruning_reconciles_a_requested_context_addition(monkeypatch, story):
+def test_later_budget_fit_preserves_a_requested_context_addition(monkeypatch, story):
     reviewed = critic(monkeypatch, story, response(add_beat_ids=["b2"]))
     assert reviewed["keep_beat_ids"] == ["b1", "b2", "b3"]
     assert reviewed["critic"]["added"] == ["b2"]
     fitted = intelligence._fit_story_selection_to_budget(
         reviewed, story[1], {"slots": [{"desired_seconds": 8}] * 2}, 16,
     )
-    assert fitted["keep_beat_ids"] == ["b1", "b3"]
+    assert fitted["keep_beat_ids"] == ["b1", "b2", "b3"]
     assert fitted["critic"]["requested_added"] == ["b2"]
-    assert fitted["critic"]["added"] == []
-    assert fitted["critic"]["unapplied_actions"] == [
-        {"action": "add", "beat_id": "b2", "reason": "not_kept_in_final_selection"},
-    ]
+    assert fitted["critic"]["added"] == ["b2"]
+    assert fitted["critic"]["unapplied_actions"] == []
+    assert fitted["budget_fit"]["status"] == "required_material_exceeds_ceiling"
 
 
 def test_adding_an_existing_selected_beat_is_not_an_applied_repair(monkeypatch, story):

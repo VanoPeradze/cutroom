@@ -20,8 +20,8 @@ from .ai_runtime import OLLAMA_RESPONSE_BYTES, open_ollama, read_ollama_json
 from .config import Settings
 from .utils import clamp, merge_ranges, normalize_text, range_duration
 
-STORY_CACHE_PIPELINE = "hierarchical-story-2026-09-06.full-chapter-input"
-CRITIC_REVIEW_CONTRACT = "critic-review-2026-10-16.selection-provenance-v3"
+STORY_CACHE_PIPELINE = "hierarchical-story-2026-10-16.target-sentence-beats-v2"
+CRITIC_REVIEW_CONTRACT = "critic-review-2026-10-16.story-completion-v4"
 
 FILLERS: dict[str, set[str]] = {
     "en": {"um", "uh", "erm", "like", "basically", "actually", "literally", "you know", "i mean", "so"},
@@ -149,23 +149,32 @@ def _cue_scores(text: str, language: str) -> tuple[float, str | None]:
     return best, best_role
 
 
-def build_story_beats(segments: list[dict[str, Any]], language: str) -> list[dict[str, Any]]:
+def _sentence_ending_complete(text: str) -> bool:
+    return bool(re.search(r"[.!?\u2026\u3002\uff01\uff1f][\"'\u201d\u2019\u00bb)\]]*$", text.strip()))
+
+
+def build_story_beats(
+    segments: list[dict[str, Any]], language: str, *, target_seconds: float | None = None,
+) -> list[dict[str, Any]]:
     """Group transcript segments into editorial ideas rather than isolated lines.
 
     A two-hour source may have thousands of Whisper segments. CUTROOM should reason
     over 15–35 second ideas (beats), then use real segment boundaries for the final
-    cuts. This substantially improves context while keeping the 4B planner light.
+    cuts. Short targets additionally expose smaller complete-sentence choices to
+    the planner and critic, rather than trimming an approved idea after review.
     """
     if not segments:
         return []
     ordered = sorted(segments, key=lambda item: (float(item.get("start", 0)), float(item.get("end", 0))))
+    requested_target = float(target_seconds) if target_seconds is not None else 0.0
+    short_beat_seconds = max(4.0, min(28.0, requested_target / 2)) if 0 < requested_target < float("inf") else None
     groups: list[list[dict[str, Any]]] = []
     current: list[dict[str, Any]] = []
+    current_words = 0
     for item in ordered:
         if current:
             gap = float(item.get("start", 0)) - float(current[-1].get("end", 0))
             current_duration = float(current[-1]["end"]) - float(current[0]["start"])
-            current_words = sum(len(tokens(str(row.get("text", "")))) for row in current)
             previous_complete = bool(re.search(r"[.!?…؟]$", str(current[-1].get("text", "")).strip()))
             # Whisper/VAD often leaves 1-2 second pauses between lines.  Treat those
             # as part of the same editorial idea unless the current beat already has
@@ -177,11 +186,23 @@ def build_story_beats(segments: list[dict[str, Any]], language: str) -> list[dic
                 or (gap >= 1.25 and current_duration >= 14.0)
                 or (gap >= 2.4 and current_duration >= 8.0)
                 or (current_duration >= 16.0 and current_words >= 72 and previous_complete)
+                or (short_beat_seconds is not None and current_duration >= short_beat_seconds
+                    and _sentence_ending_complete(str(current[-1].get("text", ""))))
             )
+            if short_beat_seconds is not None:
+                # Even the legacy 28-second cap must not cut a continuation in
+                # the middle of a sentence for a Short. An indivisible long
+                # sentence is an honest duration constraint for later review.
+                should_break = should_break and _sentence_ending_complete(str(current[-1].get("text", "")))
             if should_break:
                 groups.append(current)
                 current = []
+                current_words = 0
         current.append(item)
+        current_words += len(tokens(str(item.get("text", ""))))
+        if (short_beat_seconds is not None and float(current[-1]["end"]) - float(current[0]["start"]) > 90.0
+                and not _sentence_ending_complete(str(current[-1].get("text", "")))):
+            raise StoryPlanningError("A source passage exceeds 90 seconds without a complete sentence boundary; review the transcript before creating a Short.")
     if current:
         groups.append(current)
 
@@ -1594,10 +1615,15 @@ def _fit_story_selection_to_budget(
     """
     valid = {str(item.get("id")): item for item in candidates if item.get("id") is not None}
     rejected = {str(identifier) for identifier in (selection.get("critic") or {}).get("requested_removed", [])}
+    critic_required = {
+        str(identifier) for identifier in (selection.get("critic") or {}).get("requested_added", [])
+        if str(identifier) in valid and str(identifier) not in rejected
+    }
     selected = [
         str(identifier) for identifier in selection.get("keep_beat_ids", [])
         if str(identifier) in valid and str(identifier) not in rejected
     ]
+    selected.extend(critic_required)
     selected = sorted(dict.fromkeys(selected), key=lambda identifier: float(valid[identifier].get("start", 0.0)))
     selection = {**selection, "keep_beat_ids": selected}
     if selected:
@@ -1609,6 +1635,20 @@ def _fit_story_selection_to_budget(
     ceiling = target * headroom
     slot_rows = selection.get("slot_map", []) if isinstance(selection.get("slot_map"), list) else []
     slot_rows = [item for item in slot_rows if isinstance(item, dict)]
+    plan_slots = plan.get("slots", []) if isinstance(plan.get("slots"), list) else []
+    beat_to_chapter = {
+        str(beat.get("id")): str(chapter.get("id"))
+        for chapter in (chapters or [])
+        for beat in (chapter.get("beats", []) if isinstance(chapter, dict) else [])
+        if isinstance(beat, dict) and beat.get("id") is not None
+    }
+
+    def missing_plan_slots(identifiers: list[str] | set[str]) -> list[int]:
+        represented = {beat_to_chapter[identifier] for identifier in identifiers if identifier in beat_to_chapter}
+        return [index for index, slot in enumerate(plan_slots)
+                if (not {str(value) for value in slot.get("required_context_chapter_ids", [])} <= represented
+                    or (slot.get("chapter_ids") and not represented.intersection(str(value) for value in slot["chapter_ids"])))]
+
     if not selected and not slot_rows:
         return _reconcile_critic_actions(selection)
 
@@ -1627,8 +1667,8 @@ def _fit_story_selection_to_budget(
         any(str(identifier) in selected for identifier in row.get("beat_ids", []))
         for row in slot_rows
     )
-    if before <= ceiling + 0.05 and every_slot_represented:
-        return _reconcile_critic_actions(selection)
+    if before <= target + 0.05 and every_slot_represented and not missing_plan_slots(selected):
+        return _reconcile_critic_actions({**selection, "unresolved_plan_slot_indexes": []})
 
     highlights = {
         str(identifier) for identifier in selection.get("highlight_beat_ids", [])
@@ -1647,15 +1687,13 @@ def _fit_story_selection_to_budget(
         "conclusion": {"result", "conclusion"},
     }
 
-    fitted: set[str] = set()
+    # A continuity addition is required context, not an optional highlight. Keep
+    # its complete source passage even when the combination is infeasible; the
+    # duration stage must expose that limit instead of calling a dropped repair
+    # complete or slicing spoken context to make the number fit.
+    fitted: set[str] = set(critic_required)
     fitted_slot_map: list[dict[str, Any]] = []
-    plan_slots = plan.get("slots", []) if isinstance(plan.get("slots"), list) else []
-    beat_to_chapter = {
-        str(beat.get("id")): str(chapter.get("id"))
-        for chapter in (chapters or [])
-        for beat in (chapter.get("beats", []) if isinstance(chapter, dict) else [])
-        if isinstance(beat, dict) and beat.get("id") is not None
-    }
+    slot_alternatives: list[tuple[dict[str, Any], list[str]]] = []
     for row in sorted(
         (item for item in slot_rows if isinstance(item, dict)),
         key=lambda item: int(item.get("slot_index", 0)),
@@ -1681,6 +1719,7 @@ def _fit_story_selection_to_budget(
         choices = primary_choices or model_choices or replacements
         if not choices:
             fitted_slot_map.append({"slot_index": slot_index, "purpose": row.get("purpose"), "beat_ids": []})
+            slot_alternatives.append(({"slot_index": slot_index, "purpose": row.get("purpose")}, []))
             continue
         purpose = str(slot.get("purpose") or row.get("purpose") or "").lower()
         expected_roles = next((roles for cue, roles in role_groups.items() if cue in purpose), set())
@@ -1705,6 +1744,10 @@ def _fit_story_selection_to_budget(
             return score, substance, -abs(beat_duration - desired)
 
         representative = max(choices, key=slot_value)
+        slot_alternatives.append((
+            {"slot_index": slot_index, "purpose": row.get("purpose")},
+            sorted(choices, key=slot_value, reverse=True)[:32],
+        ))
         fitted.add(representative)
         fitted_slot_map.append({
             "slot_index": slot_index,
@@ -1719,6 +1762,21 @@ def _fit_story_selection_to_budget(
         if selected:
             fitted.add(selected[0])
             fitted.add(selected[-1])
+
+    plan_alternatives: list[list[str]] = []
+    required_chapters = {str(value) for slot in plan_slots for value in slot.get("required_context_chapter_ids", [])}
+    chapter_obligations = [{chapter_id} for chapter_id in sorted(required_chapters)]
+    chapter_obligations.extend({str(value) for value in slot["chapter_ids"]}
+                               for slot in plan_slots if slot.get("chapter_ids"))
+    for allowed_chapters in chapter_obligations:
+        choices = [identifier for identifier in selected if beat_to_chapter.get(identifier) in allowed_chapters]
+        plan_alternatives.append(choices)
+        if choices and not any(identifier in fitted for identifier in choices):
+            fitted.add(max(choices, key=lambda identifier: (
+                float(valid[identifier].get("editorial_score", 0.0)),
+                float(valid[identifier].get("novelty", 0.0)),
+                -float(valid[identifier].get("start", 0.0)),
+            )))
 
     critic_added = {
         str(identifier) for identifier in (selection.get("critic") or {}).get("added", [])
@@ -1743,6 +1801,40 @@ def _fit_story_selection_to_budget(
         if selection_duration(proposed) <= ceiling + 0.05:
             fitted = proposed
 
+    # Greedy representatives can strand most of the budget: a 3s setup plus a
+    # 3s ending prevents adding a 17s approved alternative, although replacing
+    # the setup yields a complete 20s selection. Search a bounded set of the
+    # same slot-approved alternatives before accepting that shortfall.
+    search_groups = slot_alternatives + [(None, choices) for choices in plan_alternatives]
+    if ((selection_duration(fitted) < target * 0.90 or before > target + 0.05)
+            and search_groups and all(choices for _row, choices in search_groups)):
+        def budget_value(identifiers: set[str]) -> tuple[float, float, int]:
+            duration = selection_duration(identifiers)
+            return min(duration, target), -max(0.0, duration - target), -len(identifiers)
+
+        states: list[tuple[set[str], list[dict[str, Any]]]] = [(set(critic_required), [])]
+        for slot_row, choices in search_groups:
+            expanded: dict[tuple[str, ...], tuple[set[str], list[dict[str, Any]]]] = {}
+            for identifiers, rows in states:
+                for identifier in choices:
+                    proposed = identifiers | {identifier}
+                    if selection_duration(proposed) <= target + 0.05:
+                        key = tuple(sorted(proposed))
+                        expanded.setdefault(key, (proposed, rows + (
+                            [{**slot_row, "beat_ids": [identifier]}] if slot_row is not None else []
+                        )))
+            states = sorted(expanded.values(), key=lambda state: budget_value(state[0]), reverse=True)[:512]
+            if not states:
+                break
+        for identifiers, rows in states:
+            for identifier in sorted((item for item in selected if item not in identifiers), key=extra_value, reverse=True):
+                proposed = identifiers | {identifier}
+                if selection_duration(proposed) <= target + 0.05:
+                    identifiers = proposed
+            if (selection_duration(fitted) > target + 0.05
+                    or budget_value(identifiers) > budget_value(fitted)):
+                fitted, fitted_slot_map = identifiers, rows
+
     fitted_ids = sorted(fitted, key=lambda identifier: float(valid[identifier].get("start", 0.0)))
     if not fitted_ids:
         return _reconcile_critic_actions(selection)
@@ -1754,12 +1846,17 @@ def _fit_story_selection_to_budget(
     output["closing_beat_id"] = fitted_ids[-1]
     if fitted_slot_map:
         output["slot_map"] = fitted_slot_map
+    output["unresolved_plan_slot_indexes"] = missing_plan_slots(fitted)
     output["budget_fit"] = {
         "target_duration": round(target, 3),
         "ceiling": round(ceiling, 3),
         "before_duration": round(before, 3),
         "after_duration": round(after, 3),
         "removed_beat_ids": [identifier for identifier in selected if identifier not in fitted],
+        "status": ("required_material_exceeds_ceiling" if after > ceiling + 0.05
+                   else "required_material_exceeds_target" if after > target + 0.05 else "within_planning_ceiling"),
+        "over_ceiling_seconds": round(max(0.0, after - ceiling), 3),
+        "over_target_seconds": round(max(0.0, after - target), 3),
     }
     return _reconcile_critic_actions(output)
 
@@ -1940,7 +2037,14 @@ def _select_story_beats(
     if seen_slots != expected_slots:
         raise StoryPlanningError("Story AI left one or more narrative slots without source material.")
     keep.sort(key=lambda identifier: float(valid[identifier]["start"]))
-    minimum_keep = 1 if len(candidates) <= 1 else 2
+    single_slot_complete = (
+        len(plan.get("slots", [])) == 1 and len(keep) == 1 and seen_slots == {0}
+        and _sentence_ending_complete(str(valid[keep[0]].get("text", "")))
+        and str(beat_to_chapter[keep[0]]) in {str(value) for value in plan["slots"][0].get("chapter_ids", [])}
+        and {str(value) for value in plan["slots"][0].get("required_context_chapter_ids", [])}
+        <= {str(beat_to_chapter[identifier]) for identifier in keep}
+    )
+    minimum_keep = 1 if len(candidates) <= 1 or single_slot_complete else 2
     if len(keep) < minimum_keep:
         raise StoryPlanningError("Story AI did not select enough coherent source material.")
     clean = {
@@ -1982,6 +2086,8 @@ def _reconcile_critic_actions(selection: dict[str, Any]) -> dict[str, Any]:
     unresolved_slots = [int(row.get("slot_index", index))
                         for index, row in enumerate(selection.get("slot_map", []))
                         if isinstance(row, dict) and not any(identifier in final for identifier in row.get("beat_ids", []))]
+    unresolved_slots = sorted(set(unresolved_slots) | set(selection.get("unresolved_plan_slot_indexes") or [])
+                              | set(selection.get("unresolved_context_slot_indexes") or []))
     post_review = critic.get("post_review_beat_ids", critic.get("selection_before", []))
     changed = set(post_review) != final
     verdict = critic.get("verdict")
@@ -2015,7 +2121,9 @@ def _critic_story_selection(
     valid = {str(item["id"]): item for item in candidates}
     selected = [identifier for identifier in selection.get("keep_beat_ids", []) if identifier in valid]
     selected_rows = [
-        {"id": identifier, "start": valid[identifier]["start"], "text": _balanced_excerpt(str(valid[identifier].get("text", "")), 520), **_on_screen_field(valid[identifier])}
+        {"id": identifier, "start": valid[identifier]["start"], "end": valid[identifier]["end"],
+         "duration": round(float(valid[identifier]["end"]) - float(valid[identifier]["start"]), 3),
+         "text": _balanced_excerpt(str(valid[identifier].get("text", "")), 520), **_on_screen_field(valid[identifier])}
         for identifier in selected
     ]
     mode = str(brief.get("performance_mode") or settings.ai.get("performance_mode", "auto"))
@@ -2037,7 +2145,10 @@ def _critic_story_selection(
             },
             {"role": "user", "content": json.dumps({
                 "brief": brief, "outline": outline, "plan": plan, "selected": selected_rows,
-                "candidates": [{"id": identifier, "start": row["start"], "text": _balanced_excerpt(str(row.get("text", "")), 300), **_on_screen_field(row)} for identifier, row in valid.items()],
+                "candidates": [{"id": identifier, "start": row["start"], "end": row["end"],
+                                "duration": round(float(row["end"]) - float(row["start"]), 3),
+                                "text": _balanced_excerpt(str(row.get("text", "")), 300), **_on_screen_field(row)}
+                               for identifier, row in valid.items()],
             }, ensure_ascii=False)},
         ],
     }
@@ -2106,10 +2217,26 @@ def _story_decision_from_beats(result: dict[str, Any] | None, beats: list[dict[s
 
     rejected = sorted({str(identifier) for identifier in (result.get("critic") or {}).get("requested_removed", [])
                        if str(identifier) in valid}, key=lambda identifier: float(by_id[identifier]["start"]))
-    keep_beats = [identifier for identifier in beat_ids("keep_beat_ids") if identifier not in rejected]
+    critic_requested = {
+        str(identifier) for identifier in (result.get("critic") or {}).get("requested_added", [])
+        if str(identifier) in valid and str(identifier) not in rejected
+    }
+    keep_beats = list(dict.fromkeys(
+        [identifier for identifier in beat_ids("keep_beat_ids") if identifier not in rejected]
+        + sorted(critic_requested, key=lambda identifier: float(by_id[identifier]["start"]))
+    ))
     if not keep_beats:
         return None
     keep_beats = sorted(keep_beats, key=lambda identifier: float(by_id[identifier]["start"]))
+    reconciled = _reconcile_critic_actions({**result, "keep_beat_ids": keep_beats})
+    final_critic = reconciled.get("critic") or {}
+    unresolved_slots = sorted({
+        int(row.get("slot_index", index))
+        for index, row in enumerate(result.get("slot_map", []))
+        if isinstance(row, dict) and not any(str(identifier) in keep_beats for identifier in row.get("beat_ids", []))
+    } | {int(index) for index in final_critic.get("unresolved_slot_indexes", [])}
+      | {int(index) for index in result.get("unresolved_context_slot_indexes", [])})
+    unresolved_slots = sorted(set(unresolved_slots) | {int(index) for index in result.get("unresolved_plan_slot_indexes", [])})
     highlights = [identifier for identifier in beat_ids("highlight_beat_ids", 8) if identifier in keep_beats]
     opening, closing = keep_beats[0], keep_beats[-1]
     selected_segment_ids = {segment_id for identifier in keep_beats for segment_id in by_id[identifier]["segment_ids"]}
@@ -2146,6 +2273,12 @@ def _story_decision_from_beats(result: dict[str, Any] | None, beats: list[dict[s
                          "selected_beat_ids": list(keep_beats), "title_beat_ids": title_ids},
         "summary": str(result.get("summary") or "A coherent story selected from the full recording.")[:500],
         "story_beat_ids": keep_beats,
+        "story_requirements": {
+            "required_beat_ids": list(keep_beats),
+            "critic_requested_beat_ids": [identifier for identifier in keep_beats if identifier in critic_requested],
+            "unresolved_slot_indexes": unresolved_slots,
+            "unapplied_critic_actions": len(final_critic.get("unapplied_actions") or []),
+        },
         "rejected_beat_ids": rejected,
         "rejected_segment_ids": [identifier for identifier in all_segment_ids
                                  if any(identifier in by_id[beat_id].get("segment_ids", []) for beat_id in rejected)],
@@ -2619,7 +2752,10 @@ def plan_edit(
 
     goal = str(brief.get("goal") or "short")
     if goal in {"short", "podcast"}:
-        beats = annotate_story_beats(build_story_beats(enriched, language), visual_moments)
+        beats = annotate_story_beats(build_story_beats(
+            enriched, language,
+            target_seconds=float(brief.get("target_duration") or 60) if goal == "short" else None,
+        ), visual_moments)
         _check_cancelled(cancel_check)
         # The vision notes change the Story input, so they belong to its cache
         # identity. Without notes the identity is unchanged from earlier versions.

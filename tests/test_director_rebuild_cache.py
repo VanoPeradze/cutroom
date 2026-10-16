@@ -631,3 +631,36 @@ def test_duration_intent_replans_from_cached_context_without_retranscription(sem
     assert review["chain"][-1]["seconds"] == store.load(project_id)["draft"]["output_duration"]
     director.analyze_project(context(),project_id,store,settings)
     assert calls == {"transcribe":1,"plan":2}
+
+
+def test_target_shortfall_is_saved_and_reported_as_needing_review(semantic_project, monkeypatch):
+    store, settings, project_id, _calls, context = semantic_project
+
+    def bounded_plan(_context, current_segments, *_args, **_kwargs):
+        selected = next(row for row in current_segments if row["id"] == "s3")
+        return {
+            "segments": [{**row, "editorial_score": .8} for row in current_segments],
+            "decision": {
+                "keep_ids": ["s3"], "remove_ids": [], "highlight_ids": [],
+                "opening_id": "s3", "closing_id": "s3", "title": "CUTROOM story",
+                "story_beat_ids": ["approved"],
+                "story_ranges": [{"start": selected["start"], "end": selected["end"], "beat_id": "approved"}],
+                "story_requirements": {"required_beat_ids": ["approved"], "critic_requested_beat_ids": [],
+                                       "unresolved_slot_indexes": [], "unapplied_critic_actions": 0},
+            },
+            "story_beats": [], "story_hierarchy": {"critic": {"verdict": "pass"}},
+        }, "ollama_hierarchical_story"
+
+    monkeypatch.setattr(director, "_plan_edit_with_cancel", bounded_plan)
+    store.update(project_id, lambda current: current["settings"].update({
+        "target_duration": 20, "duration_mode": "target",
+    }))
+    result = director.analyze_project(context(), project_id, store, settings)
+    draft = store.load(project_id)["draft"]
+    assert draft["output_duration"] == 8
+    assert draft["duration_review"]["target_feasibility"]["supported_seconds"] == 8
+    assert draft["duration_review"]["target_feasibility"]["status"] == "limited"
+    assert draft["quality_review"]["needs_review"] is True
+    assert "target_feasibility" in [row["type"] for row in draft["quality_review"]["warnings"]]
+    assert "8.0s of the requested 20.0s" in result["message"]
+    assert "first edit is ready" not in result["message"]
