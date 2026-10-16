@@ -182,6 +182,7 @@ def test_final_review_exposes_planned_ending_lost_to_unavoidable_budget():
 def test_final_review_accepts_an_intact_connected_planned_story():
     segments, decision = captured_anchor_structure()
     decision["closing_id"] = "s0004"
+    decision["story_ranges"] = decision["story_ranges"][:1]
     selected = [{"start": 1.73, "end": 16.03}]
     review = director._edit_quality_review(
         {}, {"critic": {"verdict": "pass"}}, segments, selected, 45.067,
@@ -323,3 +324,117 @@ def test_target_mode_tops_up_a_short_planner_selection_with_relevant_complete_be
     decision = {}
     assert director._top_up_to_target([{"start": 0.0, "end": 110.0}], candidates, 120.0, decision) == [{"start": 0.0, "end": 110.0}]
     assert [row["stage"] for row in decision["_selection_trace"]] == ["planner_passages"]
+
+
+@pytest.mark.parametrize("mode", ["style", "target"])
+def test_duration_review_names_output_above_the_effective_target(mode):
+    review = director._duration_review(
+        {"goal": "short", "target_duration": 30, "duration_mode": mode}, 300, 90,
+    )
+    assert review["reason"] == "over_target"
+    assert review["exceeds_target"] is True
+    assert review["shortfall"] is False
+
+
+@pytest.mark.parametrize("kept,added,removed,partial", [
+    ([{"start": 0, "end": 10}, {"start": 100, "end": 110}], ["other"], [], []),
+    ([{"start": 0, "end": 5}], [], [], ["planned"]),
+    ([{"start": 100, "end": 110}], ["other"], ["planned"], []),
+])
+def test_final_speech_changes_cannot_reuse_an_earlier_critic_pass(kept, added, removed, partial):
+    segments = [
+        {"id": "planned", "start": 0, "end": 10},
+        {"id": "other", "start": 100, "end": 110},
+    ]
+    review = director._edit_quality_review(
+        {}, {"critic": {"verdict": "pass"}}, segments, kept, 300,
+        decision={"story_ranges": [{"start": 0, "end": 10}]},
+    )
+    assert review["needs_review"] is True
+    assert "story_selection_changed" in [row["type"] for row in review["warnings"]]
+    assert review["selection_review"] == {
+        "status": "changed", "added_segment_ids": added,
+        "removed_segment_ids": removed, "partial_segment_ids": partial,
+    }
+
+
+def test_removing_only_a_pause_keeps_the_reviewed_speech_intact():
+    review = director._edit_quality_review(
+        {}, {"critic": {"verdict": "pass"}},
+        [{"id": "a", "start": 0, "end": 5}, {"id": "b", "start": 15, "end": 20}],
+        [{"start": 0, "end": 5}, {"start": 15, "end": 20}], 300,
+        decision={"story_ranges": [{"start": 0, "end": 20}]},
+    )
+    assert review["needs_review"] is False
+    assert review["selection_review"]["status"] == "unchanged"
+
+
+@pytest.mark.parametrize("rejected", [
+    {"rejected_segment_ids": ["rejected"]},
+    {"rejected_story_ranges": [{"start": 100, "end": 140}]},
+])
+def test_target_top_up_candidates_exclude_explicit_critic_rejections(rejected):
+    segments = [
+        {"id": "planned", "start": 0, "end": 30, "editorial_score": .6},
+        {"id": "rejected", "start": 100, "end": 140, "editorial_score": .99},
+        {"id": "safe", "start": 200, "end": 240, "editorial_score": .8},
+    ]
+    candidates = director._style_beat_candidates(
+        segments, rejected, 300, 120, {}, [dict(row) for row in segments],
+    )
+    assert [(row["start"], row["end"]) for row in candidates] == [(0, 30), (200, 240)]
+
+
+def test_a_model_title_remains_explicitly_unverified_after_a_continuity_pass():
+    review = director._edit_quality_review(
+        {}, {"critic": {"verdict": "pass"}}, [{"id": "a", "start": 0, "end": 10}],
+        [{"start": 0, "end": 10}], 300,
+        decision={"title": "An unverified claim", "story_ranges": [{"start": 0, "end": 10}],
+                  "title_review": {"status": "unverified", "reason": "model_suggestion"}},
+    )
+    assert review["needs_review"] is True
+    assert "title_review" in [row["type"] for row in review["warnings"]]
+    assert review["title_review"]["status"] == "unverified"
+
+
+def test_single_moment_cannot_bridge_across_explicitly_rejected_speech():
+    segments = [{"id": identifier, "start": start, "end": start + 10}
+                for identifier, start in [("a", 0), ("rejected", 10), ("c", 20)]]
+    decision = {"story_ranges": [segments[0], segments[2]],
+                "rejected_story_ranges": [segments[1]]}
+    selected = director._select_style_story_ranges(segments, decision, 100, 45, {"max_moments": 1})
+    assert selected == [{"start": 0, "end": 10}, {"start": 20, "end": 30}]
+
+
+@pytest.mark.parametrize("source_duration", [30, 100])
+def test_story_shortcuts_and_fallback_never_restore_explicitly_rejected_speech(source_duration):
+    segments = [{"id": identifier, "start": start, "end": start + 10}
+                for identifier, start in [("a", 0), ("rejected", 10), ("c", 20)]]
+    decision = {"opening_id": "a", "closing_id": "c", "keep_ids": ["a", "c"],
+                "rejected_segment_ids": ["rejected"]}
+    selected = director._select_short_story_ranges(segments, decision, source_duration, 45)
+    assert selected
+    assert not any(row["start"] < 20 and row["end"] > 10 for row in selected)
+
+
+def test_removing_a_pause_inside_one_segment_keeps_reviewed_words_intact():
+    review = director._edit_quality_review(
+        {}, {"critic": {"verdict": "pass"}},
+        [{"id": "a", "start": 0, "end": 10, "words": [
+            {"start": 0, "end": 2, "word": "First"}, {"start": 8, "end": 10, "word": "last"},
+        ]}], [{"start": 0, "end": 2}, {"start": 8, "end": 10}], 300,
+        decision={"story_ranges": [{"start": 0, "end": 10}]},
+    )
+    assert review["needs_review"] is False
+    assert review["selection_review"]["status"] == "unchanged"
+
+
+def test_neutral_title_does_not_report_a_hidden_model_claim_as_a_problem():
+    review = director._edit_quality_review(
+        {}, {"critic": {"verdict": "pass"}}, [{"id": "a", "start": 0, "end": 10}],
+        [{"start": 0, "end": 10}], 300,
+        decision={"title": "CUTROOM story", "story_ranges": [{"start": 0, "end": 10}],
+                  "title_review": {"status": "unverified", "reason": "model_suggestion"}},
+    )
+    assert review["needs_review"] is False
+    assert review["title_review"]["status"] == "unverified"

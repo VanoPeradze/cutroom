@@ -542,6 +542,54 @@ def _edit_quality_review(
     semantic = merge_ranges((decision or {}).get("story_ranges") or [], gap=0.75)
     anchors = _planned_story_anchors(segments, decision or {}, semantic)
     kept = merge_ranges(keep_ranges, gap=0.0)
+    selection_review: dict[str, Any] = {
+        "status": "not_reviewed", "added_segment_ids": [],
+        "removed_segment_ids": [], "partial_segment_ids": [],
+    }
+    if hierarchy and semantic:
+        # The critic saw the planner's speech, before top-up and cleanup. A pass
+        # cannot cover newly added words or omitted context. Removing only pauses
+        # leaves the reviewed speech intact and does not require another review.
+        reviewed = merge_ranges((decision or {}).get("story_ranges") or [], gap=0.0)
+        for segment in segments:
+            start, end = float(segment["start"]), float(segment["end"])
+            speech = []
+            for word in segment.get("words") or []:
+                if not isinstance(word, dict) or not str(word.get("word") or "").strip():
+                    continue
+                left = _finite_number(word.get("start"), math.nan)
+                right = _finite_number(word.get("end"), math.nan)
+                if not math.isfinite(left) or not math.isfinite(right):
+                    continue
+                left, right = max(start, left), min(end, right)
+                if right > left:
+                    speech.append({"start": left, "end": right})
+            speech = merge_ranges(speech or [{"start": start, "end": end}], gap=0.0)
+            expected = merge_ranges([
+                {"start": max(span["start"], row["start"]), "end": min(span["end"], row["end"])}
+                for span in speech for row in reviewed
+                if row["end"] > span["start"] and row["start"] < span["end"]
+            ], gap=0.0)
+            actual = merge_ranges([
+                {"start": max(span["start"], row["start"]), "end": min(span["end"], row["end"])}
+                for span in speech for row in kept
+                if row["end"] > span["start"] and row["start"] < span["end"]
+            ], gap=0.0)
+            expected_seconds, actual_seconds = range_duration(expected), range_duration(actual)
+            common = sum(max(0.0, min(a["end"], b["end"]) - max(a["start"], b["start"]))
+                         for a in expected for b in actual)
+            identifier = str(segment.get("id", ""))
+            if expected_seconds <= .05 < actual_seconds:
+                selection_review["added_segment_ids"].append(identifier)
+            elif actual_seconds <= .05 < expected_seconds:
+                selection_review["removed_segment_ids"].append(identifier)
+            elif expected_seconds - common > .05 or actual_seconds - common > .05:
+                selection_review["partial_segment_ids"].append(identifier)
+        changed = any(selection_review[key] for key in (
+            "added_segment_ids", "removed_segment_ids", "partial_segment_ids"))
+        selection_review["status"] = ("changed" if changed else
+                                      "unchanged" if (hierarchy.get("critic") or {}).get("verdict") == "pass"
+                                      else "not_reviewed")
     missing_anchor = any(sum(
         max(0.0, min(float(anchor["end"]), passage["end"])
             - max(float(anchor["start"]), passage["start"])) for passage in kept
@@ -550,6 +598,10 @@ def _edit_quality_review(
         warnings.append({"type": "story_anchor_missing", "message":
             "The final draft does not fully include the planned beginning or ending. "
             "Review context and the ending before exporting."})
+    elif selection_review["status"] == "changed":
+        warnings.append({"type": "story_selection_changed", "message":
+            "The final spoken selection changed after the story review. "
+            "Added passages or removed speech need a new context and continuity review."})
     else:
         moment_limit = (selection_policy or {}).get("max_moments")
         anchor_passages = [passage for passage in semantic if any(
@@ -574,7 +626,18 @@ def _edit_quality_review(
         warnings.append({"type": "selection_coverage", "message":
             "The selected moments come from a small part of the recording. This can suit one complete story; "
             "review the rest of the source if you wanted a broader summary."})
+    raw_title_review = (decision or {}).get("title_review")
+    title_review = copy.deepcopy(raw_title_review) if isinstance(raw_title_review, dict) else {}
+    if selection_review["status"] == "changed" and ((decision or {}).get("title") or title_review):
+        title_review.update(status="unverified", reason="final_selection_changed")
+    if (title_review.get("status") == "unverified" and title_review.get("reason") == "model_suggestion"
+            and (decision or {}).get("title") not in {None, "", "CUTROOM story"}):
+        warnings.append({"type": "title_review", "message":
+            "The suggested title has not been checked against the selected footage. "
+            "Review it before sharing."})
     return {"needs_review": bool(warnings), "warnings": warnings,
+            "selection_review": selection_review,
+            **({"title_review": title_review} if title_review else {}),
             "recognized_source_sections": recognized, "selected_source_sections": selected,
             "section_count": 10, "source_duration": duration,
             "transcription_coverage": quality.get("coverage_status", "unverified")}
@@ -938,7 +1001,7 @@ def _short_segment_value(segment: dict[str, Any], decision: dict[str, Any]) -> f
     return score
 
 
-SELECTION_STRATEGY_VERSION = "explicit-duration-intent-v6"
+SELECTION_STRATEGY_VERSION = "final-speech-review-v7"
 
 
 def _selection_unit(selection_seed: Any, *parts: Any) -> float:
@@ -1596,6 +1659,35 @@ def _gameplay_summary(count: int, notes: list[str], language: str | None, *, cut
     return f"{count} gameplay {moments} chosen by on-screen action and sound{shown}. {left_out}"
 
 
+def _rejected_story_ranges(decision: dict[str, Any], segments: list[dict[str, Any]],
+                           duration: float) -> list[dict[str, float]]:
+    rejected_ids = {str(value) for value in decision.get("rejected_segment_ids") or []}
+    rows = [*(decision.get("rejected_story_ranges") or []), *[
+        {"start": row["start"], "end": row["end"]}
+        for row in segments if str(row.get("id")) in rejected_ids
+    ]]
+    ranges = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        start = max(0.0, _finite_number(row.get("start")))
+        end = min(duration, _finite_number(row.get("end")))
+        if end > start:
+            ranges.append({"start": start, "end": end})
+    return merge_ranges(ranges, gap=0.0)
+
+
+def _exclude_rejected_story_ranges(ranges: list[dict[str, float]], decision: dict[str, Any],
+                                  segments: list[dict[str, Any]], duration: float) -> list[dict[str, float]]:
+    rejected = _rejected_story_ranges(decision, segments, duration)
+    if not rejected:
+        return ranges
+    # Selection shortcuts and context bridging obey the same explicit exclusions
+    # as top-up. User restores are applied separately, after AI selection.
+    cuts = merge_ranges([*invert_ranges(ranges, duration), *rejected], gap=0.0)
+    return invert_ranges(cuts, duration)
+
+
 def _style_beat_candidates(
     segments: list[dict[str, Any]],
     decision: dict[str, Any],
@@ -1614,6 +1706,7 @@ def _style_beat_candidates(
     beats = sorted(beats, key=lambda row: float(row["start"]))
     before = max(0.0, _finite_number(selection_policy.get("pre_roll_seconds")))
     after = max(0.0, _finite_number(selection_policy.get("post_roll_seconds")))
+    rejected_ranges = _rejected_story_ranges(decision, ordered, duration)
     candidates: list[dict[str, float]] = []
     for index, beat in enumerate(beats):
         start, end = float(beat["start"]), float(beat["end"])
@@ -1652,6 +1745,10 @@ def _style_beat_candidates(
             start, end = float(beat["start"]), float(beat["end"])
             overlapping = [row for row in ordered if float(row["end"]) > start and float(row["start"]) < end]
         if not overlapping or end - start > target + 0.05 or end <= start:
+            continue
+        if any(float(row["end"]) > start and float(row["start"]) < end for row in rejected_ranges):
+            # A new duration request cannot silently re-add speech the critic
+            # explicitly rejected, including through neighboring context padding.
             continue
         values = [_short_segment_value(row, decision) for row in overlapping]
         score = max(values) * 0.65 + sum(values) / len(values) * 0.35
@@ -1725,11 +1822,13 @@ def _select_style_story_ranges(
         return None
     moment_limit = max(1, int(moment_limit))
     semantic = merge_ranges(decision.get("story_ranges") or [], gap=0.75)
+    semantic = _exclude_rejected_story_ranges(semantic, decision, segments, duration)
     if semantic:
         if moment_limit == 1 and semantic[-1]["end"] - semantic[0]["start"] <= target + 0.05:
             # Preserve the pauses and action between setup and payoff when one
             # continuous story fits. Never bridge distant chapters blindly.
-            return [{"start": semantic[0]["start"], "end": semantic[-1]["end"]}]
+            return _exclude_rejected_story_ranges(
+                [{"start": semantic[0]["start"], "end": semantic[-1]["end"]}], decision, segments, duration)
         model_beat_ids = {str(value) for value in decision.get("story_beat_ids") or []}
         model_passages = merge_ranges([
             row for row in decision.get("story_ranges") or []
@@ -1831,19 +1930,23 @@ def _select_short_story_ranges(
     to simply keeping the first N seconds.
     """
     target = min(float(duration), max(8.0, float(target_duration)))
+
+    def finish(ranges: list[dict[str, float]]) -> list[dict[str, float]]:
+        return _exclude_rejected_story_ranges(ranges, decision, segments, duration)
+
     if duration <= target + 0.05:
-        return [{"start": 0.0, "end": round(duration, 3)}]
+        return finish([{"start": 0.0, "end": round(duration, 3)}])
     if not segments:
-        return _fallback_short_story_ranges(
+        return finish(_fallback_short_story_ranges(
             duration, target, scene_points, selection_seed=selection_seed,
-        )
+        ))
     if selection_policy:
         style_ranges = _select_style_story_ranges(
             segments, decision, duration, target, selection_policy, story_beats,
             selection_seed=selection_seed,
         )
         if style_ranges:
-            return style_ranges
+            return finish(style_ranges)
 
     # v5.5 plans long footage at the STORY-BEAT level. When the semantic planner
     # selected coherent beat ranges, honor those ideas first instead of rebuilding
@@ -1858,7 +1961,7 @@ def _select_short_story_ranges(
         semantic_duration = range_duration(semantic_story)
         semantic_ceiling = target * (1.16 if target <= 90.0 else 1.10 if target <= 210.0 else 1.07)
         if target * 0.52 <= semantic_duration <= semantic_ceiling + 0.05:
-            return semantic_story
+            return finish(semantic_story)
 
     ordered = sorted(segments, key=lambda item: (float(item.get("start", 0)), float(item.get("end", 0))))
     id_to_index = {str(item.get("id")): index for index, item in enumerate(ordered)}
@@ -2002,9 +2105,9 @@ def _select_short_story_ranges(
                 break
 
     ranges = merge_ranges(selected, gap=0.65)
-    return ranges or _fallback_short_story_ranges(
+    return finish(ranges or _fallback_short_story_ranges(
         duration, target, scene_points, selection_seed=selection_seed,
-    )
+    ))
 
 def _camera_plan(keep_ranges: list[dict[str, float]], has_b: bool, layout: str, pace: str, scene_points: list[float]) -> list[dict[str, Any]]:
     if not keep_ranges:
@@ -2531,13 +2634,15 @@ def _duration_review(brief: dict[str, Any], source_duration: float, output_durat
     effective = min(requested, source_duration)
     limit = ((brief.get("style_profile") or {}).get("selection_policy") or {}).get("max_moments")
     shortfall = output_duration + .05 < effective * .9
-    reason = ("style_moment_limit" if shortfall and limit else
+    exceeds_target = output_duration > effective + .05
+    reason = ("over_target" if exceeds_target else
+              "style_moment_limit" if shortfall and limit else
               "limited_selection" if shortfall else
               "source_shorter" if source_duration + .05 < requested else "near_target")
     return {"requested_seconds": round(requested, 3), "available_source_seconds": round(source_duration, 3),
             "effective_target_seconds": round(effective, 3), "selected_seconds": round(output_duration, 3),
             "duration_is_ceiling": brief.get("duration_mode") != "target", "duration_mode": brief.get("duration_mode", "style"),
-            "shortfall": shortfall, "reason": reason,
+            "shortfall": shortfall, "exceeds_target": exceeds_target, "reason": reason,
             "style_moment_limit": int(limit) if limit else None,
             "nonverbal": nonverbal, "can_try_more_moments": bool(shortfall and limit),
             # Each step that changed the length, so a short result names its cause.
@@ -2605,19 +2710,13 @@ def analyze_project(
     context.checkpoint()
     project = store.load(project_id)
     require_tracks_unlocked(project)
-    # Rebuilding a project with independent media must be all-or-nothing: a
-    # rejected shorter draft must not leave the refinement's settings applied.
-    staged_brief = brief_patch if any((project.get("manual") or {}).get(key) for key in ("media_clips", "text_clips")) else None
+    # Commit the requested settings together with the completed draft. A failed
+    # refinement must not change the settings used by the existing edit/export.
+    staged_brief = copy.deepcopy(brief_patch) if brief_patch else None
     original_settings = copy.deepcopy(project.get("settings") or {})
     if brief_patch:
         context.checkpoint()
-        if staged_brief:
-            project.setdefault("settings", {}).update(staged_brief)
-        else:
-            project = store.update(
-                project_id,
-                lambda current: current.setdefault("settings", {}).update(brief_patch),
-            )
+        project.setdefault("settings", {}).update(staged_brief)
     manual_input_fingerprint = stable_fingerprint("director-manual-input", project.get("manual") or {})
     if source_mixer_patch:
         project.setdefault("manual", {}).setdefault("source_mixer", {}).update(source_mixer_patch)
@@ -3128,18 +3227,19 @@ def analyze_project(
         def commit_context(latest: dict[str, Any]) -> None:
             if latest.get("draft"):
                 return
+            proposed = proposed_inputs(latest)
             if stable_fingerprint("director-manual-input", latest.get("manual") or {}) != manual_input_fingerprint:
                 raise RuntimeError("project_changed_during_analysis")
-            latest_brief = _effective_brief(latest)
+            latest_brief = _effective_brief(proposed)
             latest_paths: dict[str, Path | None] = {}
             for slot in ("A", "B"):
-                latest_source = latest.get("sources", {}).get(slot)
+                latest_source = proposed.get("sources", {}).get(slot)
                 latest_paths[slot] = (
                     store.project_dir(project_id) / latest_source["relative_path"]
                     if latest_source and latest_source.get("relative_path")
                     else None
                 )
-            latest_fingerprints = build_analysis_cache_fingerprints(latest, settings, latest_brief, latest_paths)
+            latest_fingerprints = build_analysis_cache_fingerprints(proposed, settings, latest_brief, latest_paths)
             if not cache_fingerprints_match(
                 latest_fingerprints,
                 cache_fingerprints,
@@ -3420,6 +3520,11 @@ def analyze_project(
             counts[reason] = counts.get(reason, 0) + count
     keep_ranges = invert_ranges(cuts, duration)
     if not keep_ranges:
+        if goal == "short":
+            raise StoryPlanningError(
+                "No usable passages remain within the requested length. "
+                "Choose a longer duration or a manual range; the existing edit was kept."
+            )
         keep_ranges = [{"start": 0.0, "end": duration}]
         cuts = []
     requested_layout = str(brief.get("layout", "auto"))
@@ -3472,7 +3577,8 @@ def analyze_project(
         "engine": engine,
         "created_at": project.get("updated_at"),
         "language": language,
-        "title": decision.get("title") or project.get("name"),
+        "title": ("CUTROOM story" if (quality_review.get("title_review") or {}).get("reason") == "final_selection_changed"
+                  else decision.get("title") or project.get("name")),
         "summary": decision.get("summary"),
         "pace": pace,
         "goal": goal,

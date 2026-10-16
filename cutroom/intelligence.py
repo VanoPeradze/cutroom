@@ -21,7 +21,7 @@ from .config import Settings
 from .utils import clamp, merge_ranges, normalize_text, range_duration
 
 STORY_CACHE_PIPELINE = "hierarchical-story-2026-09-06.full-chapter-input"
-CRITIC_REVIEW_CONTRACT = "critic-review-2026-10-01.effective-actions-v1"
+CRITIC_REVIEW_CONTRACT = "critic-review-2026-10-16.selection-provenance-v3"
 
 FILLERS: dict[str, set[str]] = {
     "en": {"um", "uh", "erm", "like", "basically", "actually", "literally", "you know", "i mean", "so"},
@@ -300,6 +300,10 @@ class StoryAIUnavailableError(RuntimeError):
 
 class StoryPlanningError(RuntimeError):
     """The Story AI answered, but a safe coherent plan could not be produced."""
+
+
+class _InvalidStorySelectionError(StoryPlanningError):
+    """A validated review left no material; do not restore rejected source."""
 
 
 _STRING_LIST_SCHEMA = {"type": "array", "items": {"type": "string"}}
@@ -1589,18 +1593,24 @@ def _fit_story_selection_to_budget(
     still remove measured dead air afterwards.
     """
     valid = {str(item.get("id")): item for item in candidates if item.get("id") is not None}
+    rejected = {str(identifier) for identifier in (selection.get("critic") or {}).get("requested_removed", [])}
     selected = [
         str(identifier) for identifier in selection.get("keep_beat_ids", [])
-        if str(identifier) in valid
+        if str(identifier) in valid and str(identifier) not in rejected
     ]
-    selected = list(dict.fromkeys(selected))
+    selected = sorted(dict.fromkeys(selected), key=lambda identifier: float(valid[identifier].get("start", 0.0)))
+    selection = {**selection, "keep_beat_ids": selected}
+    if selected:
+        selection.update(opening_beat_id=selected[0], closing_beat_id=selected[-1])
+    elif rejected:
+        raise _InvalidStorySelectionError("Story critic left no selected source material.")
     target = max(8.0, float(target_duration))
     headroom = 1.12 if target <= 90.0 else 1.08 if target <= 210.0 else 1.05
     ceiling = target * headroom
     slot_rows = selection.get("slot_map", []) if isinstance(selection.get("slot_map"), list) else []
     slot_rows = [item for item in slot_rows if isinstance(item, dict)]
     if not selected and not slot_rows:
-        return selection
+        return _reconcile_critic_actions(selection)
 
     def selection_duration(identifiers: list[str] | set[str]) -> float:
         ranges = [
@@ -1618,7 +1628,7 @@ def _fit_story_selection_to_budget(
         for row in slot_rows
     )
     if before <= ceiling + 0.05 and every_slot_represented:
-        return selection
+        return _reconcile_critic_actions(selection)
 
     highlights = {
         str(identifier) for identifier in selection.get("highlight_beat_ids", [])
@@ -1657,15 +1667,20 @@ def _fit_story_selection_to_budget(
         slot = plan_slots[slot_index] if 0 <= slot_index < len(plan_slots) else {}
         model_choices = [
             str(identifier) for identifier in row.get("beat_ids", [])
-            if str(identifier) in valid
+            if str(identifier) in valid and str(identifier) not in rejected
         ]
         primary_chapters = {str(value) for value in slot.get("chapter_ids", [])}
         primary_choices = [
-            identifier for identifier in valid
+            identifier for identifier in model_choices
             if primary_chapters and beat_to_chapter.get(identifier) in primary_chapters
         ]
-        choices = primary_choices or model_choices
+        allowed_chapters = primary_chapters | {str(value) for value in slot.get("required_context_chapter_ids", [])}
+        replacements = [str(identifier) for identifier in (selection.get("critic") or {}).get("requested_added", [])
+                        if str(identifier) in selected and str(identifier) not in rejected
+                        and beat_to_chapter.get(str(identifier)) in allowed_chapters]
+        choices = primary_choices or model_choices or replacements
         if not choices:
+            fitted_slot_map.append({"slot_index": slot_index, "purpose": row.get("purpose"), "beat_ids": []})
             continue
         purpose = str(slot.get("purpose") or row.get("purpose") or "").lower()
         expected_roles = next((roles for cue, roles in role_groups.items() if cue in purpose), set())
@@ -1722,7 +1737,7 @@ def _fit_story_selection_to_budget(
         beat_duration = max(0.0, float(beat.get("end", 0.0)) - float(beat.get("start", 0.0)))
         return bonus + quality, -beat_duration, -float(beat.get("start", 0.0))
 
-    for identifier in sorted((item for item in selected if item not in fitted), key=extra_value, reverse=True):
+    for identifier in sorted((item for item in selected if item not in fitted and item not in rejected), key=extra_value, reverse=True):
         proposed = set(fitted)
         proposed.add(identifier)
         if selection_duration(proposed) <= ceiling + 0.05:
@@ -1730,7 +1745,7 @@ def _fit_story_selection_to_budget(
 
     fitted_ids = sorted(fitted, key=lambda identifier: float(valid[identifier].get("start", 0.0)))
     if not fitted_ids:
-        return selection
+        return _reconcile_critic_actions(selection)
     after = selection_duration(fitted_ids)
     output = dict(selection)
     output["keep_beat_ids"] = fitted_ids
@@ -1931,10 +1946,11 @@ def _select_story_beats(
     clean = {
         "keep_beat_ids": keep,
         "slot_map": sorted(slot_map, key=lambda item: item["slot_index"]),
-        "highlight_beat_ids": [str(value) for value in result.get("highlight_beat_ids", []) if str(value) in valid_ids][:8],
-        "opening_beat_id": str(result.get("opening_beat_id") or "") if str(result.get("opening_beat_id") or "") in valid_ids else keep[0],
-        "closing_beat_id": str(result.get("closing_beat_id") or "") if str(result.get("closing_beat_id") or "") in valid_ids else keep[-1],
-        "title": str(result.get("title") or "CUTROOM story")[:120],
+        "highlight_beat_ids": [str(value) for value in result.get("highlight_beat_ids", []) if str(value) in keep][:8],
+        "opening_beat_id": keep[0],
+        "closing_beat_id": keep[-1],
+        "title": result["title"].strip()[:120] if isinstance(result.get("title"), str) and result["title"].strip() else "CUTROOM story",
+        "title_beat_ids": list(keep),
         "summary": str(result.get("summary") or "")[:600],
         "selection_mode": "ai_plan_recovery" if recovered_slots or selection_error else "model",
         "recovered_slot_indexes": recovered_slots,
@@ -1963,8 +1979,24 @@ def _reconcile_critic_actions(selection: dict[str, Any]) -> dict[str, Any]:
          "reason": "not_selected" if identifier not in before else "retained_in_final_selection"}
         for identifier in critic["requested_removed"] if identifier not in removed
     ]
+    unresolved_slots = [int(row.get("slot_index", index))
+                        for index, row in enumerate(selection.get("slot_map", []))
+                        if isinstance(row, dict) and not any(identifier in final for identifier in row.get("beat_ids", []))]
+    post_review = critic.get("post_review_beat_ids", critic.get("selection_before", []))
+    changed = set(post_review) != final
+    verdict = critic.get("verdict")
+    issues = list(critic.get("issues") or [])
+    if (changed or unresolved_slots) and verdict == "pass":
+        verdict = "revise"
+        if changed:
+            issues.append("The final selection changed after the continuity check; review it again.")
+        if unresolved_slots:
+            issues.append("One or more required story slots have no selected material; review the draft again.")
     return {**selection, "critic": {**critic, "added": added, "removed": removed,
-                                   "unapplied_actions": unapplied}}
+                                   "unapplied_actions": unapplied, "verdict": verdict, "issues": issues,
+                                   "final_beat_ids": list(selection.get("keep_beat_ids") or []),
+                                   "selection_changed_after_review": changed,
+                                   "unresolved_slot_indexes": unresolved_slots}}
 
 
 def _critic_story_selection(
@@ -2032,14 +2064,9 @@ def _critic_story_selection(
         if identifier not in final:
             final.append(identifier)
     final.sort(key=lambda identifier: float(valid[identifier]["start"]))
-    for slot in selection.get("slot_map", []):
-        slot_ids = [identifier for identifier in slot.get("beat_ids", []) if identifier in valid]
-        if slot_ids and not any(identifier in final for identifier in slot_ids):
-            final.append(slot_ids[0])
     final = sorted(dict.fromkeys(final), key=lambda identifier: float(valid[identifier]["start"]))
-    minimum_final = 1 if len(valid) <= 1 else 2
-    if len(final) < minimum_final:
-        raise StoryPlanningError("Story critic rejected too much material; no safe coherent edit remained.")
+    if not final:
+        raise _InvalidStorySelectionError("Story critic left no selected source material.")
     output = dict(selection)
     output["keep_beat_ids"] = final
     output["opening_beat_id"] = final[0]
@@ -2049,6 +2076,9 @@ def _critic_story_selection(
         "issues": [str(value)[:320] for value in result.get("issues", []) if str(value).strip()][:8],
         "summary": str(result.get("summary") or "")[:600],
         "selection_before": selected,
+        "reviewed_beat_ids": list(selected),
+        "post_review_beat_ids": list(final),
+        "review_verdict": result["verdict"],
         "requested_added": additions,
         "requested_removed": sorted(removals),
     }
@@ -2074,17 +2104,14 @@ def _story_decision_from_beats(result: dict[str, Any] | None, beats: list[dict[s
                 break
         return output
 
-    keep_beats = beat_ids("keep_beat_ids")
-    highlights = beat_ids("highlight_beat_ids", 8)
-    opening = str(result.get("opening_beat_id") or "")
-    closing = str(result.get("closing_beat_id") or "")
-    if opening in valid and opening not in keep_beats:
-        keep_beats.append(opening)
-    if closing in valid and closing not in keep_beats:
-        keep_beats.append(closing)
+    rejected = sorted({str(identifier) for identifier in (result.get("critic") or {}).get("requested_removed", [])
+                       if str(identifier) in valid}, key=lambda identifier: float(by_id[identifier]["start"]))
+    keep_beats = [identifier for identifier in beat_ids("keep_beat_ids") if identifier not in rejected]
     if not keep_beats:
         return None
     keep_beats = sorted(keep_beats, key=lambda identifier: float(by_id[identifier]["start"]))
+    highlights = [identifier for identifier in beat_ids("highlight_beat_ids", 8) if identifier in keep_beats]
+    opening, closing = keep_beats[0], keep_beats[-1]
     selected_segment_ids = {segment_id for identifier in keep_beats for segment_id in by_id[identifier]["segment_ids"]}
     all_segment_ids = [str(item["id"]) for item in segments]
 
@@ -2100,15 +2127,31 @@ def _story_decision_from_beats(result: dict[str, Any] | None, beats: list[dict[s
         return max(ids, key=lambda identifier: float(segment_by_id.get(identifier, {}).get("editorial_score", 0.0)))
 
     highlight_segments = [identifier for identifier in (representative(beat_id) for beat_id in highlights) if identifier]
+    raw_title = result.get("title")
+    # Source IDs establish selection provenance, not support for a generated
+    # claim. Until titles have an independent review, display a neutral label.
+    title = "CUTROOM story"
+    title_ids = beat_ids("title_beat_ids")
+    title_reason = "model_suggestion" if isinstance(raw_title, str) and raw_title.strip() else "missing_title"
+    if "title_beat_ids" in result and set(title_ids) != set(keep_beats):
+        title, title_reason = "CUTROOM story", "selection_changed"
     return {
         "keep_ids": [identifier for identifier in all_segment_ids if identifier in selected_segment_ids],
         "remove_ids": [identifier for identifier in all_segment_ids if identifier not in selected_segment_ids],
         "highlight_ids": highlight_segments,
         "opening_id": representative(opening, first=True) if opening in valid else representative(keep_beats[0], first=True),
         "closing_id": representative(closing, last=True) if closing in valid else representative(keep_beats[-1], last=True),
-        "title": str(result.get("title") or "CUTROOM story")[:120],
+        "title": title,
+        "title_review": {"status": "unverified", "reason": title_reason,
+                         "selected_beat_ids": list(keep_beats), "title_beat_ids": title_ids},
         "summary": str(result.get("summary") or "A coherent story selected from the full recording.")[:500],
         "story_beat_ids": keep_beats,
+        "rejected_beat_ids": rejected,
+        "rejected_segment_ids": [identifier for identifier in all_segment_ids
+                                 if any(identifier in by_id[beat_id].get("segment_ids", []) for beat_id in rejected)],
+        "rejected_story_ranges": [{"start": float(by_id[identifier]["start"]),
+                                    "end": float(by_id[identifier]["end"]), "beat_id": identifier}
+                                   for identifier in rejected],
         "story_ranges": [
             {"start": float(by_id[identifier]["start"]), "end": float(by_id[identifier]["end"]), "beat_id": identifier}
             for identifier in keep_beats
@@ -2403,6 +2446,8 @@ def hierarchical_story_edit(
                 progress,
                 cancel_check,
             )
+    except _InvalidStorySelectionError:
+        raise
     except StoryPlanningError as exc:
         # The critic is a safety review, not the source of the edit. A malformed
         # critic response must not erase a complete, slot-validated selection.
@@ -2443,6 +2488,8 @@ def hierarchical_story_edit(
         "outline": outline,
         "plan": plan,
         "selection": {
+            "keep_beat_ids": list(decision["story_beat_ids"]),
+            "slot_map": reviewed.get("slot_map", []),
             "mode": reviewed.get("selection_mode", "model"),
             "recovered_slot_indexes": reviewed.get("recovered_slot_indexes", []),
             "budget_fit": reviewed.get("budget_fit"),

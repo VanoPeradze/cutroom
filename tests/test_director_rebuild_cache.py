@@ -111,6 +111,55 @@ def test_new_editorial_instruction_replans_without_retranscription(semantic_proj
     assert calls == {"transcribe": 1, "plan": 2}
 
 
+def test_empty_target_pruning_does_not_restore_the_entire_source(semantic_project, monkeypatch):
+    store, settings, project_id, _calls, context = semantic_project
+    segment = {"id": "long", "start": 0.0, "end": 300.0, "text": "One uninterrupted explanation."}
+    monkeypatch.setattr(director, "_plan_edit_with_cancel", lambda *_args, **_kwargs: ({
+        "segments": [segment], "decision": {
+            "keep_ids": ["long"], "remove_ids": [], "highlight_ids": ["long"],
+            "opening_id": "long", "closing_id": "long", "story_ranges": [dict(segment)],
+        }, "story_beats": [], "story_hierarchy": {"critic": {"verdict": "pass"}},
+    }, "fixture_story"))
+    before = store.load(project_id)
+    with pytest.raises(director.StoryPlanningError, match="No usable passages remain"):
+        director.analyze_project(context(), project_id, store, settings, {
+            "instruction": "Keep one complete explanation", "duration_mode": "target", "target_duration": 30,
+        })
+    assert store.load(project_id) == before
+
+
+def test_final_selection_changes_use_a_neutral_title(semantic_project, monkeypatch):
+    store, settings, project_id, _calls, context = semantic_project
+    store.update(project_id, lambda current: current["settings"].update({
+        "instruction": "A new complete selection", "target_duration": 90,
+    }))
+    monkeypatch.setattr(director, "_select_short_story_ranges", lambda *_args, **_kwargs: [
+        {"start": 30, "end": 60}, {"start": 100, "end": 110}, {"start": 220, "end": 250},
+    ])
+    director.analyze_project(context(), project_id, store, settings)
+    saved = store.load(project_id)
+    assert saved["draft"]["title"] == "CUTROOM story"
+    assert saved["draft"]["quality_review"]["title_review"]["reason"] == "final_selection_changed"
+    assert saved["draft"]["quality_review"]["selection_review"]["status"] == "changed"
+
+
+def test_first_draft_context_checkpoint_validates_the_staged_brief(semantic_project):
+    store, settings, project_id, _calls, context = semantic_project
+    def reset_first_draft(current):
+        current["draft"] = None
+        current["analysis"] = None
+    store.update(project_id, reset_first_draft)
+    director.analyze_project(context(), project_id, store, settings, {
+        "spoken_language": "en", "target_duration": 90,
+        "instruction": "A complete first edit with the requested language",
+    })
+    saved = store.load(project_id)
+    assert saved["draft"] is not None
+    assert saved["settings"]["spoken_language"] == "en"
+    assert saved["settings"]["target_duration"] == 90
+    assert saved["analysis"]["transcript"]["language"] == "en"
+
+
 def test_saved_commentary_keeps_planned_anchors_with_truthful_review(semantic_project, monkeypatch):
     store, settings, project_id, _calls, context = semantic_project
     segments = [
