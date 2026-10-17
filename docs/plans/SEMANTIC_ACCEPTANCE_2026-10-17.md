@@ -166,3 +166,58 @@ No release pins, distributable ZIPs, production website, original projects or
 NOVA tabs/servers/files were changed. PR #89 must remain draft until the semantic,
 source, package and human acceptance gates are qualified separately.
 
+## Authorized continuation: summary and request repair (`503dbe5`)
+
+The six follow-up commits through `ff8d533` were checked for concurrent remote
+changes, credentials and private transcript content, then fast-forward pushed to
+PR #89. GitHub confirmed `ff8d533` as its draft head. The earlier local-only
+description above records the previous handoff, not the later push state.
+
+Source `503dbe55d45fa4e9dc7e7519219cab3d5204212d` replaces witness-only summaries
+with every cited primary/context source excerpt in chronology. The final
+conversion revalidates against retained source and rejects a changed or forged
+proof, then preserves complete quotes without the old 500-character cutoff.
+No model interpretation or rejected source supplies summary text.
+
+The Hebrew request overflow was duplicate representation, rather than missing
+model context capacity: the existing estimate, including the same 2,400-token
+output reserve, fell from **34,743 to 17,028** under the unchanged 32,768 cap.
+Shared scalar schema definitions and a shared chapter/evidence table preserve
+the fully expanded schema exactly. Source units, quotations, instructions,
+costs, sticky/rejected IDs, targets and feasibility constraints were unchanged.
+English fell from 17,166 to 12,233 estimated tokens. No estimator change,
+evidence truncation or inference was used for those measurements.
+
+The final eight-module focused run passed **266 tests in 1.48 seconds**, with
+zero network attempts and all nine production-file hashes unchanged. Independent
+review confirmed schema/domain equivalence for both actual cached requests.
+
+One fresh local final review per cached case then ran on this frozen source:
+
+- English completed in 8.953 seconds, applied a 20.000-second / three-range
+  draft, and passed independent transcript/timing review of both the selected
+  dialogue and its complete source-excerpt summary. Its new export fully
+  decoded at **20.000 seconds / 600 frames**. Source/order/speech and exact
+  source-to-commit binding passed. This is still captured upstream planning,
+  not a fresh full pipeline or human listening acceptance.
+- Hebrew reached the model and returned JSON in 10.078 seconds. The guard
+  correctly rejected all four temporal witnesses because they were outside the
+  corresponding selected primary quotations. Independent review additionally
+  found that its primary result was an unfinished phrase and acknowledgments,
+  without a conclusion proposition. A substantive conclusion exists in retained
+  source but was uncited; it was not automatically promoted. The prior edit and
+  exports stayed unchanged. The context-limit defect is repaired; Hebrew
+  semantic acceptance is still blocked.
+
+Evidence is preserved under private Temp root
+`cutroom-compact-summary-eval-20261017-d339a09b`, including the complete numeric
+source/encode report and separate editorial gate. Measurements are under
+`cutroom-request-domain-audit-20261017-1e6f0d7d`; the final focused run is under
+`cutroom-shared-choice-final-focused-20261017-61e33ed`.
+
+The next repair addresses redundant primary/anchor selection and makes actual
+ASR sentence boundaries explicit, while retaining canonical attribution,
+primary/context meaning, chronology and every existing acceptance guard.
+The failed Hebrew response remains a failure. No package/pin or production
+change is qualified by this intermediate result; PR #89 remains draft.
+
