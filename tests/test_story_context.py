@@ -63,6 +63,45 @@ def test_non_lite_context_can_grow_past_16k_without_shortening_the_brief(monkeyp
     assert "_performance_mode" not in bodies[0]
 
 
+def test_budget_revision_single_attempt_does_not_retry_malformed_json(monkeypatch):
+    bodies = _capture_requests(monkeypatch, retry=True)
+    payload = _payload({"brief": {"target_duration": 20}})
+    payload["_single_attempt"] = True
+
+    with pytest.raises(intelligence.StoryPlanningError):
+        intelligence._call_ollama_strict(Settings(), payload)
+
+    assert len(bodies) == 1
+    assert "_single_attempt" not in bodies[0]
+
+
+def test_budget_revision_single_attempt_control_is_stripped_before_cloud(monkeypatch):
+    from cutroom import cloud_ai
+    captured = []
+    monkeypatch.setattr(cloud_ai, "enabled", lambda _settings: True)
+    monkeypatch.setattr(cloud_ai, "chat", lambda _settings, payload, **_kwargs: captured.append(payload) or {"ok": True})
+    payload = _payload({"brief": {"target_duration": 20}})
+    payload["_single_attempt"] = True
+    assert intelligence._call_ollama_strict(Settings(), payload) == {"ok": True}
+    assert "_single_attempt" not in captured[0]
+    assert payload["_single_attempt"] is True
+
+
+def test_revision_source_units_remain_complete_at_the_transport_boundary(monkeypatch):
+    bodies = _capture_requests(monkeypatch)
+    text = "BEGIN " + "full source evidence " * 200 + " MIDDLE dependency " + "full source evidence " * 200 + " END."
+    unit = {"id": "b1", "start": 0, "end": 15, "segment_ids": ["s1", "s2"], "text": text,
+            "segments": [{"id": "s1", "start": 0, "end": 8, "text": text},
+                         {"id": "s2", "start": 8, "end": 15, "text": "Complete ending."}]}
+    content = {"brief": {"target_duration": 20}, "source_units": [unit],
+               "candidates": [{"id": "b1", "text": text}]}
+    payload = _payload(content)
+    payload["_single_attempt"] = True
+    intelligence._call_ollama_strict(Settings(), payload)
+    sent = json.loads(bodies[0]["messages"][1]["content"])
+    assert sent["source_units"] == [unit]
+
+
 def test_lite_honors_its_cap_even_when_a_pass_requests_a_larger_context(monkeypatch):
     bodies = _capture_requests(monkeypatch)
     intelligence._call_ollama_strict(Settings(), _payload({"brief": {}}, mode="lite", context=32768))

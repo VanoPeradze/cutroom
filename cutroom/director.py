@@ -10,6 +10,7 @@ from .cache_keys import build_analysis_cache_fingerprints, cache_fingerprints_ma
 from .composition import default_reels_stack, select_embedded_candidate
 from .config import Settings
 from .edit_styles import enrich_brief_with_style
+from .frame_rates import project_export_fps
 from .caption_items import apply_corrections, corrections as caption_corrections
 from .editing import SOURCE_MIXER_DEFAULT_LAYOUTS, apply_camera_overrides, apply_timeline_overrides
 from .audio import analyze_audio, audio_policy, build_audio_actions, constrain_gain_ranges_to_speech, protect_silence_ranges_from_speech
@@ -20,6 +21,10 @@ from .media_library import validate_media_bounds
 from .text_clips import validate_text_bounds
 from .projects import ProjectStore, apply_draft_name
 from .source_tracks import has_sequence, source_sync_offset
+from .story_budget import (
+    BUDGET_TOLERANCE_SECONDS, POLICY_VERSION, StoryBudgetError, compact_story_pauses_to_target,
+    framed_story_duration, segment_speech_ranges, story_duration_cost,
+)
 from .track_locks import require_tracks_unlocked
 from .sync import MIN_AUTOMATIC_SYNC_CONFIDENCE, synchronize_sources
 from .transcription import cuda_available, transcribe, transcript_quality_report
@@ -48,32 +53,8 @@ def _finite_number(value: Any, fallback: float = 0.0) -> float:
 
 
 def _segment_speech_ranges(segment: dict[str, Any]) -> list[dict[str, float]]:
-    """Protect the complete segment when any word timing cannot be trusted."""
-    start, end = float(segment["start"]), float(segment["end"])
-    fallback = [{"start": start, "end": end}]
-    words = segment.get("words")
-    if segment.get("word_timing_complete") is False or not isinstance(words, list) or not words:
-        return fallback
-    text = normalize_text(str(segment.get("text") or ""))
-    labels = normalize_text(" ".join(str(word.get("word") or "")
-                                     for word in words if isinstance(word, dict)))
-    if text and text != labels:
-        # Legacy caches may already have lost a malformed middle word before
-        # timing-completeness provenance existed. A valid subset is insufficient.
-        return fallback
-    speech = []
-    previous_end = start
-    for word in words:
-        if not isinstance(word, dict) or not str(word.get("word") or "").strip():
-            return fallback
-        left = _finite_number(word.get("start"), math.nan)
-        right = _finite_number(word.get("end"), math.nan)
-        if (not math.isfinite(left) or not math.isfinite(right) or right <= left
-                or left < start - .001 or right > end + .001 or left < previous_end - .001):
-            return fallback
-        speech.append({"start": max(start, left), "end": min(end, right)})
-        previous_end = right
-    return merge_ranges(speech, gap=0.0)
+    """Compatibility wrapper around the shared speech-protection policy."""
+    return segment_speech_ranges(segment)
 
 
 def _prepared_vision_is_reusable(
@@ -140,7 +121,7 @@ def _drop_isolated_micro_keeps(cuts: list[dict[str, Any]], duration: float, mini
                                *, protected_ranges: list[dict[str, float]] | None = None) -> tuple[list[dict[str, float]], int]:
     """A kept piece shorter than a second, far from any other kept footage, reads
     as a glitch in a Short. Remove it unless it is the only footage left."""
-    keeps = invert_ranges(cuts, duration)
+    keeps = (_exact_story_complement(cuts, duration) if protected_ranges else invert_ranges(cuts, duration))
     remaining = []
     for index, keep in enumerate(keeps):
         previous_gap = keep["start"] - keeps[index - 1]["end"] if index else math.inf
@@ -152,7 +133,7 @@ def _drop_isolated_micro_keeps(cuts: list[dict[str, Any]], duration: float, mini
         remaining.append(keep)
     if not remaining or len(remaining) == len(keeps):
         return cuts, 0
-    return invert_ranges(remaining, duration), len(keeps) - len(remaining)
+    return (_exact_story_complement(remaining, duration) if protected_ranges else invert_ranges(remaining, duration)), len(keeps) - len(remaining)
 
 
 def _normalize_transcript(
@@ -837,6 +818,7 @@ def _short_cleanup_cuts_with_floor(
     manual_cuts: list[dict[str, Any]],
     duration: float,
     target_duration: float,
+    *, preserve_fragments: bool = False,
 ) -> tuple[list[dict[str, float]], dict[str, int]]:
     """Apply cleanup inside a selected Short without making it needlessly short.
 
@@ -857,8 +839,10 @@ def _short_cleanup_cuts_with_floor(
             "reason": "manual",
         })
         counts["manual"] = counts.get("manual", 0) + 1
-    merged = merge_ranges(selected, gap=0.10)
-    output = range_duration(invert_ranges(merged, duration))
+    gap = 0.0 if preserve_fragments else 0.10
+    complement = _exact_story_complement if preserve_fragments else invert_ranges
+    merged = merge_ranges(selected, gap=gap)
+    output = range_duration(complement(merged, duration))
 
     ranked = sorted(
         candidates,
@@ -869,8 +853,8 @@ def _short_cleanup_cuts_with_floor(
         reverse=True,
     )
     for cut in ranked:
-        candidate = merge_ranges([*merged, cut], gap=0.10)
-        new_output = range_duration(invert_ranges(candidate, duration))
+        candidate = merge_ranges([*merged, cut], gap=gap)
+        new_output = range_duration(complement(candidate, duration))
         if new_output >= output - 0.02:
             continue
         # If explicit manual edits already pushed the result below the floor, do
@@ -902,6 +886,10 @@ def _enforce_short_target(
     truncating the source at the first N seconds.
     """
     target = max(8.0, min(float(duration), float(target_duration)))
+    if decision.get("story_requirements"):
+        # Required beats cannot be discarded by a later scoring heuristic. The
+        # shared fitter and the final guard own their safe duration contract.
+        return merge_ranges(cuts, gap=0.0), 0
     merged = merge_ranges(cuts, gap=0.10)
     output = range_duration(invert_ranges(merged, duration))
     if output <= target + 0.05:
@@ -1719,55 +1707,190 @@ def _exclude_rejected_story_ranges(ranges: list[dict[str, float]], decision: dic
         return ranges
     # Selection shortcuts and context bridging obey the same explicit exclusions
     # as top-up. User restores are applied separately, after AI selection.
-    cuts = merge_ranges([*invert_ranges(ranges, duration), *rejected], gap=0.0)
-    return invert_ranges(cuts, duration)
+    complement = _exact_story_complement if decision.get("story_requirements") else invert_ranges
+    cuts = merge_ranges([*complement(ranges, duration), *rejected], gap=0.0)
+    return complement(cuts, duration)
 
 
 def _compact_story_pauses_to_target(
     ranges: list[dict[str, float]], segments: list[dict[str, Any]],
-    duration: float, target: float,
+    duration: float, target: float, *, fps: int | None = None,
 ) -> list[dict[str, float]] | None:
-    """Fit approved speech by shortening only internal timestamped speech gaps.
+    """Compatibility wrapper around the shared approved-pause fitter."""
+    return compact_story_pauses_to_target(ranges, segments, duration, target, fps=fps)
 
-    No spoken word or passage endpoint is discarded. Untimed or malformed words
-    protect their entire segment. This is unavailable to action-protected styles:
-    an absence of transcript words does not establish an absence of game action.
-    """
-    approved = merge_ranges(ranges, gap=0.0)
-    excess = range_duration(approved) - target
-    if excess <= .05:
-        return approved
-    gaps = []
-    for passage in approved:
-        overlapping = [row for row in segments
-                       if float(row["start"]) < passage["end"] and float(row["end"]) > passage["start"]]
-        if not overlapping:
-            return None
-        protected = merge_ranges([
-            {"start": max(passage["start"], span["start"]),
-             "end": min(passage["end"], span["end"])}
-            for row in overlapping for span in _segment_speech_ranges(row)
-            if span["start"] < passage["end"] and span["end"] > passage["start"]
-        ], gap=0.0)
-        # Retain a small handle on both sides of each word-free interval. Cut
-        # large gaps first so meeting the target introduces as few joins as possible.
-        for left, right in zip(protected, protected[1:]):
-            start, end = left["end"] + .06, right["start"] - .06
-            if end - start >= .12:
-                gaps.append({"start": start, "end": end})
-    if sum(row["end"] - row["start"] for row in gaps) + .001 < excess:
+
+def _semantic_mapping_is_verified(decision: dict[str, Any]) -> bool:
+    """Old keep lists cannot stand in for verified primary/context evidence."""
+    requirements = decision.get("story_requirements") or {}
+    slots = requirements.get("slot_map")
+    required = {str(value) for value in requirements.get("required_beat_ids") or []}
+    revision = requirements.get("semantic_revision") or {}
+    if (requirements.get("semantic_mapping_verified") is not True or not required
+            or not isinstance(slots, list) or not slots
+            or not isinstance(revision, dict) or not isinstance(revision.get("cost"), dict)
+            or not isinstance(revision.get("attempts"), int) or isinstance(revision.get("attempts"), bool)
+            or revision["attempts"] not in {0, 1} or revision.get("verdict") != "fit"
+            or revision.get("policy_version") != POLICY_VERSION
+            or revision["cost"].get("policy_version") != POLICY_VERSION):
+        return False
+    indexes, mapped = set(), set()
+    for row in slots:
+        if not isinstance(row, dict):
+            return False
+        index = row.get("slot_index")
+        primary = {str(value) for value in row.get("primary_beat_ids") or []}
+        context = {str(value) for value in row.get("context_beat_ids") or []}
+        if (not isinstance(index, int) or isinstance(index, bool) or index < 0 or index in indexes
+                or not primary or not isinstance(row.get("role_evidence"), str) or not row["role_evidence"].strip()
+                or not (primary | context) <= required
+                or set(str(value) for value in row.get("beat_ids") or []) != primary | context):
+            return False
+        indexes.add(index)
+        mapped.update(primary | context)
+    sticky = {str(value) for value in requirements.get("critic_requested_beat_ids") or []}
+    return required <= mapped | sticky
+
+
+def _exact_story_complement(ranges: list[dict[str, Any]], duration: float) -> list[dict[str, float]]:
+    """Complement semantic intervals without discarding brief source words."""
+    cursor = 0.0
+    result = []
+    for row in merge_ranges(ranges, gap=0.0):
+        start, end = max(0.0, row["start"]), min(duration, row["end"])
+        if start > cursor:
+            result.append({"start": cursor, "end": start})
+        cursor = max(cursor, end)
+    if cursor < duration:
+        result.append({"start": cursor, "end": duration})
+    return result
+
+
+def _apply_story_timeline_overrides(cuts: list[dict[str, Any]], manual: dict[str, Any] | None) -> list[dict[str, float]]:
+    """Apply the same explicit restores/deletes without generic fragment pruning."""
+    manual = manual or {}
+    result = merge_ranges(cuts, gap=0.0)
+    for keep in merge_ranges(manual.get("keeps") or [], gap=0.0):
+        remaining = []
+        for row in result:
+            if row["end"] <= keep["start"] or row["start"] >= keep["end"]:
+                remaining.append(row)
+                continue
+            if row["start"] < keep["start"]:
+                remaining.append({"start": row["start"], "end": keep["start"]})
+            if row["end"] > keep["end"]:
+                remaining.append({"start": keep["end"], "end": row["end"]})
+        result = remaining
+    return merge_ranges([*result, *(manual.get("cuts") or [])], gap=0.0)
+
+
+def _validate_required_story_selection(
+    decision: dict[str, Any], segments: list[dict[str, Any]], duration: float, target: float,
+    *, selection_policy: dict[str, Any] | None = None,
+    keep_ranges: list[dict[str, float]] | None = None,
+    hierarchy: dict[str, Any] | None = None, fps: int | None = None,
+    restored_ranges: list[dict[str, Any]] | None = None,
+) -> dict[str, Any] | None:
+    """Fail before saving if any approved story evidence was lost downstream."""
+    requirements = decision.get("story_requirements") or {}
+    if not requirements:
         return None
-    pause_cuts = []
-    for gap in sorted(gaps, key=lambda row: (-(row["end"] - row["start"]), row["start"])):
-        if excess <= .001:
-            break
-        remove = min(excess, gap["end"] - gap["start"])
-        margin = (gap["end"] - gap["start"] - remove) / 2
-        pause_cuts.append({"start": round(gap["start"] + margin, 3),
-                           "end": round(gap["end"] - margin, 3)})
-        excess -= remove
-    fitted = invert_ranges(merge_ranges([*invert_ranges(approved, duration), *pause_cuts], gap=0.0), duration)
-    return fitted if range_duration(fitted) <= target + .05 else None
+    policy = selection_policy or {}
+    approved = decision.get("story_ranges") or []
+    required = {str(value) for value in requirements.get("required_beat_ids") or []}
+    passages = {str(row.get("beat_id")): row for row in approved if isinstance(row, dict)}
+    cost = story_duration_cost(approved, segments, duration, target=target,
+                               protect_action_span=bool(policy.get("protect_action_span")), fps=fps)
+    missing = required - passages.keys()
+    reasons = []
+    if not _semantic_mapping_is_verified(decision):
+        reasons.append("unverified_semantic_mapping")
+    required_roles = list(dict.fromkeys(policy.get("story_structure") or []))
+    mapped_roles = {row.get("purpose") for row in requirements.get("slot_map") or []
+                    if isinstance(row, dict) and isinstance(row.get("purpose"), str)}
+    missing_roles = [purpose for purpose in required_roles if purpose not in mapped_roles]
+    if missing_roles:
+        # Chapters may contain several narrative roles. Each configured role
+        # still needs its own explicit source mapping, even on a short source.
+        reasons.append("missing_required_story_roles")
+    critic = (hierarchy or {}).get("critic") or {}
+    unresolved = sorted(set(requirements.get("unresolved_slot_indexes") or [])
+                        | set(critic.get("unresolved_slot_indexes") or []))
+    unapplied = max(int(_finite_number(requirements.get("unapplied_critic_actions"))),
+                    len(critic.get("unapplied_actions") or []))
+    if unresolved:
+        reasons.append("unresolved_story_slots")
+    if unapplied:
+        reasons.append("unapplied_critic_actions")
+    if not cost["fits_target"]:
+        reasons.append("insufficient_safe_pause_budget")
+    rejected_overlap = []
+    unapproved_ranges = []
+    framed_seconds = None
+    if keep_ranges is not None:
+        kept = merge_ranges(keep_ranges, gap=0.0)
+        policy_minimum_ranges = compact_story_pauses_to_target(
+            approved, segments, duration, cost["minimum_safe_seconds"],
+            protect_action_span=bool(policy.get("protect_action_span")),
+        ) or approved
+        restored = merge_ranges(restored_ranges or [], gap=0.0)
+        admissible = merge_ranges([*approved, *restored], gap=0.0)
+        unapproved_ranges = [row for row in kept
+                             if sum(max(0.0, min(row["end"], passage["end"]) - max(row["start"], passage["start"]))
+                                    for passage in admissible) < row["end"] - row["start"] - .0011]
+        if unapproved_ranges:
+            reasons.append("unapproved_story_material_included")
+        for passage in approved:
+            start, end = float(passage["start"]), float(passage["end"])
+            # Enforce the shared policy's endpoints and speech handles as well
+            # as its words. Only verified internal pauses may disappear.
+            expected = [{"start": max(start, span["start"]), "end": min(end, span["end"])}
+                        for span in policy_minimum_ranges if span["start"] < end and span["end"] > start]
+            if any(sum(max(0.0, min(span["end"], row["end"]) - max(span["start"], row["start"]))
+                       for row in kept) < span["end"] - span["start"] - .0011 for span in expected):
+                missing.add(str(passage.get("beat_id") or "unmapped_approved_passage"))
+        rejected_overlap = [row for row in _rejected_story_ranges(decision, segments, duration)
+                            if any((end := min(row["end"], keep["end"])) - (start := max(row["start"], keep["start"])) > .001
+                                   and sum(max(0.0, min(end, restore["end"]) - max(start, restore["start"]))
+                                           for restore in restored) < end - start - .0011
+                                   for keep in kept)]
+        if rejected_overlap:
+            reasons.append("rejected_story_material_included")
+        if range_duration(kept) > target + BUDGET_TOLERANCE_SECONDS + 1e-9:
+            reasons.append("selected_material_over_target")
+        if fps is not None:
+            try:
+                framed_seconds = framed_story_duration(kept, fps)
+            except ValueError:
+                reasons.append("unencodable_frame_fragment")
+            else:
+                if framed_seconds > target + BUDGET_TOLERANCE_SECONDS + 1e-9:
+                    reasons.append("frame_grid_over_target")
+    if missing:
+        reasons.append("required_story_material_omitted")
+    diagnostic = {
+        "kind": "story_budget", "scope": "current_required_selection",
+        "policy_version": cost["policy_version"], "cost": cost,
+        "required_policy_minimum_seconds": cost["minimum_safe_seconds"],
+        "required_framed_minimum_seconds": cost.get("minimum_framed_seconds"),
+        "target_seconds": target, "selected_seconds": range_duration(keep_ranges) if keep_ranges is not None else None,
+        "selected_framed_seconds": framed_seconds, "fps": fps,
+        "required_beat_ids": sorted(required), "missing_required_beat_ids": sorted(missing),
+        "required_story_roles": required_roles, "mapped_story_roles": sorted(mapped_roles),
+        "missing_required_story_roles": missing_roles,
+        "unresolved_slot_indexes": unresolved, "unapplied_critic_actions": unapplied,
+        "rejected_overlap": rejected_overlap, "reasons": reasons,
+        "unapproved_ranges": unapproved_ranges,
+        "semantic_revision": copy.deepcopy(requirements.get("semantic_revision") or {}),
+        "applied_to_timeline": False,
+    }
+    if reasons:
+        minimum = max(cost["minimum_safe_seconds"], cost.get("minimum_framed_seconds") or 0.0)
+        detail = (f"The current required story needs at least {minimum:.2f}s under the safe speech policy "
+                  f"for a {target:.2f}s target. " if not cost["fits_target"] else "")
+        raise StoryBudgetError(detail + "A complete verified story could not be preserved; the existing edit was kept. "
+                               + ", ".join(reasons) + ".", diagnostic)
+    return diagnostic
 
 
 def _style_beat_candidates(
@@ -2007,6 +2130,7 @@ def _select_short_story_ranges(
     force_variation: bool = False,
     selection_policy: dict[str, Any] | None = None,
     story_beats: list[dict[str, Any]] | None = None,
+    fps: int | None = None,
 ) -> list[dict[str, float]]:
     """Select coherent passages from the whole recording for a Short.
 
@@ -2029,10 +2153,16 @@ def _select_short_story_ranges(
             duration, target, scene_points, selection_seed=selection_seed,
         ))
     approved = finish(merge_ranges(decision.get("story_ranges") or [], gap=0.0))
-    if ((selection_policy or {}).get("duration_mode") == "target" and approved
-            and range_duration(approved) > target + .05
+    frame_fit_needed = False
+    if approved and fps is not None:
+        try:
+            frame_fit_needed = framed_story_duration(approved, fps) > target + BUDGET_TOLERANCE_SECONDS + 1e-9
+        except ValueError:
+            frame_fit_needed = True
+    if (((selection_policy or {}).get("duration_mode") == "target" or decision.get("story_requirements")) and approved
+            and (range_duration(approved) > target + .05 or frame_fit_needed)
             and not (selection_policy or {}).get("protect_action_span")):
-        fitted = _compact_story_pauses_to_target(approved, segments, duration, target)
+        fitted = _compact_story_pauses_to_target(approved, segments, duration, target, fps=fps)
         decision["_target_fit_review"] = {
             "fitted": fitted is not None,
             "reason": "speech_pauses_shortened" if fitted is not None else "insufficient_safe_pause_budget",
@@ -2046,6 +2176,10 @@ def _select_short_story_ranges(
                  "passages": len(fitted)},
             ]
             return finish(fitted)
+    if decision.get("story_requirements"):
+        # A required selection may only lose verified word-free pauses. The
+        # final guard reports an infeasible budget instead of pruning its beats.
+        return approved
     if selection_policy:
         style_ranges = _select_style_story_ranges(
             segments, decision, duration, target, selection_policy, story_beats,
@@ -3451,6 +3585,11 @@ def analyze_project(
         and isinstance(cached_editorial.get("decision"), dict)
         and isinstance((cached_analysis or {}).get("segments"), list)
         and (
+            goal != "short" or not (cached_editorial["decision"].get("story_requirements")
+                 or str((cached_analysis or {}).get("engine") or "").endswith("_hierarchical_story"))
+            or _semantic_mapping_is_verified(cached_editorial["decision"])
+        )
+        and (
             cached_editorial.get("review_contract") == CRITIC_REVIEW_CONTRACT
             or (
                 not (cached_analysis or {}).get("story_hierarchy")
@@ -3545,6 +3684,19 @@ def analyze_project(
         story_beats = editorial.get("story_beats", [])
         story_hierarchy = editorial.get("story_hierarchy")
 
+    selection_policy = ((brief.get("style_profile") or {}).get("selection_policy") or {})
+    required_story = goal == "short" and bool(decision.get("story_requirements"))
+    if (goal == "short" and engine.endswith("_hierarchical_story") and not required_story):
+        raise StoryBudgetError("Story AI did not verify the required primary and context passages; the existing edit was kept.", {
+            "kind": "story_budget", "scope": "current_required_selection", "target_seconds": target_duration,
+            "reasons": ["unverified_semantic_mapping"], "applied_to_timeline": False,
+        })
+    if required_story:
+        _validate_required_story_selection(
+            decision, segments, duration, target_duration, selection_policy=selection_policy,
+            hierarchy=story_hierarchy, fps=project_export_fps(project),
+        )
+
     if source_b:
         if reusable_context and cached_analysis:
             cached_sync = cached_analysis.get("sync") if isinstance(cached_analysis.get("sync"), dict) else None
@@ -3595,7 +3747,7 @@ def analyze_project(
     # cleanup and defensible transcript cleanup inside those passages.
     duration_chain: list[dict[str, Any]] = [{"stage": "requested", "seconds": round(float(target_duration), 3)}]
     gameplay_review: list[dict[str, Any]] = []
-    if goal == "short" and (duration > target_duration or brief.get("duration_mode") == "target"):
+    if goal == "short" and (duration > target_duration or brief.get("duration_mode") == "target" or required_story):
         selection_policy = ((brief.get("style_profile") or {}).get("selection_policy") or {})
         selection_segments = _with_visual_evidence(segments, visual_timeline)
         story_keep = (
@@ -3620,6 +3772,7 @@ def analyze_project(
                 force_variation=normalized_selection_variant > 0,
                 selection_policy=selection_policy,
                 story_beats=story_beats,
+                fps=project_export_fps(project),
             )
             if not gameplay_route
             else _select_gameplay_moments(
@@ -3648,7 +3801,8 @@ def analyze_project(
                 len(story_keep), notes, language,
                 cutscenes=gameplay_route["share"].get("cutscene", 0.0) >= 0.05,
             )
-        story_cuts = invert_ranges(story_keep, duration)
+        story_cuts = (_exact_story_complement(story_keep, duration) if required_story
+                      else invert_ranges(story_keep, duration))
         duration_chain.extend(decision.pop("_selection_trace", None) or [])
         duration_chain.append({"stage": "gameplay_moments" if gameplay_route else
                                "audio_highlights" if nonverbal_highlights else "story_selection",
@@ -3663,6 +3817,7 @@ def analyze_project(
             project.get("manual", {}).get("cuts", []),
             duration,
             target_duration,
+            preserve_fragments=required_story,
         )
         counts["gameplay_moments" if gameplay_route else "story_selection"] = len(story_keep)
         duration_chain.append({"stage": "pause_cleanup", "seconds": _kept_seconds(cuts, duration)})
@@ -3677,7 +3832,7 @@ def analyze_project(
         cuts, micro_count = _drop_isolated_micro_keeps(
             cuts, duration,
             protected_ranges=([span for row in segments for span in _segment_speech_ranges(row)]
-                              if (decision.get("_target_fit_review") or {}).get("fitted") else None),
+                              if required_story or (decision.get("_target_fit_review") or {}).get("fitted") else None),
         )
         if micro_count:
             counts["micro_fragments"] = micro_count
@@ -3694,12 +3849,32 @@ def analyze_project(
 
     # Explicit restores/deletes are the final authority, including after the
     # target-duration pass. Rebuilding must not silently undo a user's restore.
-    cuts = apply_timeline_overrides(cuts, project.get("manual"))
+    cuts = (_apply_story_timeline_overrides(cuts, project.get("manual")) if required_story
+            else apply_timeline_overrides(cuts, project.get("manual")))
     for reason in ("quiet_audio", "loud_audio", "clipping"):
         count = int(audio_counts.get(reason, 0))
         if count:
             counts[reason] = counts.get(reason, 0) + count
-    keep_ranges = invert_ranges(cuts, duration)
+    keep_ranges = (_exact_story_complement(cuts, duration) if required_story
+                   else invert_ranges(cuts, duration))
+    if required_story:
+        try:
+            frame_over = framed_story_duration(keep_ranges, project_export_fps(project)) > target_duration + BUDGET_TOLERANCE_SECONDS + 1e-9
+        except ValueError:
+            frame_over = True
+        if frame_over and not selection_policy.get("protect_action_span"):
+            fitted = _compact_story_pauses_to_target(
+                keep_ranges, segments, duration, target_duration, fps=project_export_fps(project),
+            )
+            if fitted is not None:
+                keep_ranges = fitted
+                cuts = _exact_story_complement(fitted, duration)
+                duration_chain.append({"stage": "frame_grid_pause_fit", "seconds": range_duration(fitted)})
+        _validate_required_story_selection(
+            decision, segments, duration, target_duration, selection_policy=selection_policy,
+            keep_ranges=keep_ranges, hierarchy=story_hierarchy, fps=project_export_fps(project),
+            restored_ranges=(project.get("manual") or {}).get("keeps"),
+        )
     if not keep_ranges:
         if goal == "short":
             raise StoryPlanningError(
@@ -3895,6 +4070,12 @@ def analyze_project(
         ):
             raise RuntimeError("project_changed_during_analysis")
         unchanged_variation = normalized_selection_variant > 0 and not variation_changed
+        if required_story:
+            _validate_required_story_selection(
+                decision, segments, duration, target_duration, selection_policy=selection_policy,
+                keep_ranges=keep_ranges, hierarchy=story_hierarchy, fps=project_export_fps(proposed),
+                restored_ranges=(proposed.get("manual") or {}).get("keeps"),
+            )
         if not unchanged_variation:
             validate_media_bounds({**proposed, "draft": draft})
             validate_text_bounds({**proposed, "draft": draft})
@@ -4068,7 +4249,7 @@ def _cut_dead_screens(
             added.append({"start": round(start, 3), "end": round(end, 3)})
     if not added:
         return cuts, 0
-    return merge_ranges([*cuts, *added], gap=0.05), len(added)
+    return merge_ranges([*cuts, *added], gap=0.0), len(added)
 
 
 def _with_visual_evidence(segments: list[dict[str, Any]], visual: VisualTimeline) -> list[dict[str, Any]]:
@@ -4126,9 +4307,6 @@ def refine_project(context: JobContext, project_id: str, store: ProjectStore, se
     current = project.get("settings", {})
     patch: dict[str, Any] = {}
     selection_variant = 0
-    restore_focus_layout = False
-    previous_layout_present = False
-    previous_layout: Any = None
     staged_mixer: dict[str, Any] | None = None
     if command == "shorter":
         patch["target_duration"] = max(8, round(float(current.get("target_duration", 60)) * 0.78))
@@ -4143,20 +4321,9 @@ def refine_project(context: JobContext, project_id: str, store: ProjectStore, se
     elif command == "focus_speaker":
         sources = project.get("sources") or {}
         if sources.get("B"):
-            original_mixer = (project.get("manual") or {}).get("source_mixer") or {}
-            previous_layout_present = "default_layout" in original_mixer
-            previous_layout = original_mixer.get("default_layout")
-            # This one-click refinement is a newer explicit framing choice. Keep
-            # it in the same source of truth used by Studio and the next rebuild.
-            def focus_camera(current_project: dict[str, Any]) -> None:
-                current_mixer = current_project.setdefault("manual", {}).setdefault("source_mixer", {})
-                current_mixer["default_layout"] = "camera"
-
-            if any((project.get("manual") or {}).get(key) for key in ("media_clips", "text_clips")):
-                staged_mixer = {"default_layout": "camera"}
-            else:
-                store.update(project_id, focus_camera)
-                restore_focus_layout = True
+            # Framing and settings commit with the validated draft. An early
+            # write followed by rollback still changes the project revision.
+            staged_mixer = {"default_layout": "camera"}
         else:
             patch["layout"] = "A"
     elif command == "new_variation":
@@ -4167,31 +4334,8 @@ def refine_project(context: JobContext, project_id: str, store: ProjectStore, se
             selection_variant = 1
     else:
         raise ValueError("Unknown refinement command")
-    try:
-        if command == "new_variation":
-            return analyze_project(
-                context,
-                project_id,
-                store,
-                settings,
-                patch,
-                selection_variant=selection_variant,
-            )
-        if staged_mixer:
-            return analyze_project(context, project_id, store, settings, patch, source_mixer_patch=staged_mixer)
-        return analyze_project(context, project_id, store, settings, patch)
-    except Exception:
-        if restore_focus_layout:
-            def rollback_focus(current_project: dict[str, Any]) -> None:
-                current_mixer = current_project.setdefault("manual", {}).setdefault("source_mixer", {})
-                # Do not overwrite a newer explicit user action from another API
-                # client if it raced with the failed refinement.
-                if current_mixer.get("default_layout") != "camera":
-                    return
-                if previous_layout_present:
-                    current_mixer["default_layout"] = previous_layout
-                else:
-                    current_mixer.pop("default_layout", None)
-
-            store.update(project_id, rollback_focus)
-        raise
+    if command == "new_variation":
+        return analyze_project(context, project_id, store, settings, patch, selection_variant=selection_variant)
+    if staged_mixer:
+        return analyze_project(context, project_id, store, settings, patch, source_mixer_patch=staged_mixer)
+    return analyze_project(context, project_id, store, settings, patch)

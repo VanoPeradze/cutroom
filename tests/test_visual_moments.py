@@ -285,11 +285,13 @@ def streamer_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     def plan(_context, current_segments, *_args, visual_moments=None, **_kwargs):
         calls["plan"].append(1)
         calls["plan_visual"].append((visual_moments or {}).get("cache_key"))
+        # This fixed stub tests vision caching and evidence invalidation. It
+        # does not claim the semantic planner's primary/context review contract.
         return {"segments": [{**row, "editorial_score": 0.6} for row in current_segments],
                 "decision": {"keep_ids": [row["id"] for row in current_segments], "remove_ids": [],
                              "highlight_ids": ["s1"], "title": "Highlights", "summary": "Fights.",
                              "opening_id": "s1", "closing_id": "s20"},
-                "story_beats": [], "story_hierarchy": {"fixture": True}}, "ollama_hierarchical_story"
+                "story_beats": [], "story_hierarchy": {"fixture": True}}, "deterministic"
 
     monkeypatch.setattr(director, "_plan_edit_with_cancel", plan)
     from cutroom import intelligence as intel

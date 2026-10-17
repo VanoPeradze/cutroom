@@ -36,6 +36,18 @@ def critic(monkeypatch, story, reply):
     )
 
 
+def verified_story_fixture(selection, candidates):
+    for row in candidates:
+        row["text"] = "A complete fixture story idea."
+    selection["semantic_mapping_verified"] = True
+    selection["slot_map"] = [{"slot_index": index, "purpose": purpose, "beat_ids": [identifier],
+                              "primary_beat_ids": [identifier], "context_beat_ids": [],
+                              "role_evidence": "The complete fixture sentence supplies this planned role."}
+                             for index, (purpose, identifier) in enumerate((("setup", "b1"), ("result", "b3")))]
+    return {"slots": [{"purpose": purpose, "chapter_ids": ["c001"], "required_context_chapter_ids": []}
+                       for purpose in ("setup", "result")]}
+
+
 @pytest.mark.parametrize("reply", [
     {}, None, {"verdict": "pass"}, response(verdict="unknown"), response(verdict={}),
     response(add_beat_ids=None), response(remove_beat_ids="b2"),
@@ -131,16 +143,17 @@ def test_later_budget_slot_restoration_keeps_actual_removal(monkeypatch, story):
 
 def test_empty_critic_response_keeps_edit_with_review_warning_through_real_pipeline(monkeypatch, story):
     selection, candidates = story
-    segments = [{"id": f"s{i}", "start": row["start"], "end": row["end"]}
+    plan = verified_story_fixture(selection, candidates)
+    segments = [{"id": f"s{i}", "start": row["start"], "end": row["end"], "text": row["text"]}
                 for i, row in enumerate(candidates, 1)]
     monkeypatch.setattr(intelligence, "_ollama_inventory", lambda _settings: (True, {"fixture-model"}))
     monkeypatch.setattr(intelligence, "_summarize_story_chapters", lambda *_args: [{"id": "c001"}])
     monkeypatch.setattr(intelligence, "_build_global_outline", lambda *_args: {})
-    monkeypatch.setattr(intelligence, "_build_story_plan", lambda *_args: {"slots": []})
+    monkeypatch.setattr(intelligence, "_build_story_plan", lambda *_args: plan)
     monkeypatch.setattr(intelligence, "_select_story_beats", lambda *_args: (copy.deepcopy(selection), candidates))
     monkeypatch.setattr(intelligence, "_call_ollama_story_pass", lambda *_args: {})
     decision, hierarchy = intelligence.hierarchical_story_edit(
-        candidates, segments, Settings(), {"goal": "short", "target_duration": 30},
+        candidates, segments, Settings(), {"goal": "short", "duration_mode": "style", "target_duration": 30},
     )
     assert decision["story_beat_ids"] == ["b1", "b3"]
     assert hierarchy["critic"]["verdict"] == "skipped"
@@ -273,17 +286,18 @@ def test_explicitly_empty_critic_selection_cannot_fall_back_to_rejected_story(mo
 
 def test_hierarchy_saves_final_selection_and_the_exact_reviewed_input(monkeypatch, story):
     selection, candidates = story
-    segments = [{"id": f"s{i}", "start": row["start"], "end": row["end"]}
+    plan = verified_story_fixture(selection, candidates)
+    segments = [{"id": f"s{i}", "start": row["start"], "end": row["end"], "text": row["text"]}
                 for i, row in enumerate(candidates, 1)]
     monkeypatch.setattr(intelligence, "_ollama_inventory", lambda _settings: (True, {"fixture-model"}))
     monkeypatch.setattr(intelligence, "_summarize_story_chapters", lambda *_args: [{"id": "c001"}])
     monkeypatch.setattr(intelligence, "_build_global_outline", lambda *_args: {})
-    monkeypatch.setattr(intelligence, "_build_story_plan", lambda *_args: {"slots": []})
+    monkeypatch.setattr(intelligence, "_build_story_plan", lambda *_args: plan)
     monkeypatch.setattr(intelligence, "_select_story_beats", lambda *_args: (copy.deepcopy(selection), candidates))
     monkeypatch.setattr(intelligence, "_call_ollama_story_pass", lambda *_args: response(verdict="pass", issues=[]))
 
     decision, hierarchy = intelligence.hierarchical_story_edit(
-        candidates, segments, Settings(), {"goal": "short", "target_duration": 30},
+        candidates, segments, Settings(), {"goal": "short", "duration_mode": "style", "target_duration": 30},
     )
 
     assert hierarchy["selection"]["keep_beat_ids"] == decision["story_beat_ids"] == ["b1", "b3"]
