@@ -169,14 +169,16 @@ def test_focus_speaker_refinement_updates_the_explicit_semantic_camera_choice(mo
     captured = {}
     store = Store()
 
-    def fake_analyze(_context, _project_id, received_store, _settings, patch):
+    def fake_analyze(_context, _project_id, received_store, _settings, patch, *, source_mixer_patch=None):
         captured["project"] = received_store.load("project")
         captured["patch"] = patch
+        captured["source_mixer_patch"] = source_mixer_patch
         return {"ok": True}
 
     monkeypatch.setattr(director, "analyze_project", fake_analyze)
     assert director.refine_project(Context(), "project", store, object(), "focus_speaker") == {"ok": True}
-    assert captured["project"]["manual"]["source_mixer"]["default_layout"] == "camera"
+    assert captured["project"]["manual"]["source_mixer"]["default_layout"] == "stacked"
+    assert captured["source_mixer_patch"] == {"default_layout": "camera"}
     assert captured["patch"] == {}
 
     def failed_analyze(*_args, **_kwargs):

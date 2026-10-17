@@ -226,7 +226,8 @@ def test_hierarchical_story_pipeline_runs_chapters_outline_plan_selection_and_cr
                 candidate = next((beat["id"] for beat in beats if any(beat["id"] in chapter_lookup.get(ch, set()) for ch in allowed)), None)
                 if candidate is None:
                     candidate = beats[min(slot_index, len(beats)-1)]["id"]
-                selections.append({"slot_index": slot_index, "beat_ids": [candidate]})
+                selections.append({"slot_index": slot_index, "purpose": slot["purpose"], "primary_beat_ids": [candidate],
+                                   "context_beat_ids": [], "role_evidence": "The selected complete source idea supports " + slot["purpose"] + "."})
                 chosen.append(candidate)
             return {"slot_selections": selections, "highlight_beat_ids": chosen, "opening_beat_id": chosen[0], "closing_beat_id": chosen[-1], "title": "Story", "summary": "Coherent"}
         if "continuity critic" in system:
@@ -234,7 +235,7 @@ def test_hierarchical_story_pipeline_runs_chapters_outline_plan_selection_and_cr
         raise AssertionError(system)
 
     monkeypatch.setattr(intelligence, "_call_ollama_strict", fake_call)
-    editorial, engine = intelligence.plan_edit(rows, Dummy(), {"goal": "short", "target_duration": 60, "language": "en", "performance_mode": "balanced"})
+    editorial, engine = intelligence.plan_edit(rows, Dummy(), {"goal": "short", "target_duration": 100, "language": "en", "performance_mode": "balanced"})
     assert engine == "ollama_hierarchical_story"
     hierarchy = editorial["story_hierarchy"]
     assert hierarchy["chapter_count"] >= 3
@@ -485,7 +486,7 @@ def test_story_hierarchy_cache_reuses_chapters_and_outline(monkeypatch):
         "story_arc": [{"chapter_id": ch["id"], "function": "development", "why_it_matters": "cached"} for ch in chapters],
         "must_keep_chapter_ids": [], "optional_chapter_ids": [], "dependency_pairs": [],
     }
-    brief = {"goal": "short", "target_duration": 180, "language": "en", "performance_mode": "balanced"}
+    brief = {"goal": "short", "duration_mode": "style", "target_duration": 180, "language": "en", "performance_mode": "balanced"}
     cache = {
         "cache_fingerprint": intelligence.story_cache_fingerprint(enriched, brief, "qwen3.5:4b"),
         "cache_pipeline": intelligence.STORY_CACHE_PIPELINE,
@@ -497,7 +498,7 @@ def test_story_hierarchy_cache_reuses_chapters_and_outline(monkeypatch):
     monkeypatch.setattr(intelligence, "_summarize_story_chapters", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("chapter summaries should be cached")))
     monkeypatch.setattr(intelligence, "_build_global_outline", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("outline should be cached")))
 
-    def fake_plan(_settings, _summaries, _outline, _brief, _model, progress=None):
+    def fake_plan(_settings, _summaries, _outline, _brief, _model, progress=None, *_args):
         ids = [chapters[0]["id"], chapters[len(chapters)//2]["id"], chapters[-1]["id"]]
         return {"narrative": "cached hierarchy, new target plan", "slots": [
             {"purpose": "hook", "chapter_ids": [ids[0]], "desired_seconds": 15, "reason": "", "required_context_chapter_ids": []},
@@ -507,13 +508,18 @@ def test_story_hierarchy_cache_reuses_chapters_and_outline(monkeypatch):
 
     monkeypatch.setattr(intelligence, "_build_story_plan", fake_plan)
 
-    def fake_select(_settings, chapters_arg, summaries_arg, outline_arg, plan, brief, model, progress=None):
+    def fake_select(_settings, chapters_arg, summaries_arg, outline_arg, plan, brief, model, progress=None, *_args):
         candidates = intelligence._candidate_beats_for_plan(chapters_arg, plan)
-        chosen = [candidates[0]["id"], candidates[len(candidates)//2]["id"], candidates[-1]["id"]]
-        return {"keep_beat_ids": chosen, "highlight_beat_ids": chosen, "opening_beat_id": chosen[0], "closing_beat_id": chosen[-1], "title": "Cached story", "summary": ""}, candidates
+        chosen = [next(chapter["beats"][0]["id"] for chapter in chapters_arg if chapter["id"] in slot["chapter_ids"])
+                  for slot in plan["slots"]]
+        slot_map = [{"slot_index": index, "purpose": slot["purpose"], "primary_beat_ids": [identifier], "context_beat_ids": [],
+                     "beat_ids": [identifier], "role_evidence": "The selected complete source idea supports " + slot["purpose"] + "."}
+                    for index, (slot, identifier) in enumerate(zip(plan["slots"], chosen))]
+        return {"keep_beat_ids": chosen, "slot_map": slot_map, "semantic_mapping_verified": True,
+                "highlight_beat_ids": chosen, "opening_beat_id": chosen[0], "closing_beat_id": chosen[-1], "title": "Cached story", "summary": ""}, candidates
 
     monkeypatch.setattr(intelligence, "_select_story_beats", fake_select)
-    monkeypatch.setattr(intelligence, "_critic_story_selection", lambda _settings, selection, candidates, outline, plan, brief, model, progress=None: {**selection, "critic": {"verdict": "pass"}})
+    monkeypatch.setattr(intelligence, "_critic_story_selection", lambda _settings, selection, candidates, outline, plan, brief, model, progress=None, *_args: {**selection, "critic": {"verdict": "pass"}})
 
     decision, hierarchy = intelligence.hierarchical_story_edit(beats, enriched, Dummy(), brief, story_cache=cache)
     assert decision["story_ranges"]

@@ -201,8 +201,10 @@ def test_ai_story_producer_uses_the_selected_style_structure(monkeypatch, style_
 
     def respond(_settings, payload, *_args):
         captured.update(payload)
+        required_roles = json.loads(payload["messages"][1]["content"])["brief"]["style_profile"]["selection_policy"]["story_structure"]
         return {"narrative": "Complete moment", "slots": [
-            {"purpose": "complete moment", "chapter_ids": ["chapter"], "desired_seconds": 30},
+            {"purpose": role, "chapter_ids": ["chapter"], "desired_seconds": 30}
+            for role in required_roles
         ]}
 
     monkeypatch.setattr(intelligence, "_call_ollama_story_pass", respond)
