@@ -3,6 +3,8 @@
 Status: **NO-GO for promoting the current download. PR #89 remains draft.**
 This report separates historical release evidence from later source repairs and
 from the last bounded local acceptance experiment. Publication is not human QA.
+The initial audit below records the earlier `b6889a2` state; dated continuation
+sections record subsequent repairs and their distinct verification results.
 
 ## Claude handoff and published 1.2
 
@@ -68,9 +70,10 @@ The local branch `codex/cutroom-semantic-20261017` additionally contains:
 - `b6889a230127d410cf9cdda5d94dbdc193610cd2`: final choices show exact source wording
   plus the canonical reference. Exact dictionary lookup resolves the unchanged
   evidence IDs. No quote normalization, role reassignment or context promotion
-  rescues an invalid response. This is the last tested product source revision.
+  rescues an invalid response. This was the first audit's final product revision;
+  later tested revisions are recorded in the continuation sections below.
 
-At the final read-only PR refresh, remote PR #89 still pointed to `6be6d2e`.
+At the first audit's final read-only PR refresh, remote PR #89 pointed to `6be6d2e`.
 The subsequent product commits and this report remain local and have not been
 pushed. No additional native suites were started while editorial acceptance is
 blocked. The PR's existing CI results therefore cover its older remote head.
@@ -220,4 +223,110 @@ ASR sentence boundaries explicit, while retaining canonical attribution,
 primary/context meaning, chronology and every existing acceptance guard.
 The failed Hebrew response remains a failure. No package/pin or production
 change is qualified by this intermediate result; PR #89 remains draft.
+
+## Explicit primary anchors and fresh planning diagnosis (`842026b`)
+
+The next source revision, `842026bc426d172a3ba4e9450a3515e442b10a86`, removes
+redundant model choices: each purpose declares one primary anchor, optional
+additional primary quotations and required context quotations. The declared
+anchor is the temporal witness by contract. Exact canonical choices, ownership,
+chronology, ending-domain and complete-source guards remain mandatory. Full ASR
+utterances and their original timestamps accompany the unchanged quote catalog;
+no source is shortened or reconstructed. Both actual request estimates remain
+inside their existing context caps, including the 2,400-token output reserve.
+
+The final eight-module focused run passed **271 tests in 1.49 seconds**, with
+zero network attempts and all nine production-file hashes unchanged. One fresh
+final call per cached upstream case then ran against this frozen source:
+
+- English passed independent transcript review of both its selected dialogue and
+  complete source-excerpt summary, with substantive primary anchors. Its new
+  export fully decoded at **20.000 seconds / 600 frames**. The final call took
+  7.985 seconds. Canonical proof, source speech and exact commit binding passed.
+- Hebrew returned a strict `no_fit` in 4.266 seconds. No draft was applied and
+  the prior edit and exports stayed unchanged. Its allowed source still has a
+  38.57-second safe minimum for the 40-second target, so this is a model refusal,
+  not a demonstrated duration impossibility.
+
+These results are under private Temp root
+`cutroom-anchor-summary-eval-20261017-baecdb64`; focused verification is under
+`cutroom-anchor-timed-final-focused-20261017-251f794e`. English uses captured
+upstream planning, rather than proving a fresh end-to-end pipeline or listening
+acceptance. The later numeric-only guard does not change its request or result,
+but that earlier export is still bound to `842026b`, not a later source hash.
+
+A separate bounded audit then ran the five upstream Hebrew planning/critic calls
+fresh, using the same cached ASR and original source. It stopped before final
+inference or any draft application. The precision result omitted a required
+result role, needed local role recovery, and lacked its required source context.
+Planning also misinterpreted a negated technical phrase as named rival products.
+The critic removed the premise and retained only **24.82 seconds**, below the
+**36-second** minimum for this target. That changed selection also included a
+unit excluded by the original acceptance scope, so it cannot qualify that case.
+No rejected source was restored or approved automatically. These five calls took
+24.375 seconds; no ASR was rerun. Original projects, private clones and inherited
+exports stayed unchanged. Evidence is under
+`cutroom-fresh-planning-audit-20261017-aeec670c`.
+
+## Proven current-selection underfill (`33c3bb0`)
+
+Source `33c3bb0109d38126d49ee1ce54df85f00c1d3937` adds a conservative refusal
+before semantic inference only when a verified complete endpoint proof bounds
+all current critic-allowed source below the target's minimum duration. The
+diagnostic is `allowed_source_below_target_minimum`, scoped explicitly to
+`current_critic_allowed_source`; it does not claim the entire recording is too
+short. Unverified, incomplete, malformed or tolerance-boundary proofs cannot
+trigger that claim. Style-duration mode still has no target lower quota.
+
+The eight-module focused run passed **296 tests in 1.50 seconds**, with zero
+network attempts and all nine production-file hashes unchanged. Replaying the
+actual fresh-critic inputs without inference proves the **24.82 < 36** refusal
+with zero attempts. The original allowed 41.04-second source still reaches the
+trapped final-review boundary. This preserves the distinction between proven
+selection underfill and an unaccepted semantic result. Evidence is under
+`cutroom-proven-underfill-focused-20261017-8d8f64e3/final`.
+
+## Isolated Hebrew comprehension diagnostic and current decision
+
+A final private diagnostic split the original allowed Hebrew source into its
+two complete units. Aggregate coverage proved exact equality of all seven full
+ASR utterances and 29 canonical quote/choice rows, with the rejected unit absent.
+Each unit received one local classification call, without story roles or edit
+application. Both responses covered every quote, stopped normally (449 and 978
+output tokens) and preserved all nine source hashes plus original/prepared
+project guards. Exactly two loopback transports took 13.062 seconds total;
+there were no retries, ASR calls, downloads or outside-network connections.
+
+Independent inspection found a substantive negation failure even in the smaller
+request: the model labeled a qualified proposition as an assertion without its
+explicit preceding negation. It also treated an unfinished clause as an
+assertion. All 15 nonempty context lists in the later unit chose only the
+immediately preceding fragment, including irrelevant neighbors. Recognition of
+one available closing position was a narrow positive signal, not a valid story
+proposal or demonstrated understanding of its referent. Normal completion and
+valid JSON do not turn these outputs into semantic acceptance. The diagnostic
+does not prove context overload caused the earlier failures; its classifications
+were not integrated into production or used to rescue a story. Evidence is under
+`cutroom-source-unit-probe-20261017-d2553b10`, including `result-numeric.json` and
+`inspection-review.json`. Private source text stays outside the repository.
+
+**Current decision: no-go.** The summary/context overflow defects are repaired,
+and one English case passes source-bound editorial/encode checks. Hebrew still
+has no accepted four-role story under the original constraints. Fresh upstream
+planning also fails independently, before final review. The tested local Story
+model is `qwen3.5:4b`; the Ollama inventory reported no larger installed Story
+alternative. No new model was installed or downloaded. These
+bounded failures describe this tested model/source pipeline, not a proof that
+Hebrew or the full recording cannot be edited. Further progress needs a reliably
+validated Hebrew planning/comprehension result under the same source and quality
+constraints; no stronger model or manual substitution is assumed approved.
+
+The remaining release gates are a full regression run of the final accepted
+source, a matching reviewed Windows/combined candidate, successful native Mac
+candidate validation, and representative human listening/manual checks. The
+current public ZIPs still contain older code and are not qualified by these
+repairs. No new distributable ZIP, release pin, production website change or
+promotion was made. Human listening is an additional outstanding gate, not the
+explanation for the present model failure. NOVA tabs, files, servers and the
+reserved CUTROOM port were left alone.
 
