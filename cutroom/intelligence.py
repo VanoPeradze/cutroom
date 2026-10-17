@@ -22,10 +22,11 @@ from .config import Settings
 from .story_budget import StoryBudgetError, StoryPlanningError, story_duration_cost
 from .story_constraints import story_constraint_feasibility, story_final_ending_domain
 from .story_evidence import EVIDENCE_POLICY_VERSION, build_story_evidence_catalog, validate_story_evidence
+from .story_summary import SUMMARY_SOURCE, extractive_story_summary
 from .utils import clamp, merge_ranges, normalize_text, range_duration
 
-STORY_CACHE_PIPELINE = "hierarchical-story-2026-10-17.semantic-target-review-v9.verbatim-evidence-choices"
-CRITIC_REVIEW_CONTRACT = "critic-review-2026-10-17.semantic-target-review-v11.verbatim-evidence-choices"
+STORY_CACHE_PIPELINE = "hierarchical-story-2026-10-17.semantic-target-review-v10.shared-choice-domains"
+CRITIC_REVIEW_CONTRACT = "critic-review-2026-10-17.semantic-target-review-v12.shared-choice-domains"
 
 FILLERS: dict[str, set[str]] = {
     "en": {"um", "uh", "erm", "like", "basically", "actually", "literally", "you know", "i mean", "so"},
@@ -1751,9 +1752,8 @@ def _story_evidence_proof(
 
 
 def _extractive_story_summary(proof: dict[str, Any]) -> str:
-    """Display the actual cited words; model interpretations remain diagnostics."""
-    texts = list(dict.fromkeys(str(row.get("text") or "").strip() for row in proof.get("order_evidence", [])))
-    return " ".join(text for text in texts if text)[:500]
+    """Display complete cited source excerpts, including qualifying context."""
+    return extractive_story_summary(proof)
 
 
 def _story_units_complete(identifiers: list[str], candidates: list[dict[str, Any]], segments: list[dict[str, Any]]) -> bool:
@@ -1811,7 +1811,7 @@ def _verify_non_short_story_evidence(
     cost = _story_selection_cost(keep, candidates, segments, brief)
     output.update(slot_map=proof["slot_map"], semantic_mapping_verified=True, semantic_review_status="model_reviewed",
                   evidence_policy_version=EVIDENCE_POLICY_VERSION, evidence_proof=proof,
-                  summary=_extractive_story_summary(proof), summary_source="canonical_witness_quotes",
+                  summary=_extractive_story_summary(proof), summary_source=SUMMARY_SOURCE,
                   semantic_revision={"attempts": 0, "verdict": "fit", "released_optional_beat_ids": [],
                                      "policy_version": cost["policy_version"], "cost": cost,
                                      "duration_policy": "existing_non_short_policy"})
@@ -1952,7 +1952,7 @@ def _review_story_target_budget(
     if mapping_verified and critic_clean and cost["fits_target"] and cost["approved_seconds"] + .05 >= minimum_target:
         output.update(keep_beat_ids=current, slot_map=existing_map, semantic_mapping_verified=True,
                       evidence_policy_version=EVIDENCE_POLICY_VERSION, evidence_proof=existing_proof,
-                      summary=_extractive_story_summary(existing_proof), summary_source="canonical_witness_quotes",
+                      summary=_extractive_story_summary(existing_proof), summary_source=SUMMARY_SOURCE,
                       semantic_revision={"attempts": 0, "verdict": "fit", "released_optional_beat_ids": [],
                                          "policy_version": cost["policy_version"], "cost": cost,
                                          "reasoning": {**reasoning_policy, "request_attempted": False}},
@@ -1985,16 +1985,26 @@ def _review_story_target_budget(
                         if ending_domain["status"] == "verified" else set(allowed_ids))
     evidence_owners = {row["id"]: row["beat_id"] for row in catalog}
     release_ids = [value for value in current if value not in sticky and value not in rejected]
+    evidence_ids_by_chapter = {
+        str(chapter["id"]): [row["id"] for row in catalog if beat_chapters.get(row["beat_id"]) == str(chapter["id"])]
+        for chapter in chapters
+    }
     role_requirements = {slot["purpose"]: {
-        "allowed_primary_evidence_choices_by_chapter": {
-            str(chapter_id): [choice for choice, row in choice_catalog.items() if beat_chapters.get(row["beat_id"]) == str(chapter_id)]
-            for chapter_id in slot.get("chapter_ids", [])},
-        "required_context_evidence_choices_by_chapter": {
-            str(chapter_id): [choice for choice, row in choice_catalog.items() if beat_chapters.get(row["beat_id"]) == str(chapter_id)]
-            for chapter_id in slot.get("required_context_chapter_ids", [])},
+        "allowed_primary_chapter_ids": list(dict.fromkeys(str(value) for value in slot.get("chapter_ids", []))),
+        "required_context_chapter_ids": list(dict.fromkeys(str(value) for value in slot.get("required_context_chapter_ids", []))),
         "same_evidence_may_supply_primary_and_context": True,
     } for slot in plan["slots"]}
     revision_schema = copy.deepcopy(STORY_TARGET_REVISION_SCHEMA)
+    choice_definitions: dict[str, dict[str, Any]] = {}
+    choice_definition_names: dict[tuple[str, ...], str] = {}
+
+    def choice_reference(values: list[str]) -> dict[str, Any]:
+        domain = tuple(values)
+        if domain not in choice_definition_names:
+            name = f"choice_domain_{len(choice_definitions)}"
+            choice_definition_names[domain] = name
+            choice_definitions[name] = {"type": "string", "enum": list(values)}
+        return {"$ref": "#/$defs/" + choice_definition_names[domain]}
 
     def restricted_ids(values: list[str]) -> dict[str, Any]:
         return ({"type": "array", "uniqueItems": True, "items": {"type": "string", "enum": list(values)}}
@@ -2003,18 +2013,21 @@ def _review_story_target_budget(
     revision_schema["properties"]["keep_beat_ids"] = restricted_ids(allowed_ids)
     revision_schema["properties"]["released_optional_beat_ids"] = restricted_ids(release_ids)
     for purpose, requirement in role_requirements.items():
-        primary_ids = list(dict.fromkeys(value for values in requirement["allowed_primary_evidence_choices_by_chapter"].values() for value in values))
-        context_ids = list(dict.fromkeys(value for values in requirement["required_context_evidence_choices_by_chapter"].values() for value in values))
-        primary_schema, context_schema = restricted_ids(primary_ids), restricted_ids(context_ids)
+        primary_ids = [choice for choice, row in choice_catalog.items()
+                       if beat_chapters.get(row["beat_id"]) in requirement["allowed_primary_chapter_ids"]]
+        context_ids = [choice for choice, row in choice_catalog.items()
+                       if beat_chapters.get(row["beat_id"]) in requirement["required_context_chapter_ids"]]
+        primary_schema = {"type": "array", "uniqueItems": True, "items": choice_reference(primary_ids)} if primary_ids else restricted_ids([])
+        context_schema = {"type": "array", "uniqueItems": True, "items": choice_reference(context_ids)} if context_ids else restricted_ids([])
         if primary_ids:
             primary_schema["minItems"] = 1
         if context_ids:
-            context_schema["minItems"] = len(requirement["required_context_evidence_choices_by_chapter"])
+            context_schema["minItems"] = len(requirement["required_context_chapter_ids"])
         witness_ids = [value for value in primary_ids if purpose != purposes[-1] or choice_catalog[value]["beat_id"] in final_ending_ids]
         revision_schema["properties"]["role_selections"]["properties"][purpose] = {
             "type": "object", "additionalProperties": False,
             "properties": {"primary_evidence_choices": primary_schema, "context_evidence_choices": context_schema,
-                           "temporal_witness_choice": {"type": "string", "enum": witness_ids or [""]}},
+                           "temporal_witness_choice": choice_reference(witness_ids or [""])},
             "required": ["primary_evidence_choices", "context_evidence_choices", "temporal_witness_choice"],
         }
     complete_roles = revision_schema["properties"]["role_selections"]
@@ -2023,6 +2036,7 @@ def _review_story_target_budget(
         complete_roles,
         {"type": "object", "additionalProperties": False, "properties": {}, "maxProperties": 0},
     ]}
+    revision_schema["$defs"] = choice_definitions
     payload = {
         "model": model, "stream": False, "think": False, "format": revision_schema,
         "_performance_mode": mode, "_single_attempt": True,
@@ -2033,9 +2047,9 @@ def _review_story_target_budget(
             "Return fit only for a coherent, complete story whose exact source cost fits the target using the supplied pause policy. "
             "For fit, assign quotations to EVERY exact purpose key in role_requirements using role_selections. "
             "Select by the meaning of the verbatim wording FIRST, then copy its entire exact choice string including the bracketed canonical reference. "
-            "Choose primary_evidence_choices only from that purpose's allowed_primary_evidence_choices_by_chapter. "
+            "Choose primary_evidence_choices only from source_evidence_choices whose evidence_id belongs to that purpose's allowed_primary_chapter_ids in evidence_ids_by_chapter. "
             "Primary choices must express that role themselves; background context cannot replace primary support. "
-            "For EACH chapter in required_context_evidence_choices_by_chapter, choose at least one context_evidence_choice from that chapter's list. "
+            "For EACH chapter in required_context_chapter_ids, choose at least one context_evidence_choice whose evidence_id belongs to that chapter in evidence_ids_by_chapter. "
             "Required context needs explicit quotation choices even when primary and context use the SAME chapter. "
             "The SAME supplied choice may appear in both primary_evidence_choices and context_evidence_choices when allowed for both; "
             "this does not duplicate footage. Use context_evidence_choices=[] ONLY when the required-context table is empty. "
@@ -2066,6 +2080,7 @@ def _review_story_target_budget(
             "allowed_optional_release_beat_ids": release_ids,
             "release_rule": "released_optional_beat_ids = current_selected_beat_ids minus keep_beat_ids; already critic-removed IDs are excluded.",
             "role_requirements": role_requirements,
+            "evidence_ids_by_chapter": evidence_ids_by_chapter,
             "allowed_final_beat_ids": [value for value in allowed_ids if value in final_ending_ids],
             "current_cost": cost, "target_seconds": target, "minimum_target_seconds": round(minimum_target, 3),
             "constraint_feasibility": feasibility,
@@ -2158,7 +2173,7 @@ def _review_story_target_budget(
     output.update(keep_beat_ids=keep, slot_map=slot_map, semantic_mapping_verified=True,
                   semantic_review_status="model_reviewed",
                   evidence_policy_version=EVIDENCE_POLICY_VERSION, evidence_proof=evidence_proof,
-                  summary=_extractive_story_summary(evidence_proof), summary_source="canonical_witness_quotes",
+                  summary=_extractive_story_summary(evidence_proof), summary_source=SUMMARY_SOURCE,
                   opening_beat_id=keep[0], closing_beat_id=keep[-1],
                   highlight_beat_ids=[value for value in output.get("highlight_beat_ids", []) if value in keep],
                   recovered_slot_indexes=[], unresolved_plan_slot_indexes=[], unresolved_context_slot_indexes=[],
@@ -2660,7 +2675,7 @@ def _select_story_beats(
         clean["evidence_policy_version"] = EVIDENCE_POLICY_VERSION
         clean["evidence_proof"] = proof
         clean["summary"] = _extractive_story_summary(proof)
-        clean["summary_source"] = "canonical_witness_quotes"
+        clean["summary_source"] = SUMMARY_SOURCE
         # Precision evidence is provisional until the bounded model review;
         # attribution checks alone do not establish the narrative interpretation.
         clean["semantic_mapping_verified"] = False
@@ -2873,6 +2888,20 @@ def _story_decision_from_beats(result: dict[str, Any] | None, beats: list[dict[s
     title_reason = "model_suggestion" if isinstance(raw_title, str) and raw_title.strip() else "missing_title"
     if "title_beat_ids" in result and set(title_ids) != set(keep_beats):
         title, title_reason = "CUTROOM story", "selection_changed"
+    summary = str(result.get("summary") or "A coherent story selected from the full recording.")[:500]
+    summary_source = result.get("summary_source") or "unverified_interpretation"
+    if result.get("evidence_policy_version") == EVIDENCE_POLICY_VERSION:
+        try:
+            proof = validate_story_evidence(
+                result.get("slot_map"), beats, segments,
+                selected_beat_ids=keep_beats, rejected_beat_ids=rejected,
+            )
+            if proof != result.get("evidence_proof"):
+                return None
+            summary = _extractive_story_summary(proof)
+            summary_source = SUMMARY_SOURCE
+        except (ValueError, TypeError, KeyError):
+            return None
     return {
         "keep_ids": [identifier for identifier in all_segment_ids if identifier in selected_segment_ids],
         "remove_ids": [identifier for identifier in all_segment_ids if identifier not in selected_segment_ids],
@@ -2882,8 +2911,8 @@ def _story_decision_from_beats(result: dict[str, Any] | None, beats: list[dict[s
         "title": title,
         "title_review": {"status": "unverified", "reason": title_reason,
                          "selected_beat_ids": list(keep_beats), "title_beat_ids": title_ids},
-        "summary": str(result.get("summary") or "A coherent story selected from the full recording.")[:500],
-        "summary_source": result.get("summary_source") or "unverified_interpretation",
+        "summary": summary,
+        "summary_source": summary_source,
         "story_beat_ids": keep_beats,
         "story_requirements": {
             "required_beat_ids": list(keep_beats),

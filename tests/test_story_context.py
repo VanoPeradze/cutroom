@@ -102,6 +102,38 @@ def test_generic_strict_request_defaults_to_compact_non_thinking_output(monkeypa
     assert payload == original
 
 
+def test_shared_choice_references_preserve_all_fixed_source_and_constraints_at_transport(monkeypatch):
+    bodies = _capture_requests(monkeypatch)
+    choices = [f"Synthetic source phrase {index}. [b1:s1:f{index}]" for index in range(1, 13)]
+    content = {"brief": {"instruction": "Preserve every source phrase and required context."},
+               "source_units": [{"id": "b1", "segment_ids": ["s1"], "text": " ".join(choices)}],
+               "source_evidence": [{"id": f"b1:s1:f{index}", "text": f"Synthetic source phrase {index}."}
+                                   for index in range(1, 13)],
+               "source_evidence_choices": [{"choice": value, "evidence_id": f"b1:s1:f{index}"}
+                                           for index, value in enumerate(choices, 1)],
+               "evidence_ids_by_chapter": {"c1": [f"b1:s1:f{index}" for index in range(1, 13)]},
+               "role_requirements": {"premise": {"allowed_primary_chapter_ids": ["c1"],
+                                                   "required_context_chapter_ids": ["c1"]}},
+               "current_cost": {"minimum_safe_seconds": 18.5}, "target_seconds": 20}
+    payload = _payload(content, output=2400)
+    payload.update(think=False, _single_attempt=True)
+    payload["format"] = {"type": "object", "$defs": {"choice_domain_0": {"type": "string", "enum": choices}},
+                         "properties": {"primary_evidence_choices": {"type": "array", "minItems": 1,
+                                        "items": {"$ref": "#/$defs/choice_domain_0"}},
+                                        "temporal_witness_choice": {"$ref": "#/$defs/choice_domain_0"}}}
+    original = copy.deepcopy(payload)
+
+    assert intelligence._call_ollama_strict(Settings(), payload) == {"ok": True}
+
+    assert len(bodies) == 1
+    assert bodies[0]["format"] == original["format"]
+    assert bodies[0]["messages"] == original["messages"]
+    assert bodies[0]["options"]["num_predict"] == 2400
+    assert bodies[0]["think"] is False
+    assert intelligence._story_prompt_fits(bodies[0])
+    assert payload == original
+
+
 def test_single_thinking_attempt_exhaustion_fails_without_retry_or_input_mutation(monkeypatch):
     bodies = []
 

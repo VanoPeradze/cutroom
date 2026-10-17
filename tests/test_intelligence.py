@@ -19,9 +19,13 @@ def _final_evidence_response(payload):
     roles, keep = {}, set()
     by_id = {row["id"]: row for row in source["source_evidence"]}
     choice_to_id = {row["choice"]: row["evidence_id"] for row in source["source_evidence_choices"]}
+    id_to_choice = {row["evidence_id"]: row["choice"] for row in source["source_evidence_choices"]}
     for purpose, requirement in source["role_requirements"].items():
-        primary = [next(iter(requirement["allowed_primary_evidence_choices_by_chapter"].values()))[0]]
-        context = [values[0] for values in requirement["required_context_evidence_choices_by_chapter"].values()]
+        primary_ids = [source["evidence_ids_by_chapter"][requirement["allowed_primary_chapter_ids"][0]][0]]
+        context_ids = [source["evidence_ids_by_chapter"][chapter_id][0]
+                       for chapter_id in requirement["required_context_chapter_ids"]]
+        primary = [id_to_choice[identifier] for identifier in primary_ids]
+        context = [id_to_choice[identifier] for identifier in context_ids]
         roles[purpose] = {"primary_evidence_choices": primary, "context_evidence_choices": context,
                           "temporal_witness_choice": primary[0]}
         keep.update(by_id[choice_to_id[choice]]["beat_id"] for choice in primary + context)

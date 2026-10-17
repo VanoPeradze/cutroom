@@ -68,6 +68,24 @@ def role_proof(primary, context, beats, segments):
             "temporal_witness_choice": choices[0]}
 
 
+def resolved_schema(schema, node):
+    if isinstance(node, list):
+        return [resolved_schema(schema, value) for value in node]
+    if not isinstance(node, dict):
+        return node
+    if "$ref" in node:
+        assert set(node) == {"$ref"}
+        prefix = "#/$defs/"
+        assert node["$ref"].startswith(prefix)
+        name = node["$ref"][len(prefix):]
+        assert "/" not in name and name in schema["$defs"]
+        target = schema["$defs"][name]
+        assert set(target) == {"type", "enum"}
+        assert target["type"] == "string"
+        return copy.deepcopy(target)
+    return {key: resolved_schema(schema, value) for key, value in node.items()}
+
+
 def proposal(plan, assignments=("b2", "b2", "b3", "b4"), *, beats=None, segments=None):
     if beats is None or segments is None:
         _, beats, segments, _, _ = en_fixture()
@@ -421,13 +439,17 @@ def test_review_payload_distinguishes_current_ids_critic_removals_and_same_chapt
     assert "provisional_prior_slot_map" not in payload
     assert "slot_requirements" not in payload
     catalog = story_evidence.build_story_evidence_catalog(fixture[1], fixture[2], allowed_beat_ids={"b1", "b2", "b3"})
+    known_evidence_ids = [row["id"] for row in catalog]
     known_evidence_choices = [f'{row["text"]} [{row["id"]}]' for row in catalog]
     purposes = [slot["purpose"] for slot in fixture[-1]["slots"]]
+    assert payload["evidence_ids_by_chapter"] == {"c1": known_evidence_ids}
+    assert payload["source_evidence"] == catalog
+    assert payload["source_evidence_choices"] == [
+        {"choice": choice, "evidence_id": row["id"]} for choice, row in zip(known_evidence_choices, catalog)]
     assert set(payload["role_requirements"]) == set(purposes)
     for row in payload["role_requirements"].values():
-        assert row["allowed_primary_evidence_choices_by_chapter"] == {"c1": known_evidence_choices}
-        assert row["required_context_evidence_choices_by_chapter"] == {"c1": known_evidence_choices}
-        assert row["same_evidence_may_supply_primary_and_context"] is True
+        assert row == {"allowed_primary_chapter_ids": ["c1"], "required_context_chapter_ids": ["c1"],
+                       "same_evidence_may_supply_primary_and_context": True}
     schema = calls[0]["format"]
     assert set(schema["properties"]) == {"verdict", "keep_beat_ids", "released_optional_beat_ids", "role_selections"}
     assert schema["properties"]["keep_beat_ids"]["items"]["enum"] == ["b1", "b2", "b3"]
@@ -442,9 +464,12 @@ def test_review_payload_distinguishes_current_ids_critic_removals_and_same_chapt
         assert set(role["required"]) == set(role["properties"])
         assert role["additionalProperties"] is False
         for key in ("primary_evidence_choices", "context_evidence_choices"):
-            assert role["properties"][key]["items"]["enum"] == known_evidence_choices
+            field = role["properties"][key]
+            assert field["type"] == "array" and field["uniqueItems"] is True
+            assert field["minItems"] == 1
+            assert resolved_schema(schema, field["items"])["enum"] == known_evidence_choices
         expected_witnesses = [f'{row["text"]} [{row["id"]}]' for row in catalog if purpose != purposes[-1] or row["beat_id"] == "b3"]
-        assert role["properties"]["temporal_witness_choice"]["enum"] == expected_witnesses
+        assert resolved_schema(schema, role["properties"]["temporal_witness_choice"])["enum"] == expected_witnesses
     assert payload["allowed_final_beat_ids"] == ["b3"]
     assert result["semantic_revision"]["final_ending_domain"]["semantic_fit_verified"] is False
     assert intelligence.STORY_TARGET_REVISION_SCHEMA == original_schema
@@ -870,3 +895,110 @@ def test_final_choices_require_exact_allowed_quote_reference_strings(monkeypatch
     assert len(calls) == 1
     assert caught.value.diagnostic["reason"] == "invalid_semantic_mapping"
     assert caught.value.diagnostic["applied_to_timeline"] is False
+
+
+def test_shared_scalar_enum_refs_round_trip_exact_choices_and_the_same_v1_proof(monkeypatch):
+    fixture, reply = critic_removed_ending_fixture()
+    original_reply = copy.deepcopy(reply)
+    calls = []
+
+    result = review(monkeypatch, fixture, reply, calls)
+
+    assert len(calls) == 1
+    assert reply == original_reply
+    schema = calls[0]["format"]
+    definitions = schema["$defs"]
+    assert len(definitions) == 2
+    assert all(name.startswith("choice_domain_") and name.removeprefix("choice_domain_").isdigit()
+               for name in definitions)
+    domains = [tuple(definition["enum"]) for definition in definitions.values()]
+    assert len(domains) == len(set(domains))
+    assert set(domains) == {
+        tuple(evidence_choices(fixture[1], fixture[2], ["b1", "b2", "b3"])),
+        tuple(evidence_choices(fixture[1], fixture[2], ["b3"])),
+    }
+    role_schema = schema["properties"]["role_selections"]
+    expanded_roles = resolved_schema(schema, role_schema)
+    roles = role_schema["anyOf"][0]["properties"]
+    primary_ref = roles["premise"]["properties"]["primary_evidence_choices"]["items"]["$ref"]
+    for role in roles.values():
+        for key in ("primary_evidence_choices", "context_evidence_choices"):
+            assert role["properties"][key]["items"] == {"$ref": primary_ref}
+    assert roles["premise"]["properties"]["temporal_witness_choice"] == {"$ref": primary_ref}
+    assert roles["result"]["properties"]["temporal_witness_choice"] != {"$ref": primary_ref}
+    flat_schema = copy.deepcopy(schema)
+    flat_schema.pop("$defs")
+    flat_schema["properties"]["role_selections"] = expanded_roles
+    assert len(json.dumps(schema)) < len(json.dumps(flat_schema))
+    expected_rows = [slot_proof(index, slot["purpose"], [identifier], [identifier], fixture[1], fixture[2])
+                     for index, (slot, identifier) in enumerate(zip(fixture[-1]["slots"], ("b1", "b2", "b3", "b3")))]
+    expected_proof = story_evidence.validate_story_evidence(expected_rows, fixture[1], fixture[2],
+                                                           selected_beat_ids=["b1", "b2", "b3"], rejected_beat_ids=["b4"])
+    assert result["evidence_proof"] == expected_proof
+    assert result["slot_map"] == expected_proof["slot_map"]
+
+
+def test_shared_enum_refs_preserve_each_role_domain_and_array_constraints(monkeypatch):
+    fixture = list(en_fixture())
+    fixture[3] = [{"id": f"c{index}", "beats": [beat]} for index, beat in enumerate(fixture[1], 1)]
+    fixture[4] = {"slots": [{"purpose": "result", "chapter_ids": ["c4"],
+                              "required_context_chapter_ids": ["c2", "c3"]}]}
+    reply = {"verdict": "fit", "keep_beat_ids": ["b2", "b3", "b4"], "released_optional_beat_ids": ["b1"],
+             "role_selections": {"result": role_proof(["b4"], ["b2", "b3"], fixture[1], fixture[2])}}
+    calls = []
+
+    result = review(monkeypatch, fixture, reply, calls)
+
+    assert len(calls) == 1
+    schema = calls[0]["format"]
+    fields = schema["properties"]["role_selections"]["anyOf"][0]["properties"]["result"]["properties"]
+    assert fields["primary_evidence_choices"]["minItems"] == 1
+    assert fields["context_evidence_choices"]["minItems"] == 2
+    assert fields["primary_evidence_choices"]["uniqueItems"] is True
+    assert fields["context_evidence_choices"]["uniqueItems"] is True
+    assert resolved_schema(schema, fields["primary_evidence_choices"]["items"])["enum"] == evidence_choices(fixture[1], fixture[2], ["b4"])
+    assert resolved_schema(schema, fields["context_evidence_choices"]["items"])["enum"] == evidence_choices(fixture[1], fixture[2], ["b2", "b3"])
+    assert fields["temporal_witness_choice"] == fields["primary_evidence_choices"]["items"]
+    assert len(schema["$defs"]) == 2
+    assert result["slot_map"][0]["primary_beat_ids"] == ["b4"]
+    assert result["slot_map"][0]["context_beat_ids"] == ["b2", "b3"]
+
+
+def test_empty_context_domain_uses_an_empty_array_without_enum_or_ref(monkeypatch):
+    fixture = list(en_fixture())
+    fixture[0] = {"keep_beat_ids": ["b1"], "slot_map": [], "critic": {}}
+    fixture[4] = {"slots": [{"purpose": "premise", "chapter_ids": ["c1"], "required_context_chapter_ids": []}]}
+    reply = {"verdict": "fit", "keep_beat_ids": ["b1"], "released_optional_beat_ids": [],
+             "role_selections": {"premise": role_proof(["b1"], [], fixture[1], fixture[2])}}
+    calls = []
+
+    result = review(monkeypatch, fixture, reply, calls, duration_mode="style")
+
+    assert len(calls) == 1
+    schema = calls[0]["format"]
+    fields = schema["properties"]["role_selections"]["anyOf"][0]["properties"]["premise"]["properties"]
+    context = fields["context_evidence_choices"]
+    assert context["type"] == "array" and context["maxItems"] == 0
+    assert context["items"] == {"type": "string"}
+    assert "enum" not in json.dumps(context) and "$ref" not in json.dumps(context)
+    assert result["slot_map"][0]["context_evidence_ids"] == []
+
+
+def test_compact_chapter_domains_preserve_string_coercion_and_unique_context_groups(monkeypatch):
+    fixture = en_fixture()
+    fixture[3][0]["id"] = 1
+    for slot in fixture[-1]["slots"]:
+        slot.update(chapter_ids=[1, 1], required_context_chapter_ids=[1, 1])
+    calls = []
+
+    result = review(monkeypatch, fixture, proposal(fixture[-1]), calls)
+
+    assert len(calls) == 1
+    content = json.loads(calls[0]["messages"][1]["content"])
+    assert set(content["evidence_ids_by_chapter"]) == {"1"}
+    for requirement in content["role_requirements"].values():
+        assert requirement["allowed_primary_chapter_ids"] == ["1"]
+        assert requirement["required_context_chapter_ids"] == ["1"]
+    roles = calls[0]["format"]["properties"]["role_selections"]["anyOf"][0]["properties"]
+    assert all(role["properties"]["context_evidence_choices"]["minItems"] == 1 for role in roles.values())
+    assert result["semantic_mapping_verified"] is True
