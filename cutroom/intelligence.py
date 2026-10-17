@@ -24,8 +24,8 @@ from .story_constraints import story_constraint_feasibility
 from .story_evidence import EVIDENCE_POLICY_VERSION, build_story_evidence_catalog, validate_story_evidence
 from .utils import clamp, merge_ranges, normalize_text, range_duration
 
-STORY_CACHE_PIPELINE = "hierarchical-story-2026-10-17.semantic-target-review-v6.bounded-final-reasoning"
-CRITIC_REVIEW_CONTRACT = "critic-review-2026-10-17.semantic-target-review-v8.bounded-final-reasoning"
+STORY_CACHE_PIPELINE = "hierarchical-story-2026-10-17.semantic-target-review-v7.bounded-final-reasoning-6144"
+CRITIC_REVIEW_CONTRACT = "critic-review-2026-10-17.semantic-target-review-v9.bounded-final-reasoning-6144"
 
 FILLERS: dict[str, set[str]] = {
     "en": {"um", "uh", "erm", "like", "basically", "actually", "literally", "you know", "i mean", "so"},
@@ -321,6 +321,10 @@ def compact_segments_for_llm(segments: list[dict[str, Any]], limit: int) -> list
 
 class StoryAIUnavailableError(RuntimeError):
     """A semantic edit was requested but the local Story AI is not ready."""
+
+
+class StoryResponseLimitError(StoryPlanningError):
+    """The bounded local response ended before a complete JSON answer."""
 
 
 class _InvalidStorySelectionError(StoryPlanningError):
@@ -983,6 +987,11 @@ def _call_ollama_strict(
                     " Keep the retry concise: use short strings while preserving every supplied identifier or object the prompt explicitly requires."
                 )
             continue
+    _check_cancelled(cancel_check)
+    if last_reason == "length":
+        raise StoryResponseLimitError(
+            "Story AI reached its output budget before returning a complete JSON response."
+        ) from last_json_error
     if last_message.get("content"):
         raise StoryPlanningError("Story AI returned invalid JSON." if single_attempt
                                  else "Story AI returned invalid JSON after an automatic retry.") from last_json_error
@@ -1823,7 +1832,7 @@ def _story_target_reasoning_policy(settings: Settings, model: str) -> dict[str, 
     family = str(model).strip().rsplit("/", 1)[-1].split(":", 1)[0].lower()
     bounded = not enabled(settings) and family == "qwen3.5"
     return {"mode": "bounded_local_qwen35" if bounded else "compact", "think": bounded,
-            "num_predict": 4096 if bounded else 2400, "max_attempts": 1, "timeout_seconds": 240}
+            "num_predict": 6144 if bounded else 2400, "max_attempts": 1, "timeout_seconds": 240}
 
 
 def _review_story_target_budget(
@@ -1863,7 +1872,9 @@ def _review_story_target_budget(
             diagnostic["constraint_feasibility"] = copy.deepcopy(feasibility)
         if proposed_cost is not None:
             diagnostic["proposed_revision_cost"] = {**copy.deepcopy(proposed_cost), "scope": "proposed_semantic_revision"}
-        message = "Story AI could not validate a coherent story within the requested target. "
+        message = ("Story AI could not complete the single semantic review. "
+                   if reason == "semantic_revision_output_limit"
+                   else "Story AI could not validate a coherent story within the requested target. ")
         if reason == "target_infeasible" and feasibility is not None:
             message += (f"Allowed complete source constraints require at least {feasibility['optimistic_lower_bound_seconds']:.2f} "
                         f"seconds of protected source material. The current required selection has a policy minimum of "
@@ -2032,6 +2043,11 @@ def _review_story_target_budget(
     }
     if reasoning_policy["think"]:
         payload["think"] = True
+        payload["messages"][0]["content"] += (
+            " Keep deliberation brief: read the source once, assign roles in actual playback order, "
+            "then perform one constraint check. Use the provided numeric cost reports instead of "
+            "recalculating source timings. Reserve enough of the fixed output budget for the complete JSON answer."
+        )
     cancellation_error: list[BaseException] = []
 
     def checked_cancel() -> None:
@@ -2048,6 +2064,8 @@ def _review_story_target_budget(
         from .jobs import JobCancelled
         if cancellation_error or isinstance(exc, JobCancelled):
             raise
+        if isinstance(exc, StoryResponseLimitError):
+            fail("semantic_revision_output_limit", "The model used its bounded response budget before producing complete JSON. Story approval remains unfinished; the numeric source-cost report is unchanged.")
         if isinstance(exc, StoryPlanningError) and "context budget" in str(exc):
             fail("semantic_revision_context_limit", "Complete source evidence exceeds the supported local context budget. Reduce the source scope before retrying.")
         fail("semantic_revision_failed", "The single semantic review failed; review the source or story plan before retrying.")

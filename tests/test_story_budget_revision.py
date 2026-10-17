@@ -648,10 +648,15 @@ def test_final_reasoning_is_bounded_and_only_enabled_for_local_standard_qwen35(m
     assert calls[0].get("think", False) is thinking
     if not thinking:
         assert "think" not in calls[0]  # Preserve existing compact/cloud wire behavior.
-    assert calls[0]["options"]["num_predict"] == (4096 if thinking else 2400)
+    assert calls[0]["options"]["num_predict"] == (6144 if thinking else 2400)
+    instruction = calls[0]["messages"][0]["content"]
+    assert ("Keep deliberation brief" in instruction) is thinking
+    if thinking:
+        assert "provided numeric cost reports" in instruction
+        assert "complete JSON answer" in instruction
     assert revised["semantic_revision"]["reasoning"] == {
         "mode": "bounded_local_qwen35" if thinking else "compact", "think": thinking,
-        "num_predict": 4096 if thinking else 2400, "max_attempts": 1,
+        "num_predict": 6144 if thinking else 2400, "max_attempts": 1,
         "timeout_seconds": 240, "request_attempted": True,
     }
     assert revised["semantic_revision"]["attempts"] == 1
@@ -680,7 +685,7 @@ def test_bounded_reasoning_failure_records_budget_without_retry_or_selection_mut
     diagnostic = caught.value.diagnostic
     assert diagnostic["applied_to_timeline"] is False
     assert diagnostic["semantic_revision"]["attempts"] == 1
-    assert diagnostic["semantic_revision"]["reasoning"]["num_predict"] == 4096
+    assert diagnostic["semantic_revision"]["reasoning"]["num_predict"] == 6144
     assert diagnostic["semantic_revision"]["reasoning"]["request_attempted"] is True
 
 
@@ -694,3 +699,33 @@ def test_already_reviewed_selection_records_no_reasoning_request(monkeypatch):
     )
     assert revised["semantic_revision"]["attempts"] == 0
     assert revised["semantic_revision"]["reasoning"]["request_attempted"] is False
+
+
+def test_final_output_limit_is_typed_separately_from_source_duration_or_no_fit(monkeypatch):
+    fixture, _reply = critic_removed_ending_fixture()
+    original = copy.deepcopy(fixture)
+    calls = []
+
+    def fail(_settings, payload, timeout, _cancel):
+        calls.append(copy.deepcopy(payload))
+        raise intelligence.StoryResponseLimitError("Bounded response ended before complete JSON.")
+
+    monkeypatch.setattr(intelligence, "_call_ollama_story_pass", fail)
+    with pytest.raises(intelligence.StoryBudgetError) as caught:
+        intelligence._review_story_target_budget(
+            Settings(), *fixture[:4], {}, fixture[-1],
+            {"goal": "short", "duration_mode": "target", "target_duration": 20}, "qwen3.5:4b",
+        )
+
+    assert fixture == original
+    assert len(calls) == 1
+    diagnostic = caught.value.diagnostic
+    assert diagnostic["reason"] == "semantic_revision_output_limit"
+    assert diagnostic["applied_to_timeline"] is False
+    assert diagnostic["required_policy_minimum_seconds"] < 20
+    assert diagnostic["constraint_feasibility"]["status"] == "duration_fit_but_semantics_unverified"
+    assert diagnostic["semantic_revision"]["attempts"] == 1
+    assert diagnostic["semantic_revision"]["reasoning"]["num_predict"] == 6144
+    assert "bounded response budget" in str(caught.value)
+    assert "needs at least" not in str(caught.value)
+    assert "No new draft was applied" in str(caught.value)

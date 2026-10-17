@@ -77,7 +77,7 @@ def test_budget_revision_single_attempt_does_not_retry_malformed_json(monkeypatc
 
 def test_explicit_thinking_single_attempt_preserves_its_output_budget_and_input(monkeypatch):
     bodies = _capture_requests(monkeypatch)
-    payload = _payload({"brief": {"target_duration": 20}}, output=4096)
+    payload = _payload({"brief": {"target_duration": 20}}, output=6144)
     payload.update(think=True, _single_attempt=True)
     original = copy.deepcopy(payload)
 
@@ -85,7 +85,7 @@ def test_explicit_thinking_single_attempt_preserves_its_output_budget_and_input(
 
     assert len(bodies) == 1
     assert bodies[0]["think"] is True
-    assert bodies[0]["options"]["num_predict"] == 4096
+    assert bodies[0]["options"]["num_predict"] == 6144
     assert "_single_attempt" not in bodies[0]
     assert payload == original
 
@@ -121,16 +121,58 @@ def test_single_thinking_attempt_exhaustion_fails_without_retry_or_input_mutatio
         return Response()
 
     monkeypatch.setattr(intelligence, "open_ollama", fake_urlopen)
-    payload = _payload({"brief": {"target_duration": 20}}, output=4096)
+    payload = _payload({"brief": {"target_duration": 20}}, output=6144)
     payload.update(think=True, _single_attempt=True)
     original = copy.deepcopy(payload)
 
-    with pytest.raises(intelligence.StoryPlanningError, match="output budget"):
+    with pytest.raises(intelligence.StoryResponseLimitError, match="output budget"):
         intelligence._call_ollama_strict(Settings(), payload)
 
     assert len(bodies) == 1
     assert bodies[0]["think"] is True
-    assert bodies[0]["options"]["num_predict"] == 4096
+    assert bodies[0]["options"]["num_predict"] == 6144
+    assert payload == original
+
+
+@pytest.mark.parametrize("last_reason", ["length", "stop"])
+def test_truncated_response_classification_preserves_the_existing_two_attempt_limit(monkeypatch, last_reason):
+    bodies = []
+    responses = [
+        {"message": {"content": '{"cut_off":'}, "done_reason": "length"},
+        {"message": {"content": '{"still_cut_off":'}, "done_reason": last_reason},
+    ]
+
+    class Response:
+        def __init__(self, body):
+            self.body = body
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def read(self, limit):
+            return json.dumps(self.body).encode("utf-8")
+
+    def fake_urlopen(request, timeout=0):
+        bodies.append(json.loads(request.data.decode("utf-8")))
+        return Response(responses[len(bodies) - 1])
+
+    monkeypatch.setattr(intelligence, "open_ollama", fake_urlopen)
+    payload = _payload({"brief": {"target_duration": 20}})
+    original = copy.deepcopy(payload)
+
+    with pytest.raises(intelligence.StoryPlanningError) as caught:
+        intelligence._call_ollama_strict(Settings(), payload)
+
+    assert len(bodies) == 2
+    assert bodies[0]["options"]["num_predict"] == 1200
+    assert bodies[1]["options"]["num_predict"] == 2400
+    if last_reason == "length":
+        assert isinstance(caught.value, intelligence.StoryResponseLimitError)
+    else:
+        assert type(caught.value) is intelligence.StoryPlanningError
     assert payload == original
 
 
@@ -169,7 +211,7 @@ def test_single_thinking_attempt_preserves_cancellation_while_streaming(monkeypa
             raise cancellation
 
     monkeypatch.setattr(intelligence, "open_ollama", fake_urlopen)
-    payload = _payload({"brief": {"target_duration": 20}}, output=4096)
+    payload = _payload({"brief": {"target_duration": 20}}, output=6144)
     payload.update(think=True, _single_attempt=True)
     original = copy.deepcopy(payload)
 
@@ -180,7 +222,55 @@ def test_single_thinking_attempt_preserves_cancellation_while_streaming(monkeypa
     assert len(bodies) == 1
     assert bodies[0]["think"] is True
     assert bodies[0]["stream"] is True
+    assert bodies[0]["options"]["num_predict"] == 6144
     assert state["closed"] is True
+    assert payload == original
+
+
+def _canonical_thinking_evidence():
+    text = "BEGIN " + "canonical source wording " * 100 + " MIDDLE " + "ending source wording " * 60 + " END."
+    evidence = [{"id": f"b1:s1:f{index + 1}", "beat_id": "b1", "segment_id": "s1",
+                 "text": text[start:start + 150], "start": 0.0, "end": 20.0,
+                 "char_start": start, "char_end": min(start + 150, len(text))}
+                for index, start in enumerate(range(0, len(text), 150))]
+    return {"brief": {"target_duration": 20},
+            "source_units": [{"id": "b1", "start": 0.0, "end": 20.0, "segment_ids": ["s1"], "text": text,
+                              "segments": [{"id": "s1", "start": 0.0, "end": 20.0, "text": text}]}],
+            "source_evidence": evidence}
+
+
+@pytest.mark.parametrize("mode", ["balanced", "auto"])
+def test_6144_thinking_reservation_preserves_complete_canonical_source_at_transport(monkeypatch, mode):
+    bodies = _capture_requests(monkeypatch)
+    content = _canonical_thinking_evidence()
+    payload = _payload(content, mode=mode, output=6144)
+    payload.update(think=True, _single_attempt=True)
+    original = copy.deepcopy(payload)
+    assert intelligence._story_prompt_tokens(payload) + 6144 > 8192
+
+    assert intelligence._call_ollama_strict(Settings(), payload) == {"ok": True}
+
+    assert len(bodies) == 1
+    sent = bodies[0]
+    assert sent["think"] is True
+    assert sent["options"]["num_predict"] == 6144
+    assert sent["options"]["num_ctx"] > 8192
+    assert intelligence._story_prompt_fits(sent)
+    assert json.loads(sent["messages"][1]["content"]) == content
+    assert payload == original
+
+
+def test_lite_rejects_fixed_canonical_evidence_plus_6144_reserve_before_network(monkeypatch):
+    bodies = _capture_requests(monkeypatch)
+    payload = _payload(_canonical_thinking_evidence(), mode="lite", output=6144)
+    payload.update(think=True, _single_attempt=True)
+    original = copy.deepcopy(payload)
+    assert intelligence._story_prompt_tokens(payload) + 6144 > 8192
+
+    with pytest.raises(intelligence.StoryPlanningError, match="estimated local context budget"):
+        intelligence._call_ollama_strict(Settings(), payload)
+
+    assert bodies == []
     assert payload == original
 
 
