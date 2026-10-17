@@ -220,6 +220,35 @@ test('completion wording names a nonverbal or basic cleanup fallback instead of 
   assert.equal(f.ui.directorCompletionNotice({...f.job(),project_id:'other'}).message,'Your first edit is ready','an unrelated job does not use the current project fallback');
 });
 
+test('extractive rough cuts remain review notices for current results and preserved manual timelines',()=>{
+  for(const marker of [
+    {engine:'chronological_extractive_rough_cut'},
+    {engine:'other',editorial_authority:'extractive_rough_cut'},
+    {engine:'other',quality_review:{warnings:[{type:'extractive_rough_cut',message:'Original planning failed.'}]}},
+  ]){
+    const f=directorFixture();Object.assign(f.ui.state.dictionary,{extractiveRoughCutReady:'Extractive rough cut; review the original utterances.',draftReady:'Your first edit is ready'});
+    f.ui.state.project.draft={...marker,review_required:true,generative_approved:false};
+    const before=JSON.stringify(f.ui.state.project);
+    assert.deepEqual(plain(f.ui.directorCompletionNotice(f.job())),{message:'Extractive rough cut; review the original utterances.',kind:'info'});
+    assert.match(f.ui.directorCompletionNotice(f.job(),true).message,/manual timeline kept.*Extractive rough cut/);
+    assert.equal(f.ui.directorCompletionNotice({...f.job(),project_id:'other'}).message,'Your first edit is ready');
+    const stale={...f.job(),result:{...f.job().result,draft:{engine:'old'}}};
+    assert.equal(f.ui.directorCompletionNotice(stale).kind,'success','an older result cannot inherit this draft warning');
+    assert.equal(JSON.stringify(f.ui.state.project),before);assert.equal(f.calls.length,0);
+  }
+});
+
+test('extractive warning remains visible after reload even without a generated story summary',()=>{
+  const f=directorFixture();Object.assign(f.ui.state.dictionary,{extractiveRoughCutWarning:'Extractive rough cut for review; story interpretation is unverified.'});
+  f.ui.elements.draftWarning=f.get('draftWarning');f.ui.elements.draftWarningText=f.get('draftWarningText');
+  f.ui.state.project.draft={engine:'chronological_extractive_rough_cut',editorial_authority:'extractive_rough_cut',summary:'Source utterances only'};
+  const before=JSON.stringify(f.ui.state.project);f.ui.renderDraftWarning();
+  assert.equal(f.get('draftWarning').hidden,false);assert.match(f.get('draftWarningText').textContent,/Extractive rough cut.*unverified/);
+  assert.equal(JSON.stringify(f.ui.state.project),before);assert.equal(f.calls.length,0);
+  f.ui.state.project.draft={engine:'ollama_hierarchical_story'};f.ui.renderDraftWarning();
+  assert.equal(f.get('draftWarning').hidden,true);
+});
+
 test('target shortfall completion reports the supported duration instead of a success claim',()=>{
   for(const selected of [6,8.39]){
     const f=directorFixture();Object.assign(f.ui.state.dictionary,{draftReady:'Your first edit is ready',durationTargetLimitedReady:'Only {selected}s of the requested {requested}s is supported. Review the selection.'});

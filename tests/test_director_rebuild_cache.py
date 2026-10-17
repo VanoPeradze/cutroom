@@ -13,6 +13,10 @@ from cutroom.jobs import Job, JobContext
 from cutroom.projects import ProjectStore
 from cutroom.story_budget import POLICY_VERSION
 from cutroom.story_evidence import EVIDENCE_POLICY_VERSION, build_story_evidence_catalog, validate_story_evidence
+from cutroom.story_spans import (
+    SOURCE_SPAN_POLICY_VERSION, SOURCE_SPAN_SUMMARY_SOURCE, build_source_span_constraints,
+    whole_utterance_story_summary,
+)
 from cutroom.vision import VISION_ANALYSIS_VERSION
 
 
@@ -167,7 +171,7 @@ def _required_story_editorial(rows):
     return _attach_source_proof(editorial)
 
 
-def _attach_source_proof(editorial):
+def _attach_source_proof(editorial, *, attach_spans=True):
     requirements = editorial["decision"]["story_requirements"]
     catalog = build_story_evidence_catalog(editorial["story_beats"], editorial["segments"])
     for row in requirements["slot_map"]:
@@ -179,16 +183,54 @@ def _attach_source_proof(editorial):
                                     selected_beat_ids=requirements["required_beat_ids"])
     requirements.update(evidence_policy_version=EVIDENCE_POLICY_VERSION,
                         evidence_proof=proof, slot_map=copy.deepcopy(proof["slot_map"]))
+    if attach_spans:
+        _attach_source_spans(editorial)
     return editorial
+
+
+def _attach_source_spans(editorial):
+    decision = editorial["decision"]
+    requirements = decision["story_requirements"]
+    candidates = director._source_story_candidates(decision, editorial["segments"])
+    rejected = decision.get("rejected_beat_ids") or []
+    proof = build_source_span_constraints(candidates, editorial["segments"],
+        selected_beat_ids=requirements["required_beat_ids"], rejected_beat_ids=rejected)
+    requirements.update(source_span_policy_version=SOURCE_SPAN_POLICY_VERSION,
+                        source_span_constraints=proof)
+    decision.update(summary=whole_utterance_story_summary(proof), summary_source=SOURCE_SPAN_SUMMARY_SOURCE)
+
+
+def _complete_rejected_fixture_source(editorial):
+    """Give declared synthetic rejected intervals actual canonical ASR ownership."""
+    decision = editorial["decision"]
+    rejected_ids = list(decision.get("rejected_beat_ids") or [])
+    for index, passage in enumerate(decision.get("rejected_story_ranges") or []):
+        identifier = passage.get("beat_id") or (rejected_ids[index] if index < len(rejected_ids)
+                                                else f"rejected_fixture_{index}")
+        passage["beat_id"] = identifier
+        if identifier not in rejected_ids:
+            rejected_ids.append(identifier)
+        if not any(row["start"] == passage["start"] and row["end"] == passage["end"]
+                   for row in editorial["segments"]):
+            editorial["segments"].append({"id": f"source_{identifier}", "start": passage["start"],
+                                          "end": passage["end"], "words": [],
+                                          "text": "This canonical synthetic source passage was rejected."})
+    if rejected_ids:
+        decision["rejected_beat_ids"] = rejected_ids
+    editorial["segments"].sort(key=lambda row: (row["start"], row["end"], row["id"]))
 
 
 def _install_story_editorial(monkeypatch, store, project_id, editorial, engine="fixture_story"):
     """Give the test actual synthetic ASR, then a separately copied planner result."""
+    _complete_rejected_fixture_source(editorial)
     source_segments = copy.deepcopy(editorial["segments"])
     transcript = {"language": "en", "language_probability": .99,
                   "duration": float(store.load(project_id)["sources"]["A"]["duration"]),
                   "segments": source_segments, "text": " ".join(row["text"] for row in source_segments),
                   "words": [word for row in source_segments for word in row.get("words") or []]}
+    transcript, _changed = director._normalize_transcript(transcript, "en", transcript["duration"])
+    editorial["segments"] = copy.deepcopy(transcript["segments"])
+    _attach_source_spans(editorial)
     if isinstance(store.load(project_id).get("analysis"), dict):
         store.update(project_id, lambda current: current["analysis"].update({"transcript": copy.deepcopy(transcript)}))
     monkeypatch.setattr(director, "_transcribe_safely", lambda *_a, **_k: (copy.deepcopy(transcript), None))
@@ -373,7 +415,9 @@ def test_planner_fabricated_source_cannot_replace_canonical_asr(semantic_project
         editorial["segments"][0]["text"] = "A fabricated award claim absent from the actual source."
     else:
         editorial["segments"][0].update(start=1, end=5)
-    _attach_source_proof(editorial)
+    # Retain the original whole-ASR sidecar while forging only the planner's
+    # fine quotation proof, so the Director must compare it with actual ASR.
+    _attach_source_proof(editorial, attach_spans=False)
     before = store.state_path(project_id).read_bytes()
 
     with pytest.raises(StoryBudgetError) as failure:
@@ -430,7 +474,8 @@ def test_final_cited_word_loss_is_refused_atomically(semantic_project, monkeypat
     with pytest.raises(StoryBudgetError) as failure:
         director.analyze_project(context(), project_id, store, settings, {"instruction": "Preserve cited words"})
 
-    assert "omit cited source speech" in failure.value.diagnostic["source_evidence_error"]
+    assert "mandatory whole-utterance source speech" in failure.value.diagnostic["source_evidence_error"]
+    assert failure.value.diagnostic["missing_required_beat_ids"] == ["approved"]
     assert failure.value.diagnostic["applied_to_timeline"] is False
     assert store.state_path(project_id).read_bytes() == before
 
@@ -706,6 +751,7 @@ def test_complete_27_second_story_fits_20_seconds_without_losing_speech(semantic
     for segment, timings in zip(editorial["segments"], words):
         segment["words"] = [{"start": start, "end": end, "word": f"word{index}"}
                             for index, (start, end) in enumerate(timings)]
+        segment["words"][-1]["word"] += "."
         segment["text"] = " ".join(row["word"] for row in segment["words"])
     _attach_source_proof(editorial)
     _install_story_editorial(monkeypatch, store, project_id, editorial, "ollama_hierarchical_story")

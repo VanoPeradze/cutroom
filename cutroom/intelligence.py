@@ -23,10 +23,16 @@ from .story_budget import StoryBudgetError, StoryPlanningError, story_duration_c
 from .story_constraints import story_constraint_feasibility, story_final_ending_domain
 from .story_evidence import EVIDENCE_POLICY_VERSION, build_story_evidence_catalog, validate_story_evidence
 from .story_summary import SUMMARY_SOURCE, extractive_story_summary
+from .story_spans import (
+    SOURCE_SPAN_POLICY_VERSION, SOURCE_SPAN_SUMMARY_SOURCE, build_source_span_constraints,
+    validate_source_span_constraints, whole_utterance_story_summary,
+)
 from .utils import clamp, merge_ranges, normalize_text, range_duration
 
-STORY_CACHE_PIPELINE = "hierarchical-story-2026-10-17.semantic-target-review-v11.explicit-primary-anchor"
-CRITIC_REVIEW_CONTRACT = "critic-review-2026-10-17.semantic-target-review-v13.explicit-primary-anchor"
+STORY_CACHE_PIPELINE = "hierarchical-story-2026-10-18.semantic-target-review-v12.whole-source-context"
+CRITIC_REVIEW_CONTRACT = "critic-review-2026-10-18.semantic-target-review-v14.whole-source-context"
+EXTRACTIVE_ROUGH_CUT_AUTHORITY = "extractive_rough_cut"
+EXTRACTIVE_ROUGH_CUT_ENGINE = "chronological_extractive_rough_cut"
 
 FILLERS: dict[str, set[str]] = {
     "en": {"um", "uh", "erm", "like", "basically", "actually", "literally", "you know", "i mean", "so"},
@@ -1696,6 +1702,35 @@ def _story_selection_cost(
     )
 
 
+def _source_selection_target_interval(cost: dict[str, Any], source_duration: float, duration_mode: str) -> dict[str, Any]:
+    """Numeric targets for this unchanged source selection, never story approval."""
+    upper = min(source_duration, float(cost["approved_seconds"]) / .9) if duration_mode == "target" else None
+    return {"scope": "unchanged_current_source_selection", "target_kind": "effective_target",
+            "minimum_seconds": round(float(cost["minimum_safe_seconds"]), 3),
+            "maximum_seconds": round(upper, 3) if upper is not None else None,
+            "semantic_fit_verified": False, "requires_frame_validation": True}
+
+
+def _explicit_source_context_ids(selection: dict[str, Any], candidates: list[dict[str, Any]],
+                                 segments: list[dict[str, Any]]) -> set[str]:
+    """Resolve typed source prerequisites without interpreting narrative prose."""
+    known_beats, known_segments = {row["id"] for row in candidates}, {row["id"] for row in segments}
+    owner = {identifier: row["id"] for row in candidates for identifier in row.get("segment_ids", [])}
+    required = set()
+    for key, domain in (("required_context_beat_ids", known_beats), ("required_context_segment_ids", known_segments)):
+        values = selection.get(key, [])
+        if (not isinstance(values, list) or any(not isinstance(value, str) or value not in domain for value in values)
+                or len(values) != len(set(values))):
+            raise ValueError("Mandatory source prerequisites need exact unique canonical IDs.")
+        if key == "required_context_segment_ids":
+            if not set(values) <= set(owner):
+                raise ValueError("Mandatory source context is outside the retrieved complete source units.")
+            required.update(owner[value] for value in values)
+        else:
+            required.update(values)
+    return required
+
+
 def _validated_story_slot_map(
     rows: Any, keep: list[str], candidates: list[dict[str, Any]], chapters: list[dict[str, Any]],
     plan: dict[str, Any], *, sticky_context: set[str] | None = None,
@@ -1805,13 +1840,16 @@ def _verify_non_short_story_evidence(
         slots = _validated_story_slot_map(precision_selection.get("slot_map"), keep, candidates, chapters, plan,
                                           sticky_context=sticky)
         proof = _story_evidence_proof(slots, keep, candidates, segments, plan, brief, rejected)
+        source_spans = build_source_span_constraints(candidates, segments,
+            selected_beat_ids=keep, rejected_beat_ids=sorted(rejected))
     except (ValueError, TypeError, KeyError) as exc:
         raise StoryPlanningError("Story AI did not verify the non-Short source evidence and story order. "
                                  + str(exc) + " No new draft was applied; the existing edit was kept.") from exc
     cost = _story_selection_cost(keep, candidates, segments, brief)
     output.update(slot_map=proof["slot_map"], semantic_mapping_verified=True, semantic_review_status="model_reviewed",
                   evidence_policy_version=EVIDENCE_POLICY_VERSION, evidence_proof=proof,
-                  summary=_extractive_story_summary(proof), summary_source=SUMMARY_SOURCE,
+                  source_span_policy_version=SOURCE_SPAN_POLICY_VERSION, source_span_constraints=source_spans,
+                  summary=whole_utterance_story_summary(source_spans), summary_source=SOURCE_SPAN_SUMMARY_SOURCE,
                   semantic_revision={"attempts": 0, "verdict": "fit", "released_optional_beat_ids": [],
                                      "policy_version": cost["policy_version"], "cost": cost,
                                      "duration_policy": "existing_non_short_policy"})
@@ -1908,6 +1946,8 @@ def _review_story_target_budget(
                       "approved_seconds": cost["approved_seconds"], "minimum_target_seconds": round(minimum_target, 3)}
         diagnostic["semantic_revision"] = {"attempts": int(revision_attempted),
             "reasoning": {**reasoning_policy, "request_attempted": revision_attempted}}
+        diagnostic["current_source_target_interval"] = _source_selection_target_interval(
+            cost, source_duration, str(brief.get("duration_mode") or "target"))
         if feasibility is not None:
             diagnostic["constraint_feasibility"] = copy.deepcopy(feasibility)
         if ending_domain is not None:
@@ -1921,9 +1961,12 @@ def _review_story_target_budget(
                    if reason == "semantic_revision_output_limit"
                    else "Story AI could not validate a coherent story within the requested target. ")
         if reason == "allowed_source_below_target_minimum" and available_source_upper_bound is not None:
+            interval = diagnostic["current_source_target_interval"]
             message += (f"The current critic-allowed complete source can supply at most {available_source_upper_bound:.2f} seconds, "
                         f"below the {minimum_target:.2f} seconds required for the {target:g}-second target. "
-                        "This bound describes the current critic-allowed source, not the entire recording. ")
+                        "This bound describes the current critic-allowed source, not the entire recording. "
+                        f"For the unchanged selected source, the policy-only effective-target interval is {interval['minimum_seconds']:.2f}–{interval['maximum_seconds']:.2f}s, "
+                        "subject to frame validation; this does not establish semantic approval. ")
         elif reason == "target_infeasible" and feasibility is not None:
             message += (f"Allowed complete source constraints require at least {feasibility['optimistic_lower_bound_seconds']:.2f} "
                         f"seconds of protected source material. The current required selection has a policy minimum of "
@@ -1947,13 +1990,19 @@ def _review_story_target_budget(
         return _story_units_complete(identifiers, candidates, segments)
 
     try:
+        explicit_context = _explicit_source_context_ids(output, candidates, segments)
         existing_map = _validated_story_slot_map(output.get("slot_map"), current, candidates, chapters, plan,
                                                  sticky_context=sticky)
         existing_proof = _story_evidence_proof(existing_map, current, candidates, segments, plan, brief, rejected)
         existing_map = existing_proof["slot_map"]
+        existing_spans = validate_source_span_constraints(
+            output.get("source_span_constraints"), candidates, segments,
+            selected_beat_ids=current, rejected_beat_ids=sorted(rejected))
         mapping_verified = (output.get("semantic_mapping_verified") is True
                             and output.get("semantic_review_status") == "model_reviewed"
                             and output.get("evidence_policy_version") == EVIDENCE_POLICY_VERSION
+                            and output.get("source_span_policy_version") == SOURCE_SPAN_POLICY_VERSION
+                            and explicit_context <= set(current)
                             and not output.get("recovered_slot_indexes") and not rejected.intersection(current)
                             and complete_units(current))
     except (ValueError, TypeError, KeyError):
@@ -1964,7 +2013,8 @@ def _review_story_target_budget(
     if mapping_verified and critic_clean and cost["fits_target"] and cost["approved_seconds"] + .05 >= minimum_target:
         output.update(keep_beat_ids=current, slot_map=existing_map, semantic_mapping_verified=True,
                       evidence_policy_version=EVIDENCE_POLICY_VERSION, evidence_proof=existing_proof,
-                      summary=_extractive_story_summary(existing_proof), summary_source=SUMMARY_SOURCE,
+                      source_span_policy_version=SOURCE_SPAN_POLICY_VERSION, source_span_constraints=existing_spans,
+                      summary=whole_utterance_story_summary(existing_spans), summary_source=SOURCE_SPAN_SUMMARY_SOURCE,
                       semantic_revision={"attempts": 0, "verdict": "fit", "released_optional_beat_ids": [],
                                          "policy_version": cost["policy_version"], "cost": cost,
                                          "reasoning": {**reasoning_policy, "request_attempted": False}},
@@ -1979,6 +2029,12 @@ def _review_story_target_budget(
     except (ValueError, TypeError, KeyError):
         fail("invalid_source_evidence", "Source quotation ownership could not be established. Review canonical transcript boundaries before retrying.")
     allowed_ids = [value for value in known_allowed if complete_units([value])]
+    try:
+        explicit_context = _explicit_source_context_ids(output, candidates, segments)
+        if not explicit_context <= set(allowed_ids):
+            raise ValueError("Mandatory source context is rejected or lacks a complete retrieved source unit.")
+    except (ValueError, TypeError, KeyError) as exc:
+        fail("required_source_missing", str(exc) + " Required context cannot be restored by changing the duration alone.")
     catalog = [row for row in catalog if row["beat_id"] in allowed_ids]
     try:
         choice_catalog = _story_evidence_choice_catalog(catalog)
@@ -2086,6 +2142,7 @@ def _review_story_target_budget(
             "The anchor plus additional primary choices must contain a substantive complete proposition, request or conclusion supporting the role. "
             "Acknowledgments, fillers and unfinished phrases cannot establish a role alone. Background context cannot replace primary support. "
             "Read each complete ASR utterance in source_units.segments and preserve every negation or qualification needed for its meaning in primary plus context choices. "
+            "Every selected quotation requires its ENTIRE canonical ASR utterance as mandatory context, including negations and qualifications; source fragments never authorize trimming that utterance. "
             "For EACH chapter in required_context_chapter_ids, choose at least one context_evidence_choice whose evidence_id belongs to that chapter in evidence_ids_by_chapter. "
             "Required context needs explicit quotation choices even when primary and context use the SAME chapter. "
             "The SAME supplied choice may be primary and context when allowed for both; do not repeat the anchor in additional_primary_evidence_choices. "
@@ -2101,6 +2158,7 @@ def _review_story_target_budget(
             "For target duration mode, complete approved passages must also reach minimum_target_seconds without padding; style mode has no lower quota. "
             "Keep complete supplied source beats; never invent IDs, timestamps, clipped sentences or speech removal. "
             "Retain all sticky_critic_context_beat_ids and never restore rejected_beat_ids. "
+            "Retain every mandatory_context_beat_id; these exact source prerequisites cannot be released or replaced by a paraphrase. "
             "keep_beat_ids must equal the role-mapped IDs plus sticky critic context. "
             "released_optional_beat_ids must equal current_selected_beat_ids MINUS keep_beat_ids, exactly. "
             "If every current selected ID is kept, released_optional_beat_ids MUST be []. "
@@ -2112,6 +2170,8 @@ def _review_story_target_budget(
         )}, {"role": "user", "content": json.dumps({
             "brief": brief, "required_story_roles": _configured_story_roles(brief),
             "evidence_policy_version": EVIDENCE_POLICY_VERSION,
+            "source_span_policy_version": SOURCE_SPAN_POLICY_VERSION,
+            "mandatory_source_context": "Every selected beat retains every complete canonical ASR utterance; only verified internal speech-free gaps may be shortened.",
             "evidence_verification_scope": "source_attribution_and_order",
             "current_selected_beat_ids": list(current), "critic_already_removed_beat_ids": sorted(rejected - set(current)),
             "allowed_optional_release_beat_ids": release_ids,
@@ -2122,6 +2182,7 @@ def _review_story_target_budget(
             "current_cost": cost, "target_seconds": target, "minimum_target_seconds": round(minimum_target, 3),
             "constraint_feasibility": feasibility,
             "sticky_critic_context_beat_ids": sorted(sticky),
+            "mandatory_context_beat_ids": sorted(explicit_context),
             "rejected_beat_ids": sorted(rejected),
             "incomplete_source_beat_ids": [value for value in known_allowed if value not in allowed_ids],
             "candidates": [{"id": value, "chapter_id": beat_chapters.get(value),
@@ -2186,6 +2247,8 @@ def _review_story_target_budget(
         keep, released = result["keep_beat_ids"], result["released_optional_beat_ids"]
         if not keep or rejected.intersection(keep) or not sticky <= set(keep):
             raise ValueError("The revision dropped required critic context or restored rejected material.")
+        if not explicit_context <= set(keep):
+            raise ValueError("The revision dropped mandatory source prerequisite context.")
         if set(released) != set(current) - set(keep) or sticky.intersection(released):
             raise ValueError("Optional source releases must be explicit and exact.")
         slot_rows = _story_revision_slot_rows(result["role_selections"], catalog, plan)
@@ -2195,6 +2258,8 @@ def _review_story_target_budget(
             raise ValueError("The revised story must retain complete source passages and sentence boundaries.")
         evidence_proof = _story_evidence_proof(slot_map, keep, candidates, segments, plan, brief, rejected)
         slot_map = evidence_proof["slot_map"]
+        source_spans = build_source_span_constraints(candidates, segments, selected_beat_ids=keep,
+                                                    rejected_beat_ids=sorted(rejected))
     except (ValueError, TypeError, KeyError) as exc:
         fail("invalid_semantic_mapping", str(exc) + " Review the story roles; a longer target alone does not verify them.")
     revised_cost = _story_selection_cost(keep, candidates, segments, brief)
@@ -2209,7 +2274,8 @@ def _review_story_target_budget(
     output.update(keep_beat_ids=keep, slot_map=slot_map, semantic_mapping_verified=True,
                   semantic_review_status="model_reviewed",
                   evidence_policy_version=EVIDENCE_POLICY_VERSION, evidence_proof=evidence_proof,
-                  summary=_extractive_story_summary(evidence_proof), summary_source=SUMMARY_SOURCE,
+                  source_span_policy_version=SOURCE_SPAN_POLICY_VERSION, source_span_constraints=source_spans,
+                  summary=whole_utterance_story_summary(source_spans), summary_source=SOURCE_SPAN_SUMMARY_SOURCE,
                   opening_beat_id=keep[0], closing_beat_id=keep[-1],
                   highlight_beat_ids=[value for value in output.get("highlight_beat_ids", []) if value in keep],
                   recovered_slot_indexes=[], unresolved_plan_slot_indexes=[], unresolved_context_slot_indexes=[],
@@ -2542,6 +2608,7 @@ def _select_story_beats(
     valid = {str(item["id"]): item for item in candidates}
     valid_ids = set(valid)
     source_catalog = build_story_evidence_catalog(candidates, segments) if segments else []
+    candidate_segment_ids = {str(identifier) for beat in candidates for identifier in beat.get("segment_ids", [])}
     payload = {
         "model": model,
         "stream": False,
@@ -2560,6 +2627,7 @@ def _select_story_beats(
                     "Use the exact planned purpose, assign primary beats only from chapter_ids, and explicitly assign context beats from EVERY required_context_chapter_id. "
                     "Context IDs may come ONLY from required_context_chapter_ids; use an empty context list when that chapter list is empty. "
                     "Choose canonical source_evidence IDs that actually support each role, with a citation for every mapped beat. "
+                    "Every cited fragment requires its entire canonical ASR utterance as mandatory context, including all negations and qualifications; preserve the complete supplied source unit. "
                     "temporal_witness_id must be one primary_evidence_id; witnesses follow narrative role order and the final role belongs to the final selected passage. "
                     "Source quotes are authoritative; outline/summary prose is unverified interpretation. A conclusion can be a stated refusal, decision or qualified claim. "
                     "Only use supplied beat and evidence IDs; never invent events or English proof claims."
@@ -2575,6 +2643,10 @@ def _select_story_beats(
                     "plan": plan,
                     "chapter_summaries": summaries,
                     "source_evidence": source_catalog,
+                    "source_span_policy_version": SOURCE_SPAN_POLICY_VERSION,
+                    "source_utterances": [{"id": str(row["id"]), "start": row["start"], "end": row["end"], "text": str(row.get("text") or "")}
+                                          for row in (segments or [])
+                                          if str(row["id"]) in candidate_segment_ids],
                     "candidate_beats": [
                         {"id": beat["id"], "start": beat["start"], "duration": beat["duration"], "role": beat.get("role_hint"),
                          "duration_cost": _story_selection_cost([str(beat["id"])], candidates, segments or [], brief),
@@ -2858,6 +2930,118 @@ def _critic_story_selection(
     return _reconcile_critic_actions(output)
 
 
+def _extractive_rough_cut_decision(
+    selection: dict[str, Any], candidates: list[dict[str, Any]], segments: list[dict[str, Any]],
+    chapters: list[dict[str, Any]], plan: dict[str, Any], brief: dict[str, Any], failure: StoryBudgetError,
+) -> dict[str, Any] | None:
+    """Retain the fixed source after a model failure without claiming story approval."""
+    reason = failure.diagnostic.get("reason")
+    revision = failure.diagnostic.get("semantic_revision")
+    if (brief.get("allow_extractive_rough_cut") is not True or str(brief.get("goal") or "short") != "short"
+            or reason not in {"planner_no_fit", "invalid_semantic_mapping", "invalid_semantic_revision",
+                              "semantic_revision_output_limit", "required_selection_exceeds_target", "target_underfill"}
+            or not isinstance(revision, dict) or type(revision.get("attempts")) is not int or revision["attempts"] != 1):
+        return None
+    critic = selection.get("critic")
+    if not isinstance(critic, dict) or critic.get("verdict") not in {"pass", "revise"}:
+        return None
+    if any(not isinstance(row, dict) or not isinstance(row.get("id"), str) or not row["id"] for row in candidates):
+        return None
+    by_id = {row["id"]: row for row in candidates}
+    if len(by_id) != len(candidates):
+        return None
+    fields = [selection.get("keep_beat_ids"), critic.get("requested_added"), critic.get("requested_removed")]
+    if any(not isinstance(values, list) or any(not isinstance(value, str) or value not in by_id for value in values)
+           or len(values) != len(set(values)) for values in fields):
+        return None
+    try:
+        build_story_evidence_catalog(candidates, segments)
+    except (ValueError, TypeError, KeyError):
+        return None
+    current, added, removed = fields
+    rejected = set(removed)
+    fixed = sorted((set(current) | set(added)) - rejected, key=lambda value: float(by_id[value]["start"]))
+    if not fixed or not _story_units_complete(fixed, candidates, segments):
+        return None
+    try:
+        source_spans = build_source_span_constraints(candidates, segments,
+            selected_beat_ids=fixed, rejected_beat_ids=sorted(rejected))
+    except (ValueError, TypeError, KeyError):
+        return None
+    duration = max([float(row["end"]) for row in segments] or [0.0])
+    target = float(brief.get("target_duration") or 60)
+    duration_mode = str(brief.get("duration_mode") or "target")
+    minimum_target = .9 * min(target, duration) if duration_mode == "target" else 0.0
+    cost = _story_selection_cost(fixed, candidates, segments, brief)
+    diagnostic = {"kind": "story_budget", "scope": "current_critic_allowed_source", "target_seconds": target,
+        "minimum_target_seconds": round(minimum_target, 3), "policy_version": cost["policy_version"],
+        "required_policy_minimum_seconds": cost["minimum_safe_seconds"],
+        "available_complete_source_upper_bound_seconds": cost["approved_seconds"],
+        "current_source_target_interval": _source_selection_target_interval(cost, duration, duration_mode),
+        "failed_generation_diagnostic": copy.deepcopy(failure.diagnostic), "applied_to_timeline": False}
+
+    def refuse(why: str, text: str) -> None:
+        raise StoryBudgetError(text + " No new draft was applied; the existing edit was kept.", {**diagnostic, "reason": why})
+
+    for key, domain, retained in (
+        ("required_context_beat_ids", set(by_id), set(fixed)),
+        ("required_context_segment_ids", {str(row["id"]) for row in segments}, set(source_spans["segment_ids"])),
+    ):
+        prerequisites = selection.get(key, [])
+        if (not isinstance(prerequisites, list) or any(not isinstance(value, str) or value not in domain for value in prerequisites)
+                or len(prerequisites) != len(set(prerequisites))):
+            return None
+        if not set(prerequisites) <= retained:
+            refuse("extractive_required_context_missing", "Mandatory source context lies outside the fixed selected source; an extractive rough cut cannot add excluded or unselected material.")
+    slots = plan.get("slots")
+    if not isinstance(slots, list) or not slots:
+        return None
+    if (not isinstance(chapters, list) or any(not isinstance(chapter, dict) or not isinstance(chapter.get("id"), str)
+            or not isinstance(chapter.get("beats"), list)
+            or any(not isinstance(row, dict) or not isinstance(row.get("id"), str) for row in chapter["beats"])
+            for chapter in chapters)):
+        return None
+    chapter_members = {str(chapter["id"]): {str(row["id"]) for row in chapter.get("beats", [])}
+                       for chapter in chapters}
+    for slot in slots:
+        if (not isinstance(slot, dict) or not isinstance(slot.get("chapter_ids"), list) or not slot["chapter_ids"]
+                or not isinstance(slot.get("required_context_chapter_ids", []), list)
+                or any(not isinstance(value, str) or value not in chapter_members
+                       for value in slot["chapter_ids"] + slot.get("required_context_chapter_ids", []))):
+            return None
+        primary = set().union(*(chapter_members.get(str(value), set()) for value in slot.get("chapter_ids", [])))
+        context = [chapter_members.get(str(value), set()) for value in slot.get("required_context_chapter_ids", [])]
+        if not primary.intersection(fixed) or any(not group.intersection(fixed) for group in context):
+            refuse("extractive_required_context_missing", "The fixed source lacks mandatory prerequisite context; an extractive rough cut cannot restore excluded or unselected material.")
+    if not cost["fits_target"]:
+        refuse("extractive_source_exceeds_target", f"The unchanged complete source needs at least {cost['minimum_safe_seconds']:.2f}s under the safe speech policy for a {target:g}s target. A shorter extractive cut would remove required utterance speech.")
+    if cost["approved_seconds"] + .05 + 1e-9 < minimum_target:
+        interval = diagnostic["current_source_target_interval"]
+        refuse("allowed_source_below_target_minimum", f"The fixed critic-allowed source supplies at most {cost['approved_seconds']:.2f}s, below the {minimum_target:.2f}s target band. Its numeric effective-target interval is {interval['minimum_seconds']:.2f}–{interval['maximum_seconds']:.2f}s, subject to frame validation; this does not establish semantic approval.")
+    source_ids = set(source_spans["segment_ids"])
+    ordered_ids = [str(row["id"]) for row in segments]
+    ranges = [{"start": float(by_id[value]["start"]), "end": float(by_id[value]["end"]), "beat_id": value} for value in fixed]
+    rejected_ranges = [{"start": float(by_id[value]["start"]), "end": float(by_id[value]["end"]), "beat_id": value}
+                       for value in sorted(rejected, key=lambda value: float(by_id[value]["start"]))]
+    return {"editorial_authority": EXTRACTIVE_ROUGH_CUT_AUTHORITY, "semantic_review_status": "not_model_reviewed",
+        "generative_approved": False, "review_required": True, "title": "EXTRACTIVE ROUGH CUT",
+        "summary": whole_utterance_story_summary(source_spans), "summary_source": SOURCE_SPAN_SUMMARY_SOURCE,
+        "keep_ids": [value for value in ordered_ids if value in source_ids],
+        "remove_ids": [value for value in ordered_ids if value not in source_ids], "highlight_ids": [],
+        "opening_id": source_spans["segment_ids"][0], "closing_id": source_spans["segment_ids"][-1],
+        "story_beat_ids": fixed, "story_ranges": ranges, "rejected_beat_ids": sorted(rejected),
+        "rejected_segment_ids": [str(value) for identifier in rejected for value in by_id[identifier].get("segment_ids", [])],
+        "rejected_story_ranges": rejected_ranges,
+        "extractive_requirements": {"fixed_beat_ids": fixed, "critic_requested_beat_ids": [value for value in fixed if value in added],
+            "source_span_policy_version": SOURCE_SPAN_POLICY_VERSION, "source_span_constraints": source_spans,
+            "duration_mode": duration_mode,
+            "cost": cost, "failed_generation_diagnostic": copy.deepcopy(failure.diagnostic),
+            "original_critic": copy.deepcopy(critic), "semantic_review_status": "not_model_reviewed", "review_required": True,
+            "instruction_coverage": "unverified" if str(brief.get("instruction") or "").strip() else "not_requested",
+            "required_context_beat_ids": copy.deepcopy(selection.get("required_context_beat_ids", [])),
+            "required_context_segment_ids": copy.deepcopy(selection.get("required_context_segment_ids", []))}}
+
+
 def _story_decision_from_beats(result: dict[str, Any] | None, beats: list[dict[str, Any]], segments: list[dict[str, Any]]) -> dict[str, Any] | None:
     if not result or not beats:
         return None
@@ -2926,6 +3110,7 @@ def _story_decision_from_beats(result: dict[str, Any] | None, beats: list[dict[s
         title, title_reason = "CUTROOM story", "selection_changed"
     summary = str(result.get("summary") or "A coherent story selected from the full recording.")[:500]
     summary_source = result.get("summary_source") or "unverified_interpretation"
+    source_spans = None
     if result.get("evidence_policy_version") == EVIDENCE_POLICY_VERSION:
         try:
             proof = validate_story_evidence(
@@ -2934,11 +3119,17 @@ def _story_decision_from_beats(result: dict[str, Any] | None, beats: list[dict[s
             )
             if proof != result.get("evidence_proof"):
                 return None
-            summary = _extractive_story_summary(proof)
-            summary_source = SUMMARY_SOURCE
+            if result.get("source_span_policy_version") != SOURCE_SPAN_POLICY_VERSION:
+                return None
+            source_spans = validate_source_span_constraints(
+                result.get("source_span_constraints"), beats, segments,
+                selected_beat_ids=keep_beats, rejected_beat_ids=rejected)
+            summary = whole_utterance_story_summary(source_spans)
+            summary_source = SOURCE_SPAN_SUMMARY_SOURCE
         except (ValueError, TypeError, KeyError):
             return None
     return {
+        "editorial_authority": "generative_story" if source_spans is not None else "unverified_story",
         "keep_ids": [identifier for identifier in all_segment_ids if identifier in selected_segment_ids],
         "remove_ids": [identifier for identifier in all_segment_ids if identifier not in selected_segment_ids],
         "highlight_ids": highlight_segments,
@@ -2959,6 +3150,10 @@ def _story_decision_from_beats(result: dict[str, Any] | None, beats: list[dict[s
             "semantic_review_status": result.get("semantic_review_status"),
             "evidence_policy_version": result.get("evidence_policy_version"),
             "evidence_proof": copy.deepcopy(result.get("evidence_proof")),
+            "source_span_policy_version": SOURCE_SPAN_POLICY_VERSION if source_spans is not None else None,
+            "source_span_constraints": copy.deepcopy(source_spans),
+            "required_context_beat_ids": copy.deepcopy(result.get("required_context_beat_ids", [])),
+            "required_context_segment_ids": copy.deepcopy(result.get("required_context_segment_ids", [])),
             "slot_map": copy.deepcopy(result.get("slot_map") or []),
             "semantic_revision": copy.deepcopy(result.get("semantic_revision")),
         },
@@ -3252,24 +3447,34 @@ def hierarchical_story_edit(
         # critic response must not erase a complete, slot-validated selection.
         reviewed = dict(selection)
         reviewed["critic"] = {"verdict": "skipped", "issues": [str(exc)], "summary": "Selection kept after critic response failure."}
+    extractive_decision = None
     if semantic_target:
-        reviewed = _review_story_target_budget(settings, reviewed, candidates, segments, chapters,
-                                                outline, plan, brief, model, cancel_check)
+        try:
+            reviewed = _review_story_target_budget(settings, reviewed, candidates, segments, chapters,
+                                                    outline, plan, brief, model, cancel_check)
+        except StoryBudgetError as exc:
+            _check_cancelled(cancel_check)
+            extractive_decision = _extractive_rough_cut_decision(
+                reviewed, candidates, segments, chapters, plan, brief, exc)
+            if extractive_decision is None:
+                raise
     else:
         reviewed = _fit_story_selection_to_budget(reviewed, candidates, plan,
                                                   float(brief.get("target_duration") or 60), chapters)
         reviewed = _verify_non_short_story_evidence(reviewed, precision_selection, candidates, segments, chapters, plan, brief)
     _check_cancelled(cancel_check)
-    decision = _story_decision_from_beats(reviewed, beats, segments)
+    decision = extractive_decision or _story_decision_from_beats(reviewed, beats, segments)
     if not decision:
         raise StoryPlanningError("Story AI completed its passes but did not produce a safe final selection.")
     if progress:
-        progress(1.0, "Story understanding complete")
+        progress(1.0, "Extractive rough cut requires review" if extractive_decision else "Story understanding complete")
     hierarchy = {
         "cache_fingerprint": expected_cache_fingerprint,
         "cache_pipeline": STORY_CACHE_PIPELINE,
         "model": model,
         "model_selection": _model_selection_details(status),
+        "editorial_authority": decision.get("editorial_authority"),
+        "extractive_requirements": copy.deepcopy(decision.get("extractive_requirements")),
         "chapter_count": len(chapters),
         "chapters": [
             {"id": item["id"], "start": item["start"], "end": item["end"], "duration": item["duration"], "beat_ids": item["beat_ids"]}
@@ -3288,18 +3493,23 @@ def hierarchical_story_edit(
         "plan": plan,
         "selection": {
             "keep_beat_ids": list(decision["story_beat_ids"]),
-            "slot_map": reviewed.get("slot_map", []),
+            "slot_map": [] if extractive_decision else reviewed.get("slot_map", []),
             "mode": reviewed.get("selection_mode", "model"),
             "recovered_slot_indexes": reviewed.get("recovered_slot_indexes", []),
             "budget_fit": reviewed.get("budget_fit"),
-            "semantic_mapping_verified": reviewed.get("semantic_mapping_verified") is True,
-            "semantic_review_status": reviewed.get("semantic_review_status"),
+            "semantic_mapping_verified": False if extractive_decision else reviewed.get("semantic_mapping_verified") is True,
+            "semantic_review_status": "not_model_reviewed" if extractive_decision else reviewed.get("semantic_review_status"),
             "evidence_policy_version": reviewed.get("evidence_policy_version"),
             "evidence_proof": copy.deepcopy(reviewed.get("evidence_proof")),
             "semantic_revision": copy.deepcopy(reviewed.get("semantic_revision")),
+            "source_span_policy_version": (decision.get("extractive_requirements") or decision.get("story_requirements") or {}).get("source_span_policy_version"),
+            "source_span_constraints": copy.deepcopy((decision.get("extractive_requirements") or decision.get("story_requirements") or {}).get("source_span_constraints")),
         },
         "critic": reviewed.get("critic", {}),
     }
+    if extractive_decision:
+        hierarchy["failed_generation_diagnostic"] = copy.deepcopy(extractive_decision["extractive_requirements"]["failed_generation_diagnostic"])
+        hierarchy["failed_generative_selection"] = copy.deepcopy(reviewed)
     return decision, hierarchy
 
 
@@ -3447,7 +3657,7 @@ def plan_edit(
             "decision": decision,
             "story_beats": beats,
             "story_hierarchy": hierarchy,
-        }, (
+        }, (EXTRACTIVE_ROUGH_CUT_ENGINE if decision.get("editorial_authority") == EXTRACTIVE_ROUGH_CUT_AUTHORITY else
             str(settings.ai.get("cloud_connection", {}).get("provider") or "groq").replace("-", "_") + "_hierarchical_story"
             if settings.ai.get("cloud_connection", {}).get("mode", "local") != "local"
             else "ollama_hierarchical_story"

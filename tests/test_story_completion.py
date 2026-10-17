@@ -139,6 +139,10 @@ def test_completion_contract_includes_whole_critic_context_and_unresolved_slots(
         "semantic_review_status": None,
         "evidence_policy_version": None,
         "evidence_proof": None,
+        "source_span_policy_version": None,
+        "source_span_constraints": None,
+        "required_context_beat_ids": [],
+        "required_context_segment_ids": [],
         "semantic_revision": None,
         "slot_map": selection["slot_map"],
     }

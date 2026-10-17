@@ -6,6 +6,7 @@ import pytest
 
 from cutroom.story_evidence import build_story_evidence_catalog, validate_story_evidence
 from cutroom.story_summary import SUMMARY_SOURCE, extractive_story_summary
+from cutroom.story_spans import SOURCE_SPAN_POLICY_VERSION, SOURCE_SPAN_SUMMARY_SOURCE, build_source_span_constraints, whole_utterance_story_summary
 
 
 def source_fixture(texts):
@@ -173,11 +174,13 @@ def test_reference_aliases_or_overlapping_character_intervals_are_rejected():
         extractive_story_summary(proof)
 
 
-def reviewed_result(proof, beats):
+def reviewed_result(proof, beats, segments):
     return {"keep_beat_ids": [row["id"] for row in beats],
             "slot_map": copy.deepcopy(proof["slot_map"]),
             "evidence_policy_version": proof["policy_version"],
             "evidence_proof": copy.deepcopy(proof),
+            "source_span_policy_version": SOURCE_SPAN_POLICY_VERSION,
+            "source_span_constraints": build_source_span_constraints(beats, segments, selected_beat_ids=[row["id"] for row in beats]),
             "semantic_mapping_verified": True, "semantic_review_status": "model_reviewed",
             "summary": "FORGED SUCCESS FROM REJECTED MATERIAL",
             "summary_source": SUMMARY_SOURCE}
@@ -187,14 +190,14 @@ def test_current_proof_conversion_rebuilds_summary_instead_of_trusting_supplied_
     from cutroom.intelligence import _story_decision_from_beats
 
     proof, beats, segments, _ = proof_for(["A recorded question.", "The answer remains uncertain."])
-    result = reviewed_result(proof, beats)
+    result = reviewed_result(proof, beats, segments)
     original = copy.deepcopy(result)
 
     decision = _story_decision_from_beats(result, beats, segments)
 
     assert decision is not None
-    assert decision["summary"] == extractive_story_summary(proof)
-    assert decision["summary_source"] == SUMMARY_SOURCE
+    assert decision["summary"] == whole_utterance_story_summary(result["source_span_constraints"])
+    assert decision["summary_source"] == SOURCE_SPAN_SUMMARY_SOURCE
     assert "FORGED" not in decision["summary"] and "REJECTED" not in decision["summary"]
     assert result == original
 
@@ -207,12 +210,42 @@ def test_current_proof_conversion_keeps_complete_late_context_after_500_characte
     row = slot(0, "result", catalog[-1:], context=catalog[:-1])
     proof = validate_story_evidence([row], beats, segments, selected_beat_ids=["b0", "b1"])
 
-    decision = _story_decision_from_beats(reviewed_result(proof, beats), beats, segments)
+    result = reviewed_result(proof, beats, segments)
+    decision = _story_decision_from_beats(result, beats, segments)
 
     assert decision is not None
-    assert decision["summary"] == extractive_story_summary(proof)
+    assert decision["summary"] == whole_utterance_story_summary(result["source_span_constraints"])
     assert len(decision["summary"]) > 500
     assert decision["summary"].endswith("\u201cThe apparent improvement is not yet confirmed.\u201d")
+
+
+def test_whole_utterance_conversion_preserves_uncited_negation_without_changing_primary_quotes():
+    from cutroom.intelligence import _story_decision_from_beats
+
+    text = "The initial observation appears positive. It does not demonstrate a benefit."
+    beats, segments, catalog = source_fixture([text])
+    proof = validate_story_evidence([slot(0, "result", catalog[:1])], beats, segments, selected_beat_ids=["b0"])
+    result = reviewed_result(proof, beats, segments)
+
+    decision = _story_decision_from_beats(result, beats, segments)
+
+    assert text in decision["summary"]
+    assert decision["story_requirements"]["evidence_proof"] == proof
+    assert decision["story_requirements"]["slot_map"][0]["primary_evidence_ids"] == [catalog[0]["id"]]
+    assert decision["summary_source"] == SOURCE_SPAN_SUMMARY_SOURCE
+
+
+@pytest.mark.parametrize("fault", ["missing", "wrong_policy", "forged_context"])
+def test_current_conversion_cannot_downgrade_missing_or_forged_whole_source_context(fault):
+    from cutroom.intelligence import _story_decision_from_beats
+
+    proof, beats, segments, _ = proof_for(["A positive claim. It is not established."])
+    result = reviewed_result(proof, beats, segments)
+    if fault == "missing": result.pop("source_span_constraints")
+    elif fault == "wrong_policy": result["source_span_policy_version"] = "old-policy"
+    elif fault == "forged_context": result["source_span_constraints"]["utterances"][0]["text"] = "It is established."
+
+    assert _story_decision_from_beats(result, beats, segments) is None
 
 
 @pytest.mark.parametrize("change", [
@@ -225,7 +258,7 @@ def test_current_proof_conversion_rejects_foreign_proof_after_selection_or_evide
     from cutroom.intelligence import _story_decision_from_beats
 
     proof, beats, segments, _ = proof_for(["The source question.", "The source conclusion."])
-    result = reviewed_result(proof, beats)
+    result = reviewed_result(proof, beats, segments)
     change(result)
 
     assert _story_decision_from_beats(result, beats, segments) is None

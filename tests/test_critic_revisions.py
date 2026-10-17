@@ -60,7 +60,10 @@ def verified_story_fixture(selection, candidates):
         citation = next(reference["id"] for reference in catalog if reference["beat_id"] == row["primary_beat_ids"][0])
         row.update(primary_evidence_ids=[citation], context_evidence_ids=[], temporal_witness_id=citation)
     proof = intelligence.validate_story_evidence(selection["slot_map"], candidates, source, selected_beat_ids=selection["keep_beat_ids"])
-    selection.update(slot_map=proof["slot_map"], evidence_proof=proof)
+    selection.update(slot_map=proof["slot_map"], evidence_proof=proof,
+                     source_span_policy_version=intelligence.SOURCE_SPAN_POLICY_VERSION,
+                     source_span_constraints=intelligence.build_source_span_constraints(
+                         candidates, source, selected_beat_ids=selection["keep_beat_ids"]))
     return {"slots": [{"purpose": purpose, "chapter_ids": ["c001"], "required_context_chapter_ids": []}
                        for purpose in ("setup", "result")]}
 

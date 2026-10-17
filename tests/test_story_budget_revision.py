@@ -5,7 +5,7 @@ import json
 
 import pytest
 
-from cutroom import intelligence, story_evidence
+from cutroom import intelligence, story_evidence, story_spans
 
 
 class Settings:
@@ -106,7 +106,9 @@ def reviewed_fixture():
     selection.update(keep_beat_ids=keep, slot_map=proof["slot_map"],
                      semantic_mapping_verified=True, semantic_review_status="model_reviewed",
                      evidence_policy_version=story_evidence.EVIDENCE_POLICY_VERSION,
-                     evidence_proof=proof, recovered_slot_indexes=[])
+                     evidence_proof=proof, recovered_slot_indexes=[],
+                     source_span_policy_version=story_spans.SOURCE_SPAN_POLICY_VERSION,
+                     source_span_constraints=story_spans.build_source_span_constraints(beats, segments, selected_beat_ids=keep))
     selection["critic"].update(verdict="pass", issues=[], selection_before=list(keep),
                               post_review_beat_ids=list(keep), requested_added=[], requested_removed=[])
     return fixture
@@ -279,6 +281,32 @@ def test_one_semantic_revision_reassigns_recovered_slots_before_optional_release
     assert revised["evidence_policy_version"] == revised["evidence_proof"]["policy_version"]
     assert decision["story_requirements"]["evidence_policy_version"] == revised["evidence_policy_version"]
     assert all(row["source_evidence"] for row in revised["slot_map"])
+
+
+@pytest.mark.parametrize("field,identifier", [("required_context_beat_ids", "b1"),
+                                             ("required_context_segment_ids", "s1")])
+def test_final_model_cannot_release_an_explicit_source_prerequisite(monkeypatch, field, identifier):
+    fixture, calls = en_fixture(), []
+    fixture[0][field] = [identifier]
+
+    with pytest.raises(intelligence.StoryBudgetError) as caught:
+        review(monkeypatch, fixture, proposal(fixture[-1]), calls)
+
+    assert len(calls) == 1
+    assert caught.value.diagnostic["reason"] == "invalid_semantic_mapping"
+    assert "mandatory source prerequisite" in str(caught.value)
+
+
+def test_rejected_mandatory_source_context_fails_before_model_review(monkeypatch):
+    fixture, calls = en_fixture(), []
+    fixture[0]["required_context_beat_ids"] = ["b1"]
+    fixture[0]["critic"]["requested_removed"] = ["b1"]
+
+    with pytest.raises(intelligence.StoryBudgetError) as caught:
+        review(monkeypatch, fixture, proposal(fixture[-1]), calls)
+
+    assert calls == []
+    assert caught.value.diagnostic["reason"] == "required_source_missing"
 
 
 @pytest.mark.parametrize("fault", ["missing_role", "extra_role", "unreleased_optional", "wrong_purpose",
