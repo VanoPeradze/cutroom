@@ -5,7 +5,7 @@ import copy
 import pytest
 
 from cutroom.story_budget import story_duration_cost
-from cutroom.story_constraints import story_constraint_feasibility
+from cutroom.story_constraints import story_constraint_feasibility, story_final_ending_domain
 
 
 def unit(identifier, start, end, spans=None):
@@ -199,3 +199,146 @@ def test_diagnostic_is_numeric_and_does_not_mutate_source():
     assert arguments == before
     assert "word" not in str(result)
     assert "private" not in str(result)
+
+
+def endings(units, chapter_beats, slots, *, minimum=0, sticky=(), rejected=(), **kwargs):
+    beats, segments = map(list, zip(*units))
+    chapters = [{"id": identifier, "beats": [beat for beat in beats if beat["id"] in identifiers]}
+                for identifier, identifiers in chapter_beats.items()]
+    return story_final_ending_domain(
+        beats, segments, chapters, {"slots": slots}, sticky_beat_ids=sticky,
+        rejected_beat_ids=rejected, minimum_target_seconds=minimum, **kwargs,
+    )
+
+
+@pytest.mark.parametrize("units,minimum,expected_first_upper", [
+    ([unit("first", 8.41, 19.64), unit("last", 20.34, 29.5)], 18, 11.23),
+    ([unit("first", 0, 24.61), unit("last", 25, 41.43)], 36, 24.61),
+])
+def test_lower_band_proves_only_later_ending_possible(units, minimum, expected_first_upper):
+    # Captured duration shapes, with synthetic text and no semantic assumptions.
+    result = endings(units, {"c": ["first", "last"]},
+                     [slot(["c"], ["c"]) for _ in range(4)], minimum=minimum)
+    assert result["status"] == "verified"
+    assert result["allowed_final_beat_ids"] == ["last"]
+    assert result["endpoint_proofs"][0]["prefix_approved_seconds"] == expected_first_upper
+    assert result["endpoint_proofs"][0]["insufficient_duration"] is True
+    assert result["semantic_fit_verified"] is False
+    assert "slot_selections" not in result
+
+
+def test_ending_prefix_uses_overlap_union_and_retains_equal_end_ties():
+    _, a = unit("a", 0, 6)
+    _, b = unit("b", 6, 12)
+    wide = {"id": "wide", "start": 0, "end": 12, "segment_ids": [a["id"], b["id"]],
+            "text": a["text"] + " " + b["text"]}
+    tail = {"id": "tail", "start": 6, "end": 12, "segment_ids": [b["id"]], "text": b["text"]}
+    arguments = ([wide, tail], [a, b], [{"id": "c", "beats": [wide, tail]}], {"slots": [slot(["c"])]})
+    common = {"sticky_beat_ids": ["tail"], "rejected_beat_ids": []}
+    insufficient = story_final_ending_domain(*arguments, minimum_target_seconds=15, **common)
+    tied = story_final_ending_domain(*arguments, minimum_target_seconds=12, **common)
+    assert insufficient["status"] == "verified"
+    assert insufficient["allowed_final_beat_ids"] == []
+    assert all(row["prefix_approved_seconds"] == 12 for row in insufficient["endpoint_proofs"])
+    assert set(tied["allowed_final_beat_ids"]) == {"wide", "tail"}
+    assert all(row["later_sticky_count"] == 0 for row in tied["endpoint_proofs"])
+
+
+def test_later_sticky_source_disproves_an_otherwise_long_enough_ending():
+    units = [unit("early", 0, 20), unit("sticky", 25, 26)]
+    result = endings(units, {"c": ["early", "sticky"]}, [slot(["c"])], minimum=18, sticky=["sticky"])
+    assert result["allowed_final_beat_ids"] == ["sticky"]
+    assert result["endpoint_proofs"][0]["insufficient_duration"] is False
+    assert result["endpoint_proofs"][0]["later_sticky_count"] == 1
+
+
+def test_ending_primary_chapters_are_or_but_every_context_chapter_is_required():
+    units = [unit("early", 0, 20), unit("later", 25, 26)]
+    chapters = {"a": ["early"], "b": ["later"]}
+    either_primary = endings(units, chapters, [slot(["a", "b"])])
+    both_contexts = endings(units, chapters, [slot(["a", "b"], ["a", "b"])])
+    later_primary = endings(units, chapters, [slot(["b"])])
+    assert either_primary["allowed_final_beat_ids"] == ["early", "later"]
+    assert both_contexts["allowed_final_beat_ids"] == ["later"]
+    assert later_primary["allowed_final_beat_ids"] == ["later"]
+    assert both_contexts["endpoint_proofs"][0]["missing_group_count"] == 1
+
+
+def test_zero_style_lower_band_does_not_force_a_later_ending():
+    units = [unit("early", 0, 1), unit("later", 5, 6)]
+    result = endings(units, {"c": ["early", "later"]}, [slot(["c"])], minimum=0)
+    assert result["allowed_final_beat_ids"] == ["early", "later"]
+    assert result["excluded_final_beat_count"] == 0
+
+
+def test_rejected_or_caller_ineligible_units_cannot_inflate_prefix_or_supply_context():
+    units = [unit("early", 0, 2), unit("unavailable", 3, 20), unit("rejected", 21, 40)]
+    result = endings(units, {"a": ["early"], "b": ["unavailable", "rejected"]},
+                     [slot(["a"], ["b"])], minimum=18, rejected=["rejected"],
+                     eligible_beat_ids=["early", "rejected"])
+    assert result["status"] == "verified"
+    assert result["allowed_final_beat_ids"] == []
+    assert result["eligible_unit_count"] == 1
+    proof = result["endpoint_proofs"][0]
+    assert proof["prefix_approved_seconds"] == 2
+    assert proof["missing_group_count"] == 1
+
+
+@pytest.mark.parametrize("duration,allowed", [(17.95, True), (17.949, False)])
+def test_ending_lower_band_respects_shared_50ms_tolerance(duration, allowed):
+    result = endings([unit("end", 0, duration)], {"c": ["end"]}, [slot(["c"])], minimum=18)
+    assert bool(result["allowed_final_beat_ids"]) is allowed
+
+
+@pytest.mark.parametrize("corruption", ["duplicate_candidate", "duplicate_segment", "malformed_time",
+                                        "incomplete_unit", "missing_sticky", "malformed_plan"])
+def test_unverified_ending_inputs_retain_full_caller_domain(corruption):
+    beat, segment = unit("allowed", 0, 2)
+    rejected, extra_segment = unit("rejected", 5, 7)
+    beats, segments = [beat, rejected], [segment, extra_segment]
+    plan = {"slots": [slot(["c"])]}
+    sticky = []
+    if corruption == "duplicate_candidate":
+        beats.append(copy.deepcopy(beat))
+    elif corruption == "duplicate_segment":
+        segments.append(copy.deepcopy(segment))
+    elif corruption == "malformed_time":
+        segment["end"] = None
+    elif corruption == "incomplete_unit":
+        beat["text"] = "A partial sentence"
+    elif corruption == "missing_sticky":
+        sticky = ["absent"]
+    else:
+        plan["slots"] = None
+    result = story_final_ending_domain(
+        beats, segments, [{"id": "c", "beats": beats}], plan,
+        sticky_beat_ids=sticky, rejected_beat_ids=["rejected"], minimum_target_seconds=18,
+    )
+    assert result["status"] == "unverified"
+    assert result["allowed_final_beat_ids"] == ["allowed"]
+    assert result["excluded_final_beat_count"] == 0
+    assert result["endpoint_proofs"] == []
+
+
+def test_ending_work_bound_returns_unverified_full_domain(monkeypatch):
+    import cutroom.story_constraints as constraints
+    monkeypatch.setattr(constraints, "MAX_FINAL_ENDING_DOMAIN_UNITS", 1)
+    units = [unit("early", 0, 1), unit("later", 5, 6)]
+    result = endings(units, {"c": ["early", "later"]}, [slot(["c"])], minimum=18)
+    assert result["status"] == "unverified"
+    assert result["allowed_final_beat_ids"] == ["early", "later"]
+    assert result["bound_exceeded"] is True
+
+
+def test_ending_proofs_do_not_mutate_source_or_return_quotes_or_role_assignments():
+    beat, segment = unit("end", 0, 20)
+    arguments = ([beat], [segment], [{"id": "c", "beats": [beat]}], {"slots": [slot(["c"])]})
+    before = copy.deepcopy(arguments)
+    result = story_final_ending_domain(*arguments, sticky_beat_ids=[], rejected_beat_ids=[],
+                                      minimum_target_seconds=18)
+    assert arguments == before
+    assert "word" not in str(result)
+    assert "text" not in result
+    assert "keep_beat_ids" not in result
+    assert "slot_selections" not in result
+    assert result["semantic_fit_verified"] is False

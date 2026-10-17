@@ -16,23 +16,18 @@ def _no_real_story_transport(monkeypatch):
 
 def _final_evidence_response(payload):
     source = json.loads(payload["messages"][1]["content"])
-    rows, keep = [], set()
-    for requirement in source["slot_requirements"]:
-        primary = [next(iter(requirement["allowed_primary_beat_ids_by_chapter"].values()))[0]]
-        context = [values[0] for values in requirement["required_context_beat_ids_by_chapter"].values()]
-        def cite(identifiers):
-            return [next(row["id"] for row in source["source_evidence"] if row["beat_id"] == identifier)
-                    for identifier in identifiers]
-        evidence = cite(primary)
-        rows.append({"slot_index": requirement["slot_index"], "purpose": requirement["purpose"],
-                     "primary_beat_ids": primary, "context_beat_ids": context,
-                     "primary_evidence_ids": evidence, "context_evidence_ids": cite(context),
-                     "temporal_witness_id": evidence[0]})
-        keep.update(primary + context)
+    roles, keep = {}, set()
+    by_id = {row["id"]: row for row in source["source_evidence"]}
+    for purpose, requirement in source["role_requirements"].items():
+        primary = [next(iter(requirement["allowed_primary_evidence_ids_by_chapter"].values()))[0]]
+        context = [values[0] for values in requirement["required_context_evidence_ids_by_chapter"].values()]
+        roles[purpose] = {"primary_evidence_ids": primary, "context_evidence_ids": context,
+                          "temporal_witness_id": primary[0]}
+        keep.update(by_id[identifier]["beat_id"] for identifier in primary + context)
     keep.update(source["sticky_critic_context_beat_ids"])
     return {"verdict": "fit", "keep_beat_ids": sorted(keep),
             "released_optional_beat_ids": [value for value in source["current_selected_beat_ids"] if value not in keep],
-            "slot_selections": rows}
+            "role_selections": roles}
 
 
 def segment(identifier, start, end, text):

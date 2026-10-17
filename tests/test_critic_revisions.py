@@ -174,8 +174,9 @@ def test_empty_critic_response_requires_bounded_review_before_applying_story(mon
         if "continuity critic" in payload["messages"][0]["content"]:
             return {}
         return {"verdict": "fit", "keep_beat_ids": ["b1", "b3"], "released_optional_beat_ids": [],
-                "slot_selections": [{key: row[key] for key in ("slot_index", "purpose", "primary_beat_ids", "context_beat_ids",
-                    "primary_evidence_ids", "context_evidence_ids", "temporal_witness_id")} for row in selection["slot_map"]]}
+                "role_selections": {row["purpose"]: {key: row[key] for key in
+                    ("primary_evidence_ids", "context_evidence_ids", "temporal_witness_id")}
+                    for row in selection["slot_map"]}}
     monkeypatch.setattr(intelligence, "_call_ollama_story_pass", respond)
     decision, hierarchy = intelligence.hierarchical_story_edit(
         candidates, segments, Settings(), {"goal": "short", "duration_mode": "style", "target_duration": 30},
