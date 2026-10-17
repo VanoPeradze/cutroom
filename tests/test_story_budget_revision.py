@@ -56,9 +56,16 @@ def slot_proof(index, purpose, primary, context, beats, segments):
             "temporal_witness_id": primary_ids[0]}
 
 
+def evidence_choices(beats, segments, identifiers):
+    catalog = story_evidence.build_story_evidence_catalog(beats, segments)
+    return [f'{row["text"]} [{row["id"]}]' for identifier in identifiers for row in catalog if row["beat_id"] == identifier]
+
+
 def role_proof(primary, context, beats, segments):
-    row = slot_proof(0, "unused", primary, context, beats, segments)
-    return {key: row[key] for key in ("primary_evidence_ids", "context_evidence_ids", "temporal_witness_id")}
+    choices = evidence_choices(beats, segments, primary)
+    return {"primary_evidence_choices": choices,
+            "context_evidence_choices": evidence_choices(beats, segments, context),
+            "temporal_witness_choice": choices[0]}
 
 
 def proposal(plan, assignments=("b2", "b2", "b3", "b4"), *, beats=None, segments=None):
@@ -137,15 +144,15 @@ def test_invalid_revision_fails_without_a_second_model_call(monkeypatch, fault):
     elif fault == "extra_role": reply["role_selections"]["unexpected"] = copy.deepcopy(reply["role_selections"]["result"])
     elif fault == "unreleased_optional": reply["released_optional_beat_ids"] = []
     elif fault == "wrong_purpose": reply["role_selections"]["different"] = reply["role_selections"].pop("premise")
-    elif fault == "empty_evidence": reply["role_selections"]["premise"]["primary_evidence_ids"] = []
-    elif fault == "unknown_primary": reply["role_selections"]["premise"]["primary_evidence_ids"] = ["unknown"]
+    elif fault == "empty_evidence": reply["role_selections"]["premise"]["primary_evidence_choices"] = []
+    elif fault == "unknown_primary": reply["role_selections"]["premise"]["primary_evidence_choices"] = ["unknown"]
     elif fault == "missing_critic_context":
         reply["keep_beat_ids"].remove("b3")
         reply["released_optional_beat_ids"].append("b3")
     elif fault == "over_budget":
         reply["keep_beat_ids"].insert(0, "b1")
         reply["released_optional_beat_ids"] = []
-        reply["role_selections"]["evidence"]["primary_evidence_ids"] = evidence_ids(fixture[1], fixture[2], ["b1", "b3"])
+        reply["role_selections"]["evidence"]["primary_evidence_choices"] = evidence_choices(fixture[1], fixture[2], ["b1", "b3"])
     calls = []
     with pytest.raises(intelligence.StoryPlanningError) as caught:
         review(monkeypatch, fixture, reply, calls)
@@ -231,12 +238,12 @@ def test_revision_checks_source_roles_and_complete_units(monkeypatch, fault):
     reply = {"verdict": "fit", "keep_beat_ids": ["b2", "b3", "b4"], "released_optional_beat_ids": ["b1"],
              "role_selections": {"result": role_proof(["b4"], ["b2", "b3"], fixture[1], fixture[2])}}
     row = reply["role_selections"]["result"]
-    if fault == "wrong_primary_chapter": row["primary_evidence_ids"] = evidence_ids(fixture[1], fixture[2], ["b2"])
-    elif fault == "missing_context_chapter": row["context_evidence_ids"] = evidence_ids(fixture[1], fixture[2], ["b2"])
-    elif fault == "unrelated_context": row["context_evidence_ids"] = evidence_ids(fixture[1], fixture[2], ["b2", "b3", "b4"])
+    if fault == "wrong_primary_chapter": row["primary_evidence_choices"] = evidence_choices(fixture[1], fixture[2], ["b2"])
+    elif fault == "missing_context_chapter": row["context_evidence_choices"] = evidence_choices(fixture[1], fixture[2], ["b2"])
+    elif fault == "unrelated_context": row["context_evidence_choices"] = evidence_choices(fixture[1], fixture[2], ["b2", "b3", "b4"])
     elif fault == "unexpected_role_field": row["slot_index"] = False
-    elif fault == "unmapped_keep": row["context_evidence_ids"] = evidence_ids(fixture[1], fixture[2], ["b3"])
-    elif fault == "duplicate_primary": row["primary_evidence_ids"] *= 2
+    elif fault == "unmapped_keep": row["context_evidence_choices"] = evidence_choices(fixture[1], fixture[2], ["b3"])
+    elif fault == "duplicate_primary": row["primary_evidence_choices"] *= 2
     elif fault == "partial_source_unit": fixture[1][3]["start"] += .1
     elif fault == "unfinished_sentence": fixture[1][3]["text"] = fixture[2][3]["text"] = "An unfinished result"
     calls = []
@@ -268,7 +275,7 @@ def test_distinct_primary_and_every_context_chapter_can_be_verified(monkeypatch)
 def test_invalid_roles_below_target_do_not_claim_more_duration_fixes_the_story(monkeypatch):
     fixture = en_fixture()
     reply = proposal(fixture[-1])
-    reply["role_selections"]["premise"]["primary_evidence_ids"] = []
+    reply["role_selections"]["premise"]["primary_evidence_choices"] = []
     with pytest.raises(intelligence.StoryBudgetError) as caught:
         review(monkeypatch, fixture, reply, target_duration=40)
     assert caught.value.diagnostic["required_policy_minimum_seconds"] < 40
@@ -414,12 +421,12 @@ def test_review_payload_distinguishes_current_ids_critic_removals_and_same_chapt
     assert "provisional_prior_slot_map" not in payload
     assert "slot_requirements" not in payload
     catalog = story_evidence.build_story_evidence_catalog(fixture[1], fixture[2], allowed_beat_ids={"b1", "b2", "b3"})
-    known_evidence_ids = [row["id"] for row in catalog]
+    known_evidence_choices = [f'{row["text"]} [{row["id"]}]' for row in catalog]
     purposes = [slot["purpose"] for slot in fixture[-1]["slots"]]
     assert set(payload["role_requirements"]) == set(purposes)
     for row in payload["role_requirements"].values():
-        assert row["allowed_primary_evidence_ids_by_chapter"] == {"c1": known_evidence_ids}
-        assert row["required_context_evidence_ids_by_chapter"] == {"c1": known_evidence_ids}
+        assert row["allowed_primary_evidence_choices_by_chapter"] == {"c1": known_evidence_choices}
+        assert row["required_context_evidence_choices_by_chapter"] == {"c1": known_evidence_choices}
         assert row["same_evidence_may_supply_primary_and_context"] is True
     schema = calls[0]["format"]
     assert set(schema["properties"]) == {"verdict", "keep_beat_ids", "released_optional_beat_ids", "role_selections"}
@@ -431,13 +438,13 @@ def test_review_payload_distinguishes_current_ids_critic_removals_and_same_chapt
     assert set(roles["properties"]) == set(purposes)
     assert roles["additionalProperties"] is False
     for purpose, role in roles["properties"].items():
-        assert set(role["properties"]) == {"primary_evidence_ids", "context_evidence_ids", "temporal_witness_id"}
+        assert set(role["properties"]) == {"primary_evidence_choices", "context_evidence_choices", "temporal_witness_choice"}
         assert set(role["required"]) == set(role["properties"])
         assert role["additionalProperties"] is False
-        for key in ("primary_evidence_ids", "context_evidence_ids"):
-            assert role["properties"][key]["items"]["enum"] == known_evidence_ids
-        expected_witnesses = [row["id"] for row in catalog if purpose != purposes[-1] or row["beat_id"] == "b3"]
-        assert role["properties"]["temporal_witness_id"]["enum"] == expected_witnesses
+        for key in ("primary_evidence_choices", "context_evidence_choices"):
+            assert role["properties"][key]["items"]["enum"] == known_evidence_choices
+        expected_witnesses = [f'{row["text"]} [{row["id"]}]' for row in catalog if purpose != purposes[-1] or row["beat_id"] == "b3"]
+        assert role["properties"]["temporal_witness_choice"]["enum"] == expected_witnesses
     assert payload["allowed_final_beat_ids"] == ["b3"]
     assert result["semantic_revision"]["final_ending_domain"]["semantic_fit_verified"] is False
     assert intelligence.STORY_TARGET_REVISION_SCHEMA == original_schema
@@ -454,7 +461,7 @@ def test_fresh_revision_ambiguities_remain_validation_errors(monkeypatch, fault)
         reply["released_optional_beat_ids"] = ["b4"]
     else:
         for row in reply["role_selections"].values():
-            row["context_evidence_ids"] = []
+            row["context_evidence_choices"] = []
     calls = []
     with pytest.raises(intelligence.StoryBudgetError) as caught:
         review(monkeypatch, fixture, reply, calls)
@@ -511,7 +518,7 @@ def test_old_free_role_evidence_cannot_claim_typed_source_proof(monkeypatch):
     fixture = en_fixture()
     reply = proposal(fixture[-1])
     for row in reply["role_selections"].values():
-        for key in ("primary_evidence_ids", "context_evidence_ids", "temporal_witness_id"):
+        for key in ("primary_evidence_choices", "context_evidence_choices", "temporal_witness_choice"):
             row.pop(key)
         row["role_evidence"] = "The source says Alpha beta, so this slot is verified."
     calls = []
@@ -529,11 +536,11 @@ def test_source_citations_must_belong_to_each_assigned_role(monkeypatch, fault):
     reply = proposal(fixture[-1])
     row = reply["role_selections"]["premise"]
     if fault == "unrelated_primary_quote":
-        row["primary_evidence_ids"] = evidence_ids(fixture[1], fixture[2], ["b3"])
+        row["primary_evidence_choices"] = evidence_choices(fixture[1], fixture[2], ["b3"])
     elif fault == "missing_context_quote":
-        row["context_evidence_ids"] = []
+        row["context_evidence_choices"] = []
     else:
-        row["temporal_witness_id"] = evidence_ids(fixture[1], fixture[2], ["b3"])[0]
+        row["temporal_witness_choice"] = evidence_choices(fixture[1], fixture[2], ["b3"])[0]
     calls = []
 
     with pytest.raises(intelligence.StoryBudgetError) as caught:
@@ -810,3 +817,56 @@ def test_ambiguous_planned_purposes_fail_before_a_final_request(monkeypatch, fau
 
     assert calls == []
     assert fixture == original
+
+
+def test_text_first_choices_disambiguate_repeated_words_and_return_canonical_references(monkeypatch):
+    fixture = en_fixture()
+    catalog = story_evidence.build_story_evidence_catalog(fixture[1], fixture[2])
+    references = {row["beat_id"]: row for row in catalog}
+    assert references["b2"]["text"] == references["b3"]["text"] == references["b4"]["text"]
+    choices = evidence_choices(fixture[1], fixture[2], ["b2", "b3", "b4"])
+    assert len(set(choices)) == 3
+    for choice, identifier in zip(choices, ("b2", "b3", "b4")):
+        assert choice == f'{references[identifier]["text"]} [{references[identifier]["id"]}]'
+    calls = []
+
+    result = review(monkeypatch, fixture, proposal(fixture[-1]), calls)
+
+    assert len(calls) == 1
+    for row, identifier in zip(result["slot_map"], ("b2", "b2", "b3", "b4")):
+        assert row["primary_beat_ids"] == [identifier]
+        assert row["primary_evidence_ids"] == [references[identifier]["id"]]
+        assert row["temporal_witness_id"] == references[identifier]["id"]
+        assert all(reference["id"] in {item["id"] for item in catalog} for reference in row["source_evidence"])
+    assert [row["beat_id"] for row in result["evidence_proof"]["order_evidence"]] == ["b2", "b2", "b3", "b4"]
+
+
+@pytest.mark.parametrize("fault", ["fake_quote_known_id", "unknown_reference", "old_opaque_id", "unknown_key",
+                                   "old_id_fields", "duplicate_choice"])
+def test_final_choices_require_exact_allowed_quote_reference_strings(monkeypatch, fault):
+    fixture = en_fixture()
+    reply = proposal(fixture[-1])
+    row = reply["role_selections"]["premise"]
+    canonical_id = evidence_ids(fixture[1], fixture[2], ["b2"])[0]
+    if fault == "fake_quote_known_id":
+        row["primary_evidence_choices"] = [f"Invented source wording. [{canonical_id}]"]
+    elif fault == "unknown_reference":
+        row["primary_evidence_choices"] = ["Alpha beta. [unknown:source:f1]"]
+    elif fault == "old_opaque_id":
+        row["primary_evidence_choices"] = [canonical_id]
+    elif fault == "unknown_key":
+        row["unknown_evidence_key"] = []
+    elif fault == "old_id_fields":
+        row.clear()
+        row.update(primary_evidence_ids=[canonical_id], context_evidence_ids=[canonical_id],
+                   temporal_witness_id=canonical_id)
+    else:
+        row["primary_evidence_choices"] *= 2
+    calls = []
+
+    with pytest.raises(intelligence.StoryBudgetError) as caught:
+        review(monkeypatch, fixture, reply, calls)
+
+    assert len(calls) == 1
+    assert caught.value.diagnostic["reason"] == "invalid_semantic_mapping"
+    assert caught.value.diagnostic["applied_to_timeline"] is False

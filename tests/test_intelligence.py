@@ -18,12 +18,13 @@ def _final_evidence_response(payload):
     source = json.loads(payload["messages"][1]["content"])
     roles, keep = {}, set()
     by_id = {row["id"]: row for row in source["source_evidence"]}
+    choice_to_id = {row["choice"]: row["evidence_id"] for row in source["source_evidence_choices"]}
     for purpose, requirement in source["role_requirements"].items():
-        primary = [next(iter(requirement["allowed_primary_evidence_ids_by_chapter"].values()))[0]]
-        context = [values[0] for values in requirement["required_context_evidence_ids_by_chapter"].values()]
-        roles[purpose] = {"primary_evidence_ids": primary, "context_evidence_ids": context,
-                          "temporal_witness_id": primary[0]}
-        keep.update(by_id[identifier]["beat_id"] for identifier in primary + context)
+        primary = [next(iter(requirement["allowed_primary_evidence_choices_by_chapter"].values()))[0]]
+        context = [values[0] for values in requirement["required_context_evidence_choices_by_chapter"].values()]
+        roles[purpose] = {"primary_evidence_choices": primary, "context_evidence_choices": context,
+                          "temporal_witness_choice": primary[0]}
+        keep.update(by_id[choice_to_id[choice]]["beat_id"] for choice in primary + context)
     keep.update(source["sticky_critic_context_beat_ids"])
     return {"verdict": "fit", "keep_beat_ids": sorted(keep),
             "released_optional_beat_ids": [value for value in source["current_selected_beat_ids"] if value not in keep],

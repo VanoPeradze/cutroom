@@ -24,8 +24,8 @@ from .story_constraints import story_constraint_feasibility, story_final_ending_
 from .story_evidence import EVIDENCE_POLICY_VERSION, build_story_evidence_catalog, validate_story_evidence
 from .utils import clamp, merge_ranges, normalize_text, range_duration
 
-STORY_CACHE_PIPELINE = "hierarchical-story-2026-10-17.semantic-target-review-v8.purpose-keyed-quotes"
-CRITIC_REVIEW_CONTRACT = "critic-review-2026-10-17.semantic-target-review-v10.purpose-keyed-quotes"
+STORY_CACHE_PIPELINE = "hierarchical-story-2026-10-17.semantic-target-review-v9.verbatim-evidence-choices"
+CRITIC_REVIEW_CONTRACT = "critic-review-2026-10-17.semantic-target-review-v11.verbatim-evidence-choices"
 
 FILLERS: dict[str, set[str]] = {
     "en": {"um", "uh", "erm", "like", "basically", "actually", "literally", "you know", "i mean", "so"},
@@ -1818,6 +1818,14 @@ def _verify_non_short_story_evidence(
     return _reconcile_critic_actions(output)
 
 
+def _story_evidence_choice_catalog(catalog: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Expose exact source wording first while retaining an unambiguous reference."""
+    choices = {f"{row['text']} [{row['id']}]": row for row in catalog}
+    if len(choices) != len(catalog):
+        raise ValueError("Canonical source quotations need unique exact choice labels.")
+    return choices
+
+
 def _story_revision_slot_rows(roles: Any, catalog: list[dict[str, Any]],
                               plan: dict[str, Any]) -> list[dict[str, Any]]:
     """Resolve chosen quotes to their canonical owners without assigning roles."""
@@ -1825,21 +1833,27 @@ def _story_revision_slot_rows(roles: Any, catalog: list[dict[str, Any]],
     purposes = [row["purpose"] for row in slots]
     if not isinstance(roles, dict) or set(roles) != set(purposes):
         raise ValueError("Every planned purpose needs exactly one explicit quotation assignment.")
-    by_id = {row["id"]: row for row in catalog}
+    by_choice = _story_evidence_choice_catalog(catalog)
     rows = []
     for index, purpose in enumerate(purposes):
         row = roles[purpose]
-        if not isinstance(row, dict) or set(row) != {"primary_evidence_ids", "context_evidence_ids", "temporal_witness_id"}:
-            raise ValueError("A story role must contain only quotation IDs and its temporal witness.")
-        owners = {}
+        if not isinstance(row, dict) or set(row) != {"primary_evidence_choices", "context_evidence_choices", "temporal_witness_choice"}:
+            raise ValueError("A story role must contain only exact source quotation choices and its temporal witness choice.")
+        owners, identifiers = {}, {}
         for kind in ("primary", "context"):
-            values = row[f"{kind}_evidence_ids"]
-            if (not isinstance(values, list) or any(not isinstance(value, str) or value not in by_id for value in values)
+            values = row[f"{kind}_evidence_choices"]
+            if (not isinstance(values, list) or any(not isinstance(value, str) or value not in by_choice for value in values)
                     or len(values) != len(set(values))):
-                raise ValueError("Story roles must cite unique allowed canonical quotation IDs.")
-            owners[kind] = list(dict.fromkeys(by_id[value]["beat_id"] for value in values))
+                raise ValueError("Story roles must select unique exact allowed source quotation choices.")
+            identifiers[kind] = [by_choice[value]["id"] for value in values]
+            owners[kind] = list(dict.fromkeys(by_choice[value]["beat_id"] for value in values))
+        witness = row["temporal_witness_choice"]
+        if not isinstance(witness, str) or witness not in by_choice:
+            raise ValueError("The temporal witness must be an exact allowed source quotation choice.")
         rows.append({"slot_index": index, "purpose": purpose,
-                     "primary_beat_ids": owners["primary"], "context_beat_ids": owners["context"], **row})
+                     "primary_beat_ids": owners["primary"], "context_beat_ids": owners["context"],
+                     "primary_evidence_ids": identifiers["primary"], "context_evidence_ids": identifiers["context"],
+                     "temporal_witness_id": by_choice[witness]["id"]})
     return rows
 
 
@@ -1954,6 +1968,10 @@ def _review_story_target_budget(
         fail("invalid_source_evidence", "Source quotation ownership could not be established. Review canonical transcript boundaries before retrying.")
     allowed_ids = [value for value in known_allowed if complete_units([value])]
     catalog = [row for row in catalog if row["beat_id"] in allowed_ids]
+    try:
+        choice_catalog = _story_evidence_choice_catalog(catalog)
+    except (ValueError, TypeError, KeyError):
+        fail("invalid_source_evidence", "Source quotation choices could not be resolved to unique canonical evidence.")
     feasibility = story_constraint_feasibility(candidates, segments, chapters, plan,
         selected_beat_ids=current, sticky_beat_ids=sticky, rejected_beat_ids=rejected, target=target,
         protect_action_span=bool(((brief.get("style_profile") or {}).get("selection_policy") or {}).get("protect_action_span")),
@@ -1968,11 +1986,11 @@ def _review_story_target_budget(
     evidence_owners = {row["id"]: row["beat_id"] for row in catalog}
     release_ids = [value for value in current if value not in sticky and value not in rejected]
     role_requirements = {slot["purpose"]: {
-        "allowed_primary_evidence_ids_by_chapter": {
-            str(chapter_id): [row["id"] for row in catalog if beat_chapters.get(row["beat_id"]) == str(chapter_id)]
+        "allowed_primary_evidence_choices_by_chapter": {
+            str(chapter_id): [choice for choice, row in choice_catalog.items() if beat_chapters.get(row["beat_id"]) == str(chapter_id)]
             for chapter_id in slot.get("chapter_ids", [])},
-        "required_context_evidence_ids_by_chapter": {
-            str(chapter_id): [row["id"] for row in catalog if beat_chapters.get(row["beat_id"]) == str(chapter_id)]
+        "required_context_evidence_choices_by_chapter": {
+            str(chapter_id): [choice for choice, row in choice_catalog.items() if beat_chapters.get(row["beat_id"]) == str(chapter_id)]
             for chapter_id in slot.get("required_context_chapter_ids", [])},
         "same_evidence_may_supply_primary_and_context": True,
     } for slot in plan["slots"]}
@@ -1985,19 +2003,19 @@ def _review_story_target_budget(
     revision_schema["properties"]["keep_beat_ids"] = restricted_ids(allowed_ids)
     revision_schema["properties"]["released_optional_beat_ids"] = restricted_ids(release_ids)
     for purpose, requirement in role_requirements.items():
-        primary_ids = list(dict.fromkeys(value for values in requirement["allowed_primary_evidence_ids_by_chapter"].values() for value in values))
-        context_ids = list(dict.fromkeys(value for values in requirement["required_context_evidence_ids_by_chapter"].values() for value in values))
+        primary_ids = list(dict.fromkeys(value for values in requirement["allowed_primary_evidence_choices_by_chapter"].values() for value in values))
+        context_ids = list(dict.fromkeys(value for values in requirement["required_context_evidence_choices_by_chapter"].values() for value in values))
         primary_schema, context_schema = restricted_ids(primary_ids), restricted_ids(context_ids)
         if primary_ids:
             primary_schema["minItems"] = 1
         if context_ids:
-            context_schema["minItems"] = len(requirement["required_context_evidence_ids_by_chapter"])
-        witness_ids = [value for value in primary_ids if purpose != purposes[-1] or evidence_owners[value] in final_ending_ids]
+            context_schema["minItems"] = len(requirement["required_context_evidence_choices_by_chapter"])
+        witness_ids = [value for value in primary_ids if purpose != purposes[-1] or choice_catalog[value]["beat_id"] in final_ending_ids]
         revision_schema["properties"]["role_selections"]["properties"][purpose] = {
             "type": "object", "additionalProperties": False,
-            "properties": {"primary_evidence_ids": primary_schema, "context_evidence_ids": context_schema,
-                           "temporal_witness_id": {"type": "string", "enum": witness_ids or [""]}},
-            "required": ["primary_evidence_ids", "context_evidence_ids", "temporal_witness_id"],
+            "properties": {"primary_evidence_choices": primary_schema, "context_evidence_choices": context_schema,
+                           "temporal_witness_choice": {"type": "string", "enum": witness_ids or [""]}},
+            "required": ["primary_evidence_choices", "context_evidence_choices", "temporal_witness_choice"],
         }
     complete_roles = revision_schema["properties"]["role_selections"]
     complete_roles["required"] = list(purposes)
@@ -2014,16 +2032,18 @@ def _review_story_target_budget(
             "You are CUTROOM's final semantic budget editor. This is the single permitted revision. "
             "Return fit only for a coherent, complete story whose exact source cost fits the target using the supplied pause policy. "
             "For fit, assign quotations to EVERY exact purpose key in role_requirements using role_selections. "
-            "Choose primary_evidence_ids only from that purpose's allowed_primary_evidence_ids_by_chapter. "
-            "For EACH chapter in required_context_evidence_ids_by_chapter, choose at least one context_evidence_id from that chapter's list. "
-            "Required context needs explicit quotation IDs even when primary and context use the SAME chapter. "
-            "The SAME supplied quotation ID may appear in both primary_evidence_ids and context_evidence_ids when allowed for both; "
-            "this does not duplicate footage. Use context_evidence_ids=[] ONLY when the required-context table is empty. "
+            "Select by the meaning of the verbatim wording FIRST, then copy its entire exact choice string including the bracketed canonical reference. "
+            "Choose primary_evidence_choices only from that purpose's allowed_primary_evidence_choices_by_chapter. "
+            "Primary choices must express that role themselves; background context cannot replace primary support. "
+            "For EACH chapter in required_context_evidence_choices_by_chapter, choose at least one context_evidence_choice from that chapter's list. "
+            "Required context needs explicit quotation choices even when primary and context use the SAME chapter. "
+            "The SAME supplied choice may appear in both primary_evidence_choices and context_evidence_choices when allowed for both; "
+            "this does not duplicate footage. Use context_evidence_choices=[] ONLY when the required-context table is empty. "
             "The supplied source_units and source_evidence are authoritative. Select the actual source phrases that support each role; "
             "do not invent events, motives, attacks, relocation, participation or other outcomes. A conclusion may be an explicit refusal, decision or qualified claim. "
-            "Each chosen quotation identifies its complete source beat through the supplied catalog; the server derives those beat IDs. "
-            "Return quotation IDs only for each role, with no beat assignments, English proof claims, invented quotations or timestamps. "
-            "Choose temporal_witness_id from the row's primary_evidence_ids. Witnesses must follow the configured story-role order in source playback; "
+            "Each exact source_evidence_choices string identifies one canonical quotation and its complete source beat; the server resolves that exact key. "
+            "Return complete supplied choice strings for each role, with no bare IDs, rewritten quotations, beat assignments, English proof claims or timestamps. "
+            "Choose temporal_witness_choice from that role's primary_evidence_choices. Witnesses must follow the configured story-role order in source playback; "
             "overlapping evidence within one source unit may support several roles, but a later role cannot point definitely backward. "
             "The final role must cite primary evidence from the final selected passage. Narrow unsupported interpretations to what the source actually says. "
             "Its temporal witness must belong to allowed_final_beat_ids, the endings that remain possible under optimistic numeric prefix constraints. "
@@ -2057,6 +2077,8 @@ def _review_story_target_budget(
                 "duration_cost": _story_selection_cost([value], candidates, segments, brief)}
                 for value in allowed_ids],
             "source_evidence": catalog,
+            "source_evidence_choices": [{"choice": choice, "evidence_id": row["id"]}
+                                        for choice, row in choice_catalog.items()],
             # Fixed context: the context fitter may shorten candidate excerpts,
             # but it must preserve the complete source evidence behind a role.
             "source_units": [{"id": value, "start": row["start"], "end": row["end"],
