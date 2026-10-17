@@ -609,3 +609,88 @@ def test_over_budget_proposal_reports_its_own_cost_without_claiming_global_infea
     assert diagnostic["proposed_revision_cost"]["minimum_safe_seconds"] == pytest.approx(21.46)
     assert diagnostic["proposed_revision_cost"]["fits_target"] is False
     assert "Allowed complete source constraints require at least" not in str(caught.value)
+
+
+@pytest.mark.parametrize("model,connection,thinking", [
+    ("qwen3.5:2b", "local", True),
+    ("qwen3.5:4b", "local", True),
+    ("qwen3.5:9b", "local", True),
+    ("library/qwen3.5:4b", "local", True),
+    ("fixture-model", "local", False),
+    ("qwen35:4b", "local", False),
+    ("custom-qwen3.5:4b", "local", False),
+    ("qwen3.5-instruct:4b", "local", False),
+    ("qwen3.5:4b", "cloud", False),
+    ("fixture-model", "cloud", False),
+])
+def test_final_reasoning_is_bounded_and_only_enabled_for_local_standard_qwen35(monkeypatch, model, connection, thinking):
+    fixture = en_fixture()
+    original = copy.deepcopy(fixture)
+    settings = Settings()
+    settings.ai = {**settings.ai, "cloud_connection": {"mode": connection}}
+    calls = []
+
+    def respond(_settings, payload, timeout, cancel_check):
+        calls.append(copy.deepcopy(payload))
+        assert timeout == 240
+        assert cancel_check is None
+        return proposal(fixture[-1])
+
+    monkeypatch.setattr(intelligence, "_call_ollama_story_pass", respond)
+    revised = intelligence._review_story_target_budget(
+        settings, *fixture[:4], {}, fixture[-1],
+        {"goal": "short", "duration_mode": "target", "target_duration": 20}, model,
+    )
+
+    assert fixture == original
+    assert len(calls) == 1
+    assert calls[0]["_single_attempt"] is True
+    assert calls[0].get("think", False) is thinking
+    if not thinking:
+        assert "think" not in calls[0]  # Preserve existing compact/cloud wire behavior.
+    assert calls[0]["options"]["num_predict"] == (4096 if thinking else 2400)
+    assert revised["semantic_revision"]["reasoning"] == {
+        "mode": "bounded_local_qwen35" if thinking else "compact", "think": thinking,
+        "num_predict": 4096 if thinking else 2400, "max_attempts": 1,
+        "timeout_seconds": 240, "request_attempted": True,
+    }
+    assert revised["semantic_revision"]["attempts"] == 1
+    assert revised["evidence_policy_version"] == story_evidence.EVIDENCE_POLICY_VERSION
+
+
+def test_bounded_reasoning_failure_records_budget_without_retry_or_selection_mutation(monkeypatch):
+    fixture = en_fixture()
+    original = copy.deepcopy(fixture)
+    calls = []
+
+    def fail(_settings, payload, timeout, _cancel):
+        calls.append(copy.deepcopy(payload))
+        raise intelligence.StoryPlanningError("The model exhausted its output budget.")
+
+    monkeypatch.setattr(intelligence, "_call_ollama_story_pass", fail)
+    with pytest.raises(intelligence.StoryBudgetError) as caught:
+        intelligence._review_story_target_budget(
+            Settings(), *fixture[:4], {}, fixture[-1],
+            {"goal": "short", "duration_mode": "target", "target_duration": 20}, "qwen3.5:4b",
+        )
+
+    assert fixture == original
+    assert len(calls) == 1
+    assert calls[0]["think"] is True
+    diagnostic = caught.value.diagnostic
+    assert diagnostic["applied_to_timeline"] is False
+    assert diagnostic["semantic_revision"]["attempts"] == 1
+    assert diagnostic["semantic_revision"]["reasoning"]["num_predict"] == 4096
+    assert diagnostic["semantic_revision"]["reasoning"]["request_attempted"] is True
+
+
+def test_already_reviewed_selection_records_no_reasoning_request(monkeypatch):
+    fixture = reviewed_fixture()
+    monkeypatch.setattr(intelligence, "_call_ollama_story_pass",
+                        lambda *_args: pytest.fail("Verified unchanged review must not call a model."))
+    revised = intelligence._review_story_target_budget(
+        Settings(), *fixture[:4], {}, fixture[-1],
+        {"goal": "short", "duration_mode": "target", "target_duration": 20}, "qwen3.5:4b",
+    )
+    assert revised["semantic_revision"]["attempts"] == 0
+    assert revised["semantic_revision"]["reasoning"]["request_attempted"] is False

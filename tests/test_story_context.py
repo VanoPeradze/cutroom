@@ -75,6 +75,115 @@ def test_budget_revision_single_attempt_does_not_retry_malformed_json(monkeypatc
     assert "_single_attempt" not in bodies[0]
 
 
+def test_explicit_thinking_single_attempt_preserves_its_output_budget_and_input(monkeypatch):
+    bodies = _capture_requests(monkeypatch)
+    payload = _payload({"brief": {"target_duration": 20}}, output=4096)
+    payload.update(think=True, _single_attempt=True)
+    original = copy.deepcopy(payload)
+
+    assert intelligence._call_ollama_strict(Settings(), payload) == {"ok": True}
+
+    assert len(bodies) == 1
+    assert bodies[0]["think"] is True
+    assert bodies[0]["options"]["num_predict"] == 4096
+    assert "_single_attempt" not in bodies[0]
+    assert payload == original
+
+
+def test_generic_strict_request_defaults_to_compact_non_thinking_output(monkeypatch):
+    bodies = _capture_requests(monkeypatch)
+    payload = _payload({"brief": {}})
+    original = copy.deepcopy(payload)
+
+    assert intelligence._call_ollama_strict(Settings(), payload) == {"ok": True}
+
+    assert len(bodies) == 1
+    assert bodies[0]["think"] is False
+    assert payload == original
+
+
+def test_single_thinking_attempt_exhaustion_fails_without_retry_or_input_mutation(monkeypatch):
+    bodies = []
+
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def read(self, limit):
+            return json.dumps({"message": {"thinking": "The thinking budget was exhausted.", "content": ""},
+                               "done_reason": "length"}).encode("utf-8")
+
+    def fake_urlopen(request, timeout=0):
+        bodies.append(json.loads(request.data.decode("utf-8")))
+        return Response()
+
+    monkeypatch.setattr(intelligence, "open_ollama", fake_urlopen)
+    payload = _payload({"brief": {"target_duration": 20}}, output=4096)
+    payload.update(think=True, _single_attempt=True)
+    original = copy.deepcopy(payload)
+
+    with pytest.raises(intelligence.StoryPlanningError, match="output budget"):
+        intelligence._call_ollama_strict(Settings(), payload)
+
+    assert len(bodies) == 1
+    assert bodies[0]["think"] is True
+    assert bodies[0]["options"]["num_predict"] == 4096
+    assert payload == original
+
+
+def test_single_thinking_attempt_preserves_cancellation_while_streaming(monkeypatch):
+    class Cancelled(RuntimeError):
+        pass
+
+    cancellation = Cancelled("The owning job was cancelled.")
+    state = {"chunks": 0, "closed": False}
+    bodies = []
+
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            self.close()
+            return False
+
+        def readline(self, limit):
+            if state["chunks"]:
+                return b""
+            state["chunks"] += 1
+            return json.dumps({"message": {"thinking": "A partial thought.", "content": ""},
+                               "done": False}).encode("utf-8") + b"\n"
+
+        def close(self):
+            state["closed"] = True
+
+    def fake_urlopen(request, timeout=0):
+        bodies.append(json.loads(request.data.decode("utf-8")))
+        return Response()
+
+    def cancel_check():
+        if state["chunks"]:
+            raise cancellation
+
+    monkeypatch.setattr(intelligence, "open_ollama", fake_urlopen)
+    payload = _payload({"brief": {"target_duration": 20}}, output=4096)
+    payload.update(think=True, _single_attempt=True)
+    original = copy.deepcopy(payload)
+
+    with pytest.raises(Cancelled) as caught:
+        intelligence._call_ollama_strict(Settings(), payload, cancel_check=cancel_check)
+
+    assert caught.value is cancellation
+    assert len(bodies) == 1
+    assert bodies[0]["think"] is True
+    assert bodies[0]["stream"] is True
+    assert state["closed"] is True
+    assert payload == original
+
+
 def test_budget_revision_single_attempt_control_is_stripped_before_cloud(monkeypatch):
     from cutroom import cloud_ai
     captured = []

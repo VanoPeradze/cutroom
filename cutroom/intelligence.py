@@ -24,8 +24,8 @@ from .story_constraints import story_constraint_feasibility
 from .story_evidence import EVIDENCE_POLICY_VERSION, build_story_evidence_catalog, validate_story_evidence
 from .utils import clamp, merge_ranges, normalize_text, range_duration
 
-STORY_CACHE_PIPELINE = "hierarchical-story-2026-10-17.semantic-target-review-v5.source-quotes-order"
-CRITIC_REVIEW_CONTRACT = "critic-review-2026-10-17.semantic-target-review-v7.source-quotes-order"
+STORY_CACHE_PIPELINE = "hierarchical-story-2026-10-17.semantic-target-review-v6.bounded-final-reasoning"
+CRITIC_REVIEW_CONTRACT = "critic-review-2026-10-17.semantic-target-review-v8.bounded-final-reasoning"
 
 FILLERS: dict[str, set[str]] = {
     "en": {"um", "uh", "erm", "like", "basically", "actually", "literally", "you know", "i mean", "so"},
@@ -924,8 +924,8 @@ def _call_ollama_strict(
     # The hierarchy preflights Ollama/model availability once before the first pass.
     # Do not re-query /api/tags before every pass; that adds latency without adding safety.
     mode = str(clean_payload.pop("_performance_mode", None) or settings.ai.get("performance_mode") or "auto").lower()
-    # Story passes require compact JSON. Explicitly disable model thinking so
-    # the response token budget cannot be exhausted before content is emitted.
+    # Keep ordinary passes compact. The supported local final review can opt
+    # into bounded thinking explicitly without changing custom/cloud defaults.
     clean_payload.setdefault("think", False)
     # Ollama emits a small NDJSON chunk for each generated token. Streaming only
     # when a job supplies a cancellation callback lets closing this response
@@ -1817,6 +1817,15 @@ def _verify_non_short_story_evidence(
     return _reconcile_critic_actions(output)
 
 
+def _story_target_reasoning_policy(settings: Settings, model: str) -> dict[str, Any]:
+    """Use known standard-family support without a per-job capability probe."""
+    from .cloud_ai import enabled
+    family = str(model).strip().rsplit("/", 1)[-1].split(":", 1)[0].lower()
+    bounded = not enabled(settings) and family == "qwen3.5"
+    return {"mode": "bounded_local_qwen35" if bounded else "compact", "think": bounded,
+            "num_predict": 4096 if bounded else 2400, "max_attempts": 1, "timeout_seconds": 240}
+
+
 def _review_story_target_budget(
     settings: Settings, selection: dict[str, Any], candidates: list[dict[str, Any]],
     segments: list[dict[str, Any]], chapters: list[dict[str, Any]], outline: dict[str, Any],
@@ -1828,6 +1837,8 @@ def _review_story_target_budget(
         return selection
     _check_cancelled(cancel_check)
     _validate_configured_story_roles(plan, brief)
+    reasoning_policy = _story_target_reasoning_policy(settings, model)
+    revision_attempted = False
     output = copy.deepcopy(selection)
     valid = {str(row["id"]): row for row in candidates}
     critic = output.get("critic") or {}
@@ -1846,6 +1857,8 @@ def _review_story_target_budget(
                       "required_policy_minimum_seconds": cost["minimum_safe_seconds"], "reason": reason,
                       "policy_version": cost["policy_version"], "applied_to_timeline": False,
                       "approved_seconds": cost["approved_seconds"], "minimum_target_seconds": round(minimum_target, 3)}
+        diagnostic["semantic_revision"] = {"attempts": int(revision_attempted),
+            "reasoning": {**reasoning_policy, "request_attempted": revision_attempted}}
         if feasibility is not None:
             diagnostic["constraint_feasibility"] = copy.deepcopy(feasibility)
         if proposed_cost is not None:
@@ -1893,7 +1906,8 @@ def _review_story_target_budget(
                       evidence_policy_version=EVIDENCE_POLICY_VERSION, evidence_proof=existing_proof,
                       summary=_extractive_story_summary(existing_proof), summary_source="canonical_witness_quotes",
                       semantic_revision={"attempts": 0, "verdict": "fit", "released_optional_beat_ids": [],
-                                         "policy_version": cost["policy_version"], "cost": cost},
+                                         "policy_version": cost["policy_version"], "cost": cost,
+                                         "reasoning": {**reasoning_policy, "request_attempted": False}},
                       unresolved_plan_slot_indexes=[], unresolved_context_slot_indexes=[])
         return _reconcile_critic_actions(output)
     mode = str(brief.get("performance_mode") or settings.ai.get("performance_mode") or "auto")
@@ -1956,7 +1970,8 @@ def _review_story_target_budget(
     payload = {
         "model": model, "stream": False, "format": revision_schema,
         "_performance_mode": mode, "_single_attempt": True,
-        "options": {"temperature": .02, "num_ctx": 16384 if mode == "quality" else 12288, "num_predict": 2400},
+        "options": {"temperature": .02, "num_ctx": 16384 if mode == "quality" else 12288,
+                    "num_predict": reasoning_policy["num_predict"]},
         "messages": [{"role": "system", "content": (
             "You are CUTROOM's final semantic budget editor. This is the single permitted revision. "
             "Return fit only for a coherent, complete story whose exact source cost fits the target using the supplied pause policy. "
@@ -2015,6 +2030,8 @@ def _review_story_target_budget(
                              for value, row in valid.items() if value in allowed_ids],
         }, ensure_ascii=False)}],
     }
+    if reasoning_policy["think"]:
+        payload["think"] = True
     cancellation_error: list[BaseException] = []
 
     def checked_cancel() -> None:
@@ -2025,6 +2042,7 @@ def _review_story_target_budget(
             raise
 
     try:
+        revision_attempted = True
         result = _call_ollama_story_pass(settings, payload, 240, checked_cancel if cancel_check else None)
     except Exception as exc:
         from .jobs import JobCancelled
@@ -2077,7 +2095,8 @@ def _review_story_target_budget(
                   highlight_beat_ids=[value for value in output.get("highlight_beat_ids", []) if value in keep],
                   recovered_slot_indexes=[], unresolved_plan_slot_indexes=[], unresolved_context_slot_indexes=[],
                   semantic_revision={"attempts": 1, "verdict": "fit", "released_optional_beat_ids": list(released),
-                                     "policy_version": revised_cost["policy_version"], "cost": revised_cost})
+                                     "policy_version": revised_cost["policy_version"], "cost": revised_cost,
+                                     "reasoning": {**reasoning_policy, "request_attempted": True}})
     output["critic"] = {**critic, "original_review": copy.deepcopy(critic), "verdict": "pass", "issues": [],
                         "post_review_beat_ids": list(keep), "semantic_revision_verified": True,
                         "summary": "The single model review assigned the story roles; canonical source attribution, role order, required context and budget were validated."}
