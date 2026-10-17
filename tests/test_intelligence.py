@@ -1,6 +1,38 @@
 from __future__ import annotations
 
+import json
+import pytest
+
 from cutroom.intelligence import enrich_segments, language_from_text, similarity, deterministic_edit
+
+
+@pytest.fixture(autouse=True)
+def _no_real_story_transport(monkeypatch):
+    from cutroom import intelligence
+    def forbid(*_args, **_kwargs):
+        raise AssertionError("Intelligence unit tests must stub every model request.")
+    monkeypatch.setattr(intelligence, "open_ollama", forbid)
+
+
+def _final_evidence_response(payload):
+    source = json.loads(payload["messages"][1]["content"])
+    rows, keep = [], set()
+    for requirement in source["slot_requirements"]:
+        primary = [next(iter(requirement["allowed_primary_beat_ids_by_chapter"].values()))[0]]
+        context = [values[0] for values in requirement["required_context_beat_ids_by_chapter"].values()]
+        def cite(identifiers):
+            return [next(row["id"] for row in source["source_evidence"] if row["beat_id"] == identifier)
+                    for identifier in identifiers]
+        evidence = cite(primary)
+        rows.append({"slot_index": requirement["slot_index"], "purpose": requirement["purpose"],
+                     "primary_beat_ids": primary, "context_beat_ids": context,
+                     "primary_evidence_ids": evidence, "context_evidence_ids": cite(context),
+                     "temporal_witness_id": evidence[0]})
+        keep.update(primary + context)
+    keep.update(source["sticky_critic_context_beat_ids"])
+    return {"verdict": "fit", "keep_beat_ids": sorted(keep),
+            "released_optional_beat_ids": [value for value in source["current_selected_beat_ids"] if value not in keep],
+            "slot_selections": rows}
 
 
 def segment(identifier, start, end, text):
@@ -232,6 +264,8 @@ def test_hierarchical_story_pipeline_runs_chapters_outline_plan_selection_and_cr
             return {"slot_selections": selections, "highlight_beat_ids": chosen, "opening_beat_id": chosen[0], "closing_beat_id": chosen[-1], "title": "Story", "summary": "Coherent"}
         if "continuity critic" in system:
             return {"verdict": "pass", "add_beat_ids": [], "remove_beat_ids": [], "issues": [], "summary": "Continuity is sound"}
+        if "final semantic budget editor" in system:
+            return _final_evidence_response(payload)
         raise AssertionError(system)
 
     monkeypatch.setattr(intelligence, "_call_ollama_strict", fake_call)
@@ -520,6 +554,7 @@ def test_story_hierarchy_cache_reuses_chapters_and_outline(monkeypatch):
 
     monkeypatch.setattr(intelligence, "_select_story_beats", fake_select)
     monkeypatch.setattr(intelligence, "_critic_story_selection", lambda _settings, selection, candidates, outline, plan, brief, model, progress=None, *_args: {**selection, "critic": {"verdict": "pass"}})
+    monkeypatch.setattr(intelligence, "_call_ollama_story_pass", lambda _settings, payload, *_args: _final_evidence_response(payload))
 
     decision, hierarchy = intelligence.hierarchical_story_edit(beats, enriched, Dummy(), brief, story_cache=cache)
     assert decision["story_ranges"]

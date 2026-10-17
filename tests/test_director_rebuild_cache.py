@@ -12,6 +12,7 @@ from cutroom.edit_styles import get_edit_style
 from cutroom.jobs import Job, JobContext
 from cutroom.projects import ProjectStore
 from cutroom.story_budget import POLICY_VERSION
+from cutroom.story_evidence import EVIDENCE_POLICY_VERSION, build_story_evidence_catalog, validate_story_evidence
 from cutroom.vision import VISION_ANALYSIS_VERSION
 
 
@@ -138,7 +139,7 @@ def _required_story_editorial(rows):
                  "editorial_score": .8}
                 for identifier, start, end in rows]
     identifiers = [row["id"] for row in segments]
-    return {
+    editorial = {
         "segments": segments,
         "decision": {
             "keep_ids": identifiers, "remove_ids": [], "highlight_ids": identifiers[:1],
@@ -148,26 +149,63 @@ def _required_story_editorial(rows):
                              for row in segments],
             "story_requirements": {
                 "semantic_mapping_verified": True,
+                "semantic_review_status": "model_reviewed",
                 "required_beat_ids": identifiers, "critic_requested_beat_ids": identifiers[1:],
                 "unresolved_slot_indexes": [], "unapplied_critic_actions": 0,
-                "slot_map": [{"slot_index": 0, "primary_beat_ids": identifiers[:1],
-                              "context_beat_ids": identifiers[1:], "beat_ids": identifiers,
-                              "role_evidence": "Synthetic primary and context evidence."}],
+                "slot_map": [{"slot_index": index, "purpose": f"source role {index}",
+                              "primary_beat_ids": [identifier],
+                              "context_beat_ids": identifiers[1:] if index == 0 else [],
+                              "beat_ids": identifiers if index == 0 else [identifier]}
+                             for index, identifier in enumerate(identifiers)],
                 "semantic_revision": {"attempts": 0, "verdict": "fit", "policy_version": POLICY_VERSION,
                                       "cost": {"policy_version": POLICY_VERSION}},
             },
         },
-        "story_beats": [], "story_hierarchy": {"critic": {"verdict": "pass"}},
+        "story_beats": [{**row, "segment_ids": [row["id"]]} for row in segments],
+        "story_hierarchy": {"critic": {"verdict": "pass"}},
     }
+    return _attach_source_proof(editorial)
+
+
+def _attach_source_proof(editorial):
+    requirements = editorial["decision"]["story_requirements"]
+    catalog = build_story_evidence_catalog(editorial["story_beats"], editorial["segments"])
+    for row in requirements["slot_map"]:
+        for kind in ("primary", "context"):
+            row[f"{kind}_evidence_ids"] = [next(item["id"] for item in catalog if item["beat_id"] == identifier)
+                                           for identifier in row[f"{kind}_beat_ids"]]
+        row.setdefault("temporal_witness_id", row["primary_evidence_ids"][0])
+    proof = validate_story_evidence(requirements["slot_map"], editorial["story_beats"], editorial["segments"],
+                                    selected_beat_ids=requirements["required_beat_ids"])
+    requirements.update(evidence_policy_version=EVIDENCE_POLICY_VERSION,
+                        evidence_proof=proof, slot_map=copy.deepcopy(proof["slot_map"]))
+    return editorial
+
+
+def _install_story_editorial(monkeypatch, store, project_id, editorial, engine="fixture_story"):
+    """Give the test actual synthetic ASR, then a separately copied planner result."""
+    source_segments = copy.deepcopy(editorial["segments"])
+    transcript = {"language": "en", "language_probability": .99,
+                  "duration": float(store.load(project_id)["sources"]["A"]["duration"]),
+                  "segments": source_segments, "text": " ".join(row["text"] for row in source_segments),
+                  "words": [word for row in source_segments for word in row.get("words") or []]}
+    if isinstance(store.load(project_id).get("analysis"), dict):
+        store.update(project_id, lambda current: current["analysis"].update({"transcript": copy.deepcopy(transcript)}))
+    monkeypatch.setattr(director, "_transcribe_safely", lambda *_a, **_k: (copy.deepcopy(transcript), None))
+    monkeypatch.setattr(director, "_plan_edit_with_cancel", lambda *_a, **_k: (copy.deepcopy(editorial), engine))
 
 
 def _with_story_roles(editorial, purposes):
     requirements = editorial["decision"]["story_requirements"]
-    template = requirements["slot_map"][0]
-    requirements["slot_map"] = [{**copy.deepcopy(template), "slot_index": index, "purpose": purpose,
-                                 "role_evidence": f"Synthetic explicit source mapping for {purpose}."}
-                                for index, purpose in enumerate(purposes)]
-    return editorial
+    identifiers = requirements["required_beat_ids"]
+    requirements["slot_map"] = []
+    for index, purpose in enumerate(purposes):
+        primary = identifiers[min(len(identifiers) - 1, index * len(identifiers) // len(purposes))]
+        context = [identifier for identifier in identifiers if identifier != primary]
+        requirements["slot_map"].append({"slot_index": index, "purpose": purpose,
+                                         "primary_beat_ids": [primary], "context_beat_ids": context,
+                                         "beat_ids": [primary, *context]})
+    return _attach_source_proof(editorial)
 
 
 @pytest.mark.parametrize("complete", [False, True], ids=["premise_only", "all_roles_one_source_beat"])
@@ -178,7 +216,7 @@ def test_required_style_roles_are_independently_mapped_before_commit(semantic_pr
     roles = get_edit_style("stream_story")["selection_policy"]["story_structure"]
     editorial = _with_story_roles(_required_story_editorial([("source_idea", 0, 6)]),
                                   roles if complete else roles[:1])
-    monkeypatch.setattr(director, "_plan_edit_with_cancel", lambda *_a, **_k: (copy.deepcopy(editorial), "ollama_hierarchical_story"))
+    _install_story_editorial(monkeypatch, store, project_id, editorial, "ollama_hierarchical_story")
     before = store.state_path(project_id).read_bytes()
     patch = {"instruction": "Keep each configured story role", "edit_style": "stream_story",
              "duration_mode": "target", "target_duration": 20}
@@ -198,6 +236,219 @@ def test_required_style_roles_are_independently_mapped_before_commit(semantic_pr
         assert store.state_path(project_id).read_bytes() == before
 
 
+def _save_canonical_evidence_proof(editorial):
+    requirements = editorial["decision"]["story_requirements"]
+    proof = validate_story_evidence(requirements["slot_map"], editorial["story_beats"], editorial["segments"],
+                                    selected_beat_ids=requirements["required_beat_ids"])
+    requirements.update(evidence_policy_version=EVIDENCE_POLICY_VERSION,
+                        evidence_proof=proof, slot_map=copy.deepcopy(proof["slot_map"]))
+
+
+@pytest.mark.parametrize("verdict,issues,blocked", [
+    ("revise", [], True),
+    ("pass", ["The final idea still needs context."], True),
+    ("pass", [], False),
+], ids=["active_revise", "active_issues", "historical_review_only"])
+def test_active_critic_objections_cannot_be_bypassed_by_source_proof(semantic_project, monkeypatch, verdict, issues, blocked):
+    from cutroom.story_budget import StoryBudgetError
+
+    store, settings, project_id, _calls, context = semantic_project
+    editorial = _required_story_editorial([("approved", 0, 6)])
+    editorial["story_hierarchy"]["critic"] = {
+        "verdict": verdict, "issues": issues,
+        "original_review": {"verdict": "revise", "issues": ["A historical issue resolved by review."]},
+    }
+    _install_story_editorial(monkeypatch, store, project_id, editorial, "ollama_hierarchical_story")
+    before = store.state_path(project_id).read_bytes()
+    patch = {"instruction": "Honor the active critic's objections"}
+
+    if blocked:
+        with pytest.raises(StoryBudgetError) as failure:
+            director.analyze_project(context(), project_id, store, settings, patch)
+        assert "unresolved_critic_review" in failure.value.diagnostic["reasons"]
+        assert failure.value.diagnostic["critic_verdict"] == verdict
+        assert failure.value.diagnostic["critic_issue_count"] == len(issues)
+        assert store.state_path(project_id).read_bytes() == before
+    else:
+        result = director.analyze_project(context(), project_id, store, settings, patch)
+        assert result["draft"]["keep_ranges"] == [{"start": 0, "end": 6}]
+
+
+def test_recomputed_proof_cannot_authorize_an_unmapped_extra_approved_passage(semantic_project, monkeypatch):
+    from cutroom.story_budget import StoryBudgetError
+
+    store, settings, project_id, _calls, context = semantic_project
+    editorial = _required_story_editorial([("opening", 0, 4), ("ending", 20, 24)])
+    extra = {"id": "unmapped_middle", "start": 10, "end": 14,
+             "text": "This genuine source passage has no authorized narrative role.", "words": []}
+    editorial["segments"].insert(1, extra)
+    editorial["story_beats"].insert(1, {**extra, "segment_ids": [extra["id"]]})
+    editorial["decision"]["story_ranges"].insert(1, {"beat_id": extra["id"], "start": 10, "end": 14})
+    requirements = editorial["decision"]["story_requirements"]
+    # A valid catalog hash alone cannot authorize an otherwise unmapped unit.
+    proof = validate_story_evidence(requirements["slot_map"], editorial["story_beats"], editorial["segments"],
+                                    selected_beat_ids=["opening", "unmapped_middle", "ending"])
+    requirements.update(evidence_proof=proof, slot_map=copy.deepcopy(proof["slot_map"]))
+    _install_story_editorial(monkeypatch, store, project_id, editorial, "ollama_hierarchical_story")
+    before = store.state_path(project_id).read_bytes()
+
+    with pytest.raises(StoryBudgetError) as failure:
+        director.analyze_project(context(), project_id, store, settings, {"instruction": "Keep only authorized roles"})
+
+    assert "inconsistent_story_selection" in failure.value.diagnostic["reasons"]
+    assert failure.value.diagnostic["approved_beat_ids"] == ["ending", "opening", "unmapped_middle"]
+    assert failure.value.diagnostic["required_beat_ids"] == ["ending", "opening"]
+    assert store.state_path(project_id).read_bytes() == before
+
+
+def test_captured_hebrew_role_order_cannot_commit_an_early_result_before_later_setup(semantic_project, monkeypatch):
+    from cutroom.story_budget import StoryBudgetError
+
+    store, settings, project_id, _calls, context = semantic_project
+    roles = get_edit_style("stream_story")["selection_policy"]["story_structure"]
+    editorial = _required_story_editorial([("b1", 0, 24.61), ("b3", 43.54, 59.97)])
+    # Preserve the captured failure's source geometry without retaining its
+    # private speech. The timestamped gaps make the complete selection fit 40s.
+    for segment, text, words in zip(editorial["segments"], ["Question result.", "Setup evidence."], [
+        [{"word": "Question", "start": 0, "end": 12}, {"word": "result.", "start": 14, "end": 24.61}],
+        [{"word": "Setup", "start": 43.54, "end": 50}, {"word": "evidence.", "start": 50.6, "end": 59.97}],
+    ]):
+        segment.update(text=text, words=words)
+    _with_story_roles(editorial, roles)
+    rows = editorial["decision"]["story_requirements"]["slot_map"]
+    early, late = copy.deepcopy(rows[0]), copy.deepcopy(rows[-1])
+    rows[1] = {**late, "slot_index": 1, "purpose": roles[1]}
+    rows[2] = {**late, "slot_index": 2, "purpose": roles[2]}
+    rows[3] = {**early, "slot_index": 3, "purpose": roles[3]}
+    _install_story_editorial(monkeypatch, store, project_id, editorial, "ollama_hierarchical_story")
+    before = store.state_path(project_id).read_bytes()
+
+    with pytest.raises(StoryBudgetError) as failure:
+        director.analyze_project(context(), project_id, store, settings, {
+            "instruction": "Preserve a grounded story arc", "edit_style": "stream_story",
+            "duration_mode": "target", "target_duration": 40,
+        })
+
+    assert failure.value.diagnostic["cost"]["fits_target"] is True
+    assert "invalid_story_evidence" in failure.value.diagnostic["reasons"]
+    assert "inverted" in failure.value.diagnostic["source_evidence_error"]
+    assert store.state_path(project_id).read_bytes() == before
+
+
+@pytest.mark.parametrize("citation", ["unknown", "rejected_manual_restore"])
+def test_unsupported_or_restored_rejected_citations_cannot_supply_automatic_roles(semantic_project, monkeypatch, citation):
+    from cutroom.story_budget import StoryBudgetError
+
+    store, settings, project_id, _calls, context = semantic_project
+    editorial = _required_story_editorial([("approved", 0, 6)])
+    requirements = editorial["decision"]["story_requirements"]
+    reference = "approved:approved:f999"
+    if citation == "rejected_manual_restore":
+        rejected = {"id": "rejected_source", "start": 10, "end": 14, "text": "The award occurs only here.", "words": []}
+        editorial["segments"].append(rejected)
+        rejected_beat = {**rejected, "id": "rejected", "segment_ids": [rejected["id"]]}
+        reference = build_story_evidence_catalog([rejected_beat], editorial["segments"])[0]["id"]
+        editorial["decision"].update(rejected_beat_ids=["rejected"], rejected_story_ranges=[{"start": 10, "end": 14}])
+        store.update(project_id, lambda current: current["manual"].update({"keeps": [{"start": 10, "end": 14}]}))
+    requirements["slot_map"][0].update(primary_evidence_ids=[reference], temporal_witness_id=reference)
+    _install_story_editorial(monkeypatch, store, project_id, editorial)
+    before = store.state_path(project_id).read_bytes()
+
+    with pytest.raises(StoryBudgetError) as failure:
+        director.analyze_project(context(), project_id, store, settings, {"instruction": "Require selected source citations"})
+
+    assert "invalid_story_evidence" in failure.value.diagnostic["reasons"]
+    assert "ineligible quotation" in failure.value.diagnostic["source_evidence_error"]
+    assert store.state_path(project_id).read_bytes() == before
+
+
+@pytest.mark.parametrize("fabrication", ["text", "timing"])
+def test_planner_fabricated_source_cannot_replace_canonical_asr(semantic_project, monkeypatch, fabrication):
+    from cutroom.story_budget import StoryBudgetError
+
+    store, settings, project_id, _calls, context = semantic_project
+    editorial = _required_story_editorial([("approved", 0, 6)])
+    _install_story_editorial(monkeypatch, store, project_id, editorial)
+    if fabrication == "text":
+        editorial["segments"][0]["text"] = "A fabricated award claim absent from the actual source."
+    else:
+        editorial["segments"][0].update(start=1, end=5)
+    _attach_source_proof(editorial)
+    before = store.state_path(project_id).read_bytes()
+
+    with pytest.raises(StoryBudgetError) as failure:
+        director.analyze_project(context(), project_id, store, settings, {"instruction": "Validate against actual ASR"})
+
+    assert "invalid_story_evidence" in failure.value.diagnostic["reasons"]
+    assert "does not match" in failure.value.diagnostic["source_evidence_error"]
+    assert store.state_path(project_id).read_bytes() == before
+
+
+@pytest.mark.parametrize("reuse_quote", [False, True], ids=["distinct_fragments", "overlapping_role_evidence"])
+def test_one_source_unit_can_ground_four_ordered_roles_without_repeating_footage(semantic_project, monkeypatch, reuse_quote):
+    store, settings, project_id, _calls, context = semantic_project
+    roles = get_edit_style("stream_story")["selection_policy"]["story_structure"]
+    editorial = _required_story_editorial([("whole_idea", 0, 12)])
+    editorial["segments"][0]["text"] = "Here is the question. This is the setup. This shows the evidence. Here is the result."
+    _with_story_roles(editorial, roles)
+    catalog = build_story_evidence_catalog(editorial["story_beats"], editorial["segments"])
+    rows = editorial["decision"]["story_requirements"]["slot_map"]
+    for row, quote_index in zip(rows, [0, 1, 1 if reuse_quote else 2, 3]):
+        reference = catalog[quote_index]["id"]
+        row.update(primary_evidence_ids=[reference], temporal_witness_id=reference)
+    _save_canonical_evidence_proof(editorial)
+    _install_story_editorial(monkeypatch, store, project_id, editorial, "ollama_hierarchical_story")
+
+    result = director.analyze_project(context(), project_id, store, settings, {
+        "instruction": "Keep a complete grounded source idea", "edit_style": "stream_story", "target_duration": 20,
+    })
+
+    assert result["draft"]["keep_ranges"] == [{"start": 0, "end": 12}]
+    assert result["draft"]["output_duration"] == 12
+    saved = store.load(project_id)["analysis"]["editorial_cache"]["decision"]["story_requirements"]
+    assert [row["purpose"] for row in saved["slot_map"]] == roles
+    assert saved["evidence_proof"]["verification_scope"] == "source_attribution_and_order"
+
+
+def test_final_cited_word_loss_is_refused_atomically(semantic_project, monkeypatch):
+    from cutroom.story_budget import StoryBudgetError
+    from cutroom.utils import invert_ranges
+
+    store, settings, project_id, _calls, context = semantic_project
+    editorial = _required_story_editorial([("approved", 0, 6)])
+    editorial["segments"][0].update(text="Question evidence result.", words=[
+        {"word": "Question", "start": 0, "end": 1}, {"word": "evidence", "start": 3, "end": 4},
+        {"word": "result.", "start": 5, "end": 6},
+    ])
+    _attach_source_proof(editorial)
+    _install_story_editorial(monkeypatch, store, project_id, editorial)
+    monkeypatch.setattr(director, "_short_cleanup_cuts_with_floor", lambda *_a, **_k: (
+        invert_ranges([{"start": 0, "end": 1}, {"start": 5, "end": 6}], 300), {},
+    ))
+    before = store.state_path(project_id).read_bytes()
+
+    with pytest.raises(StoryBudgetError) as failure:
+        director.analyze_project(context(), project_id, store, settings, {"instruction": "Preserve cited words"})
+
+    assert "omit cited source speech" in failure.value.diagnostic["source_evidence_error"]
+    assert failure.value.diagnostic["applied_to_timeline"] is False
+    assert store.state_path(project_id).read_bytes() == before
+
+
+@pytest.mark.parametrize("keeps", [
+    [{"start": 3, "end": 6}, {"start": 0, "end": 3}],
+    [{"start": 0, "end": 6}, {"start": 0, "end": 6}],
+], ids=["reordered", "repeated"])
+def test_final_story_keep_ranges_must_be_chronological_and_unrepeated(keeps):
+    from cutroom.story_budget import StoryBudgetError
+
+    editorial = _required_story_editorial([("approved", 0, 6)])
+    with pytest.raises(StoryBudgetError) as failure:
+        director._validate_required_story_selection(editorial["decision"], editorial["segments"], 10, 20,
+                                                    keep_ranges=keeps)
+    assert "invalid_story_playback_order" in failure.value.diagnostic["reasons"]
+
+
 @pytest.mark.parametrize("rows,incomplete", [
     ([("b1", .59, 2.93), ("b2", 8.41, 19.64), ("b3", 20.34, 29.5), ("b4", 35.31, 41.31)],
      [{"start": .59, "end": 2.93}, {"start": 35.31, "end": 41.31}]),
@@ -213,7 +464,7 @@ def test_required_story_budget_failure_preserves_edit_settings_and_export(
     export.write_bytes(b"previous encoded export remains authoritative")
     store.update(project_id, lambda current: current["exports"].append({"name": export.name}))
     editorial = _required_story_editorial(rows)
-    monkeypatch.setattr(director, "_plan_edit_with_cancel", lambda *_a, **_k: (copy.deepcopy(editorial), "fixture_story"))
+    _install_story_editorial(monkeypatch, store, project_id, editorial, "fixture_story")
     monkeypatch.setattr(director, "_select_short_story_ranges", lambda *_a, **_k: copy.deepcopy(incomplete))
     before = store.state_path(project_id).read_bytes()
     old_export = export.read_bytes()
@@ -237,7 +488,7 @@ def test_cleanup_cannot_commit_a_draft_missing_required_speech(semantic_project,
 
     store, settings, project_id, _calls, context = semantic_project
     editorial = _required_story_editorial([("setup", 0, 6), ("ending", 12, 18)])
-    monkeypatch.setattr(director, "_plan_edit_with_cancel", lambda *_a, **_k: (copy.deepcopy(editorial), "fixture_story"))
+    _install_story_editorial(monkeypatch, store, project_id, editorial, "fixture_story")
     monkeypatch.setattr(director, "_short_cleanup_cuts_with_floor", lambda *_a, **_k: (
         invert_ranges([{"start": 12, "end": 18}], 300), {},
     ))
@@ -263,7 +514,7 @@ def test_initial_budget_failure_does_not_commit_a_draft_or_requested_settings(se
     store.update(project_id, reset)
     before = store.load(project_id)
     editorial = _required_story_editorial([("context", 0, 25), ("result", 30, 38)])
-    monkeypatch.setattr(director, "_plan_edit_with_cancel", lambda *_a, **_k: (copy.deepcopy(editorial), "fixture_story"))
+    _install_story_editorial(monkeypatch, store, project_id, editorial, "fixture_story")
 
     with pytest.raises(StoryBudgetError):
         director.analyze_project(context(), project_id, store, settings, {
@@ -298,7 +549,8 @@ def test_focus_speaker_budget_failure_has_no_early_mutation_or_rollback(semantic
 
 
 @pytest.mark.parametrize("damage", ["unverified", "missing_primary", "missing_context", "missing_revision_cost",
-                                    "extra_revision", "unfit_revision", "stale_revision_policy"])
+                                    "extra_revision", "unfit_revision", "stale_revision_policy",
+                                    "missing_review_status", "provisional_review_status"])
 def test_invalid_semantic_proof_cannot_commit(semantic_project, monkeypatch, damage):
     from cutroom.story_budget import StoryBudgetError
 
@@ -317,9 +569,13 @@ def test_invalid_semantic_proof_cannot_commit(semantic_project, monkeypatch, dam
         requirements["semantic_revision"]["attempts"] = 2
     elif damage == "unfit_revision":
         requirements["semantic_revision"]["verdict"] = "infeasible"
+    elif damage == "missing_review_status":
+        requirements.pop("semantic_review_status")
+    elif damage == "provisional_review_status":
+        requirements["semantic_review_status"] = "provisional_precision_selection"
     else:
         requirements["semantic_revision"]["policy_version"] = "legacy-policy"
-    monkeypatch.setattr(director, "_plan_edit_with_cancel", lambda *_a, **_k: (copy.deepcopy(editorial), "fixture_story"))
+    _install_story_editorial(monkeypatch, store, project_id, editorial, "fixture_story")
     before = store.state_path(project_id).read_bytes()
 
     with pytest.raises(StoryBudgetError) as failure:
@@ -348,7 +604,7 @@ def test_final_guard_rejects_missing_primary_even_when_all_context_survives(sema
 
     store, settings, project_id, _calls, context = semantic_project
     editorial = _required_story_editorial([("primary", 0, 4), ("context", 10, 14)])
-    monkeypatch.setattr(director, "_plan_edit_with_cancel", lambda *_a, **_k: (copy.deepcopy(editorial), "fixture_story"))
+    _install_story_editorial(monkeypatch, store, project_id, editorial, "fixture_story")
     monkeypatch.setattr(director, "_select_short_story_ranges", lambda *_a, **_k: [{"start": 10, "end": 14}])
     before = store.state_path(project_id).read_bytes()
 
@@ -367,7 +623,7 @@ def test_final_guard_rejects_reintroduced_unapproved_footage(semantic_project, m
     editorial = _required_story_editorial([("primary", 0, 4), ("context", 10, 14)])
     if rejected:
         editorial["decision"]["rejected_story_ranges"] = [{"start": 20, "end": 22}]
-    monkeypatch.setattr(director, "_plan_edit_with_cancel", lambda *_a, **_k: (copy.deepcopy(editorial), "fixture_story"))
+    _install_story_editorial(monkeypatch, store, project_id, editorial, "fixture_story")
     monkeypatch.setattr(director, "_select_short_story_ranges", lambda *_a, **_k: [
         {"start": 0, "end": 4}, {"start": 10, "end": 14}, {"start": 20, "end": 22},
     ])
@@ -387,7 +643,7 @@ def test_explicit_user_restore_remains_authoritative_for_a_verified_story(semant
     store, settings, project_id, _calls, context = semantic_project
     editorial = _required_story_editorial([("primary", 0, 4), ("context", 10, 14)])
     editorial["decision"]["rejected_story_ranges"] = [{"start": 20, "end": 22}]
-    monkeypatch.setattr(director, "_plan_edit_with_cancel", lambda *_a, **_k: (copy.deepcopy(editorial), "ollama_hierarchical_story"))
+    _install_story_editorial(monkeypatch, store, project_id, editorial, "ollama_hierarchical_story")
     store.update(project_id, lambda current: current["manual"].update({"keeps": [{"start": 20, "end": 22}]}))
 
     result = director.analyze_project(context(), project_id, store, settings, {"instruction": "Preserve my restore"})
@@ -401,7 +657,7 @@ def test_explicit_user_restore_remains_authoritative_for_a_verified_story(semant
 def test_short_source_in_style_mode_still_selects_only_the_approved_story(semantic_project, monkeypatch):
     store, settings, project_id, _calls, context = semantic_project
     editorial = _required_story_editorial([("primary", 2, 8)])
-    monkeypatch.setattr(director, "_plan_edit_with_cancel", lambda *_a, **_k: (copy.deepcopy(editorial), "ollama_hierarchical_story"))
+    _install_story_editorial(monkeypatch, store, project_id, editorial, "ollama_hierarchical_story")
     store.update(project_id, lambda current: current["sources"]["A"].update({"duration": 10}))
 
     result = director.analyze_project(context(), project_id, store, settings, {
@@ -419,7 +675,7 @@ def test_frame_grid_budget_failure_preserves_the_existing_edit(semantic_project,
     editorial = _required_story_editorial([
         ("first", .01, 6.69), ("middle", 20.01, 26.69), ("ending", 40.01, 46.69),
     ])
-    monkeypatch.setattr(director, "_plan_edit_with_cancel", lambda *_a, **_k: (copy.deepcopy(editorial), "fixture_story"))
+    _install_story_editorial(monkeypatch, store, project_id, editorial, "fixture_story")
     before = store.state_path(project_id).read_bytes()
 
     with pytest.raises(StoryBudgetError) as failure:
@@ -451,7 +707,8 @@ def test_complete_27_second_story_fits_20_seconds_without_losing_speech(semantic
         segment["words"] = [{"start": start, "end": end, "word": f"word{index}"}
                             for index, (start, end) in enumerate(timings)]
         segment["text"] = " ".join(row["word"] for row in segment["words"])
-    monkeypatch.setattr(director, "_plan_edit_with_cancel", lambda *_a, **_k: (copy.deepcopy(editorial), "ollama_hierarchical_story"))
+    _attach_source_proof(editorial)
+    _install_story_editorial(monkeypatch, store, project_id, editorial, "ollama_hierarchical_story")
 
     result = director.analyze_project(context(), project_id, store, settings, {
         "instruction": "Keep the complete setup and ending", "duration_mode": mode,
@@ -984,7 +1241,7 @@ def test_target_shortfall_is_saved_and_reported_as_needing_review(semantic_proje
 
     def bounded_plan(_context, current_segments, *_args, **_kwargs):
         selected = next(row for row in current_segments if row["id"] == "s3")
-        return {
+        editorial = {
             "segments": [{**row, "editorial_score": .8} for row in current_segments],
             "decision": {
                 "keep_ids": ["s3"], "remove_ids": [], "highlight_ids": [],
@@ -994,14 +1251,18 @@ def test_target_shortfall_is_saved_and_reported_as_needing_review(semantic_proje
                 "story_requirements": {"required_beat_ids": ["approved"], "critic_requested_beat_ids": [],
                                        "unresolved_slot_indexes": [], "unapplied_critic_actions": 0,
                                        "semantic_mapping_verified": True,
-                                       "slot_map": [{"slot_index": 0, "primary_beat_ids": ["approved"],
+                                       "semantic_review_status": "model_reviewed",
+                                       "slot_map": [{"slot_index": 0, "purpose": "complete idea", "primary_beat_ids": ["approved"],
                                                      "context_beat_ids": [], "beat_ids": ["approved"],
                                                      "role_evidence": "One complete approved source sentence."}],
                                        "semantic_revision": {"attempts": 0, "verdict": "fit", "policy_version": POLICY_VERSION,
                                                              "cost": {"policy_version": POLICY_VERSION}}},
             },
-            "story_beats": [], "story_hierarchy": {"critic": {"verdict": "pass"}},
-        }, "ollama_hierarchical_story"
+            "story_beats": [{"id": "approved", "start": selected["start"], "end": selected["end"],
+                              "segment_ids": [selected["id"]]}],
+            "story_hierarchy": {"critic": {"verdict": "pass"}},
+        }
+        return _attach_source_proof(editorial), "ollama_hierarchical_story"
 
     monkeypatch.setattr(director, "_plan_edit_with_cancel", bounded_plan)
     store.update(project_id, lambda current: current["settings"].update({

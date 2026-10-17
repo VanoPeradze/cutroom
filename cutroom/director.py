@@ -25,6 +25,7 @@ from .story_budget import (
     BUDGET_TOLERANCE_SECONDS, POLICY_VERSION, StoryBudgetError, compact_story_pauses_to_target,
     framed_story_duration, segment_speech_ranges, story_duration_cost,
 )
+from .story_evidence import EVIDENCE_POLICY_VERSION, validate_story_evidence
 from .track_locks import require_tracks_unlocked
 from .sync import MIN_AUTOMATIC_SYNC_CONFIDENCE, synchronize_sources
 from .transcription import cuda_available, transcribe, transcript_quality_report
@@ -1726,7 +1727,8 @@ def _semantic_mapping_is_verified(decision: dict[str, Any]) -> bool:
     slots = requirements.get("slot_map")
     required = {str(value) for value in requirements.get("required_beat_ids") or []}
     revision = requirements.get("semantic_revision") or {}
-    if (requirements.get("semantic_mapping_verified") is not True or not required
+    if (requirements.get("semantic_mapping_verified") is not True
+            or requirements.get("semantic_review_status") != "model_reviewed" or not required
             or not isinstance(slots, list) or not slots
             or not isinstance(revision, dict) or not isinstance(revision.get("cost"), dict)
             or not isinstance(revision.get("attempts"), int) or isinstance(revision.get("attempts"), bool)
@@ -1749,7 +1751,7 @@ def _semantic_mapping_is_verified(decision: dict[str, Any]) -> bool:
         indexes.add(index)
         mapped.update(primary | context)
     sticky = {str(value) for value in requirements.get("critic_requested_beat_ids") or []}
-    return required <= mapped | sticky
+    return required == mapped | sticky
 
 
 def _exact_story_complement(ranges: list[dict[str, Any]], duration: float) -> list[dict[str, float]]:
@@ -1784,27 +1786,97 @@ def _apply_story_timeline_overrides(cuts: list[dict[str, Any]], manual: dict[str
     return merge_ranges([*result, *(manual.get("cuts") or [])], gap=0.0)
 
 
+def _source_story_candidates(
+    decision: dict[str, Any], source_segments: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Rebuild source ownership from approved ranges and canonical ASR only."""
+    candidates, seen = [], set()
+    for passage in decision.get("story_ranges") or []:
+        if not isinstance(passage, dict):
+            raise ValueError("A selected story passage is invalid.")
+        identifier = str(passage.get("beat_id") or passage.get("id") or "")
+        start = _finite_number(passage.get("start"), math.nan)
+        end = _finite_number(passage.get("end"), math.nan)
+        if not identifier or identifier in seen or not math.isfinite(start) or not math.isfinite(end) or end <= start:
+            raise ValueError("Selected story source units must be unique and bounded.")
+        rows = []
+        for segment in source_segments:
+            left, right = float(segment["start"]), float(segment["end"])
+            if min(end, right) - max(start, left) <= .001:
+                continue
+            if left < start - .001 or right > end + .001:
+                raise ValueError("A story passage clips a canonical source segment.")
+            rows.append(segment)
+        rows.sort(key=lambda row: (float(row["start"]), float(row["end"]), str(row["id"])))
+        if not rows or abs(float(rows[0]["start"]) - start) > .001 or abs(float(rows[-1]["end"]) - end) > .001:
+            raise ValueError("A story passage does not match complete canonical source segments.")
+        candidates.append({"id": identifier, "start": start, "end": end,
+                           "segment_ids": [str(row["id"]) for row in rows],
+                           "text": " ".join(str(row.get("text") or "") for row in rows)})
+        seen.add(identifier)
+    return sorted(candidates, key=lambda row: (row["start"], row["end"], row["id"]))
+
+
+def _verified_source_story_evidence(
+    decision: dict[str, Any], source_segments: list[dict[str, Any]], selection_policy: dict[str, Any],
+    *, keep_ranges: list[dict[str, float]] | None = None,
+) -> dict[str, Any]:
+    requirements = decision.get("story_requirements") or {}
+    proof = requirements.get("evidence_proof")
+    if (requirements.get("evidence_policy_version") != EVIDENCE_POLICY_VERSION
+            or not isinstance(proof, dict) or proof.get("policy_version") != EVIDENCE_POLICY_VERSION):
+        raise ValueError("The story has no current canonical source-evidence proof.")
+    candidates = _source_story_candidates(decision, source_segments)
+    derived = validate_story_evidence(
+        requirements.get("slot_map"), candidates, source_segments,
+        selected_beat_ids=[row["id"] for row in candidates],
+        required_roles=selection_policy.get("story_structure") or None,
+        rejected_beat_ids=decision.get("rejected_beat_ids") or [], keep_ranges=keep_ranges,
+    )
+    if derived != proof or derived["slot_map"] != requirements.get("slot_map"):
+        raise ValueError("The story evidence proof does not match its current canonical source and role mapping.")
+    return derived
+
+
+def _cached_source_story_evidence_is_verified(
+    decision: dict[str, Any], source_segments: list[dict[str, Any]], selection_policy: dict[str, Any],
+) -> bool:
+    try:
+        _verified_source_story_evidence(decision, source_segments, selection_policy)
+    except (ValueError, TypeError, KeyError):
+        return False
+    return True
+
+
 def _validate_required_story_selection(
     decision: dict[str, Any], segments: list[dict[str, Any]], duration: float, target: float,
     *, selection_policy: dict[str, Any] | None = None,
     keep_ranges: list[dict[str, float]] | None = None,
     hierarchy: dict[str, Any] | None = None, fps: int | None = None,
     restored_ranges: list[dict[str, Any]] | None = None,
+    source_segments: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any] | None:
     """Fail before saving if any approved story evidence was lost downstream."""
     requirements = decision.get("story_requirements") or {}
     if not requirements:
         return None
     policy = selection_policy or {}
+    canonical_segments = source_segments if source_segments is not None else segments
     approved = decision.get("story_ranges") or []
     required = {str(value) for value in requirements.get("required_beat_ids") or []}
-    passages = {str(row.get("beat_id")): row for row in approved if isinstance(row, dict)}
-    cost = story_duration_cost(approved, segments, duration, target=target,
+    passages = {str(row.get("beat_id") or row.get("id") or ""): row
+                for row in approved if isinstance(row, dict)}
+    cost = story_duration_cost(approved, canonical_segments, duration, target=target,
                                protect_action_span=bool(policy.get("protect_action_span")), fps=fps)
     missing = required - passages.keys()
     reasons = []
     if not _semantic_mapping_is_verified(decision):
         reasons.append("unverified_semantic_mapping")
+    mapped = {str(identifier) for row in requirements.get("slot_map") or [] if isinstance(row, dict)
+              for identifier in [*(row.get("primary_beat_ids") or []), *(row.get("context_beat_ids") or [])]}
+    sticky = {str(identifier) for identifier in requirements.get("critic_requested_beat_ids") or []}
+    if set(passages) != required or required != mapped | sticky:
+        reasons.append("inconsistent_story_selection")
     required_roles = list(dict.fromkeys(policy.get("story_structure") or []))
     mapped_roles = {row.get("purpose") for row in requirements.get("slot_map") or []
                     if isinstance(row, dict) and isinstance(row.get("purpose"), str)}
@@ -1813,7 +1885,15 @@ def _validate_required_story_selection(
         # Chapters may contain several narrative roles. Each configured role
         # still needs its own explicit source mapping, even on a short source.
         reasons.append("missing_required_story_roles")
+    evidence_error = None
+    try:
+        _verified_source_story_evidence(decision, canonical_segments, policy, keep_ranges=keep_ranges)
+    except (ValueError, TypeError, KeyError) as exc:
+        evidence_error = str(exc)
+        reasons.append("invalid_story_evidence")
     critic = (hierarchy or {}).get("critic") or {}
+    if critic.get("verdict") == "revise" or critic.get("issues"):
+        reasons.append("unresolved_critic_review")
     unresolved = sorted(set(requirements.get("unresolved_slot_indexes") or [])
                         | set(critic.get("unresolved_slot_indexes") or []))
     unapplied = max(int(_finite_number(requirements.get("unapplied_critic_actions"))),
@@ -1828,9 +1908,17 @@ def _validate_required_story_selection(
     unapproved_ranges = []
     framed_seconds = None
     if keep_ranges is not None:
+        previous_end = -math.inf
+        for row in keep_ranges:
+            start, end = _finite_number(row.get("start"), math.nan), _finite_number(row.get("end"), math.nan)
+            if (not math.isfinite(start) or not math.isfinite(end) or end <= start
+                    or start < previous_end - .001):
+                reasons.append("invalid_story_playback_order")
+                break
+            previous_end = end
         kept = merge_ranges(keep_ranges, gap=0.0)
         policy_minimum_ranges = compact_story_pauses_to_target(
-            approved, segments, duration, cost["minimum_safe_seconds"],
+            approved, canonical_segments, duration, cost["minimum_safe_seconds"],
             protect_action_span=bool(policy.get("protect_action_span")),
         ) or approved
         restored = merge_ranges(restored_ranges or [], gap=0.0)
@@ -1849,7 +1937,7 @@ def _validate_required_story_selection(
             if any(sum(max(0.0, min(span["end"], row["end"]) - max(span["start"], row["start"]))
                        for row in kept) < span["end"] - span["start"] - .0011 for span in expected):
                 missing.add(str(passage.get("beat_id") or "unmapped_approved_passage"))
-        rejected_overlap = [row for row in _rejected_story_ranges(decision, segments, duration)
+        rejected_overlap = [row for row in _rejected_story_ranges(decision, canonical_segments, duration)
                             if any((end := min(row["end"], keep["end"])) - (start := max(row["start"], keep["start"])) > .001
                                    and sum(max(0.0, min(end, restore["end"]) - max(start, restore["start"]))
                                            for restore in restored) < end - start - .0011
@@ -1876,8 +1964,13 @@ def _validate_required_story_selection(
         "target_seconds": target, "selected_seconds": range_duration(keep_ranges) if keep_ranges is not None else None,
         "selected_framed_seconds": framed_seconds, "fps": fps,
         "required_beat_ids": sorted(required), "missing_required_beat_ids": sorted(missing),
+        "approved_beat_ids": sorted(passages), "mapped_beat_ids": sorted(mapped),
         "required_story_roles": required_roles, "mapped_story_roles": sorted(mapped_roles),
         "missing_required_story_roles": missing_roles,
+        "evidence_policy_version": requirements.get("evidence_policy_version"),
+        "semantic_review_status": requirements.get("semantic_review_status"),
+        "source_evidence_error": evidence_error,
+        "critic_verdict": critic.get("verdict"), "critic_issue_count": len(critic.get("issues") or []),
         "unresolved_slot_indexes": unresolved, "unapplied_critic_actions": unapplied,
         "rejected_overlap": rejected_overlap, "reasons": reasons,
         "unapproved_ranges": unapproved_ranges,
@@ -3587,7 +3680,10 @@ def analyze_project(
         and (
             goal != "short" or not (cached_editorial["decision"].get("story_requirements")
                  or str((cached_analysis or {}).get("engine") or "").endswith("_hierarchical_story"))
-            or _semantic_mapping_is_verified(cached_editorial["decision"])
+            or (_semantic_mapping_is_verified(cached_editorial["decision"])
+                and _cached_source_story_evidence_is_verified(
+                    cached_editorial["decision"], normalized_editorial_transcript["segments"],
+                    ((brief.get("style_profile") or {}).get("selection_policy") or {})))
         )
         and (
             cached_editorial.get("review_contract") == CRITIC_REVIEW_CONTRACT
@@ -3670,7 +3766,7 @@ def analyze_project(
     else:
         editorial, engine = _plan_edit_with_cancel(
             context,
-            transcript.get("segments", []),
+            normalized_editorial_transcript["segments"],
             settings,
             brief,
             progress=lambda value, message: context.update(story_start + value * max(0.005, 0.76 - story_start), message),
@@ -3695,6 +3791,7 @@ def analyze_project(
         _validate_required_story_selection(
             decision, segments, duration, target_duration, selection_policy=selection_policy,
             hierarchy=story_hierarchy, fps=project_export_fps(project),
+            source_segments=normalized_editorial_transcript["segments"],
         )
 
     if source_b:
@@ -3749,7 +3846,9 @@ def analyze_project(
     gameplay_review: list[dict[str, Any]] = []
     if goal == "short" and (duration > target_duration or brief.get("duration_mode") == "target" or required_story):
         selection_policy = ((brief.get("style_profile") or {}).get("selection_policy") or {})
-        selection_segments = _with_visual_evidence(segments, visual_timeline)
+        selection_segments = _with_visual_evidence(
+            normalized_editorial_transcript["segments"] if required_story else segments, visual_timeline,
+        )
         story_keep = (
             _select_audio_highlight_ranges(
                 sound_profile,
@@ -3831,7 +3930,8 @@ def analyze_project(
             duration_chain.append({"stage": "target_trim", "seconds": _kept_seconds(cuts, duration), "count": target_trim_count})
         cuts, micro_count = _drop_isolated_micro_keeps(
             cuts, duration,
-            protected_ranges=([span for row in segments for span in _segment_speech_ranges(row)]
+            protected_ranges=([span for row in (normalized_editorial_transcript["segments"] if required_story else segments)
+                               for span in _segment_speech_ranges(row)]
                               if required_story or (decision.get("_target_fit_review") or {}).get("fitted") else None),
         )
         if micro_count:
@@ -3864,7 +3964,8 @@ def analyze_project(
             frame_over = True
         if frame_over and not selection_policy.get("protect_action_span"):
             fitted = _compact_story_pauses_to_target(
-                keep_ranges, segments, duration, target_duration, fps=project_export_fps(project),
+                keep_ranges, normalized_editorial_transcript["segments"], duration, target_duration,
+                fps=project_export_fps(project),
             )
             if fitted is not None:
                 keep_ranges = fitted
@@ -3874,6 +3975,7 @@ def analyze_project(
             decision, segments, duration, target_duration, selection_policy=selection_policy,
             keep_ranges=keep_ranges, hierarchy=story_hierarchy, fps=project_export_fps(project),
             restored_ranges=(project.get("manual") or {}).get("keeps"),
+            source_segments=normalized_editorial_transcript["segments"],
         )
     if not keep_ranges:
         if goal == "short":
@@ -4075,6 +4177,7 @@ def analyze_project(
                 decision, segments, duration, target_duration, selection_policy=selection_policy,
                 keep_ranges=keep_ranges, hierarchy=story_hierarchy, fps=project_export_fps(proposed),
                 restored_ranges=(proposed.get("manual") or {}).get("keeps"),
+                source_segments=normalized_editorial_transcript["segments"],
             )
         if not unchanged_variation:
             validate_media_bounds({**proposed, "draft": draft})
