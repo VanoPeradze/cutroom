@@ -25,8 +25,8 @@ from .story_evidence import EVIDENCE_POLICY_VERSION, build_story_evidence_catalo
 from .story_summary import SUMMARY_SOURCE, extractive_story_summary
 from .utils import clamp, merge_ranges, normalize_text, range_duration
 
-STORY_CACHE_PIPELINE = "hierarchical-story-2026-10-17.semantic-target-review-v10.shared-choice-domains"
-CRITIC_REVIEW_CONTRACT = "critic-review-2026-10-17.semantic-target-review-v12.shared-choice-domains"
+STORY_CACHE_PIPELINE = "hierarchical-story-2026-10-17.semantic-target-review-v11.explicit-primary-anchor"
+CRITIC_REVIEW_CONTRACT = "critic-review-2026-10-17.semantic-target-review-v13.explicit-primary-anchor"
 
 FILLERS: dict[str, set[str]] = {
     "en": {"um", "uh", "erm", "like", "basically", "actually", "literally", "you know", "i mean", "so"},
@@ -1837,23 +1837,27 @@ def _story_revision_slot_rows(roles: Any, catalog: list[dict[str, Any]],
     rows = []
     for index, purpose in enumerate(purposes):
         row = roles[purpose]
-        if not isinstance(row, dict) or set(row) != {"primary_evidence_choices", "context_evidence_choices", "temporal_witness_choice"}:
-            raise ValueError("A story role must contain only exact source quotation choices and its temporal witness choice.")
+        if not isinstance(row, dict) or set(row) != {"primary_anchor_choice", "additional_primary_evidence_choices", "context_evidence_choices"}:
+            raise ValueError("A story role must contain an explicit primary anchor, additional primary choices and context choices.")
+        anchor = row["primary_anchor_choice"]
+        if not isinstance(anchor, str) or anchor not in by_choice:
+            raise ValueError("The primary anchor must be an exact allowed source quotation choice.")
         owners, identifiers = {}, {}
         for kind in ("primary", "context"):
-            values = row[f"{kind}_evidence_choices"]
+            values = row["additional_primary_evidence_choices" if kind == "primary" else "context_evidence_choices"]
             if (not isinstance(values, list) or any(not isinstance(value, str) or value not in by_choice for value in values)
                     or len(values) != len(set(values))):
                 raise ValueError("Story roles must select unique exact allowed source quotation choices.")
+            if kind == "primary":
+                if anchor in values:
+                    raise ValueError("The primary anchor cannot be repeated among additional primary choices.")
+                values = [anchor, *values]
             identifiers[kind] = [by_choice[value]["id"] for value in values]
             owners[kind] = list(dict.fromkeys(by_choice[value]["beat_id"] for value in values))
-        witness = row["temporal_witness_choice"]
-        if not isinstance(witness, str) or witness not in by_choice:
-            raise ValueError("The temporal witness must be an exact allowed source quotation choice.")
         rows.append({"slot_index": index, "purpose": purpose,
                      "primary_beat_ids": owners["primary"], "context_beat_ids": owners["context"],
                      "primary_evidence_ids": identifiers["primary"], "context_evidence_ids": identifiers["context"],
-                     "temporal_witness_id": by_choice[witness]["id"]})
+                     "temporal_witness_id": by_choice[anchor]["id"]})
     return rows
 
 
@@ -2019,16 +2023,14 @@ def _review_story_target_budget(
                        if beat_chapters.get(row["beat_id"]) in requirement["required_context_chapter_ids"]]
         primary_schema = {"type": "array", "uniqueItems": True, "items": choice_reference(primary_ids)} if primary_ids else restricted_ids([])
         context_schema = {"type": "array", "uniqueItems": True, "items": choice_reference(context_ids)} if context_ids else restricted_ids([])
-        if primary_ids:
-            primary_schema["minItems"] = 1
         if context_ids:
             context_schema["minItems"] = len(requirement["required_context_chapter_ids"])
         witness_ids = [value for value in primary_ids if purpose != purposes[-1] or choice_catalog[value]["beat_id"] in final_ending_ids]
         revision_schema["properties"]["role_selections"]["properties"][purpose] = {
             "type": "object", "additionalProperties": False,
-            "properties": {"primary_evidence_choices": primary_schema, "context_evidence_choices": context_schema,
-                           "temporal_witness_choice": choice_reference(witness_ids or [""])},
-            "required": ["primary_evidence_choices", "context_evidence_choices", "temporal_witness_choice"],
+            "properties": {"primary_anchor_choice": choice_reference(witness_ids or [""]),
+                           "additional_primary_evidence_choices": primary_schema, "context_evidence_choices": context_schema},
+            "required": ["primary_anchor_choice", "additional_primary_evidence_choices", "context_evidence_choices"],
         }
     complete_roles = revision_schema["properties"]["role_selections"]
     complete_roles["required"] = list(purposes)
@@ -2047,17 +2049,20 @@ def _review_story_target_budget(
             "Return fit only for a coherent, complete story whose exact source cost fits the target using the supplied pause policy. "
             "For fit, assign quotations to EVERY exact purpose key in role_requirements using role_selections. "
             "Select by the meaning of the verbatim wording FIRST, then copy its entire exact choice string including the bracketed canonical reference. "
-            "Choose primary_evidence_choices only from source_evidence_choices whose evidence_id belongs to that purpose's allowed_primary_chapter_ids in evidence_ids_by_chapter. "
-            "Primary choices must express that role themselves; background context cannot replace primary support. "
+            "Choose primary_anchor_choice as the explicit PRIMARY source phrase and temporal anchor for that role. "
+            "Choose it and any additional_primary_evidence_choices only from source_evidence_choices whose evidence_id belongs to that purpose's allowed_primary_chapter_ids in evidence_ids_by_chapter. "
+            "The anchor plus additional primary choices must contain a substantive complete proposition, request or conclusion supporting the role. "
+            "Acknowledgments, fillers and unfinished phrases cannot establish a role alone. Background context cannot replace primary support. "
+            "Read each complete ASR utterance in source_units.segments and preserve every negation or qualification needed for its meaning in primary plus context choices. "
             "For EACH chapter in required_context_chapter_ids, choose at least one context_evidence_choice whose evidence_id belongs to that chapter in evidence_ids_by_chapter. "
             "Required context needs explicit quotation choices even when primary and context use the SAME chapter. "
-            "The SAME supplied choice may appear in both primary_evidence_choices and context_evidence_choices when allowed for both; "
+            "The SAME supplied choice may be primary and context when allowed for both; do not repeat the anchor in additional_primary_evidence_choices. "
             "this does not duplicate footage. Use context_evidence_choices=[] ONLY when the required-context table is empty. "
             "The supplied source_units and source_evidence are authoritative. Select the actual source phrases that support each role; "
             "do not invent events, motives, attacks, relocation, participation or other outcomes. A conclusion may be an explicit refusal, decision or qualified claim. "
             "Each exact source_evidence_choices string identifies one canonical quotation and its complete source beat; the server resolves that exact key. "
             "Return complete supplied choice strings for each role, with no bare IDs, rewritten quotations, beat assignments, English proof claims or timestamps. "
-            "Choose temporal_witness_choice from that role's primary_evidence_choices. Witnesses must follow the configured story-role order in source playback; "
+            "The server uses primary_anchor_choice as that role's primary temporal witness. Anchors must follow the configured story-role order in source playback; "
             "overlapping evidence within one source unit may support several roles, but a later role cannot point definitely backward. "
             "The final role must cite primary evidence from the final selected passage. Narrow unsupported interpretations to what the source actually says. "
             "Its temporal witness must belong to allowed_final_beat_ids, the endings that remain possible under optimistic numeric prefix constraints. "
@@ -2097,11 +2102,10 @@ def _review_story_target_budget(
             # Fixed context: the context fitter may shorten candidate excerpts,
             # but it must preserve the complete source evidence behind a role.
             "source_units": [{"id": value, "start": row["start"], "end": row["end"],
-                              "text": " ".join(str(segment_by_id[str(identifier)].get("text") or "").strip()
-                                               for identifier in row.get("segment_ids", [])),
                               "segment_ids": row.get("segment_ids", []),
                               "segments": [{"id": str(identifier), "start": segment_by_id[str(identifier)]["start"],
-                                            "end": segment_by_id[str(identifier)]["end"]}
+                                            "end": segment_by_id[str(identifier)]["end"],
+                                            "text": str(segment_by_id[str(identifier)].get("text") or "")}
                                            for identifier in row.get("segment_ids", []) if str(identifier) in segment_by_id]}
                              for value, row in valid.items() if value in allowed_ids],
         }, ensure_ascii=False)}],

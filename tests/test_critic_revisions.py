@@ -177,12 +177,14 @@ def test_empty_critic_response_requires_bounded_review_before_applying_story(mon
         def choice(identifier):
             reference = references[identifier]
             return f'{reference["text"]} [{reference["id"]}]'
+        roles = {}
+        for row in selection["slot_map"]:
+            primary = [choice(identifier) for identifier in row["primary_evidence_ids"]]
+            roles[row["purpose"]] = {
+                "primary_anchor_choice": primary[0], "additional_primary_evidence_choices": primary[1:],
+                "context_evidence_choices": [choice(identifier) for identifier in row["context_evidence_ids"]]}
         return {"verdict": "fit", "keep_beat_ids": ["b1", "b3"], "released_optional_beat_ids": [],
-                "role_selections": {row["purpose"]: {
-                    "primary_evidence_choices": [choice(identifier) for identifier in row["primary_evidence_ids"]],
-                    "context_evidence_choices": [choice(identifier) for identifier in row["context_evidence_ids"]],
-                    "temporal_witness_choice": choice(row["temporal_witness_id"])}
-                    for row in selection["slot_map"]}}
+                "role_selections": roles}
     monkeypatch.setattr(intelligence, "_call_ollama_story_pass", respond)
     decision, hierarchy = intelligence.hierarchical_story_edit(
         candidates, segments, Settings(), {"goal": "short", "duration_mode": "style", "target_duration": 30},

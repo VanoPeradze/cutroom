@@ -106,7 +106,8 @@ def test_shared_choice_references_preserve_all_fixed_source_and_constraints_at_t
     bodies = _capture_requests(monkeypatch)
     choices = [f"Synthetic source phrase {index}. [b1:s1:f{index}]" for index in range(1, 13)]
     content = {"brief": {"instruction": "Preserve every source phrase and required context."},
-               "source_units": [{"id": "b1", "segment_ids": ["s1"], "text": " ".join(choices)}],
+               "source_units": [{"id": "b1", "start": 0, "end": 20, "segment_ids": ["s1"],
+                                 "segments": [{"id": "s1", "start": 0, "end": 20, "text": " ".join(choices)}]}],
                "source_evidence": [{"id": f"b1:s1:f{index}", "text": f"Synthetic source phrase {index}."}
                                    for index in range(1, 13)],
                "source_evidence_choices": [{"choice": value, "evidence_id": f"b1:s1:f{index}"}
@@ -118,9 +119,9 @@ def test_shared_choice_references_preserve_all_fixed_source_and_constraints_at_t
     payload = _payload(content, output=2400)
     payload.update(think=False, _single_attempt=True)
     payload["format"] = {"type": "object", "$defs": {"choice_domain_0": {"type": "string", "enum": choices}},
-                         "properties": {"primary_evidence_choices": {"type": "array", "minItems": 1,
+                         "properties": {"additional_primary_evidence_choices": {"type": "array",
                                         "items": {"$ref": "#/$defs/choice_domain_0"}},
-                                        "temporal_witness_choice": {"$ref": "#/$defs/choice_domain_0"}}}
+                                        "primary_anchor_choice": {"$ref": "#/$defs/choice_domain_0"}}}
     original = copy.deepcopy(payload)
 
     assert intelligence._call_ollama_strict(Settings(), payload) == {"ok": True}

@@ -26,8 +26,8 @@ def _final_evidence_response(payload):
                        for chapter_id in requirement["required_context_chapter_ids"]]
         primary = [id_to_choice[identifier] for identifier in primary_ids]
         context = [id_to_choice[identifier] for identifier in context_ids]
-        roles[purpose] = {"primary_evidence_choices": primary, "context_evidence_choices": context,
-                          "temporal_witness_choice": primary[0]}
+        roles[purpose] = {"primary_anchor_choice": primary[0], "additional_primary_evidence_choices": primary[1:],
+                          "context_evidence_choices": context}
         keep.update(by_id[choice_to_id[choice]]["beat_id"] for choice in primary + context)
     keep.update(source["sticky_critic_context_beat_ids"])
     return {"verdict": "fit", "keep_beat_ids": sorted(keep),

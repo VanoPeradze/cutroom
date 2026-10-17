@@ -63,9 +63,8 @@ def evidence_choices(beats, segments, identifiers):
 
 def role_proof(primary, context, beats, segments):
     choices = evidence_choices(beats, segments, primary)
-    return {"primary_evidence_choices": choices,
-            "context_evidence_choices": evidence_choices(beats, segments, context),
-            "temporal_witness_choice": choices[0]}
+    return {"primary_anchor_choice": choices[0], "additional_primary_evidence_choices": choices[1:],
+            "context_evidence_choices": evidence_choices(beats, segments, context)}
 
 
 def resolved_schema(schema, node):
@@ -162,15 +161,15 @@ def test_invalid_revision_fails_without_a_second_model_call(monkeypatch, fault):
     elif fault == "extra_role": reply["role_selections"]["unexpected"] = copy.deepcopy(reply["role_selections"]["result"])
     elif fault == "unreleased_optional": reply["released_optional_beat_ids"] = []
     elif fault == "wrong_purpose": reply["role_selections"]["different"] = reply["role_selections"].pop("premise")
-    elif fault == "empty_evidence": reply["role_selections"]["premise"]["primary_evidence_choices"] = []
-    elif fault == "unknown_primary": reply["role_selections"]["premise"]["primary_evidence_choices"] = ["unknown"]
+    elif fault == "empty_evidence": reply["role_selections"]["premise"]["primary_anchor_choice"] = ""
+    elif fault == "unknown_primary": reply["role_selections"]["premise"]["primary_anchor_choice"] = "unknown"
     elif fault == "missing_critic_context":
         reply["keep_beat_ids"].remove("b3")
         reply["released_optional_beat_ids"].append("b3")
     elif fault == "over_budget":
         reply["keep_beat_ids"].insert(0, "b1")
         reply["released_optional_beat_ids"] = []
-        reply["role_selections"]["evidence"]["primary_evidence_choices"] = evidence_choices(fixture[1], fixture[2], ["b1", "b3"])
+        reply["role_selections"]["evidence"]["additional_primary_evidence_choices"] = evidence_choices(fixture[1], fixture[2], ["b1"])
     calls = []
     with pytest.raises(intelligence.StoryPlanningError) as caught:
         review(monkeypatch, fixture, reply, calls)
@@ -256,12 +255,12 @@ def test_revision_checks_source_roles_and_complete_units(monkeypatch, fault):
     reply = {"verdict": "fit", "keep_beat_ids": ["b2", "b3", "b4"], "released_optional_beat_ids": ["b1"],
              "role_selections": {"result": role_proof(["b4"], ["b2", "b3"], fixture[1], fixture[2])}}
     row = reply["role_selections"]["result"]
-    if fault == "wrong_primary_chapter": row["primary_evidence_choices"] = evidence_choices(fixture[1], fixture[2], ["b2"])
+    if fault == "wrong_primary_chapter": row["primary_anchor_choice"] = evidence_choices(fixture[1], fixture[2], ["b2"])[0]
     elif fault == "missing_context_chapter": row["context_evidence_choices"] = evidence_choices(fixture[1], fixture[2], ["b2"])
     elif fault == "unrelated_context": row["context_evidence_choices"] = evidence_choices(fixture[1], fixture[2], ["b2", "b3", "b4"])
     elif fault == "unexpected_role_field": row["slot_index"] = False
     elif fault == "unmapped_keep": row["context_evidence_choices"] = evidence_choices(fixture[1], fixture[2], ["b3"])
-    elif fault == "duplicate_primary": row["primary_evidence_choices"] *= 2
+    elif fault == "duplicate_primary": row["additional_primary_evidence_choices"] = [row["primary_anchor_choice"]] * 2
     elif fault == "partial_source_unit": fixture[1][3]["start"] += .1
     elif fault == "unfinished_sentence": fixture[1][3]["text"] = fixture[2][3]["text"] = "An unfinished result"
     calls = []
@@ -293,7 +292,7 @@ def test_distinct_primary_and_every_context_chapter_can_be_verified(monkeypatch)
 def test_invalid_roles_below_target_do_not_claim_more_duration_fixes_the_story(monkeypatch):
     fixture = en_fixture()
     reply = proposal(fixture[-1])
-    reply["role_selections"]["premise"]["primary_evidence_choices"] = []
+    reply["role_selections"]["premise"]["primary_anchor_choice"] = ""
     with pytest.raises(intelligence.StoryBudgetError) as caught:
         review(monkeypatch, fixture, reply, target_duration=40)
     assert caught.value.diagnostic["required_policy_minimum_seconds"] < 40
@@ -342,8 +341,8 @@ def test_revision_preserves_full_multisegment_source_evidence(monkeypatch):
                     calls, target_duration=40, duration_mode="style")
     payload = json.loads(calls[0]["messages"][1]["content"])
     unit = next(row for row in payload["source_units"] if row["id"] == "b2")
-    assert unit["text"] == fixture[1][1]["text"]
-    assert unit["segments"] == [{key: row[key] for key in ("id", "start", "end")}
+    assert set(unit) == {"id", "start", "end", "segment_ids", "segments"}
+    assert unit["segments"] == [{key: row[key] for key in ("id", "start", "end", "text")}
                                 for row in (fixture[2][1], fixture[2][-1])]
     assert result["semantic_mapping_verified"] is True
 
@@ -460,16 +459,16 @@ def test_review_payload_distinguishes_current_ids_critic_removals_and_same_chapt
     assert set(roles["properties"]) == set(purposes)
     assert roles["additionalProperties"] is False
     for purpose, role in roles["properties"].items():
-        assert set(role["properties"]) == {"primary_evidence_choices", "context_evidence_choices", "temporal_witness_choice"}
+        assert set(role["properties"]) == {"primary_anchor_choice", "additional_primary_evidence_choices", "context_evidence_choices"}
         assert set(role["required"]) == set(role["properties"])
         assert role["additionalProperties"] is False
-        for key in ("primary_evidence_choices", "context_evidence_choices"):
+        for key in ("additional_primary_evidence_choices", "context_evidence_choices"):
             field = role["properties"][key]
             assert field["type"] == "array" and field["uniqueItems"] is True
-            assert field["minItems"] == 1
+            assert field.get("minItems", 0) == (1 if key == "context_evidence_choices" else 0)
             assert resolved_schema(schema, field["items"])["enum"] == known_evidence_choices
         expected_witnesses = [f'{row["text"]} [{row["id"]}]' for row in catalog if purpose != purposes[-1] or row["beat_id"] == "b3"]
-        assert resolved_schema(schema, role["properties"]["temporal_witness_choice"])["enum"] == expected_witnesses
+        assert resolved_schema(schema, role["properties"]["primary_anchor_choice"])["enum"] == expected_witnesses
     assert payload["allowed_final_beat_ids"] == ["b3"]
     assert result["semantic_revision"]["final_ending_domain"]["semantic_fit_verified"] is False
     assert intelligence.STORY_TARGET_REVISION_SCHEMA == original_schema
@@ -543,7 +542,7 @@ def test_old_free_role_evidence_cannot_claim_typed_source_proof(monkeypatch):
     fixture = en_fixture()
     reply = proposal(fixture[-1])
     for row in reply["role_selections"].values():
-        for key in ("primary_evidence_choices", "context_evidence_choices", "temporal_witness_choice"):
+        for key in ("primary_anchor_choice", "additional_primary_evidence_choices", "context_evidence_choices"):
             row.pop(key)
         row["role_evidence"] = "The source says Alpha beta, so this slot is verified."
     calls = []
@@ -555,17 +554,17 @@ def test_old_free_role_evidence_cannot_claim_typed_source_proof(monkeypatch):
     assert caught.value.diagnostic["reason"] == "invalid_semantic_mapping"
 
 
-@pytest.mark.parametrize("fault", ["unrelated_primary_quote", "missing_context_quote", "unrelated_witness"])
+@pytest.mark.parametrize("fault", ["unrelated_primary_quote", "missing_context_quote", "unselected_anchor"])
 def test_source_citations_must_belong_to_each_assigned_role(monkeypatch, fault):
     fixture = en_fixture()
     reply = proposal(fixture[-1])
     row = reply["role_selections"]["premise"]
     if fault == "unrelated_primary_quote":
-        row["primary_evidence_choices"] = evidence_choices(fixture[1], fixture[2], ["b3"])
+        row["primary_anchor_choice"] = evidence_choices(fixture[1], fixture[2], ["b3"])[0]
     elif fault == "missing_context_quote":
         row["context_evidence_choices"] = []
     else:
-        row["temporal_witness_choice"] = evidence_choices(fixture[1], fixture[2], ["b3"])[0]
+        row["primary_anchor_choice"] = evidence_choices(fixture[1], fixture[2], ["b1"])[0]
     calls = []
 
     with pytest.raises(intelligence.StoryBudgetError) as caught:
@@ -867,26 +866,35 @@ def test_text_first_choices_disambiguate_repeated_words_and_return_canonical_ref
 
 
 @pytest.mark.parametrize("fault", ["fake_quote_known_id", "unknown_reference", "old_opaque_id", "unknown_key",
-                                   "old_id_fields", "duplicate_choice"])
+                                   "old_id_fields", "old_primary_and_witness_form", "missing_anchor",
+                                   "anchor_repeated_in_extras", "duplicate_choice"])
 def test_final_choices_require_exact_allowed_quote_reference_strings(monkeypatch, fault):
     fixture = en_fixture()
     reply = proposal(fixture[-1])
     row = reply["role_selections"]["premise"]
     canonical_id = evidence_ids(fixture[1], fixture[2], ["b2"])[0]
     if fault == "fake_quote_known_id":
-        row["primary_evidence_choices"] = [f"Invented source wording. [{canonical_id}]"]
+        row["primary_anchor_choice"] = f"Invented source wording. [{canonical_id}]"
     elif fault == "unknown_reference":
-        row["primary_evidence_choices"] = ["Alpha beta. [unknown:source:f1]"]
+        row["primary_anchor_choice"] = "Alpha beta. [unknown:source:f1]"
     elif fault == "old_opaque_id":
-        row["primary_evidence_choices"] = [canonical_id]
+        row["primary_anchor_choice"] = canonical_id
     elif fault == "unknown_key":
         row["unknown_evidence_key"] = []
     elif fault == "old_id_fields":
         row.clear()
         row.update(primary_evidence_ids=[canonical_id], context_evidence_ids=[canonical_id],
                    temporal_witness_id=canonical_id)
+    elif fault == "old_primary_and_witness_form":
+        anchor = row["primary_anchor_choice"]
+        row.clear()
+        row.update(primary_evidence_choices=[anchor], context_evidence_choices=[anchor], temporal_witness_choice=anchor)
+    elif fault == "missing_anchor":
+        row.pop("primary_anchor_choice")
+    elif fault == "anchor_repeated_in_extras":
+        row["additional_primary_evidence_choices"] = [row["primary_anchor_choice"]]
     else:
-        row["primary_evidence_choices"] *= 2
+        row["additional_primary_evidence_choices"] = evidence_choices(fixture[1], fixture[2], ["b3"]) * 2
     calls = []
 
     with pytest.raises(intelligence.StoryBudgetError) as caught:
@@ -920,12 +928,12 @@ def test_shared_scalar_enum_refs_round_trip_exact_choices_and_the_same_v1_proof(
     role_schema = schema["properties"]["role_selections"]
     expanded_roles = resolved_schema(schema, role_schema)
     roles = role_schema["anyOf"][0]["properties"]
-    primary_ref = roles["premise"]["properties"]["primary_evidence_choices"]["items"]["$ref"]
+    primary_ref = roles["premise"]["properties"]["additional_primary_evidence_choices"]["items"]["$ref"]
     for role in roles.values():
-        for key in ("primary_evidence_choices", "context_evidence_choices"):
+        for key in ("additional_primary_evidence_choices", "context_evidence_choices"):
             assert role["properties"][key]["items"] == {"$ref": primary_ref}
-    assert roles["premise"]["properties"]["temporal_witness_choice"] == {"$ref": primary_ref}
-    assert roles["result"]["properties"]["temporal_witness_choice"] != {"$ref": primary_ref}
+    assert roles["premise"]["properties"]["primary_anchor_choice"] == {"$ref": primary_ref}
+    assert roles["result"]["properties"]["primary_anchor_choice"] != {"$ref": primary_ref}
     flat_schema = copy.deepcopy(schema)
     flat_schema.pop("$defs")
     flat_schema["properties"]["role_selections"] = expanded_roles
@@ -952,13 +960,13 @@ def test_shared_enum_refs_preserve_each_role_domain_and_array_constraints(monkey
     assert len(calls) == 1
     schema = calls[0]["format"]
     fields = schema["properties"]["role_selections"]["anyOf"][0]["properties"]["result"]["properties"]
-    assert fields["primary_evidence_choices"]["minItems"] == 1
+    assert fields["additional_primary_evidence_choices"].get("minItems", 0) == 0
     assert fields["context_evidence_choices"]["minItems"] == 2
-    assert fields["primary_evidence_choices"]["uniqueItems"] is True
+    assert fields["additional_primary_evidence_choices"]["uniqueItems"] is True
     assert fields["context_evidence_choices"]["uniqueItems"] is True
-    assert resolved_schema(schema, fields["primary_evidence_choices"]["items"])["enum"] == evidence_choices(fixture[1], fixture[2], ["b4"])
+    assert resolved_schema(schema, fields["additional_primary_evidence_choices"]["items"])["enum"] == evidence_choices(fixture[1], fixture[2], ["b4"])
     assert resolved_schema(schema, fields["context_evidence_choices"]["items"])["enum"] == evidence_choices(fixture[1], fixture[2], ["b2", "b3"])
-    assert fields["temporal_witness_choice"] == fields["primary_evidence_choices"]["items"]
+    assert fields["primary_anchor_choice"] == fields["additional_primary_evidence_choices"]["items"]
     assert len(schema["$defs"]) == 2
     assert result["slot_map"][0]["primary_beat_ids"] == ["b4"]
     assert result["slot_map"][0]["context_beat_ids"] == ["b2", "b3"]
@@ -982,6 +990,48 @@ def test_empty_context_domain_uses_an_empty_array_without_enum_or_ref(monkeypatc
     assert context["items"] == {"type": "string"}
     assert "enum" not in json.dumps(context) and "$ref" not in json.dumps(context)
     assert result["slot_map"][0]["context_evidence_ids"] == []
+
+
+def test_primary_anchor_and_extras_round_trip_into_canonical_primary_and_witness(monkeypatch):
+    fixture = en_fixture()
+    reply = proposal(fixture[-1])
+    reply["keep_beat_ids"] = ["b1", "b2", "b3", "b4"]
+    reply["released_optional_beat_ids"] = []
+    reply["role_selections"]["premise"]["additional_primary_evidence_choices"] = evidence_choices(fixture[1], fixture[2], ["b1"])
+    calls = []
+
+    result = review(monkeypatch, fixture, reply, calls, target_duration=40, duration_mode="style")
+
+    assert len(calls) == 1
+    row = result["slot_map"][0]
+    assert row["primary_beat_ids"] == ["b2", "b1"]
+    assert row["primary_evidence_ids"] == evidence_ids(fixture[1], fixture[2], ["b2", "b1"])
+    assert row["temporal_witness_id"] == evidence_ids(fixture[1], fixture[2], ["b2"])[0]
+    assert result["evidence_proof"]["order_evidence"][0]["beat_id"] == "b2"
+    assert result["evidence_proof"]["policy_version"] == story_evidence.EVIDENCE_POLICY_VERSION
+
+
+def test_final_source_units_preserve_every_asr_segment_character_without_joining_or_stripping(monkeypatch):
+    fixture = en_fixture()
+    first_text = ' \tI did not attack.\n  "No" was the explicit refusal.  '
+    second_text = '\n They did not relocate — the outcome is uncertain.\r\n'
+    fixture[2][1].update(text=first_text, end=14.0)
+    fixture[2].append({"id": "s2b", "start": 14.0, "end": 19.64, "text": second_text})
+    fixture[1][1].update(segment_ids=["s2", "s2b"], text=first_text + " " + second_text)
+    original = copy.deepcopy(fixture)
+    calls = []
+    reply = proposal(fixture[-1], beats=fixture[1], segments=fixture[2])
+
+    result = review(monkeypatch, fixture, reply, calls, target_duration=40, duration_mode="style")
+
+    assert len(calls) == 1
+    payload = json.loads(calls[0]["messages"][1]["content"])
+    unit = next(row for row in payload["source_units"] if row["id"] == "b2")
+    assert unit == {"id": "b2", "start": 8.41, "end": 19.64, "segment_ids": ["s2", "s2b"],
+                    "segments": [{"id": "s2", "start": 8.41, "end": 14.0, "text": first_text},
+                                 {"id": "s2b", "start": 14.0, "end": 19.64, "text": second_text}]}
+    assert fixture == original
+    assert result["semantic_mapping_verified"] is True
 
 
 def test_compact_chapter_domains_preserve_string_coercion_and_unique_context_groups(monkeypatch):
