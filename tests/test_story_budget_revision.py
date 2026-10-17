@@ -127,6 +127,135 @@ def review(monkeypatch, fixture, reply, calls=None, *, outline=None, **brief_pat
     )
 
 
+def critic_allowed_fixture(*, underfilled=True):
+    pairs = [unit("b1", 0, 24.61, 10, 11),
+             unit("b2", 30.69, 39.08, 34, 35),
+             unit("b3", 43.54, 59.97, 49, 51)]
+    beats, segments = map(list, zip(*pairs))
+    keep, rejected = (["b2", "b3"], ["b1"]) if underfilled else (["b1", "b3"], ["b2"])
+    selection = {"keep_beat_ids": keep, "slot_map": [],
+                 "critic": {"verdict": "revise", "requested_removed": rejected, "requested_added": []}}
+    plan = {"slots": [{"purpose": purpose, "chapter_ids": ["c1"], "required_context_chapter_ids": ["c1"]}
+                      for purpose in ("premise", "setup", "evidence", "result")]}
+    return selection, beats, segments, [{"id": "c1", "beats": beats}], plan
+
+
+def allowed_source_reply(fixture):
+    selection, beats, segments, _chapters, plan = fixture
+    first, last = selection["keep_beat_ids"]
+    return {"verdict": "fit", "keep_beat_ids": list(selection["keep_beat_ids"]),
+            "released_optional_beat_ids": [],
+            "role_selections": {slot["purpose"]: role_proof([identifier], [first], beats, segments)
+                                for slot, identifier in zip(plan["slots"], (first, first, last, last))}}
+
+
+def test_proven_allowed_source_underfill_refuses_before_semantic_inference(monkeypatch):
+    fixture = critic_allowed_fixture()
+    before, calls = copy.deepcopy(fixture), []
+
+    with pytest.raises(intelligence.StoryBudgetError) as caught:
+        review(monkeypatch, fixture, AssertionError("no inference for a proven underfill"), calls,
+               target_duration=40)
+
+    diagnostic = caught.value.diagnostic
+    assert calls == []
+    assert fixture == before
+    assert diagnostic["reason"] == "allowed_source_below_target_minimum"
+    assert diagnostic["scope"] == "current_critic_allowed_source"
+    assert diagnostic["available_complete_source_upper_bound_seconds"] == pytest.approx(24.82)
+    assert diagnostic["minimum_target_seconds"] == 36
+    assert diagnostic["target_seconds"] == 40
+    assert diagnostic["applied_to_timeline"] is False
+    assert diagnostic["semantic_revision"]["attempts"] == 0
+    assert diagnostic["semantic_revision"]["reasoning"]["request_attempted"] is False
+    assert "not the entire recording" in str(caught.value)
+    assert "existing edit was kept" in str(caught.value)
+
+
+def test_sufficient_allowed_source_still_requires_semantic_review(monkeypatch):
+    fixture, calls = critic_allowed_fixture(underfilled=False), []
+
+    result = review(monkeypatch, fixture, allowed_source_reply(fixture), calls, target_duration=40)
+
+    assert len(calls) == 1
+    assert result["keep_beat_ids"] == ["b1", "b3"]
+    assert result["semantic_revision"]["attempts"] == 1
+    assert result["semantic_revision"]["final_ending_domain"]["allowed_final_beat_ids"] == ["b3"]
+
+
+def test_style_duration_has_no_allowed_source_lower_quota(monkeypatch):
+    fixture, calls = critic_allowed_fixture(), []
+
+    result = review(monkeypatch, fixture, allowed_source_reply(fixture), calls,
+                    duration_mode="style", target_duration=40)
+
+    assert len(calls) == 1
+    assert result["keep_beat_ids"] == ["b2", "b3"]
+    assert result["semantic_revision"]["attempts"] == 1
+
+
+def empty_ending_proof(fixture, upper):
+    keep = fixture[0]["keep_beat_ids"]
+    return {"status": "verified", "allowed_final_beat_ids": [],
+            "excluded_final_beat_count": len(keep), "eligible_unit_count": len(keep),
+            "endpoint_proofs": [{"beat_id": identifier, "prefix_approved_seconds": upper,
+                                 "excluded": True, "insufficient_duration": True}
+                                for identifier in keep],
+            "semantic_fit_verified": False, "invalid_source_count": 0, "bound_exceeded": False}
+
+
+@pytest.mark.parametrize("upper,early_refusal", [(35.95, False), (35.95 - 5e-10, False), (35.949, True), (36, False)])
+def test_allowed_source_underfill_respects_shared_fifty_millisecond_tolerance(monkeypatch, upper, early_refusal):
+    fixture, calls = critic_allowed_fixture(), []
+    monkeypatch.setattr(intelligence, "story_final_ending_domain", lambda *_args, **_kwargs: empty_ending_proof(fixture, upper))
+
+    with pytest.raises(intelligence.StoryBudgetError) as caught:
+        review(monkeypatch, fixture, {"verdict": "no_fit", "keep_beat_ids": [],
+                                     "released_optional_beat_ids": [], "role_selections": {}}, calls,
+               target_duration=40)
+
+    assert len(calls) == int(not early_refusal)
+    assert (caught.value.diagnostic["reason"] == "allowed_source_below_target_minimum") is early_refusal
+
+
+@pytest.mark.parametrize("fault", ["unverified", "empty_proofs", "missing_endpoint", "duplicate_endpoint",
+                                   "missing_bound", "nan", "infinity", "negative", "boolean", "string", "overflow",
+                                   "wrong_count", "boolean_count", "invalid_source", "bound_exceeded",
+                                   "not_excluded", "other_constraint", "nonempty_allowed"])
+def test_unverified_or_malformed_ending_proof_cannot_claim_numeric_underfill(monkeypatch, fault):
+    fixture, calls = critic_allowed_fixture(), []
+    domain = empty_ending_proof(fixture, 24.82)
+    if fault == "unverified": domain["status"] = "unverified"
+    elif fault == "empty_proofs": domain["endpoint_proofs"] = []
+    elif fault == "missing_endpoint": domain["endpoint_proofs"].pop()
+    elif fault == "duplicate_endpoint": domain["endpoint_proofs"][1]["beat_id"] = "b2"
+    elif fault == "missing_bound": domain["endpoint_proofs"][0].pop("prefix_approved_seconds")
+    elif fault in {"nan", "infinity", "negative", "boolean", "string", "overflow"}:
+        domain["endpoint_proofs"][0]["prefix_approved_seconds"] = {
+            "nan": float("nan"), "infinity": float("inf"), "negative": -1,
+            "boolean": True, "string": "24.82", "overflow": 10 ** 400}[fault]
+    elif fault == "wrong_count": domain["eligible_unit_count"] += 1
+    elif fault == "boolean_count": domain["eligible_unit_count"] = True
+    elif fault == "invalid_source": domain["invalid_source_count"] = 1
+    elif fault == "bound_exceeded": domain["bound_exceeded"] = True
+    elif fault == "not_excluded": domain["endpoint_proofs"][0]["excluded"] = False
+    elif fault == "nonempty_allowed": domain["allowed_final_beat_ids"] = ["b3"]
+    elif fault == "other_constraint":
+        for row in domain["endpoint_proofs"]:
+            row.update(prefix_approved_seconds=41.04, insufficient_duration=False,
+                       later_sticky_count=1, missing_group_count=1)
+    monkeypatch.setattr(intelligence, "story_final_ending_domain", lambda *_args, **_kwargs: domain)
+
+    with pytest.raises(intelligence.StoryBudgetError) as caught:
+        review(monkeypatch, fixture, {"verdict": "no_fit", "keep_beat_ids": [],
+                                     "released_optional_beat_ids": [], "role_selections": {}}, calls,
+               target_duration=40)
+
+    assert len(calls) == 1
+    assert caught.value.diagnostic["reason"] != "allowed_source_below_target_minimum"
+    assert caught.value.diagnostic["scope"] == "current_required_selection"
+
+
 def test_one_semantic_revision_reassigns_recovered_slots_before_optional_release(monkeypatch):
     fixture = en_fixture()
     before = copy.deepcopy(fixture)
@@ -294,8 +423,8 @@ def test_invalid_roles_below_target_do_not_claim_more_duration_fixes_the_story(m
     reply = proposal(fixture[-1])
     reply["role_selections"]["premise"]["primary_anchor_choice"] = ""
     with pytest.raises(intelligence.StoryBudgetError) as caught:
-        review(monkeypatch, fixture, reply, target_duration=40)
-    assert caught.value.diagnostic["required_policy_minimum_seconds"] < 40
+        review(monkeypatch, fixture, reply, target_duration=30)
+    assert caught.value.diagnostic["required_policy_minimum_seconds"] < 30
     assert "longer target alone does not verify" in str(caught.value)
     assert "needs at least" not in str(caught.value)
 

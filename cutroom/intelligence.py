@@ -1900,7 +1900,8 @@ def _review_story_target_budget(
     feasibility: dict[str, Any] | None = None
     ending_domain: dict[str, Any] | None = None
 
-    def fail(reason: str, detail: str, proposed_cost: dict[str, Any] | None = None) -> None:
+    def fail(reason: str, detail: str, proposed_cost: dict[str, Any] | None = None,
+             *, available_source_upper_bound: float | None = None) -> None:
         diagnostic = {"kind": "story_budget", "scope": "current_required_selection", "target_seconds": target,
                       "required_policy_minimum_seconds": cost["minimum_safe_seconds"], "reason": reason,
                       "policy_version": cost["policy_version"], "applied_to_timeline": False,
@@ -1913,10 +1914,17 @@ def _review_story_target_budget(
             diagnostic["final_ending_domain"] = copy.deepcopy(ending_domain)
         if proposed_cost is not None:
             diagnostic["proposed_revision_cost"] = {**copy.deepcopy(proposed_cost), "scope": "proposed_semantic_revision"}
+        if available_source_upper_bound is not None:
+            diagnostic["scope"] = "current_critic_allowed_source"
+            diagnostic["available_complete_source_upper_bound_seconds"] = round(available_source_upper_bound, 3)
         message = ("Story AI could not complete the single semantic review. "
                    if reason == "semantic_revision_output_limit"
                    else "Story AI could not validate a coherent story within the requested target. ")
-        if reason == "target_infeasible" and feasibility is not None:
+        if reason == "allowed_source_below_target_minimum" and available_source_upper_bound is not None:
+            message += (f"The current critic-allowed complete source can supply at most {available_source_upper_bound:.2f} seconds, "
+                        f"below the {minimum_target:.2f} seconds required for the {target:g}-second target. "
+                        "This bound describes the current critic-allowed source, not the entire recording. ")
+        elif reason == "target_infeasible" and feasibility is not None:
             message += (f"Allowed complete source constraints require at least {feasibility['optimistic_lower_bound_seconds']:.2f} "
                         f"seconds of protected source material. The current required selection has a policy minimum of "
                         f"{cost['minimum_safe_seconds']:.2f} seconds; the target is {target:g} seconds. ")
@@ -1985,6 +1993,30 @@ def _review_story_target_budget(
     ending_domain = story_final_ending_domain(candidates, segments, chapters, plan,
         sticky_beat_ids=sticky, rejected_beat_ids=rejected, minimum_target_seconds=minimum_target,
         eligible_beat_ids=allowed_ids)
+    endpoint_proofs = ending_domain.get("endpoint_proofs")
+    try:
+        verified_underfill_proof = (
+            ending_domain.get("status") == "verified" and ending_domain.get("allowed_final_beat_ids") == []
+            and isinstance(endpoint_proofs, list) and bool(endpoint_proofs)
+            and len(endpoint_proofs) == len(allowed_ids)
+            and all(type(ending_domain.get(key)) is int and ending_domain[key] == len(endpoint_proofs)
+                    for key in ("eligible_unit_count", "excluded_final_beat_count"))
+            and type(ending_domain.get("invalid_source_count")) is int and ending_domain["invalid_source_count"] == 0
+            and ending_domain.get("bound_exceeded") is False
+            and all(isinstance(row, dict) and isinstance(row.get("beat_id"), str)
+                    and row.get("excluded") is True and row.get("insufficient_duration") is True
+                    and type(row.get("prefix_approved_seconds")) in (int, float)
+                    and math.isfinite(row["prefix_approved_seconds"]) and row["prefix_approved_seconds"] >= 0
+                    for row in endpoint_proofs)
+            and {row["beat_id"] for row in endpoint_proofs} == set(allowed_ids)
+            and math.isfinite(minimum_target) and minimum_target > 0)
+    except OverflowError:
+        verified_underfill_proof = False
+    if verified_underfill_proof:
+        available_source_upper_bound = max(row["prefix_approved_seconds"] for row in endpoint_proofs)
+        if available_source_upper_bound + .05 + 1e-9 < minimum_target:
+            fail("allowed_source_below_target_minimum", "Review the current source selection or choose a shorter target.",
+                 available_source_upper_bound=available_source_upper_bound)
     final_ending_ids = (set(ending_domain["allowed_final_beat_ids"])
                         if ending_domain["status"] == "verified" else set(allowed_ids))
     evidence_owners = {row["id"]: row["beat_id"] for row in catalog}
