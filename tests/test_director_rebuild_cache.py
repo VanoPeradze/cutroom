@@ -111,6 +111,55 @@ def test_new_editorial_instruction_replans_without_retranscription(semantic_proj
     assert calls == {"transcribe": 1, "plan": 2}
 
 
+def test_empty_target_pruning_does_not_restore_the_entire_source(semantic_project, monkeypatch):
+    store, settings, project_id, _calls, context = semantic_project
+    segment = {"id": "long", "start": 0.0, "end": 300.0, "text": "One uninterrupted explanation."}
+    monkeypatch.setattr(director, "_plan_edit_with_cancel", lambda *_args, **_kwargs: ({
+        "segments": [segment], "decision": {
+            "keep_ids": ["long"], "remove_ids": [], "highlight_ids": ["long"],
+            "opening_id": "long", "closing_id": "long", "story_ranges": [dict(segment)],
+        }, "story_beats": [], "story_hierarchy": {"critic": {"verdict": "pass"}},
+    }, "fixture_story"))
+    before = store.load(project_id)
+    with pytest.raises(director.StoryPlanningError, match="No usable passages remain"):
+        director.analyze_project(context(), project_id, store, settings, {
+            "instruction": "Keep one complete explanation", "duration_mode": "target", "target_duration": 30,
+        })
+    assert store.load(project_id) == before
+
+
+def test_final_selection_changes_use_a_neutral_title(semantic_project, monkeypatch):
+    store, settings, project_id, _calls, context = semantic_project
+    store.update(project_id, lambda current: current["settings"].update({
+        "instruction": "A new complete selection", "target_duration": 90,
+    }))
+    monkeypatch.setattr(director, "_select_short_story_ranges", lambda *_args, **_kwargs: [
+        {"start": 30, "end": 60}, {"start": 100, "end": 110}, {"start": 220, "end": 250},
+    ])
+    director.analyze_project(context(), project_id, store, settings)
+    saved = store.load(project_id)
+    assert saved["draft"]["title"] == "CUTROOM story"
+    assert saved["draft"]["quality_review"]["title_review"]["reason"] == "final_selection_changed"
+    assert saved["draft"]["quality_review"]["selection_review"]["status"] == "changed"
+
+
+def test_first_draft_context_checkpoint_validates_the_staged_brief(semantic_project):
+    store, settings, project_id, _calls, context = semantic_project
+    def reset_first_draft(current):
+        current["draft"] = None
+        current["analysis"] = None
+    store.update(project_id, reset_first_draft)
+    director.analyze_project(context(), project_id, store, settings, {
+        "spoken_language": "en", "target_duration": 90,
+        "instruction": "A complete first edit with the requested language",
+    })
+    saved = store.load(project_id)
+    assert saved["draft"] is not None
+    assert saved["settings"]["spoken_language"] == "en"
+    assert saved["settings"]["target_duration"] == 90
+    assert saved["analysis"]["transcript"]["language"] == "en"
+
+
 def test_saved_commentary_keeps_planned_anchors_with_truthful_review(semantic_project, monkeypatch):
     store, settings, project_id, _calls, context = semantic_project
     segments = [
@@ -582,3 +631,36 @@ def test_duration_intent_replans_from_cached_context_without_retranscription(sem
     assert review["chain"][-1]["seconds"] == store.load(project_id)["draft"]["output_duration"]
     director.analyze_project(context(),project_id,store,settings)
     assert calls == {"transcribe":1,"plan":2}
+
+
+def test_target_shortfall_is_saved_and_reported_as_needing_review(semantic_project, monkeypatch):
+    store, settings, project_id, _calls, context = semantic_project
+
+    def bounded_plan(_context, current_segments, *_args, **_kwargs):
+        selected = next(row for row in current_segments if row["id"] == "s3")
+        return {
+            "segments": [{**row, "editorial_score": .8} for row in current_segments],
+            "decision": {
+                "keep_ids": ["s3"], "remove_ids": [], "highlight_ids": [],
+                "opening_id": "s3", "closing_id": "s3", "title": "CUTROOM story",
+                "story_beat_ids": ["approved"],
+                "story_ranges": [{"start": selected["start"], "end": selected["end"], "beat_id": "approved"}],
+                "story_requirements": {"required_beat_ids": ["approved"], "critic_requested_beat_ids": [],
+                                       "unresolved_slot_indexes": [], "unapplied_critic_actions": 0},
+            },
+            "story_beats": [], "story_hierarchy": {"critic": {"verdict": "pass"}},
+        }, "ollama_hierarchical_story"
+
+    monkeypatch.setattr(director, "_plan_edit_with_cancel", bounded_plan)
+    store.update(project_id, lambda current: current["settings"].update({
+        "target_duration": 20, "duration_mode": "target",
+    }))
+    result = director.analyze_project(context(), project_id, store, settings)
+    draft = store.load(project_id)["draft"]
+    assert draft["output_duration"] == 8
+    assert draft["duration_review"]["target_feasibility"]["supported_seconds"] == 8
+    assert draft["duration_review"]["target_feasibility"]["status"] == "limited"
+    assert draft["quality_review"]["needs_review"] is True
+    assert "target_feasibility" in [row["type"] for row in draft["quality_review"]["warnings"]]
+    assert "8.0s of the requested 20.0s" in result["message"]
+    assert "first edit is ready" not in result["message"]

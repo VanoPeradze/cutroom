@@ -36,7 +36,7 @@ from .visual_moments import (
     resolve_visual_pass,
     summary as visual_summary,
 )
-from .utils import atomic_write_json, clamp, invert_ranges, merge_ranges, range_duration
+from .utils import atomic_write_json, clamp, invert_ranges, merge_ranges, normalize_text, range_duration
 
 
 def _finite_number(value: Any, fallback: float = 0.0) -> float:
@@ -45,6 +45,35 @@ def _finite_number(value: Any, fallback: float = 0.0) -> float:
     except (TypeError, ValueError):
         return fallback
     return number if math.isfinite(number) else fallback
+
+
+def _segment_speech_ranges(segment: dict[str, Any]) -> list[dict[str, float]]:
+    """Protect the complete segment when any word timing cannot be trusted."""
+    start, end = float(segment["start"]), float(segment["end"])
+    fallback = [{"start": start, "end": end}]
+    words = segment.get("words")
+    if segment.get("word_timing_complete") is False or not isinstance(words, list) or not words:
+        return fallback
+    text = normalize_text(str(segment.get("text") or ""))
+    labels = normalize_text(" ".join(str(word.get("word") or "")
+                                     for word in words if isinstance(word, dict)))
+    if text and text != labels:
+        # Legacy caches may already have lost a malformed middle word before
+        # timing-completeness provenance existed. A valid subset is insufficient.
+        return fallback
+    speech = []
+    previous_end = start
+    for word in words:
+        if not isinstance(word, dict) or not str(word.get("word") or "").strip():
+            return fallback
+        left = _finite_number(word.get("start"), math.nan)
+        right = _finite_number(word.get("end"), math.nan)
+        if (not math.isfinite(left) or not math.isfinite(right) or right <= left
+                or left < start - .001 or right > end + .001 or left < previous_end - .001):
+            return fallback
+        speech.append({"start": max(start, left), "end": min(end, right)})
+        previous_end = right
+    return merge_ranges(speech, gap=0.0)
 
 
 def _prepared_vision_is_reusable(
@@ -107,7 +136,8 @@ def _drop_isolated_blips(segments: list[dict[str, Any]]) -> list[dict[str, Any]]
     return kept
 
 
-def _drop_isolated_micro_keeps(cuts: list[dict[str, Any]], duration: float, minimum: float = 1.0) -> tuple[list[dict[str, float]], int]:
+def _drop_isolated_micro_keeps(cuts: list[dict[str, Any]], duration: float, minimum: float = 1.0,
+                               *, protected_ranges: list[dict[str, float]] | None = None) -> tuple[list[dict[str, float]], int]:
     """A kept piece shorter than a second, far from any other kept footage, reads
     as a glitch in a Short. Remove it unless it is the only footage left."""
     keeps = invert_ranges(cuts, duration)
@@ -115,7 +145,9 @@ def _drop_isolated_micro_keeps(cuts: list[dict[str, Any]], duration: float, mini
     for index, keep in enumerate(keeps):
         previous_gap = keep["start"] - keeps[index - 1]["end"] if index else math.inf
         next_gap = keeps[index + 1]["start"] - keep["end"] if index + 1 < len(keeps) else math.inf
-        if keep["end"] - keep["start"] < minimum and previous_gap > 1.0 and next_gap > 1.0:
+        spoken = any(row["start"] < keep["end"] and row["end"] > keep["start"]
+                     for row in protected_ranges or [])
+        if keep["end"] - keep["start"] < minimum and previous_gap > 1.0 and next_gap > 1.0 and not spoken:
             continue
         remaining.append(keep)
     if not remaining or len(remaining) == len(keeps):
@@ -171,18 +203,27 @@ def _normalize_transcript(
         identifiers.add(identifier)
         words: list[dict[str, Any]] = []
         raw_words = raw_segment.get("words")
+        word_timing_complete = raw_segment.get("word_timing_complete") is not False
         if raw_words is not None and not isinstance(raw_words, list):
             changed = True
             raw_words = []
+            word_timing_complete = False
         for raw_word in raw_words or []:
             if not isinstance(raw_word, dict):
                 changed = True
+                word_timing_complete = False
                 continue
+            raw_start = _finite_number(raw_word.get("start"), math.nan)
+            raw_end = _finite_number(raw_word.get("end"), math.nan)
+            if (not math.isfinite(raw_start) or not math.isfinite(raw_end)
+                    or raw_start < start - .001 or raw_end > end + .001 or raw_end <= raw_start):
+                word_timing_complete = False
             word_start = max(start, _finite_number(raw_word.get("start"), start))
             word_end = min(end, _finite_number(raw_word.get("end"), word_start))
             word_text = str(raw_word.get("word") or "").strip()
             if not word_text or word_end - word_start < 0.005:
                 changed = True
+                word_timing_complete = False
                 continue
             word = {
                 "start": round(word_start, 3),
@@ -203,6 +244,10 @@ def _normalize_transcript(
             "normalized": str(raw_segment.get("normalized") or text).strip(),
             "words": words,
         }
+        if not word_timing_complete:
+            # A normalized partial word list must never prove that its missing
+            # middle contains no speech, including after cache reuse/corrections.
+            segment["word_timing_complete"] = False
         for key in ("avg_logprob", "no_speech_prob"):
             if raw_segment.get(key) is not None:
                 number = _finite_number(raw_segment.get(key), math.nan)
@@ -542,14 +587,56 @@ def _edit_quality_review(
     semantic = merge_ranges((decision or {}).get("story_ranges") or [], gap=0.75)
     anchors = _planned_story_anchors(segments, decision or {}, semantic)
     kept = merge_ranges(keep_ranges, gap=0.0)
-    missing_anchor = any(sum(
-        max(0.0, min(float(anchor["end"]), passage["end"])
-            - max(float(anchor["start"]), passage["start"])) for passage in kept
-    ) < float(anchor["end"]) - float(anchor["start"]) - 0.001 for anchor in anchors)
+    selection_review: dict[str, Any] = {
+        "status": "not_reviewed", "added_segment_ids": [],
+        "removed_segment_ids": [], "partial_segment_ids": [],
+    }
+    if hierarchy and semantic:
+        # The critic saw the planner's speech, before top-up and cleanup. A pass
+        # cannot cover newly added words or omitted context. Removing only pauses
+        # leaves the reviewed speech intact and does not require another review.
+        reviewed = merge_ranges((decision or {}).get("story_ranges") or [], gap=0.0)
+        for segment in segments:
+            start, end = float(segment["start"]), float(segment["end"])
+            speech = _segment_speech_ranges(segment)
+            expected = merge_ranges([
+                {"start": max(span["start"], row["start"]), "end": min(span["end"], row["end"])}
+                for span in speech for row in reviewed
+                if row["end"] > span["start"] and row["start"] < span["end"]
+            ], gap=0.0)
+            actual = merge_ranges([
+                {"start": max(span["start"], row["start"]), "end": min(span["end"], row["end"])}
+                for span in speech for row in kept
+                if row["end"] > span["start"] and row["start"] < span["end"]
+            ], gap=0.0)
+            expected_seconds, actual_seconds = range_duration(expected), range_duration(actual)
+            common = sum(max(0.0, min(a["end"], b["end"]) - max(a["start"], b["start"]))
+                         for a in expected for b in actual)
+            identifier = str(segment.get("id", ""))
+            if expected_seconds <= .05 < actual_seconds:
+                selection_review["added_segment_ids"].append(identifier)
+            elif actual_seconds <= .05 < expected_seconds:
+                selection_review["removed_segment_ids"].append(identifier)
+            elif expected_seconds - common > .05 or actual_seconds - common > .05:
+                selection_review["partial_segment_ids"].append(identifier)
+        changed = any(selection_review[key] for key in (
+            "added_segment_ids", "removed_segment_ids", "partial_segment_ids"))
+        selection_review["status"] = ("changed" if changed else
+                                      "unchanged" if (hierarchy.get("critic") or {}).get("verdict") == "pass"
+                                      else "not_reviewed")
+    missing_anchor = any(any(sum(
+        max(0.0, min(span["end"], passage["end"]) - max(span["start"], passage["start"]))
+        for passage in kept
+    ) < span["end"] - span["start"] - 0.001 for span in _segment_speech_ranges(anchor))
+        for anchor in anchors)
     if missing_anchor:
         warnings.append({"type": "story_anchor_missing", "message":
             "The final draft does not fully include the planned beginning or ending. "
             "Review context and the ending before exporting."})
+    elif selection_review["status"] == "changed":
+        warnings.append({"type": "story_selection_changed", "message":
+            "The final spoken selection changed after the story review. "
+            "Added passages or removed speech need a new context and continuity review."})
     else:
         moment_limit = (selection_policy or {}).get("max_moments")
         anchor_passages = [passage for passage in semantic if any(
@@ -574,7 +661,18 @@ def _edit_quality_review(
         warnings.append({"type": "selection_coverage", "message":
             "The selected moments come from a small part of the recording. This can suit one complete story; "
             "review the rest of the source if you wanted a broader summary."})
+    raw_title_review = (decision or {}).get("title_review")
+    title_review = copy.deepcopy(raw_title_review) if isinstance(raw_title_review, dict) else {}
+    if selection_review["status"] == "changed" and ((decision or {}).get("title") or title_review):
+        title_review.update(status="unverified", reason="final_selection_changed")
+    if (title_review.get("status") == "unverified" and title_review.get("reason") == "model_suggestion"
+            and (decision or {}).get("title") not in {None, "", "CUTROOM story"}):
+        warnings.append({"type": "title_review", "message":
+            "The suggested title has not been checked against the selected footage. "
+            "Review it before sharing."})
     return {"needs_review": bool(warnings), "warnings": warnings,
+            "selection_review": selection_review,
+            **({"title_review": title_review} if title_review else {}),
             "recognized_source_sections": recognized, "selected_source_sections": selected,
             "section_count": 10, "source_duration": duration,
             "transcription_coverage": quality.get("coverage_status", "unverified")}
@@ -938,7 +1036,7 @@ def _short_segment_value(segment: dict[str, Any], decision: dict[str, Any]) -> f
     return score
 
 
-SELECTION_STRATEGY_VERSION = "explicit-duration-intent-v6"
+SELECTION_STRATEGY_VERSION = "approved-speech-pause-fit-v8"
 
 
 def _selection_unit(selection_seed: Any, *parts: Any) -> float:
@@ -1596,6 +1694,82 @@ def _gameplay_summary(count: int, notes: list[str], language: str | None, *, cut
     return f"{count} gameplay {moments} chosen by on-screen action and sound{shown}. {left_out}"
 
 
+def _rejected_story_ranges(decision: dict[str, Any], segments: list[dict[str, Any]],
+                           duration: float) -> list[dict[str, float]]:
+    rejected_ids = {str(value) for value in decision.get("rejected_segment_ids") or []}
+    rows = [*(decision.get("rejected_story_ranges") or []), *[
+        {"start": row["start"], "end": row["end"]}
+        for row in segments if str(row.get("id")) in rejected_ids
+    ]]
+    ranges = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        start = max(0.0, _finite_number(row.get("start")))
+        end = min(duration, _finite_number(row.get("end")))
+        if end > start:
+            ranges.append({"start": start, "end": end})
+    return merge_ranges(ranges, gap=0.0)
+
+
+def _exclude_rejected_story_ranges(ranges: list[dict[str, float]], decision: dict[str, Any],
+                                  segments: list[dict[str, Any]], duration: float) -> list[dict[str, float]]:
+    rejected = _rejected_story_ranges(decision, segments, duration)
+    if not rejected:
+        return ranges
+    # Selection shortcuts and context bridging obey the same explicit exclusions
+    # as top-up. User restores are applied separately, after AI selection.
+    cuts = merge_ranges([*invert_ranges(ranges, duration), *rejected], gap=0.0)
+    return invert_ranges(cuts, duration)
+
+
+def _compact_story_pauses_to_target(
+    ranges: list[dict[str, float]], segments: list[dict[str, Any]],
+    duration: float, target: float,
+) -> list[dict[str, float]] | None:
+    """Fit approved speech by shortening only internal timestamped speech gaps.
+
+    No spoken word or passage endpoint is discarded. Untimed or malformed words
+    protect their entire segment. This is unavailable to action-protected styles:
+    an absence of transcript words does not establish an absence of game action.
+    """
+    approved = merge_ranges(ranges, gap=0.0)
+    excess = range_duration(approved) - target
+    if excess <= .05:
+        return approved
+    gaps = []
+    for passage in approved:
+        overlapping = [row for row in segments
+                       if float(row["start"]) < passage["end"] and float(row["end"]) > passage["start"]]
+        if not overlapping:
+            return None
+        protected = merge_ranges([
+            {"start": max(passage["start"], span["start"]),
+             "end": min(passage["end"], span["end"])}
+            for row in overlapping for span in _segment_speech_ranges(row)
+            if span["start"] < passage["end"] and span["end"] > passage["start"]
+        ], gap=0.0)
+        # Retain a small handle on both sides of each word-free interval. Cut
+        # large gaps first so meeting the target introduces as few joins as possible.
+        for left, right in zip(protected, protected[1:]):
+            start, end = left["end"] + .06, right["start"] - .06
+            if end - start >= .12:
+                gaps.append({"start": start, "end": end})
+    if sum(row["end"] - row["start"] for row in gaps) + .001 < excess:
+        return None
+    pause_cuts = []
+    for gap in sorted(gaps, key=lambda row: (-(row["end"] - row["start"]), row["start"])):
+        if excess <= .001:
+            break
+        remove = min(excess, gap["end"] - gap["start"])
+        margin = (gap["end"] - gap["start"] - remove) / 2
+        pause_cuts.append({"start": round(gap["start"] + margin, 3),
+                           "end": round(gap["end"] - margin, 3)})
+        excess -= remove
+    fitted = invert_ranges(merge_ranges([*invert_ranges(approved, duration), *pause_cuts], gap=0.0), duration)
+    return fitted if range_duration(fitted) <= target + .05 else None
+
+
 def _style_beat_candidates(
     segments: list[dict[str, Any]],
     decision: dict[str, Any],
@@ -1614,6 +1788,7 @@ def _style_beat_candidates(
     beats = sorted(beats, key=lambda row: float(row["start"]))
     before = max(0.0, _finite_number(selection_policy.get("pre_roll_seconds")))
     after = max(0.0, _finite_number(selection_policy.get("post_roll_seconds")))
+    rejected_ranges = _rejected_story_ranges(decision, ordered, duration)
     candidates: list[dict[str, float]] = []
     for index, beat in enumerate(beats):
         start, end = float(beat["start"]), float(beat["end"])
@@ -1653,6 +1828,10 @@ def _style_beat_candidates(
             overlapping = [row for row in ordered if float(row["end"]) > start and float(row["start"]) < end]
         if not overlapping or end - start > target + 0.05 or end <= start:
             continue
+        if any(float(row["end"]) > start and float(row["start"]) < end for row in rejected_ranges):
+            # A new duration request cannot silently re-add speech the critic
+            # explicitly rejected, including through neighboring context padding.
+            continue
         values = [_short_segment_value(row, decision) for row in overlapping]
         score = max(values) * 0.65 + sum(values) / len(values) * 0.35
         if beat.get("role_hint") in {"result", "conclusion"}:
@@ -1677,6 +1856,10 @@ def _top_up_to_target(
     planned = range_duration(selected)
     trace = [{"stage": "planner_passages", "seconds": round(planned, 3), "passages": len(selected)}]
     decision["_selection_trace"] = trace
+    if decision.get("story_requirements"):
+        # The model/critic now identifies the admissible story material. A
+        # relevance score alone cannot authorize another unreviewed source beat.
+        return selected
     if planned >= target * 0.9 or not candidates:
         return selected
     scores = sorted(row["score"] for row in candidates)
@@ -1725,11 +1908,13 @@ def _select_style_story_ranges(
         return None
     moment_limit = max(1, int(moment_limit))
     semantic = merge_ranges(decision.get("story_ranges") or [], gap=0.75)
+    semantic = _exclude_rejected_story_ranges(semantic, decision, segments, duration)
     if semantic:
         if moment_limit == 1 and semantic[-1]["end"] - semantic[0]["start"] <= target + 0.05:
             # Preserve the pauses and action between setup and payoff when one
             # continuous story fits. Never bridge distant chapters blindly.
-            return [{"start": semantic[0]["start"], "end": semantic[-1]["end"]}]
+            return _exclude_rejected_story_ranges(
+                [{"start": semantic[0]["start"], "end": semantic[-1]["end"]}], decision, segments, duration)
         model_beat_ids = {str(value) for value in decision.get("story_beat_ids") or []}
         model_passages = merge_ranges([
             row for row in decision.get("story_ranges") or []
@@ -1831,19 +2016,43 @@ def _select_short_story_ranges(
     to simply keeping the first N seconds.
     """
     target = min(float(duration), max(8.0, float(target_duration)))
+
+    def finish(ranges: list[dict[str, float]]) -> list[dict[str, float]]:
+        return _exclude_rejected_story_ranges(ranges, decision, segments, duration)
+
     if duration <= target + 0.05:
-        return [{"start": 0.0, "end": round(duration, 3)}]
+        if decision.get("story_requirements") and decision.get("story_ranges"):
+            return finish(merge_ranges(decision["story_ranges"], gap=0.0))
+        return finish([{"start": 0.0, "end": round(duration, 3)}])
     if not segments:
-        return _fallback_short_story_ranges(
+        return finish(_fallback_short_story_ranges(
             duration, target, scene_points, selection_seed=selection_seed,
-        )
+        ))
+    approved = finish(merge_ranges(decision.get("story_ranges") or [], gap=0.0))
+    if ((selection_policy or {}).get("duration_mode") == "target" and approved
+            and range_duration(approved) > target + .05
+            and not (selection_policy or {}).get("protect_action_span")):
+        fitted = _compact_story_pauses_to_target(approved, segments, duration, target)
+        decision["_target_fit_review"] = {
+            "fitted": fitted is not None,
+            "reason": "speech_pauses_shortened" if fitted is not None else "insufficient_safe_pause_budget",
+            "approved_seconds": round(range_duration(approved), 3),
+        }
+        if fitted is not None:
+            decision["_selection_trace"] = [
+                {"stage": "planner_passages", "seconds": round(range_duration(approved), 3),
+                 "passages": len(approved)},
+                {"stage": "speech_pause_fit", "seconds": round(range_duration(fitted), 3),
+                 "passages": len(fitted)},
+            ]
+            return finish(fitted)
     if selection_policy:
         style_ranges = _select_style_story_ranges(
             segments, decision, duration, target, selection_policy, story_beats,
             selection_seed=selection_seed,
         )
         if style_ranges:
-            return style_ranges
+            return finish(style_ranges)
 
     # v5.5 plans long footage at the STORY-BEAT level. When the semantic planner
     # selected coherent beat ranges, honor those ideas first instead of rebuilding
@@ -1858,7 +2067,7 @@ def _select_short_story_ranges(
         semantic_duration = range_duration(semantic_story)
         semantic_ceiling = target * (1.16 if target <= 90.0 else 1.10 if target <= 210.0 else 1.07)
         if target * 0.52 <= semantic_duration <= semantic_ceiling + 0.05:
-            return semantic_story
+            return finish(semantic_story)
 
     ordered = sorted(segments, key=lambda item: (float(item.get("start", 0)), float(item.get("end", 0))))
     id_to_index = {str(item.get("id")): index for index, item in enumerate(ordered)}
@@ -2002,9 +2211,9 @@ def _select_short_story_ranges(
                 break
 
     ranges = merge_ranges(selected, gap=0.65)
-    return ranges or _fallback_short_story_ranges(
+    return finish(ranges or _fallback_short_story_ranges(
         duration, target, scene_points, selection_seed=selection_seed,
-    )
+    ))
 
 def _camera_plan(keep_ranges: list[dict[str, float]], has_b: bool, layout: str, pace: str, scene_points: list[float]) -> list[dict[str, Any]]:
     if not keep_ranges:
@@ -2523,7 +2732,10 @@ def _kept_seconds(cuts: list[dict[str, Any]], duration: float) -> float:
 
 
 def _duration_review(brief: dict[str, Any], source_duration: float, output_duration: float,
-                     *, nonverbal: bool = False, chain: list[dict[str, Any]] | None = None) -> dict[str, Any] | None:
+                     *, nonverbal: bool = False, chain: list[dict[str, Any]] | None = None,
+                     decision: dict[str, Any] | None = None, hierarchy: dict[str, Any] | None = None,
+                     segments: list[dict[str, Any]] | None = None,
+                     keep_ranges: list[dict[str, float]] | None = None) -> dict[str, Any] | None:
     """Explain a Short's real budget without claiming all footage was assessed."""
     if brief.get("goal", "short") != "short":
         return None
@@ -2531,17 +2743,87 @@ def _duration_review(brief: dict[str, Any], source_duration: float, output_durat
     effective = min(requested, source_duration)
     limit = ((brief.get("style_profile") or {}).get("selection_policy") or {}).get("max_moments")
     shortfall = output_duration + .05 < effective * .9
-    reason = ("style_moment_limit" if shortfall and limit else
+    exceeds_target = output_duration > effective + .05
+    reason = ("over_target" if exceeds_target else
+              "style_moment_limit" if shortfall and limit else
               "limited_selection" if shortfall else
               "source_shorter" if source_duration + .05 < requested else "near_target")
+    requirements = (decision or {}).get("story_requirements") or {}
+    critic = (hierarchy or {}).get("critic") or {}
+    unresolved = sorted({int(value) for value in [
+        *(requirements.get("unresolved_slot_indexes") or []),
+        *(critic.get("unresolved_slot_indexes") or []),
+    ] if isinstance(value, int) and not isinstance(value, bool) and value >= 0})
+    unapplied = max(max(0, int(_finite_number(requirements.get("unapplied_critic_actions")))),
+                    len(critic.get("unapplied_actions") or []))
+    missing_required: set[str] = set()
+    if segments is not None and keep_ranges is not None:
+        required = {str(value) for value in requirements.get("required_beat_ids") or []}
+        passages = (decision or {}).get("story_ranges") or []
+        missing_required = required - {str(row.get("beat_id")) for row in passages}
+        for passage in passages:
+            identifier = str(passage.get("beat_id"))
+            if identifier not in required:
+                continue
+            speech = [span for row in segments
+                      if float(row["start"]) < float(passage["end"]) and float(row["end"]) > float(passage["start"])
+                      for span in _segment_speech_ranges(row)]
+            expected = merge_ranges([
+                {"start": max(span["start"], float(passage["start"])),
+                 "end": min(span["end"], float(passage["end"]))}
+                for span in speech
+                if span["start"] < float(passage["end"]) and span["end"] > float(passage["start"])
+            ] or [{"start": float(passage["start"]), "end": float(passage["end"])}], gap=0.0)
+            if any(sum(max(0.0, min(span["end"], kept["end"]) - max(span["start"], kept["start"]))
+                       for kept in keep_ranges) < span["end"] - span["start"] - .025 for span in expected):
+                missing_required.add(identifier)
+        missing_additions = missing_required & {str(value) for value in requirements.get("critic_requested_beat_ids") or []}
+        unapplied = max(unapplied, len(missing_additions))
+    reasons = []
+    if brief.get("duration_mode") == "target" and shortfall:
+        reasons.append("selected_material_under_target")
+    if brief.get("duration_mode") == "target" and source_duration + .05 < requested:
+        reasons.append("source_shorter_than_requested")
+    if exceeds_target:
+        reasons.append("selected_material_over_target")
+    if unresolved:
+        reasons.append("unresolved_story_slots")
+    if unapplied:
+        reasons.append("unapplied_critic_actions")
+    if missing_required:
+        reasons.append("required_story_material_omitted")
+    fit_review = (decision or {}).get("_target_fit_review") or {}
+    if reasons and fit_review.get("fitted") is False:
+        reasons.append(str(fit_review.get("reason") or "insufficient_safe_pause_budget"))
+    feasibility = {
+        "status": "limited" if reasons else "met", "scope": "current_selection",
+        "supported_seconds": round(output_duration, 3), "reasons": reasons,
+        "unresolved_slot_indexes": unresolved, "unapplied_critic_actions": unapplied,
+        "missing_required_beat_ids": sorted(missing_required),
+    }
     return {"requested_seconds": round(requested, 3), "available_source_seconds": round(source_duration, 3),
             "effective_target_seconds": round(effective, 3), "selected_seconds": round(output_duration, 3),
             "duration_is_ceiling": brief.get("duration_mode") != "target", "duration_mode": brief.get("duration_mode", "style"),
-            "shortfall": shortfall, "reason": reason,
+            "shortfall": shortfall, "exceeds_target": exceeds_target, "reason": reason,
             "style_moment_limit": int(limit) if limit else None,
             "nonverbal": nonverbal, "can_try_more_moments": bool(shortfall and limit),
+            "target_feasibility": feasibility,
             # Each step that changed the length, so a short result names its cause.
             "chain": chain or []}
+
+
+def _target_completion_message(review: dict[str, Any] | None) -> str | None:
+    if not review or (review.get("target_feasibility") or {}).get("status") != "limited":
+        return None
+    selected, requested = float(review["selected_seconds"]), float(review["requested_seconds"])
+    if (review.get("duration_mode") == "target"
+            and (review.get("shortfall") or "source_shorter_than_requested" in
+                 (review.get("target_feasibility") or {}).get("reasons", []))):
+        return (f"Draft needs review: the current selection supports {selected:.1f}s of the requested {requested:.1f}s. "
+                "Review the story selection or change the requested duration.")
+    if review.get("exceeds_target"):
+        return f"Draft needs review: the selected {selected:.1f}s exceeds the requested {requested:.1f}s."
+    return "Draft needs review: required story material is not resolved."
 
 
 def _effective_brief(project: dict[str, Any]) -> dict[str, Any]:
@@ -2605,19 +2887,13 @@ def analyze_project(
     context.checkpoint()
     project = store.load(project_id)
     require_tracks_unlocked(project)
-    # Rebuilding a project with independent media must be all-or-nothing: a
-    # rejected shorter draft must not leave the refinement's settings applied.
-    staged_brief = brief_patch if any((project.get("manual") or {}).get(key) for key in ("media_clips", "text_clips")) else None
+    # Commit the requested settings together with the completed draft. A failed
+    # refinement must not change the settings used by the existing edit/export.
+    staged_brief = copy.deepcopy(brief_patch) if brief_patch else None
     original_settings = copy.deepcopy(project.get("settings") or {})
     if brief_patch:
         context.checkpoint()
-        if staged_brief:
-            project.setdefault("settings", {}).update(staged_brief)
-        else:
-            project = store.update(
-                project_id,
-                lambda current: current.setdefault("settings", {}).update(brief_patch),
-            )
+        project.setdefault("settings", {}).update(staged_brief)
     manual_input_fingerprint = stable_fingerprint("director-manual-input", project.get("manual") or {})
     if source_mixer_patch:
         project.setdefault("manual", {}).setdefault("source_mixer", {}).update(source_mixer_patch)
@@ -3128,18 +3404,19 @@ def analyze_project(
         def commit_context(latest: dict[str, Any]) -> None:
             if latest.get("draft"):
                 return
+            proposed = proposed_inputs(latest)
             if stable_fingerprint("director-manual-input", latest.get("manual") or {}) != manual_input_fingerprint:
                 raise RuntimeError("project_changed_during_analysis")
-            latest_brief = _effective_brief(latest)
+            latest_brief = _effective_brief(proposed)
             latest_paths: dict[str, Path | None] = {}
             for slot in ("A", "B"):
-                latest_source = latest.get("sources", {}).get(slot)
+                latest_source = proposed.get("sources", {}).get(slot)
                 latest_paths[slot] = (
                     store.project_dir(project_id) / latest_source["relative_path"]
                     if latest_source and latest_source.get("relative_path")
                     else None
                 )
-            latest_fingerprints = build_analysis_cache_fingerprints(latest, settings, latest_brief, latest_paths)
+            latest_fingerprints = build_analysis_cache_fingerprints(proposed, settings, latest_brief, latest_paths)
             if not cache_fingerprints_match(
                 latest_fingerprints,
                 cache_fingerprints,
@@ -3397,7 +3674,11 @@ def analyze_project(
         if target_trim_count:
             counts["target_trim"] = target_trim_count
             duration_chain.append({"stage": "target_trim", "seconds": _kept_seconds(cuts, duration), "count": target_trim_count})
-        cuts, micro_count = _drop_isolated_micro_keeps(cuts, duration)
+        cuts, micro_count = _drop_isolated_micro_keeps(
+            cuts, duration,
+            protected_ranges=([span for row in segments for span in _segment_speech_ranges(row)]
+                              if (decision.get("_target_fit_review") or {}).get("fitted") else None),
+        )
         if micro_count:
             counts["micro_fragments"] = micro_count
             duration_chain.append({"stage": "micro_fragments", "seconds": _kept_seconds(cuts, duration), "count": micro_count})
@@ -3420,6 +3701,11 @@ def analyze_project(
             counts[reason] = counts.get(reason, 0) + count
     keep_ranges = invert_ranges(cuts, duration)
     if not keep_ranges:
+        if goal == "short":
+            raise StoryPlanningError(
+                "No usable passages remain within the requested length. "
+                "Choose a longer duration or a manual range; the existing edit was kept."
+            )
         keep_ranges = [{"start": 0.0, "end": duration}]
         cuts = []
     requested_layout = str(brief.get("layout", "auto"))
@@ -3447,7 +3733,9 @@ def analyze_project(
     if len(duration_chain) > 1:
         duration_chain.append({"stage": "final", "seconds": output_duration})
     duration_review = _duration_review(brief, duration, output_duration, nonverbal=nonverbal_highlights,
-                                       chain=duration_chain if len(duration_chain) > 1 else None)
+                                       chain=duration_chain if len(duration_chain) > 1 else None,
+                                       decision=decision, hierarchy=story_hierarchy,
+                                       segments=segments, keep_ranges=keep_ranges)
     quality_review = _edit_quality_review(
         transcript_quality, story_hierarchy, segments, keep_ranges, duration,
         decision=decision,
@@ -3461,6 +3749,10 @@ def analyze_project(
     if planner_warnings:
         quality_review["warnings"].extend(planner_warnings)
         quality_review["needs_review"] = True
+    target_completion_message = _target_completion_message(duration_review)
+    if target_completion_message:
+        quality_review["warnings"].append({"type": "target_feasibility", "message": target_completion_message})
+        quality_review["needs_review"] = True
     old_keep_ranges = (project.get("draft") or {}).get("keep_ranges") or []
     variation_changed = keep_ranges != old_keep_ranges
     decisions = _aggregate_decisions(counts, duration, output_duration, bool(source_b), sync)
@@ -3472,7 +3764,8 @@ def analyze_project(
         "engine": engine,
         "created_at": project.get("updated_at"),
         "language": language,
-        "title": decision.get("title") or project.get("name"),
+        "title": ("CUTROOM story" if (quality_review.get("title_review") or {}).get("reason") == "final_selection_changed"
+                  else decision.get("title") or project.get("name")),
         "summary": decision.get("summary"),
         "pace": pace,
         "goal": goal,
@@ -3649,6 +3942,10 @@ def analyze_project(
         message = "New draft ready; your manual timeline was kept. Reset to AI draft to use this edit."
     elif planner_warnings:
         message = "Basic cleanup draft ready; Story AI did not produce a valid edit. Review the warning before exporting."
+    if target_completion_message:
+        message = (message + " " + target_completion_message
+                   if timeline_preserved or normalized_selection_variant > 0 and not variation_changed
+                   else target_completion_message)
     context.update(1.0, message)
     result = {"project_id": project_id, "draft": saved_project["draft"], "engine": engine,
               "applied_to_timeline": not timeline_preserved, "timeline_preserved": timeline_preserved,

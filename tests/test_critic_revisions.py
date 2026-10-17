@@ -66,21 +66,19 @@ def test_removing_an_unselected_candidate_is_a_noop_not_an_applied_repair(monkey
     ]
 
 
-def test_required_story_slot_retained_without_claiming_critic_removal(monkeypatch, story):
+def test_rejected_required_slot_is_exposed_without_restoring_its_material(monkeypatch, story):
     selection, candidates = story
     selection["keep_beat_ids"] = ["b1", "b2", "b3"]
     selection["slot_map"] = [{"slot_index": i, "beat_ids": [row["id"]]}
                              for i, row in enumerate(candidates)]
     reviewed = critic(monkeypatch, story, response(remove_beat_ids=["b2"]))
-    assert reviewed["keep_beat_ids"] == ["b1", "b2", "b3"]
-    assert reviewed["critic"]["removed"] == []
-    assert reviewed["critic"]["unapplied_actions"] == [
-        {"action": "remove", "beat_id": "b2", "reason": "retained_in_final_selection"},
-    ]
+    assert reviewed["keep_beat_ids"] == ["b1", "b3"]
+    assert reviewed["critic"]["removed"] == ["b2"]
+    assert reviewed["critic"]["unapplied_actions"] == []
+    assert reviewed["critic"]["unresolved_slot_indexes"] == [1]
     review = director._edit_quality_review({}, {"critic": reviewed["critic"]}, [], [], 30)
     assert review["needs_review"] is True
     assert all(row["type"] == "story_review" for row in review["warnings"])
-    assert any("not applied" in row["message"] for row in review["warnings"])
 
 
 def test_effective_nonessential_removal_is_recorded_exactly(monkeypatch, story):
@@ -92,19 +90,18 @@ def test_effective_nonessential_removal_is_recorded_exactly(monkeypatch, story):
     assert reviewed["critic"]["verdict"] == "revise"
 
 
-def test_later_budget_pruning_reconciles_a_requested_context_addition(monkeypatch, story):
+def test_later_budget_fit_preserves_a_requested_context_addition(monkeypatch, story):
     reviewed = critic(monkeypatch, story, response(add_beat_ids=["b2"]))
     assert reviewed["keep_beat_ids"] == ["b1", "b2", "b3"]
     assert reviewed["critic"]["added"] == ["b2"]
     fitted = intelligence._fit_story_selection_to_budget(
         reviewed, story[1], {"slots": [{"desired_seconds": 8}] * 2}, 16,
     )
-    assert fitted["keep_beat_ids"] == ["b1", "b3"]
+    assert fitted["keep_beat_ids"] == ["b1", "b2", "b3"]
     assert fitted["critic"]["requested_added"] == ["b2"]
-    assert fitted["critic"]["added"] == []
-    assert fitted["critic"]["unapplied_actions"] == [
-        {"action": "add", "beat_id": "b2", "reason": "not_kept_in_final_selection"},
-    ]
+    assert fitted["critic"]["added"] == ["b2"]
+    assert fitted["critic"]["unapplied_actions"] == []
+    assert fitted["budget_fit"]["status"] == "required_material_exceeds_ceiling"
 
 
 def test_adding_an_existing_selected_beat_is_not_an_applied_repair(monkeypatch, story):
@@ -116,7 +113,7 @@ def test_adding_an_existing_selected_beat_is_not_an_applied_repair(monkeypatch, 
     ]
 
 
-def test_later_budget_slot_restoration_reconciles_actual_removal(monkeypatch, story):
+def test_later_budget_slot_restoration_keeps_actual_removal(monkeypatch, story):
     story[0]["keep_beat_ids"] = ["b1", "b2", "b3"]
     reviewed = critic(monkeypatch, story, response(remove_beat_ids=["b2"]))
     assert reviewed["critic"]["removed"] == ["b2"]
@@ -125,12 +122,11 @@ def test_later_budget_slot_restoration_reconciles_actual_removal(monkeypatch, st
     fitted = intelligence._fit_story_selection_to_budget(
         reviewed, story[1], {"slots": [{"desired_seconds": 8}] * 3}, 30,
     )
-    assert fitted["keep_beat_ids"] == ["b1", "b2", "b3"]
+    assert fitted["keep_beat_ids"] == ["b1", "b3"]
     assert fitted["critic"]["requested_removed"] == ["b2"]
-    assert fitted["critic"]["removed"] == []
-    assert fitted["critic"]["unapplied_actions"] == [
-        {"action": "remove", "beat_id": "b2", "reason": "retained_in_final_selection"},
-    ]
+    assert fitted["critic"]["removed"] == ["b2"]
+    assert fitted["critic"]["unapplied_actions"] == []
+    assert fitted["critic"]["unresolved_slot_indexes"] == [1]
 
 
 def test_empty_critic_response_keeps_edit_with_review_warning_through_real_pipeline(monkeypatch, story):
@@ -151,3 +147,176 @@ def test_empty_critic_response_keeps_edit_with_review_warning_through_real_pipel
     review = director._edit_quality_review({}, hierarchy, segments, decision["story_ranges"], 30)
     assert review["needs_review"] is True
     assert review["warnings"][0]["type"] == "story_review"
+
+
+def test_story_endpoints_and_highlights_cannot_inject_unselected_beats(story):
+    selection, candidates = story
+    selection.update(keep_beat_ids=["b2"], opening_beat_id="b1", closing_beat_id="b3",
+                     highlight_beat_ids=["b1", "b2", "b3"])
+    segments = [{"id": f"s{i}"} for i in range(1, 4)]
+
+    decision = intelligence._story_decision_from_beats(selection, candidates, segments)
+
+    assert decision["story_beat_ids"] == ["b2"]
+    assert decision["opening_id"] == decision["closing_id"] == "s2"
+    assert decision["highlight_ids"] == ["s2"]
+
+
+def test_budget_fit_cannot_substitute_an_unselected_chapter_alternative(story):
+    selection, candidates = story
+    candidates[0].update(end=20.0)
+    candidates[1].update(editorial_score=1.0, text="An unrelated alternative.")
+    candidates[2].update(end=40.0)
+    chapters = [{"id": "c1", "beats": candidates[:2]}, {"id": "c2", "beats": candidates[2:]}]
+    plan = {"slots": [{"chapter_ids": ["c1"], "desired_seconds": 8},
+                      {"chapter_ids": ["c2"], "desired_seconds": 8}]}
+
+    fitted = intelligence._fit_story_selection_to_budget(selection, candidates, plan, 16, chapters)
+
+    assert fitted["keep_beat_ids"] == ["b1", "b3"]
+
+
+def test_critic_removal_of_a_required_slot_is_not_undone_by_budget_fit(monkeypatch, story):
+    selection, candidates = story
+    selection["keep_beat_ids"] = ["b1", "b2", "b3"]
+    selection["slot_map"] = [{"slot_index": i, "beat_ids": [row["id"]]}
+                             for i, row in enumerate(candidates)]
+    reviewed = critic(monkeypatch, story, response(remove_beat_ids=["b2"]))
+    fitted = intelligence._fit_story_selection_to_budget(
+        reviewed, candidates, {"slots": [{"desired_seconds": 8}] * 3}, 30,
+    )
+
+    assert fitted["keep_beat_ids"] == ["b1", "b3"]
+    assert fitted["critic"]["removed"] == ["b2"]
+    assert fitted["critic"]["unresolved_slot_indexes"] == [1]
+
+
+def test_rejected_segment_provenance_survives_conversion(monkeypatch, story):
+    story[0]["keep_beat_ids"] = ["b1", "b2", "b3"]
+    reviewed = critic(monkeypatch, story, response(remove_beat_ids=["b2"]))
+    # Conversion must also defend against a stale slot or extension restoring it.
+    reviewed["keep_beat_ids"].append("b2")
+    decision = intelligence._story_decision_from_beats(
+        reviewed, story[1], [{"id": f"s{i}"} for i in range(1, 4)],
+    )
+
+    assert decision["story_beat_ids"] == ["b1", "b3"]
+    assert decision["rejected_beat_ids"] == ["b2"]
+    assert decision["rejected_segment_ids"] == ["s2"]
+    assert decision["rejected_story_ranges"] == [{"start": 10.0, "end": 18.0, "beat_id": "b2"}]
+
+
+def test_removing_every_selected_beat_is_structurally_invalid(monkeypatch, story):
+    with pytest.raises(intelligence.StoryPlanningError, match="no.*material|no.*selection"):
+        critic(monkeypatch, story, response(remove_beat_ids=["b1", "b3"]))
+
+
+def test_later_budget_change_cannot_retain_an_earlier_critic_pass(monkeypatch, story):
+    selection, candidates = story
+    selection["keep_beat_ids"] = ["b1", "b2", "b3"]
+    reviewed = critic(monkeypatch, story, response(verdict="pass", issues=[]))
+    fitted = intelligence._fit_story_selection_to_budget(
+        reviewed, candidates, {"slots": [{"desired_seconds": 8}] * 2}, 16,
+    )
+
+    assert fitted["keep_beat_ids"] == ["b1", "b3"]
+    assert fitted["critic"]["reviewed_beat_ids"] == ["b1", "b2", "b3"]
+    assert fitted["critic"]["final_beat_ids"] == ["b1", "b3"]
+    assert fitted["critic"]["selection_changed_after_review"] is True
+    assert fitted["critic"]["verdict"] != "pass"
+
+
+def test_title_falls_back_when_its_selected_material_changes(story):
+    selection, candidates = story
+    selection.update(title="The original suggested title", title_beat_ids=["b1", "b2", "b3"])
+
+    decision = intelligence._story_decision_from_beats(
+        selection, candidates, [{"id": f"s{i}"} for i in range(1, 4)],
+    )
+
+    assert decision["title"] == "CUTROOM story"
+    assert decision["title_review"]["status"] == "unverified"
+    assert decision["title_review"]["reason"] == "selection_changed"
+
+
+def test_unchanged_title_provenance_does_not_claim_semantic_verification(story):
+    selection, candidates = story
+    selection.update(title="A suggested title", title_beat_ids=["b1", "b3"])
+    decision = intelligence._story_decision_from_beats(
+        selection, candidates, [{"id": f"s{i}"} for i in range(1, 4)],
+    )
+
+    assert decision["title"] == "CUTROOM story"
+    assert decision["title_review"] == {
+        "status": "unverified", "reason": "model_suggestion",
+        "selected_beat_ids": ["b1", "b3"], "title_beat_ids": ["b1", "b3"],
+    }
+
+
+def test_explicitly_empty_critic_selection_cannot_fall_back_to_rejected_story(monkeypatch, story):
+    selection, candidates = story
+    segments = [{"id": f"s{i}", "start": row["start"], "end": row["end"]}
+                for i, row in enumerate(candidates, 1)]
+    monkeypatch.setattr(intelligence, "_ollama_inventory", lambda _settings: (True, {"fixture-model"}))
+    monkeypatch.setattr(intelligence, "_summarize_story_chapters", lambda *_args: [{"id": "c001"}])
+    monkeypatch.setattr(intelligence, "_build_global_outline", lambda *_args: {})
+    monkeypatch.setattr(intelligence, "_build_story_plan", lambda *_args: {"slots": []})
+    monkeypatch.setattr(intelligence, "_select_story_beats", lambda *_args: (copy.deepcopy(selection), candidates))
+    monkeypatch.setattr(intelligence, "_call_ollama_story_pass",
+                        lambda *_args: response(remove_beat_ids=["b1", "b3"]))
+
+    with pytest.raises(intelligence.StoryPlanningError, match="no selected source material"):
+        intelligence.hierarchical_story_edit(
+            candidates, segments, Settings(), {"goal": "short", "target_duration": 30},
+        )
+
+
+def test_hierarchy_saves_final_selection_and_the_exact_reviewed_input(monkeypatch, story):
+    selection, candidates = story
+    segments = [{"id": f"s{i}", "start": row["start"], "end": row["end"]}
+                for i, row in enumerate(candidates, 1)]
+    monkeypatch.setattr(intelligence, "_ollama_inventory", lambda _settings: (True, {"fixture-model"}))
+    monkeypatch.setattr(intelligence, "_summarize_story_chapters", lambda *_args: [{"id": "c001"}])
+    monkeypatch.setattr(intelligence, "_build_global_outline", lambda *_args: {})
+    monkeypatch.setattr(intelligence, "_build_story_plan", lambda *_args: {"slots": []})
+    monkeypatch.setattr(intelligence, "_select_story_beats", lambda *_args: (copy.deepcopy(selection), candidates))
+    monkeypatch.setattr(intelligence, "_call_ollama_story_pass", lambda *_args: response(verdict="pass", issues=[]))
+
+    decision, hierarchy = intelligence.hierarchical_story_edit(
+        candidates, segments, Settings(), {"goal": "short", "target_duration": 30},
+    )
+
+    assert hierarchy["selection"]["keep_beat_ids"] == decision["story_beat_ids"] == ["b1", "b3"]
+    assert hierarchy["selection"]["slot_map"] == selection["slot_map"]
+    assert hierarchy["critic"]["reviewed_beat_ids"] == hierarchy["critic"]["final_beat_ids"] == ["b1", "b3"]
+    assert hierarchy["critic"]["selection_changed_after_review"] is False
+
+
+def test_an_unresolved_required_slot_invalidates_a_critic_pass_without_id_changes(story):
+    selection, _ = story
+    selection["slot_map"].append({"slot_index": 2, "beat_ids": ["b2"]})
+    selection["critic"] = {"verdict": "pass", "issues": [], "selection_before": ["b1", "b3"],
+                           "post_review_beat_ids": ["b1", "b3"],
+                           "requested_added": [], "requested_removed": []}
+
+    reconciled = intelligence._reconcile_critic_actions(selection)
+
+    assert reconciled["critic"]["selection_changed_after_review"] is False
+    assert reconciled["critic"]["unresolved_slot_indexes"] == [2]
+    assert reconciled["critic"]["verdict"] == "revise"
+    assert any("slot" in issue for issue in reconciled["critic"]["issues"])
+
+
+def test_selected_ids_cannot_ground_an_unsupported_generated_title(story):
+    selection, candidates = story
+    selection.update(title="An unsupported invented claim", title_beat_ids=["b1", "b3"])
+    candidates[0]["text"] = "A synthetic setup about an ordinary task."
+    candidates[2]["text"] = "The task has a modest result."
+
+    decision = intelligence._story_decision_from_beats(
+        selection, candidates, [{"id": f"s{i}"} for i in range(1, 4)],
+    )
+
+    assert decision["title"] == "CUTROOM story"
+    assert decision["title_review"]["status"] == "unverified"
+    assert decision["title_review"]["reason"] == "model_suggestion"

@@ -678,12 +678,18 @@ def test_story_budget_fit_prunes_whole_beats_and_preserves_every_plan_slot():
 
     fitted = _fit_story_selection_to_budget(selection, beats, plan, 60.0, chapters)
 
-    assert fitted["keep_beat_ids"] == ["b2", "b3", "b6"]
+    assert fitted["keep_beat_ids"] == ["b1", "b3", "b5"]
     assert fitted["budget_fit"]["before_duration"] == 115.1
-    assert fitted["budget_fit"]["after_duration"] == 64.69
-    assert fitted["budget_fit"]["after_duration"] <= fitted["budget_fit"]["ceiling"]
+    assert fitted["budget_fit"]["after_duration"] == 59.57
+    assert fitted["budget_fit"]["after_duration"] <= fitted["budget_fit"]["target_duration"]
     assert all(row["beat_ids"] for row in fitted["slot_map"])
     assert {row["slot_index"] for row in fitted["slot_map"]} == {0, 1, 2}
+    selected = set(fitted["keep_beat_ids"])
+    chapter_by_beat = {beat["id"]: chapter["id"] for chapter in chapters for beat in chapter["beats"]}
+    selected_chapters = {chapter_by_beat[identifier] for identifier in selected}
+    for slot in plan["slots"]:
+        assert selected_chapters & set(slot["chapter_ids"])
+        assert set(slot.get("required_context_chapter_ids", [])) <= selected_chapters
 
 
 def test_story_budget_fit_restores_a_slot_removed_by_the_critic():

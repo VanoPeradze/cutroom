@@ -2,9 +2,10 @@ Flask>=3.1.3,<4
 Werkzeug>=3.1.9,<4
 waitress>=3.0.2,<4
 numpy>=2.5.3,<3
-faster-whisper>=1.2.1,<2
+# Pin the released decoder; PyAV 19 support is not in its latest release.
+faster-whisper==1.2.1
 # PyAV 19 removed av.open(metadata_errors), used by faster-whisper 1.2.1.
-av>=19.0.1,<20
-# Keep the Windows CUDA wheel aligned with the verified runtime build.
-ctranslate2==4.8.2; sys_platform == "win32"
+av>=18.1.0,<19
+# Pin the Windows CUDA wheel verified with this speech runtime.
+ctranslate2==4.8.3; sys_platform == "win32"
 opencv-python-headless>=5.0.0.93,<6

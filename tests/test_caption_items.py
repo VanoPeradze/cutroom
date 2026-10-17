@@ -277,6 +277,38 @@ def test_splitting_a_clip_keeps_caption_identity_and_overrides():
     ]
 
 
+def test_reordering_repeated_speech_keeps_each_caption_edit_on_its_clip():
+    value = sequence_project()
+    apply_manual_edit(value, {"action": "caption_update", "caption_id": "s1:w0~1", "text": "Second time",
+                              "style": "boxed", "position": "top"})
+    apply_manual_edit(value, {"action": "caption_visibility", "caption_id": "s1:w0", "hidden": True})
+    apply_manual_edit(value, {"action": "sequence_move_range", "start": 4, "end": 6, "to": 0, "mode": "insert"})
+    items = render.project_caption_items(value)
+    assert items[0]["text"] == "Second time"
+    assert (items[0]["style"], items[0]["position"], items[0]["hidden"]) == ("boxed", "top", False)
+    assert items[1]["source_text"] == "Later words" and items[1]["hidden"]
+    apply_manual_edit(value, {"action": "undo"})
+    assert render.project_caption_items(value)[2]["text"] == "Second time"
+    apply_manual_edit(value, {"action": "redo"})
+    assert render.project_caption_items(value)[0]["text"] == "Second time"
+
+
+def test_trimming_first_spoken_word_preserves_the_caption_edit():
+    value = sequence_project()
+    apply_manual_edit(value, {"action": "caption_update", "caption_id": "s1:w0~1", "text": "Second time",
+                              "style": "boxed"})
+    apply_manual_edit(value, {"action": "sequence_trim", "slot": "A", "clip_id": "c", "start": 4.5,
+                              "end": 6, "source_start": 2.5})
+    item = render.project_caption_items(value)[2]
+    assert item["text"] == "Second time" and item["style"] == "boxed"
+    assert item["start"] == 4.5
+    assert render.project_caption_items(value)[0]["text"] == "Later words"
+    apply_manual_edit(value, {"action": "undo"})
+    assert render.project_caption_items(value)[2]["text"] == "Second time"
+    apply_manual_edit(value, {"action": "redo"})
+    assert render.project_caption_items(value)[2]["text"] == "Second time"
+
+
 def test_long_captions_split_into_readable_parts_with_or_without_word_timing():
     from cutroom.caption_items import MAX_CAPTION_CHARACTERS
     long_text = " ".join(f"word{index:02d}" for index in range(30))  # 209 characters

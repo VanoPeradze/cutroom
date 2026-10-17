@@ -3,9 +3,10 @@ from __future__ import annotations
 import copy
 from typing import Any
 
-from .caption_items import CAPTION_ACTION_FIELDS, CaptionError, correct_segment_text, prepare_caption_edit
+from .caption_items import (CAPTION_ACTION_FIELDS, CaptionError, anchor_caption_change, correct_segment_text,
+                            prepare_caption_edit, remap_caption_overrides)
 from .composition import CHROMA_KEY_ACTION_FIELDS, build_manual_embedded_candidate, prepare_chroma_key_edit
-from .source_tracks import TRACK_ACTIONS, SourceTrackError, prepare_source_track_edit, validate_source_track_sync
+from .source_tracks import TRACK_ACTIONS, SourceTrackError, prepare_source_track_edit, source_track_clips, validate_source_track_sync
 from .sequence import SEQUENCE_ACTIONS, prepare_sequence_edit
 from .media_library import MEDIA_ACTION_FIELDS, MediaLibraryError, prepare_media_edit, validate_media_bounds
 from .render import caption_context, project_caption_items
@@ -292,6 +293,7 @@ def _timeline_snapshot(project: dict[str, Any]) -> dict[str, Any]:
         "manual_source_tracks": copy.deepcopy(manual.get("source_tracks")),
         "manual_sequence_present": "sequence" in manual,
         "manual_sequence": copy.deepcopy(manual.get("sequence")),
+        "caption_layers": _caption_snapshot(project),
         "manual_media_clips_present": "media_clips" in manual,
         "manual_media_clips": copy.deepcopy(manual.get("media_clips")),
         "manual_text_clips_present": "text_clips" in manual,
@@ -322,6 +324,8 @@ def _restore_timeline(project: dict[str, Any], snapshot: dict[str, Any]) -> None
     manual["cuts"] = copy.deepcopy(snapshot.get("manual_cuts") or [])
     manual["keeps"] = copy.deepcopy(snapshot.get("manual_keeps") or [])
     manual["camera_overrides"] = copy.deepcopy(snapshot.get("manual_camera_overrides") or [])
+    if "caption_layers" in snapshot:
+        _restore_captions(project, snapshot["caption_layers"])
     for key in ("media_clips", "text_clips", "audio_mixer", "chroma_key"):
         if f"manual_{key}_present" in snapshot:
             if snapshot[f"manual_{key}_present"]:
@@ -895,7 +899,7 @@ def _set_embedded_camera(project: dict[str, Any], payload: dict[str, Any]) -> No
     draft["status"] = "ready"
 
 
-CAPTION_LAYERS = ("caption_corrections", "caption_overrides")
+CAPTION_LAYERS = ("caption_corrections", "caption_overrides", "caption_override_anchors", "caption_dormant_overrides")
 VISUAL_SCREENS = frozenset({"gameplay", "cutscene", "menu_or_map", "loading_or_black", "webcam_only", "other"})
 
 
@@ -940,11 +944,13 @@ def _prepare_caption_change(project: dict[str, Any], payload: dict[str, Any], ac
             fixes = correct_segment_text(project, payload.get("segment_id"), new_text)
             if fixes is None:
                 return None
-            return {"caption_corrections": fixes, "caption_overrides": (project.get("manual") or {}).get("caption_overrides") or {}}
+            return {**_caption_snapshot(project), "caption_corrections": fixes,
+                    "caption_overrides": (project.get("manual") or {}).get("caption_overrides") or {}}
         # Times come from the editor timeline, so validate against the editor clock.
         context = caption_context(project, aligned=False)
-        return prepare_caption_edit(project, {**payload, "action": action}, project_caption_items(project, aligned=False),
-                                    float(context["duration"] or 0.0))
+        items = project_caption_items(project, aligned=False)
+        change = prepare_caption_edit(project, {**payload, "action": action}, items, float(context["duration"] or 0.0))
+        return anchor_caption_change(project, change, items, payload.get("caption_id")) if change is not None else None
     except CaptionError as exc:
         raise ManualEditError(str(exc)) from exc
 
@@ -1027,9 +1033,30 @@ def _apply_manual_edit(project: dict[str, Any], payload: dict[str, Any]) -> dict
         return project
     # Validate independent track operations before creating history or touching
     # the project. Failed edits and genuine no-ops must preserve the whole state.
+    caption_edits = bool((project.get("manual") or {}).get("caption_overrides") or
+                         (project.get("manual") or {}).get("caption_dormant_overrides"))
     try:
         sequence_edit = prepare_sequence_edit(project, payload) if action in SEQUENCE_ACTIONS else None
         tracks = prepare_source_track_edit(project, payload) if action in TRACK_ACTIONS else None
+        if caption_edits and (sequence_edit is not None or tracks is not None):
+            # Annotate only accepted changes on a detached preparation copy.
+            # Invalid edits and no-ops cannot add provenance or consume history.
+            preparation_project = copy.deepcopy(project)
+            prepared_manual = preparation_project.setdefault("manual", {})
+            prepared_tracks = prepared_manual.get("source_tracks")
+            if not isinstance(prepared_tracks, dict):
+                prepared_tracks = prepared_manual["source_tracks"] = {}
+            annotation_slots = (str(payload.get("slot") or "").upper(),) if action in TRACK_ACTIONS else ("A", "B")
+            for slot in annotation_slots:
+                if slot not in prepared_tracks:
+                    prepared_tracks[slot] = source_track_clips(project, slot)
+                for clip in prepared_tracks[slot] if isinstance(prepared_tracks[slot], list) else []:
+                    if isinstance(clip, dict) and "id" in clip:
+                        clip.setdefault("caption_origin", clip["id"])
+            if sequence_edit is not None:
+                sequence_edit = prepare_sequence_edit(preparation_project, payload)
+            if tracks is not None:
+                tracks = prepare_source_track_edit(preparation_project, payload)
         media_edit = prepare_media_edit(project, {**payload, "action": action}) if action in MEDIA_ACTION_FIELDS else None
         text_edit = prepare_text_edit(project, {**payload, "action": action}) if action in TEXT_ACTION_FIELDS else None
         if action == "set_source_mixer":
@@ -1122,6 +1149,7 @@ def _apply_manual_edit(project: dict[str, Any], payload: dict[str, Any]) -> dict
         if not isinstance(project.get("draft"), dict):
             raise ManualEditError("Generate a draft before editing the timeline")
         before = _timeline_snapshot(project)
+        before_captions = project_caption_items(project, aligned=False) if caption_edits else []
         if action in TEXT_ACTION_FIELDS:
             project.setdefault("manual", {}).update(text_edit)
             project["draft"]["edited_at"] = now_iso()
@@ -1216,6 +1244,8 @@ def _apply_manual_edit(project: dict[str, Any], payload: dict[str, Any]) -> dict
             project["draft"]["edited_at"] = now_iso()
         else:
             _set_embedded_camera(project, payload)
+        if caption_edits:
+            remap_caption_overrides(project, before_captions, project_caption_items(project, aligned=False))
         entry = {"kind": "timeline", "before": before, "after": _timeline_snapshot(project)}
     else:
         raise ManualEditError("Unknown manual edit action")

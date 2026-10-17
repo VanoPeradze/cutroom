@@ -2772,9 +2772,29 @@ def _public_captions(project: dict[str, Any], public: dict[str, Any]) -> None:
         analysis["segments"] = apply_corrections({"segments": analysis["segments"]}, fixes)[0]["segments"]
 
 
+def _strip_private_caption_provenance(public: dict[str, Any]) -> None:
+    """Keep caption ownership on disk, outside the editor's public projection."""
+    manual = public.get("manual")
+    if not isinstance(manual, dict):
+        return
+    manual.pop("caption_override_anchors", None)
+    manual.pop("caption_dormant_overrides", None)
+    sequence = manual.get("sequence")
+    base_tracks = sequence.get("base_source_tracks") if isinstance(sequence, dict) else None
+    for tracks in (manual.get("source_tracks"), base_tracks):
+        if not isinstance(tracks, dict):
+            continue
+        for clips in tracks.values():
+            if isinstance(clips, list):
+                for clip in clips:
+                    if isinstance(clip, dict):
+                        clip.pop("caption_origin", None)
+
+
 def _public_project(project: dict[str, Any]) -> dict[str, Any]:
     public = json.loads(json.dumps(project))
     public["display_name"] = display_name(public)
+    _strip_private_caption_provenance(public)
     strip_private_edit_history(public)
     try:
         public["editor_sequence"] = editor_sequence_snapshot(public)

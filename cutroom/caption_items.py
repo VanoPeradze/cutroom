@@ -11,10 +11,10 @@ Two separate layers change what an item shows:
   and reported as stale instead of landing on different speech.
 * ``manual.caption_overrides`` changes one item: its own text, timing offsets
   from the speech it belongs to (so it moves with its clip), hidden, or its own
-  style. An item is identified by the speech it shows, ``<segment>:w<n>`` for a
+  style. An item's public ID describes the speech it shows, ``<segment>:w<n>`` for a
   portion starting at the segment's n-th transcribed word (``t<seconds>`` without
-  word timing), so splitting, moving or trimming other clips does not move an
-  edit to different words. Speech used twice adds ``~1``, ``~2`` in edit order.
+  word timing). Speech used twice adds ``~1``, ``~2`` in edit order. Private
+  source and clip anchors carry saved edits across changes to these display IDs.
 
 The same items feed the timeline, the live preview and the exported captions.
 """
@@ -22,6 +22,8 @@ from __future__ import annotations
 
 import bisect
 import copy
+import hashlib
+import json
 import math
 import re
 from typing import Any
@@ -105,6 +107,21 @@ def overrides(project: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return {str(key): value for key, value in raw.items() if isinstance(value, dict)} if isinstance(raw, dict) else {}
 
 
+def _override_anchors(project: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    raw = _manual(project).get("caption_override_anchors")
+    return {str(key): value for key, value in raw.items() if isinstance(value, dict)} if isinstance(raw, dict) else {}
+
+
+def _dormant_overrides(project: dict[str, Any]) -> list[dict[str, Any]]:
+    raw = _manual(project).get("caption_dormant_overrides")
+    return [row for row in raw if isinstance(row, dict) and isinstance(row.get("edit"), dict)] if isinstance(raw, list) else []
+
+
+def _analyzed_audio_source(project: dict[str, Any]) -> str:
+    return str((project.get("analysis") or {}).get("audio_source") or
+               (project.get("draft") or {}).get("audio_source") or "A").upper()
+
+
 def effective_transcript(project: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
     """The transcript with source corrections applied, and the stale correction keys."""
     return apply_corrections((project.get("analysis") or {}).get("transcript"), corrections(project))
@@ -145,7 +162,7 @@ def apply_corrections(transcript: Any, fixes: dict[str, dict[str, Any]]) -> tupl
 
 
 def _pieces(project: dict[str, Any], slot: str | None, offset: float,
-            keeps: list[dict[str, Any]] | None) -> list[tuple[float, float, float, float]]:
+            keeps: list[dict[str, Any]] | None) -> list[tuple]:
     """Continuous pieces of speech in the edit: (edit start, edit end, transcript start, transcript end).
 
     Audio clips place the transcript on the timeline (``slot`` is the analyzed
@@ -162,30 +179,34 @@ def _pieces(project: dict[str, Any], slot: str | None, offset: float,
         for clip in source_track_clips(project, slot):
             start, end = _finite(clip.get("start")), _finite(clip.get("end"))
             if end > start:
-                timeline.append((start, end, _finite(clip.get("source_start")) + offset))
+                timeline.append((start, end, _finite(clip.get("source_start")) + offset,
+                                 str(clip.get("caption_origin") or clip["id"])))
     else:
-        timeline = [(0.0, math.inf, 0.0)]
-    pieces: list[tuple[float, float, float, float]] = []
+        analyzed = _analyzed_audio_source(project)
+        timeline = [(0.0, math.inf, 0.0, f"{analyzed}:base")]
+    pieces: list[tuple] = []
     if keeps is None:
-        pieces = [(start, end, source, source + end - start) for start, end, source in timeline]
+        pieces = [(start, end, source, source + end - start,
+                   [(origin, source, source + end - start)]) for start, end, source, origin in timeline]
     else:
         cursor = 0.0
         for keep in keeps:
             keep_start, keep_end = _finite(keep.get("start")), _finite(keep.get("end"))
             if keep_end <= keep_start:
                 continue
-            for start, end, source in timeline:
+            for start, end, source, origin in timeline:
                 left, right = max(keep_start, start), min(keep_end, end)
                 if right > left:
                     source_left = source + left - start
                     pieces.append((cursor + left - keep_start, cursor + right - keep_start,
-                                   source_left, source_left + right - left))
+                                   source_left, source_left + right - left,
+                                   [(origin, source_left, source_left + right - left)]))
             cursor += keep_end - keep_start
-    joined: list[tuple[float, float, float, float]] = []
+    joined: list[tuple] = []
     for piece in sorted(pieces):
         last = joined[-1] if joined else None
         if last and abs(piece[0] - last[1]) < 1e-6 and abs(piece[2] - last[3]) < 1e-6:
-            joined[-1] = (last[0], piece[1], last[2], piece[3])
+            joined[-1] = (last[0], piece[1], last[2], piece[3], last[4] + piece[4])
         else:
             joined.append(piece)
     return joined
@@ -202,8 +223,8 @@ def _anchor(original: dict[str, Any] | None, source_start: float, source_end: fl
     return f"t{max(0.0, portion_start - _finite((original or {}).get('start'))):.1f}"
 
 
-def _natural_items(transcript: dict[str, Any], pieces: list[tuple[float, float, float, float]],
-                   originals: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+def _natural_items(transcript: dict[str, Any], pieces: list[tuple],
+                   originals: dict[str, dict[str, Any]], source_identity: str) -> list[dict[str, Any]]:
     raw_segments = transcript.get("segments") if isinstance(transcript.get("segments"), list) else []
     # Index by start time so a long recording with many cuts stays fast.
     indexed = sorted((_finite(segment.get("start")), index, segment)
@@ -213,7 +234,7 @@ def _natural_items(transcript: dict[str, Any], pieces: list[tuple[float, float, 
     language = str(transcript.get("language") or "")
     occurrence: dict[str, int] = {}
     items: list[dict[str, Any]] = []
-    for edit_start, _edit_end, source_start, source_end in pieces:
+    for edit_start, _edit_end, source_start, source_end, origins in pieces:
         shift = edit_start - source_start
         nearby = indexed[bisect.bisect_left(starts, source_start - longest):bisect.bisect_left(starts, source_end)]
         for _, index, segment in sorted(nearby, key=lambda row: row[1]):
@@ -254,8 +275,88 @@ def _natural_items(transcript: dict[str, Any], pieces: list[tuple[float, float, 
                 "text": item_text, "source_text": str((original or {}).get("text") or text).strip(),
                 "language": str(segment.get("language") or language),
                 "words": mapped,
+                "_caption_anchor": {
+                    "segment": key, "source": source_identity,
+                    "speech": hashlib.sha256(json.dumps(original or segment, sort_keys=True, ensure_ascii=False,
+                                                         separators=(",", ":")).encode("utf-8")).hexdigest(),
+                    "spans": [{"origin": origin, "start": max(left, portion[0]), "end": min(right, portion[1])}
+                              for origin, left, right in origins if min(right, portion[1]) > max(left, portion[0])],
+                },
             })
     return items
+
+
+def _anchor_overlap(left: Any, right: Any) -> float:
+    """Source speech shared by two items in the same clip lineage."""
+    if not isinstance(left, dict) or not isinstance(right, dict):
+        return 0.0
+    if any(left.get(key) != right.get(key) for key in ("segment", "source", "speech")):
+        return 0.0
+    left_spans, right_spans = left.get("spans"), right.get("spans")
+    if not isinstance(left_spans, list) or not isinstance(right_spans, list):
+        return 0.0
+    return sum(max(0.0, min(_finite(a.get("end")), _finite(b.get("end")))
+                   - max(_finite(a.get("start")), _finite(b.get("start"))))
+               for a in left_spans if isinstance(a, dict)
+               for b in right_spans if isinstance(b, dict)
+               if a.get("origin") == b.get("origin"))
+
+
+def anchor_caption_change(project: dict[str, Any], change: dict[str, Any],
+                          items: list[dict[str, Any]], selected_id: Any) -> dict[str, Any]:
+    """Keep private provenance beside overrides without changing their public shape."""
+    anchors = copy.deepcopy(_override_anchors(project))
+    current = overrides(project)
+    edits = change.get("caption_overrides") or {}
+    dormant = copy.deepcopy(_dormant_overrides(project))
+    for item in items:
+        key = item["id"]
+        stale = bool(anchors.get(key) and not _anchor_overlap(anchors[key], item["_caption_anchor"]))
+        if stale and key == selected_id and key in current:
+            dormant.append({"anchor": copy.deepcopy(anchors[key]), "edit": copy.deepcopy(current[key])})
+        if key in edits and (key not in anchors or edits[key] != current.get(key) or stale and key == selected_id):
+            anchors[key] = copy.deepcopy(item["_caption_anchor"])
+    change["caption_override_anchors"] = {key: value for key, value in anchors.items() if key in edits}
+    change["caption_dormant_overrides"] = dormant
+    return change
+
+
+def remap_caption_overrides(project: dict[str, Any], before_items: list[dict[str, Any]],
+                            after_items: list[dict[str, Any]]) -> None:
+    """Move edits with their speech, parking fully trimmed speech for re-expansion.
+
+    Public item IDs still describe the current word/occurrence. They cannot own
+    persistent edits because moving a repeat or trimming its first word renames
+    those IDs. Each edit instead has one source/clip owner; a discontinuous split
+    gives it to the fragment with most surviving speech (earlier fragment on ties).
+    """
+    manual = project.setdefault("manual", {})
+    edits = overrides(project)
+    anchors = _override_anchors(project)
+    old = {item["id"]: item for item in before_items}
+    pending = []
+    for key, edit in edits.items():
+        anchor = anchors.get(key)
+        anchor = anchor or (old.get(key) or {}).get("_caption_anchor")
+        pending.append({"anchor": copy.deepcopy(anchor), "edit": copy.deepcopy(edit)})
+    pending.extend(copy.deepcopy(_dormant_overrides(project)))
+    mapped, mapped_anchors, parked = {}, {}, []
+    for row in pending:
+        candidates = [(_anchor_overlap(row.get("anchor"), item["_caption_anchor"]), item)
+                      for item in after_items if item["id"] not in mapped]
+        candidates = [(overlap, item) for overlap, item in candidates if overlap > 1e-8]
+        if not candidates:
+            parked.append(row)
+            continue
+        _, item = min(candidates, key=lambda pair: (-pair[0], pair[1]["source_start"], pair[1]["natural_start"], pair[1]["id"]))
+        mapped[item["id"]] = row["edit"]
+        mapped_anchors[item["id"]] = row["anchor"]
+    for key, value in (("caption_overrides", mapped), ("caption_override_anchors", mapped_anchors),
+                       ("caption_dormant_overrides", parked)):
+        if value:
+            manual[key] = value
+        else:
+            manual.pop(key, None)
 
 
 def caption_items(project: dict[str, Any], *, slot: str | None, offset: float = 0.0,
@@ -268,10 +369,19 @@ def caption_items(project: dict[str, Any], *, slot: str | None, offset: float = 
     transcript, stale = effective_transcript(project)
     fixes = corrections(project)
     edits = overrides(project)
-    items = _natural_items(transcript, _pieces(project, slot, offset, keeps), originals)
+    analyzed = _analyzed_audio_source(project)
+    source = (project.get("sources") or {}).get(analyzed) or {}
+    identity = {key: source[key] for key in ("relative_path", "generation", "duration", "size", "sha256") if key in source}
+    source_identity = hashlib.sha256(json.dumps([analyzed, identity], sort_keys=True, ensure_ascii=False,
+                                               separators=(",", ":")).encode("utf-8")).hexdigest()
+    items = _natural_items(transcript, _pieces(project, slot, offset, keeps), originals, source_identity)
+    anchors = _override_anchors(project)
     for item in items:
         item["corrected"] = item["segment_id"] in fixes and item["segment_id"] not in stale
         edit = edits.get(item["id"]) or {}
+        stored_anchor = anchors.get(item["id"])
+        if stored_anchor and not _anchor_overlap(stored_anchor, item["_caption_anchor"]):
+            edit = {}  # A new transcript/source must not inherit another speech edit.
         item["hidden"] = bool(edit.get("hidden"))
         for key in _STYLE_KEYS:
             item[key] = edit.get(key)
@@ -386,6 +496,10 @@ def prepare_caption_edit(project: dict[str, Any], payload: dict[str, Any],
     fixes = copy.deepcopy(corrections(project))
     edits = copy.deepcopy(overrides(project))
     edit = dict(edits.get(item["id"]) or {})
+    stored_anchor = _override_anchors(project).get(item["id"])
+    stale = bool(stored_anchor and not _anchor_overlap(stored_anchor, item["_caption_anchor"]))
+    if stale:
+        edit = {}
     if action == "caption_reset":
         edits.pop(item["id"], None)
     elif action == "caption_visibility":
@@ -453,7 +567,7 @@ def prepare_caption_edit(project: dict[str, Any], payload: dict[str, Any],
     else:
         raise CaptionError("Unknown caption action")
     edits = {key: value for key, value in edits.items() if value}
-    if fixes == corrections(project) and edits == overrides(project):
+    if fixes == corrections(project) and edits == overrides(project) and not stale:
         return None
     return {"caption_corrections": fixes, "caption_overrides": edits}
 

@@ -220,6 +220,44 @@ test('completion wording names a nonverbal or basic cleanup fallback instead of 
   assert.equal(f.ui.directorCompletionNotice({...f.job(),project_id:'other'}).message,'Your first edit is ready','an unrelated job does not use the current project fallback');
 });
 
+test('target shortfall completion reports the supported duration instead of a success claim',()=>{
+  for(const selected of [6,8.39]){
+    const f=directorFixture();Object.assign(f.ui.state.dictionary,{draftReady:'Your first edit is ready',durationTargetLimitedReady:'Only {selected}s of the requested {requested}s is supported. Review the selection.'});
+    f.ui.state.project.draft={engine:'ollama_hierarchical_story',duration_review:{duration_mode:'target',shortfall:true,selected_seconds:selected,requested_seconds:20,target_feasibility:{status:'limited',scope:'current_selection',supported_seconds:selected}}};
+    const before=JSON.stringify(f.ui.state.project),notice=plain(f.ui.directorCompletionNotice(f.job()));
+    assert.equal(notice.kind,'info');assert.match(notice.message,new RegExp(`Only ${Math.round(selected*10)/10}s.*20s`));
+    assert.doesNotMatch(notice.message,/first edit is ready/);
+    assert.match(f.ui.directorCompletionNotice(f.job(),true).message,/manual timeline kept.*Only/);
+    assert.equal(JSON.stringify(f.ui.state.project),before);assert.equal(f.calls.length,0);
+  }
+});
+
+test('unresolved required story material remains a review notice even when the target duration is met',()=>{
+  const f=directorFixture();Object.assign(f.ui.state.dictionary,{draftReady:'Your first edit is ready',durationStoryIncompleteReady:'Draft needs review: required story material remains unresolved.'});
+  f.ui.state.project.draft={engine:'ollama_hierarchical_story',duration_review:{duration_mode:'target',shortfall:false,selected_seconds:20,requested_seconds:20,target_feasibility:{status:'limited',scope:'current_selection',supported_seconds:20,reasons:['unresolved_story_slots'],unresolved_slot_indexes:[2]}}};
+  assert.deepEqual(plain(f.ui.directorCompletionNotice(f.job())),{message:'Draft needs review: required story material remains unresolved.',kind:'info'});
+  f.ui.state.project.draft.duration_review={duration_mode:'style',shortfall:true,selected_seconds:6,requested_seconds:20};
+  assert.equal(f.ui.directorCompletionNotice(f.job()).kind,'success','a style maximum is not a target quota');
+  f.ui.state.project.draft.duration_review={duration_mode:'target',shortfall:true,selected_seconds:6,requested_seconds:20};
+  assert.equal(f.ui.directorCompletionNotice({...f.job(),project_id:'other'}).kind,'success','an unrelated job cannot inherit the current draft warning');
+  f.ui.state.dictionary.durationOverTarget='The draft exceeds the requested length.';
+  f.ui.state.project.draft.duration_review={duration_mode:'target',exceeds_target:true,selected_seconds:23,requested_seconds:20};
+  assert.deepEqual(plain(f.ui.directorCompletionNotice(f.job())),{message:'The draft exceeds the requested length.',kind:'info'});
+});
+
+test('duration review distinguishes target from maximum and labels the scope of supported material',()=>{
+  const f=directorFixture(),{ui,get}=f,notice=get('durationReview');notice.append(new Element('p'));
+  Object.assign(ui.state.dictionary,{durationDraftSummary:'Legacy {selected}s / {requested}s.',durationDraftTargetSummary:'AI draft: {selected}s / target {requested}s.',durationDraftMaximumSummary:'AI draft: {selected}s / maximum {requested}s.',durationEvidenceLimit:'Review source ranges.',durationAssessmentLimit:'Supported by the current selection: {supported}s.',durationOverTarget:'The draft exceeds the requested length.'});
+  ui.state.project.draft.duration_review={reason:'limited_selection',duration_mode:'target',duration_is_ceiling:false,shortfall:true,requested_seconds:20,selected_seconds:8.39,available_source_seconds:45,target_feasibility:{status:'limited',scope:'current_selection',supported_seconds:8.39}};
+  const before=JSON.stringify(ui.state.project);ui.renderDurationReview();
+  assert.equal(notice.hidden,false);assert.match(notice.querySelector('p').textContent,/8.4s \/ target 20s.*current selection: 8.4s/);
+  assert.doesNotMatch(notice.querySelector('p').textContent,/maximum achievable|available.*45s/);assert.equal(JSON.stringify(ui.state.project),before);
+  ui.state.project.draft.duration_review={reason:'style_moment_limit',duration_mode:'style',duration_is_ceiling:true,requested_seconds:20,selected_seconds:8.39};ui.renderDurationReview();
+  assert.match(notice.querySelector('p').textContent,/8.4s \/ maximum 20s/);
+  ui.state.project.draft.duration_review={reason:'over_target',duration_mode:'target',requested_seconds:20,selected_seconds:23,exceeds_target:true};ui.renderDurationReview();
+  assert.equal(notice.hidden,false);assert.match(notice.querySelector('p').textContent,/23s.*target 20s.*exceeds/);
+});
+
 test('saved transcript fallback is actionable and reviewing it expands the actual language controls without changing settings',()=>{
   const f=directorFixture();Object.assign(f.ui.state.dictionary,{transcriptFallbackActionable:'Requested speech style was not created. Choose exact language and Quality; CPU can be slower.',speechStyleFallbackReady:'Requested speech style was not created; review speech settings.'});
   f.ui.state.project={...f.ui.state.project,settings:{spoken_language:'auto',performance_mode:'auto'},analysis:{warnings:[{type:'transcript_fallback',reason:'low_transcript_confidence'}]},draft:{engine:'audio_visual_highlights'}};

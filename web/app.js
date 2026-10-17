@@ -2615,8 +2615,16 @@ function directorCompletionNotice(job, preserved = false) {
   const basicCleanup = current && (draft.engine === "deterministic_story_fallback"
     || (draft.quality_review?.warnings || []).some(warning => warning?.type === "story_ai_fallback"));
   const transcriptFallback = current && (state.project?.analysis?.warnings || []).some(warning => warning?.type === "transcript_fallback");
-  const warning = transcriptFallback ? t("speechStyleFallbackReady") : current && draft.engine === "audio_visual_highlights" ? t("audioHighlightsReady")
+  const fallbackWarning = transcriptFallback ? t("speechStyleFallbackReady") : current && draft.engine === "audio_visual_highlights" ? t("audioHighlightsReady")
     : basicCleanup ? t("basicCleanupReady") : "";
+  const review = draft?.duration_review;
+  const targetShortfall = current && review?.duration_mode === "target" && review.shortfall === true;
+  const overTarget = current && review?.exceeds_target === true;
+  const storyIncomplete = current && review?.target_feasibility?.status === "limited";
+  const number = value => Number.isFinite(Number(value)) ? Math.round(Number(value)*10)/10 : 0;
+  const targetWarning = (overTarget ? t("durationOverTarget") : targetShortfall ? t("durationTargetLimitedReady") : storyIncomplete ? t("durationStoryIncompleteReady") : "")
+    .replace(/\{(selected|requested)\}/g,(_match,key)=>String(number(review?.[`${key}_seconds`])));
+  const warning = [fallbackWarning,targetWarning].filter(Boolean).join(" ");
   return {message:[preserved ? t("aiDraftKept") : warning ? "" : t("draftReady"), warning].filter(Boolean).join(" "),
     kind:preserved || warning ? "info" : "success"};
 }
@@ -3088,18 +3096,23 @@ function canVaryDraft() {
 function renderDurationReview() {
   const node = document.getElementById("durationReview"); if (!node) return;
   const draft = state.project?.draft, review = draft?.duration_review;
-  node.hidden = !review || !["style_moment_limit","limited_selection","source_shorter"].includes(review.reason);
+  const assessedLimit = review?.target_feasibility?.status === "limited";
+  node.hidden = !review || !assessedLimit && !["style_moment_limit","limited_selection","source_shorter","over_target"].includes(review.reason);
   if (node.hidden) return;
   const number = value => Number.isFinite(Number(value)) ? Math.round(Number(value)*10)/10 : 0;
   const replacements = {selected:number(review.selected_seconds), requested:number(review.requested_seconds),
-    available:number(review.available_source_seconds), limit:number(review.style_moment_limit)};
-  const key = review.reason === "style_moment_limit" ? "durationStyleLimit" : review.reason === "source_shorter" ? "durationSourceLimit" : "durationEvidenceLimit";
+    available:number(review.available_source_seconds), limit:number(review.style_moment_limit),
+    supported:number(review.target_feasibility?.supported_seconds ?? review.selected_seconds)};
+  const key = review.reason === "over_target" ? "durationOverTarget" : review.reason === "style_moment_limit" ? "durationStyleLimit" : review.reason === "source_shorter" ? "durationSourceLimit" : "durationEvidenceLimit";
+  const summaryKey = review.duration_mode === "target" ? "durationDraftTargetSummary"
+    : review.duration_is_ceiling || review.duration_mode === "style" ? "durationDraftMaximumSummary" : "durationDraftSummary";
   // Each step that changed the length, so a short draft shows where time went.
   const chain = (Array.isArray(review.chain) ? review.chain : []).filter(row => row && Number.isFinite(Number(row.seconds)))
     .map(row => `${t(`durationStage_${row.stage}`) || row.stage} ${number(row.seconds)}s${row.passages ? ` (${row.passages})` : ""}`);
-  const message = t("durationDraftSummary") + " " + t(key) + (chain.length > 2 ? ` ${t("durationChain")} ${chain.join(" → ")}.` : "");
+  const assessment = assessedLimit && review.target_feasibility.scope === "current_selection" ? ` ${t("durationAssessmentLimit")}` : "";
+  const message = t(summaryKey) + " " + t(key) + assessment + (chain.length > 2 ? ` ${t("durationChain")} ${chain.join(" → ")}.` : "");
   const text = node.querySelector("p");
-  if (text) text.textContent = message.replace(/\{(selected|requested|available|limit)\}/g,(_match,key)=>String(replacements[key]));
+  if (text) text.textContent = message.replace(/\{(selected|requested|available|limit|supported)\}/g,(_match,key)=>String(replacements[key]));
   const button = document.getElementById("reviewDurationSettings");
   if (button) { button.textContent=t("reviewDurationSettings"); button.disabled=foregroundBusy() || state.manualEditBusy; }
   const host = state.studio.open ? elements.advancedPanel?.querySelector(".studio-header") : elements.resultPanel;
