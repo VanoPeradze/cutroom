@@ -1,10 +1,11 @@
 {
   "version": "1.2-beta",
-  "filename": "CUTROOM-1.2-Beta-windows-0a67e3c-20261015.zip",
-  "build_id": "CUTROOM-1.2-beta-20261015-083237",
-  "bytes": 3581242,
-  "sha256": "41c76f17aa30ae425692dcb6b013b374d2a67d1d25b732c61cf9dd0bf5be94f3",
-  "manifest_sha256": "d59c0c64009a70854196e2f94fc72d660c1a0bfcac13801d1224332e00ae8d5d",
-  "url": "https://cutroom-studio--xzxz4nmqbq.expo.app/downloads/CUTROOM-1.2-Beta-windows-0a67e3c-20261015.zip",
-  "note": "Immutable non-production validation deployment of source 0a67e3ce56224aa3e6d12f2179ccbd4b889e9bed (1.2 Beta). Caption items on the timeline, mixer with typed values and an export limiter, Short length top-up, gameplay-moment corrections, text templates, the export check, long-caption splitting, a single audio encode for normalized exports and layout fixes. First-run setup from the 75a70fb build (same app; only a test file differs) passed on the existing Windows machine (private Python 3.12.14, 50 s with warm caches); the installed copy served 1.2-beta and exported a synthetic project with every export check passing. No clean-machine claim. No private data, runtimes or models. Native Apple Silicon/Intel candidate CI is required before production."
+  "filename": "CUTROOM-1.2-Beta-Windows-review-fe35453.zip",
+  "build_id": "CUTROOM-1.2-beta-20261018-035807",
+  "bytes": 3708965,
+  "sha256": "d20f33568ebaeb702717baade8e2a76dda88cb10e81461d61cc48ec96f725aca",
+  "manifest_sha256": "d3a5af27228338a97986b676e7c4e54d436845c395923d38644453bd59e83f76",
+  "url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261018/CUTROOM-1.2-Beta-Windows-review-fe35453.zip",
+  "source_commit": "fe35453119305a33e0890a25e627a4fa47ad353d",
+  "note": "Exact existing Windows archive from the source-pinned fe35453 review pair, promoted without rebuilding for the explicitly authorized exploratory public beta. A fresh Windows 10 guest with WinGet alone failed native dependency loading; the launcher does not install the required Microsoft Visual C++ x64 runtime. With WinGet 1.29.380 and signed Microsoft runtime 14.51.36247.0 prepared separately, unchanged setup and startup health succeeded without models. This conditional result does not qualify the default installer, physical-device restart or manual UI acceptance. Native macOS 15 arm64/x64 no-model checks of the matching combined ZIP passed in run 39139136807. Transcription/model quality, Finder/Gatekeeper/Safari and human editorial/listening acceptance remain pending. The package manifest retains clean_machine_install_verified=false. Historical validation pins and the earlier public release remain unchanged."
 }

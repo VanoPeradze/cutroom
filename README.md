@@ -21,8 +21,8 @@
 
 <p align="center">
   <a href="https://cutroom-studio.expo.app/"><strong>Website</strong></a> ·
-  <a href="https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261015/CUTROOM-1.2-Beta-Windows.zip"><strong>Download for Windows</strong></a> ·
-  <a href="https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261015/CUTROOM-1.2-Beta-Mac.zip"><strong>Download for Mac</strong></a> ·
+  <a href="https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261018/CUTROOM-1.2-Beta-Windows-review-fe35453.zip"><strong>Download for Windows</strong></a> ·
+  <a href="https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261018/CUTROOM-1.2-Beta-combined-review-fe35453.zip"><strong>Download for Mac</strong></a> ·
   <a href="docs/USER_GUIDE_EN.md">User guide</a> ·
   <a href="docs/README_HE.md">Hebrew README</a>
 </p>
@@ -32,11 +32,12 @@
 </p>
 
 > [!NOTE]
-> The screenshots show the CUTROOM 1.1 Beta studio, captured on 4 October 2026 with a locally recorded gameplay clip. They show the interface, not AI editing quality.
+> These existing screenshots show the CUTROOM 1.1 Beta studio. They illustrate the interface, not the latest release's AI editing quality.
 
 ## Contents
 
 - [Highlights](#highlights)
+- [Latest beta update](#latest-beta-update)
 - [Quick start](#quick-start)
 - [How it works](#how-it-works)
 - [AI, your way](#ai-your-way)
@@ -56,7 +57,7 @@
 - **Text and captions.** Add titles and captions, import SRT or VTT, and correct and style an optional AI transcript.
 - **Green screen and stabilization.** Apply a chroma key to any video source, or create an optional stabilized local copy. [Green screen](docs/CHROMA_KEY.md) · [Stabilization](docs/STABILIZATION.md)
 - **Local MP4 export.** Landscape, vertical, square, portrait or the source shape, from 720p to 4K at up to 60 FPS, with no CUTROOM watermark.
-- **Gameplay vision for Shorts.** The local Story model looks at sampled frames to find fights and skip menus and loading screens. There is nothing extra to download, and frames stay on your computer. [Models](docs/MODELS.md#gameplay-vision)
+- **Gameplay vision for Shorts.** A compatible installed local Story model looks at sampled frames to propose action moments and filter menus and loading screens. Frames stay on your computer. [Models](docs/MODELS.md#gameplay-vision)
 - **AI is optional.** Manual editing needs no AI model, API key or account.
 
 <table>
@@ -72,20 +73,43 @@
   </tr>
 </table>
 
+## Latest beta update
+
+The **18 October 2026** source-based beta contains app revision [`fe35453`](https://github.com/VanoPeradze/cutroom/commit/fe35453119305a33e0890a25e627a4fa47ad353d), with the existing caption, mixer, gameplay and export tools from 1.2 Beta.
+
+- **Keep the full speech context.** Story selections retain complete original ASR utterances, including negations and qualifications, and their summaries quote that source verbatim. Precision selection requires explicit source quotations for every planned role and required context chapter. Incomplete assignments and explicit refusals stop before rough-cut fallback.
+- **Choose an extractive rough cut.** An optional Short setting, off by default, can retain the same selected utterances in chronological order after an eligible failed Story review, shortening only verified internal speech-free pauses. The result is labelled **EXTRACTIVE ROUGH CUT**, still requires review, and does not repeat, pad or slow footage to fill the requested length. It does not establish accepted generative Story quality.
+- **More reliable Windows stabilization.** Stabilized copies can be published from long temporary paths, with atomic publication that preserves existing files and retains cancellation cleanup.
+
+Preserving source words does not repair transcription or establish that a model understood the story. Review the source roles, speech boundaries and final export. See [beta status](#beta-status) for the actual checks and remaining gaps.
+
 ## Quick start
 
 ### Download for Windows or macOS
 
-1. Download the ZIP for your computer: [Windows](https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261015/CUTROOM-1.2-Beta-Windows.zip) or [Mac](https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261015/CUTROOM-1.2-Beta-Mac.zip).
-2. Extract the entire archive.
+1. Download the [Windows ZIP](https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261018/CUTROOM-1.2-Beta-Windows-review-fe35453.zip) or the [combined Windows + Mac ZIP](https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261018/CUTROOM-1.2-Beta-combined-review-fe35453.zip). **Mac users: use the combined ZIP.**
+2. Extract the entire archive. In the combined ZIP, open **mac** on macOS or **windows** on Windows.
 3. Open the launcher beside the **App** folder: **START CUTROOM.bat** on Windows, **START CUTROOM.command** on macOS.
 4. CUTROOM opens in your browser. Keep the launch window open while you edit; closing the browser alone does not stop CUTROOM.
 
-**First setup needs internet** to install dependencies. Python, FFmpeg and AI models are not bundled in the ZIPs. Keep **App**, **START HERE.html** and the launcher together. If the browser does not open, copy the address shown in the launch window once setup finishes. The Mac launcher is unsigned and is not a notarized `.app`; the [platform guide](docs/PLATFORMS.md) explains the security prompts.
+**These are source-based beta packages. First setup needs internet** to install dependencies. Python, FFmpeg, the local Story engine and AI models are not bundled. Keep **App**, **START HERE.html** and the launcher together. If the browser does not open, copy the address shown in the launch window once setup finishes. The Mac launcher is unsigned and is not a signed or notarized `.app`; the [platform guide](docs/PLATFORMS.md) explains the security prompts.
 
-[Release notes and SHA-256 checksums](https://github.com/VanoPeradze/cutroom/releases/tag/v1.2-beta-20261015). If GitHub is unavailable, use the [Windows mirror](https://cutroom-studio.expo.app/downloads/CUTROOM-1.2-Beta-Windows.zip), [Mac mirror](https://cutroom-studio.expo.app/downloads/CUTROOM-1.2-Beta-Mac.zip) or [combined ZIP mirror](https://cutroom-studio.expo.app/downloads/CUTROOM-1.2-Beta.zip).
+> [!WARNING]
+> Before the first Windows launch, make sure WinGet is available and install the [official Microsoft Visual C++ x64 runtime](https://aka.ms/vc14/vc_redist.x64.exe). The CUTROOM launcher does not install this runtime prerequisite. Fresh Windows 10 Sandbox setup and startup health passed with both prerequisites; default first-run setup without the runtime failed. Physical-device, restart and manual editing/export acceptance remain pending.
 
-To update, extract a fresh copy separately and back up your projects before moving them. The older combined ZIP is still supported: open its `windows` or `mac` folder first.
+[Release notes](https://github.com/VanoPeradze/cutroom/releases/tag/v1.2-beta-20261018). The [15 October beta](https://github.com/VanoPeradze/cutroom/releases/tag/v1.2-beta-20261015) remains available for rollback. To update, extract a fresh copy separately and back up your projects before moving them.
+
+<details>
+<summary>Download sizes and SHA-256 checksums</summary>
+
+| Archive | Bytes | SHA-256 |
+| --- | ---: | --- |
+| Windows: `CUTROOM-1.2-Beta-Windows-review-fe35453.zip` | 3,708,965 | `d20f33568ebaeb702717baade8e2a76dda88cb10e81461d61cc48ec96f725aca` |
+| Windows + Mac: `CUTROOM-1.2-Beta-combined-review-fe35453.zip` | 7,452,329 | `e6973fcace0766e43767e0a14e1833dc35e820b9e5b19895ed57e688ff2ff731` |
+
+Both downloads contain the frozen app source identified above. This GitHub README can receive documentation updates separately from those immutable archives.
+
+</details>
 
 ### Run from source
 
@@ -127,7 +151,7 @@ Setup creates a local virtual environment and installs the Python dependencies. 
 | **Cloud AI (optional)** | Uses Groq or a compatible provider for transcription and edit planning. | Your own API account, compatible models and your explicit consent. Provider limits and billing apply. |
 
 - **You stay in control.** A new AI draft does not replace your manual timeline until you choose **Apply new AI draft**, and Undo stays available.
-- **No surprise downloads.** In Auto mode, CUTROOM uses the stronger transcription and Story models only when they are already installed and your graphics card has room for them. It suggests a larger Story model when it would fit, and every model download waits for your confirmation.
+- **Plan for model downloads.** In Auto mode, CUTROOM uses the stronger transcription and Story models only when they are already installed and your graphics card has room for them. It suggests a larger Story model when it would fit. Models are separate downloads; a missing selected speech model can download on its first use. [Download behavior](docs/THIRD_PARTY_NOTICES.md)
 - **Know your limits.** Mac transcription currently runs on the CPU. A chat subscription does not include API access, and free tiers have usage limits.
 
 [AI connections and privacy](docs/AI_CONNECTIONS.md) · [Models and download sizes](docs/MODELS.md)
@@ -142,8 +166,8 @@ Setup creates a local virtual environment and installs the Python dependencies. 
 
 | Platform | Status |
 | --- | --- |
-| **Windows** | Beta ZIP with launcher. Testing on fresh computers and a wide range of hardware is ongoing. |
-| **macOS** | Beta ZIP for macOS 15 or later on Apple Silicon and Intel. Automated checks run for both architectures; Finder, Gatekeeper and Safari behavior still need manual verification. |
+| **Windows** | Source-based beta ZIP with launcher. WinGet and the Microsoft Visual C++ x64 runtime are prerequisites; see [Quick start](#quick-start). Physical-device coverage remains pending. |
+| **macOS** | Source-based beta in the combined ZIP for macOS 15 or later on Apple Silicon and Intel. Exact-package automated checks passed for both architectures; Finder, Gatekeeper and Safari behavior still need manual verification. |
 | **Linux** | Source checkout only: Python 3.12, FFmpeg/FFprobe and Bash. No Linux download, and the full Linux installation is not yet verified end to end. |
 
 See the [platform guide](docs/PLATFORMS.md) for exact prerequisites, commands and troubleshooting.
@@ -152,7 +176,18 @@ See the [platform guide](docs/PLATFORMS.md) for exact prerequisites, commands an
 
 CUTROOM 1.2 Beta is beta software. Start with a short recording and keep your originals. Review transcripts, AI selections, source roles, synchronization and the exported MP4 before you publish. AI proposes a draft for you to edit; the default YouTube cleanup keeps your recording's order.
 
-The editor has two main video sources plus media and text layers. Added layers stay within the existing edit and do not automatically follow source reordering. Automated checks and synthetic renders do not prove real-footage quality, installation on every computer or AI accuracy.
+The editor has two main video sources plus media and text layers. Added media and custom text layers stay within the existing edit and do not automatically follow source reordering. Saved transcript-caption corrections follow the surviving source speech across trimming and reordering. Automated checks and synthetic renders do not prove real-footage quality, installation on every computer or AI accuracy.
+
+The **18 October downloads** have the following recorded evidence:
+
+| Check | Result and scope |
+| --- | --- |
+| Frozen app source on Windows | 2,729 Python tests passed; two POSIX-only tests skipped. 623 frontend tests passed. |
+| Exact-package native macOS 15 | [Run 39139136807](https://github.com/VanoPeradze/cutroom/actions/runs/39139136807) passed on **Apple Silicon and Intel**. Each architecture passed 69 maintainer checks and 340 feature checks, covering all 50 required cases with zero skips, plus fresh App dependency installation, missing-pip recovery and restart. |
+| Clean Windows setup | Fresh Windows 10 Sandbox setup and startup health passed with WinGet and the official Microsoft Visual C++ x64 runtime installed. Default first-run setup without the runtime failed; the launcher does not install that prerequisite. This is not full device or manual acceptance. |
+| Still pending | Physical Windows device setup, Windows restart and manual editing/export acceptance; physical Mac Finder/Gatekeeper launch and Safari; native transcription/model execution and representative ASR accuracy; human English/Hebrew story, caption, mixer and timeline review. |
+
+Native Mac automation used no new model downloads or inference. It does not establish transcription accuracy, accepted generative Story quality or human listening approval. The remaining checks are described in the [manual acceptance protocol](https://github.com/VanoPeradze/cutroom/blob/master/packaging/REVIEW_ACCEPTANCE.md).
 
 [Beta status](docs/BETA_STATUS.md) · [Known limits](docs/QUALITY_AND_LIMITS.md) · [Mac validation](https://github.com/VanoPeradze/cutroom/blob/master/docs/MAC_BETA.md) · [Changelog](CHANGELOG.md)
 

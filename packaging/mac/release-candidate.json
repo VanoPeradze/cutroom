@@ -1,11 +1,14 @@
 {
-  "bytes": 7195525,
-  "sha256": "17857919c2315cfe01db2e6c6695220cc8949c7759cf66860672e4df5ea3811b",
-  "filename": "CUTROOM-1.2-Beta-combined-17857919c231-20261015.zip",
-  "url": "https://cutroom-studio--o6igksvb01.expo.app/downloads/CUTROOM-1.2-Beta-combined-17857919c231-20261015.zip",
+  "bytes": 7452329,
+  "sha256": "e6973fcace0766e43767e0a14e1833dc35e820b9e5b19895ed57e688ff2ff731",
+  "filename": "CUTROOM-1.2-Beta-combined-review-fe35453.zip",
+  "url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261018/CUTROOM-1.2-Beta-combined-review-fe35453.zip",
   "version": "1.2-beta",
   "layout": "windows-mac-folders-v1",
-  "build_id": "CUTROOM-1.2-beta-mac-20261015-083307",
-  "source_commit": "0a67e3ce56224aa3e6d12f2179ccbd4b889e9bed",
-  "note": "Exact 1.2 Beta release candidate built from the pinned Windows baseline CUTROOM-1.2-beta-20261015-083237. Caption items, mixer and export limiter, Short length top-up, gameplay-moment corrections, text templates, export check, long-caption splitting and layout fixes. CI retains strict payload comparison."
+  "build_id": "CUTROOM-1.2-beta-mac-20261018-035808",
+  "manifest_sha256": "18cd303a1895bdb6b5b154b5592831b3b4a520f8682eb6a72fa17e496931689a",
+  "source_commit": "fe35453119305a33e0890a25e627a4fa47ad353d",
+  "native_validation_url": "https://github.com/VanoPeradze/cutroom/actions/runs/39139136807",
+  "native_validation_commit": "7e18c1c622968985cbcbc33abdb33a185a2b2bd3",
+  "note": "Exact existing combined ZIP from the source-pinned fe35453 review pair, promoted without rebuilding for the explicitly authorized exploratory public beta. Native macOS 15 arm64/x64 run 39139136807 passed 69 offline review checks and 340 feature checks per architecture, all 50 required feature cases with zero skips, fresh App setup, missing-pip recovery and restart persistence. No transcription or model inference was run, and no models were downloaded. Physical Mac Finder/Gatekeeper/Safari and human editing/listening/AI quality remain unverified. The default clean Windows installer failed without a separately installed Microsoft Visual C++ x64 runtime; WinGet plus signed runtime preparation enabled setup/startup health, with full physical-device/restart/UI acceptance still pending. This combined ZIP is also the Mac download; no standalone Mac archive is promoted. CI retains strict payload comparison, and historical validation pins remain unchanged."
 }

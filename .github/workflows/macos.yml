@@ -6,7 +6,7 @@ on:
       transcribe:
         description: Download tiny.en and test real CPU transcription of synthetic English speech
         required: false
-        default: true
+        default: false
         type: boolean
       review_release_id:
         description: Optional numeric ID of the unpublished cutroom-review-fe35453 draft release
@@ -151,7 +151,7 @@ jobs:
         timeout-minutes: 18
         shell: bash
         env:
-          RUN_TRANSCRIPTION: ${{ (github.event_name != 'workflow_dispatch' || inputs.transcribe) && '1' || '0' }}
+          RUN_TRANSCRIPTION: ${{ github.event_name == 'workflow_dispatch' && inputs.transcribe && '1' || '0' }}
         run: |
           extra=()
           if [[ "$RUN_TRANSCRIPTION" == '1' ]]; then extra+=(--transcribe); fi
@@ -161,7 +161,7 @@ jobs:
         timeout-minutes: 18
         shell: bash
         env:
-          RUN_TRANSCRIPTION: ${{ (github.event_name != 'workflow_dispatch' || inputs.transcribe) && '1' || '0' }}
+          RUN_TRANSCRIPTION: ${{ github.event_name == 'workflow_dispatch' && inputs.transcribe && '1' || '0' }}
         run: |
           extra=()
           if [[ "$RUN_TRANSCRIPTION" == '1' ]]; then extra+=(--transcribe); fi

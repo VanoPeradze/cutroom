@@ -3,7 +3,7 @@ import {resolve, dirname, sep} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createHash} from 'node:crypto';
 import assert from 'node:assert/strict';
-import {downloadEntries, verifyArchive} from './prepare-download.mjs';
+import {downloadEntries, uniqueDownloadEntries, verifyArchive, assertPublishable} from './prepare-download.mjs';
 const root = dirname(fileURLToPath(import.meta.url));
 const html = readFileSync(resolve(root,'public/index.html'),'utf8');
 const publicRoot = resolve(root,'public');
@@ -29,12 +29,19 @@ for (const filename of pageFiles) {
 const release = JSON.parse(readFileSync(resolve(root,'release.json'),'utf8'));
 const zip = release.filename;
 assert.match(zip, /^CUTROOM-[A-Za-z0-9.-]+\.zip$/, 'Unsafe release filename');
-assert.equal(release.version, '1.1-beta');
-assert.equal(release.label, '1.1 Beta');
+assert.equal(release.version, '1.2-beta');
+assert.equal(release.label, '1.2 Beta');
 assert.equal(release.layout, 'windows-mac-folders-v1');
 assert.ok(html.includes('Double-click START CUTROOM.bat'), 'The page must explain the single download launcher');
-assert.equal(JSON.parse(readFileSync(resolve(root,'package.json'),'utf8')).version, '1.1.0-beta');
-assert.ok(html.includes('WINDOWS + MAC · 1.1 BETA'), 'The download must display both platforms and 1.1 Beta');
+assert.equal(JSON.parse(readFileSync(resolve(root,'package.json'),'utf8')).version, '1.2.0-beta');
+assert.ok(html.includes('WINDOWS + MAC · 1.2 BETA'), 'The download must display both platforms and 1.2 Beta');
+assertPublishable(release);
+assert.equal(release.release_state, 'beta');
+assert.equal(release.source_commit, 'fe35453119305a33e0890a25e627a4fa47ad353d');
+assert.equal(release.platforms.mac.filename, release.filename);
+assert.equal(release.platforms.mac.folder, 'mac');
+assert.ok(html.includes('Mac download includes both platforms. Extract it, open mac/'), 'Mac download must explain the combined archive');
+assert.ok(html.includes('Public beta.') && html.includes('acceptance remain pending.'), 'Disclose beta acceptance limits');
 assert.ok(html.includes('START CUTROOM.command') && html.includes('exactly two folders: windows and mac'), 'Both platform launchers must be explained');
 assert.ok(html.includes('/downloads/'+zip+'"'), 'The download must match the release manifest');
 assert.ok(html.includes('/downloads/'+zip+'.sha256"'), 'The checksum link must match the release manifest');
@@ -44,6 +51,9 @@ assert.ok(Number.isSafeInteger(release.bytes) && release.bytes > 0);
 assert.match(release.github_release.tag, /^v\d+\.\d+-beta-\d{8}$/);
 assert.equal(release.github_release.tag_commit, release.source_commit);
 const releaseBase = `https://github.com/VanoPeradze/cutroom/releases/download/${release.github_release.tag}/`;
+const retained = JSON.parse(readFileSync(resolve(root,'retained-downloads.json'),'utf8'));
+assert.equal(retained.length,6,'Preserve all historical 1.1 and October 15 1.2 mirrors');
+uniqueDownloadEntries([...downloadEntries(release), ...retained]);
 for (const entry of downloadEntries(release)) {
   assert.equal(entry.url, releaseBase + entry.filename);
   assert.ok(html.includes('href="'+entry.url+'"'), 'Missing tag-specific GitHub primary download');
@@ -55,6 +65,13 @@ for (const entry of downloadEntries(release)) {
   const sidecar = readFileSync(resolve(root,'public/downloads',entry.filename+'.sha256'),'utf8').trim().split(/\s+/);
   assert.equal(sidecar[0], entry.sha256);
   assert.equal(sidecar[1], entry.filename);
+}
+for (const entry of retained) {
+  assert.match(entry.url,/^https:\/\/github\.com\/VanoPeradze\/cutroom\/releases\/download\/v1\.[12]-beta-202610(?:11|15)\//);
+  verifyArchive(readFileSync(resolve(root,'public/downloads',entry.filename)),entry);
+  const sidecar = readFileSync(resolve(root,'public/downloads',entry.filename+'.sha256'),'utf8').trim().split(/\s+/);
+  assert.equal(sidecar[0],entry.sha256);
+  assert.equal(sidecar[1],entry.filename);
 }
 assert.ok(!html.includes('127.0.0.1')&&!html.includes('C:/Users/'),'Local-only reference leaked');
 const {expo}=JSON.parse(readFileSync(resolve(root,'app.json'),'utf8'));

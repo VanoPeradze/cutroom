@@ -1,0 +1,38 @@
+[
+  {
+    "filename": "CUTROOM-1.1-Beta.zip",
+    "bytes": 7082118,
+    "sha256": "f46fb59b4fdbbf5772c2ca0c2fae5f0503bb33f1b7cccbade2781d8722fcedb0",
+    "url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.1-beta-20261011/CUTROOM-1.1-Beta.zip"
+  },
+  {
+    "filename": "CUTROOM-1.1-Beta-Windows.zip",
+    "bytes": 3524750,
+    "sha256": "f535ee904d726347ac3b3c793c247f1180e26ee3e2e45ad6c0b343dddc17f053",
+    "url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.1-beta-20261011/CUTROOM-1.1-Beta-Windows.zip"
+  },
+  {
+    "filename": "CUTROOM-1.1-Beta-Mac.zip",
+    "bytes": 3536156,
+    "sha256": "5d8ceaa2259f4e8be94c75c9404aa21b991f1a9c9496cff04895dc653cbe7123",
+    "url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.1-beta-20261011/CUTROOM-1.1-Beta-Mac.zip"
+  },
+  {
+    "filename": "CUTROOM-1.2-Beta.zip",
+    "bytes": 7195525,
+    "sha256": "17857919c2315cfe01db2e6c6695220cc8949c7759cf66860672e4df5ea3811b",
+    "url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261015/CUTROOM-1.2-Beta.zip"
+  },
+  {
+    "filename": "CUTROOM-1.2-Beta-Windows.zip",
+    "bytes": 3581242,
+    "sha256": "41c76f17aa30ae425692dcb6b013b374d2a67d1d25b732c61cf9dd0bf5be94f3",
+    "url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261015/CUTROOM-1.2-Beta-Windows.zip"
+  },
+  {
+    "filename": "CUTROOM-1.2-Beta-Mac.zip",
+    "bytes": 3592637,
+    "sha256": "5c7be082218fe28e57748460aeaeb0e6740ecda40d509bfe5ad3d98bf059be22",
+    "url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261015/CUTROOM-1.2-Beta-Mac.zip"
+  }
+]

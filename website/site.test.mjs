@@ -1,6 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync, readdirSync} from 'node:fs';
+import {downloadEntries, assertPublishable} from './prepare-download.mjs';
 
 const html = readFileSync(new URL('./public/index.html', import.meta.url), 'utf8');
 const privacy = readFileSync(new URL('./public/privacy.html', import.meta.url), 'utf8');
@@ -26,14 +27,14 @@ function assertLocalized(link) {
   assert.match(link[0], />[^<>]*[A-Za-z][^<>]*</, 'The default link text must be English');
 }
 
-test('one download area offers distinct real Windows and Mac archives, with Linux guide only', () => {
+test('Windows uses its archive and Mac uses the exact combined archive with folder instructions', () => {
   const release = JSON.parse(readFileSync(new URL('./release.json', import.meta.url), 'utf8'));
   const buttons = [...html.matchAll(/<a\b[^>]*class="[^"]*\bbutton\b[^"]*"[^>]*>/g)];
   assert.equal(buttons.length, 2);
   assert.equal(new Set(buttons.map(row => row[0].match(/href="([^"]+)"/)[1])).size, 2);
   for (const platform of ['windows', 'mac']) {
     const entry = release.platforms[platform];
-    const links = linksTo(html, entry.url);
+    const links = linksTo(html, entry.url).filter(link => /\bdownload-link\b/.test(link[1]));
     assert.equal(links.length, 1);
     assert.match(links[0][1], /\bdownload-link\b/);
     assert.doesNotMatch(links[0][1], /\sdownload(?:\s|=|$)/, 'Cross-origin downloads rely on GitHub attachment headers');
@@ -42,11 +43,17 @@ test('one download area offers distinct real Windows and Mac archives, with Linu
     assert.equal(mirror.length, 1);
     assertLocalized(mirror[0]);
     assert.match(mirror[0][2], /mirror/i);
-    assert.equal(linksTo(html, `/downloads/${entry.filename}.sha256`).length, 1);
+    assert.ok(linksTo(html, `/downloads/${entry.filename}.sha256`).length >= 1);
   }
-  assert.equal(linksTo(html, release.url).length, 1);
+  assert.equal(release.platforms.mac.filename, release.filename);
+  assert.equal(release.platforms.mac.folder, 'mac');
+  assert.equal(linksTo(html, release.url).length, 2); // Mac button and the combined ZIP help link.
   assert.equal(linksTo(html, `/downloads/${release.filename}`).length, 1);
-  assert.equal(linksTo(html, `/downloads/${release.filename}.sha256`).length, 1);
+  assert.equal(linksTo(html, `/downloads/${release.filename}.sha256`).length, 2);
+  assert.match(html, /Mac download includes both platforms\. Extract it, open mac\//);
+  const source = release.source_archive;
+  for (const url of [source.url, `/downloads/${source.filename}`, `/downloads/${source.filename}.sha256`]) assert.equal(linksTo(html,url).length,1);
+  assert.equal(downloadEntries(release).length,3);
   assert.doesNotMatch(html, /href="[^"]*Linux[^"\n]*\.zip/i);
   assert.ok(linksTo(html, `${repository}/blob/master/docs/PLATFORMS.md#linux-source-based-development-path`).length);
 });
@@ -57,10 +64,41 @@ test('download metadata pins a dated release and preserves Expo mirrors and prov
   assert.equal(release.github_release.tag_commit, release.source_commit);
   assert.equal(release.github_release.package_bytes_changed, false);
   assert.equal(release.github_release.url, `${repository}/releases/tag/${release.github_release.tag}`);
-  for (const entry of [release, release.platforms.windows, release.platforms.mac]) {
+  for (const entry of downloadEntries(release)) {
     assert.equal(entry.url, `${repository}/releases/download/${release.github_release.tag}/${entry.filename}`);
     assert.deepEqual(entry.mirrors, [`https://cutroom-studio.expo.app/downloads/${entry.filename}`]);
   }
+});
+
+test('public beta retains exact automated native provenance and visible pending acceptance', () => {
+  const release = JSON.parse(readFileSync(new URL('./release.json', import.meta.url), 'utf8'));
+  assertPublishable(release);
+  assert.equal(release.release_state,'beta');
+  assert.equal(release.full_release_qualified,false);
+  assert.equal(release.source_commit,'fe35453119305a33e0890a25e627a4fa47ad353d');
+  assert.equal(release.github_release.tag,'v1.2-beta-20261018');
+  for (const architecture of ['arm64','x64']) {
+    const checks = release.native_validation.architectures[architecture];
+    assert.equal(checks.offline_checks_passed,69);
+    assert.equal(checks.feature_tests_passed,340);
+    assert.equal(checks.required_cases_passed,50);
+    assert.equal(checks.skipped,0);
+  }
+  assert.match(html,/Public beta\./);
+  assert.match(html,/default setup without the runtime failed\./);
+  assert.match(html,/Setup and startup health passed with these prerequisites in Windows 10 Sandbox/);
+  assert.match(html,/The required Visual C\+\+ runtime is not installed by the launcher\./);
+  assert.match(html,/Full physical-device, restart and UI acceptance remain pending\./);
+  assert.equal(release.windows_fresh_install_acceptance,'failed-native-dll-check');
+  assert.equal(release.windows_fresh_install.result,'failed');
+  assert.equal(release.windows_conditional_setup.result,'setup-and-startup-health-observed-pass');
+  assert.equal(release.windows_conditional_setup.full_guest_acceptance,'pending');
+  assert.deepEqual(release.windows_conditional_setup.health.models,[]);
+  const runtimeHelp=linksTo(region('details','install-help'),'https://aka.ms/vc14/vc_redist.x64.exe');
+  assert.equal(runtimeHelp.length,1);
+  assertLocalized(runtimeHelp[0]);
+  assert.match(html,/Transcription, Ollama\/cloud AI, physical clean-device installation, Finder\/Gatekeeper\/Safari/);
+  assert.match(html,/representative English\/Hebrew editing and listening acceptance remain pending\./);
 });
 
 test('source and issue links remain visible without competing with download', () => {
