@@ -7,6 +7,13 @@ import pytest
 from cutroom import director, intelligence
 
 
+@pytest.fixture(autouse=True)
+def _no_real_story_transport(monkeypatch):
+    def forbid(*_args, **_kwargs):
+        raise AssertionError("Critic unit tests must stub every model request.")
+    monkeypatch.setattr(intelligence, "open_ollama", forbid)
+
+
 class Settings:
     ai = {"enabled": True, "editor_model": "fixture-model", "editor_fallback_models": []}
 
@@ -34,6 +41,31 @@ def critic(monkeypatch, story, reply):
     return intelligence._critic_story_selection(
         Settings(), selection, candidates, {}, {}, {"target_duration": 30}, "fixture-model",
     )
+
+
+def verified_story_fixture(selection, candidates):
+    for row in candidates:
+        row["text"] = "A complete fixture story idea."
+    selection["semantic_mapping_verified"] = True
+    selection["semantic_review_status"] = "model_reviewed"
+    selection["evidence_policy_version"] = intelligence.EVIDENCE_POLICY_VERSION
+    selection["slot_map"] = [{"slot_index": index, "purpose": purpose, "beat_ids": [identifier],
+                              "primary_beat_ids": [identifier], "context_beat_ids": [],
+                              "role_evidence": "The complete fixture sentence supplies this planned role."}
+                             for index, (purpose, identifier) in enumerate((("setup", "b1"), ("result", "b3")))]
+    source = [{"id": f"s{index}", "start": beat["start"], "end": beat["end"], "text": beat["text"]}
+              for index, beat in enumerate(candidates, 1)]
+    catalog = intelligence.build_story_evidence_catalog(candidates, source)
+    for row in selection["slot_map"]:
+        citation = next(reference["id"] for reference in catalog if reference["beat_id"] == row["primary_beat_ids"][0])
+        row.update(primary_evidence_ids=[citation], context_evidence_ids=[], temporal_witness_id=citation)
+    proof = intelligence.validate_story_evidence(selection["slot_map"], candidates, source, selected_beat_ids=selection["keep_beat_ids"])
+    selection.update(slot_map=proof["slot_map"], evidence_proof=proof,
+                     source_span_policy_version=intelligence.SOURCE_SPAN_POLICY_VERSION,
+                     source_span_constraints=intelligence.build_source_span_constraints(
+                         candidates, source, selected_beat_ids=selection["keep_beat_ids"]))
+    return {"slots": [{"purpose": purpose, "chapter_ids": ["c001"], "required_context_chapter_ids": []}
+                       for purpose in ("setup", "result")]}
 
 
 @pytest.mark.parametrize("reply", [
@@ -129,24 +161,43 @@ def test_later_budget_slot_restoration_keeps_actual_removal(monkeypatch, story):
     assert fitted["critic"]["unresolved_slot_indexes"] == [1]
 
 
-def test_empty_critic_response_keeps_edit_with_review_warning_through_real_pipeline(monkeypatch, story):
+def test_empty_critic_response_requires_bounded_review_before_applying_story(monkeypatch, story):
     selection, candidates = story
-    segments = [{"id": f"s{i}", "start": row["start"], "end": row["end"]}
+    plan = verified_story_fixture(selection, candidates)
+    segments = [{"id": f"s{i}", "start": row["start"], "end": row["end"], "text": row["text"]}
                 for i, row in enumerate(candidates, 1)]
     monkeypatch.setattr(intelligence, "_ollama_inventory", lambda _settings: (True, {"fixture-model"}))
     monkeypatch.setattr(intelligence, "_summarize_story_chapters", lambda *_args: [{"id": "c001"}])
     monkeypatch.setattr(intelligence, "_build_global_outline", lambda *_args: {})
-    monkeypatch.setattr(intelligence, "_build_story_plan", lambda *_args: {"slots": []})
+    monkeypatch.setattr(intelligence, "_build_story_plan", lambda *_args: plan)
     monkeypatch.setattr(intelligence, "_select_story_beats", lambda *_args: (copy.deepcopy(selection), candidates))
-    monkeypatch.setattr(intelligence, "_call_ollama_story_pass", lambda *_args: {})
+    calls = []
+    def respond(_settings, payload, *_args):
+        calls.append(payload)
+        if "continuity critic" in payload["messages"][0]["content"]:
+            return {}
+        references = {reference["id"]: reference for row in selection["slot_map"] for reference in row["source_evidence"]}
+        def choice(identifier):
+            reference = references[identifier]
+            return f'{reference["text"]} [{reference["id"]}]'
+        roles = {}
+        for row in selection["slot_map"]:
+            primary = [choice(identifier) for identifier in row["primary_evidence_ids"]]
+            roles[row["purpose"]] = {
+                "primary_anchor_choice": primary[0], "additional_primary_evidence_choices": primary[1:],
+                "context_evidence_choices": [choice(identifier) for identifier in row["context_evidence_ids"]]}
+        return {"verdict": "fit", "keep_beat_ids": ["b1", "b3"], "released_optional_beat_ids": [],
+                "role_selections": roles}
+    monkeypatch.setattr(intelligence, "_call_ollama_story_pass", respond)
     decision, hierarchy = intelligence.hierarchical_story_edit(
-        candidates, segments, Settings(), {"goal": "short", "target_duration": 30},
+        candidates, segments, Settings(), {"goal": "short", "duration_mode": "style", "target_duration": 30},
     )
     assert decision["story_beat_ids"] == ["b1", "b3"]
-    assert hierarchy["critic"]["verdict"] == "skipped"
+    assert len(calls) == 2
+    assert hierarchy["critic"]["verdict"] == "pass"
+    assert hierarchy["critic"]["original_review"]["verdict"] == "skipped"
     review = director._edit_quality_review({}, hierarchy, segments, decision["story_ranges"], 30)
-    assert review["needs_review"] is True
-    assert review["warnings"][0]["type"] == "story_review"
+    assert review["needs_review"] is False
 
 
 def test_story_endpoints_and_highlights_cannot_inject_unselected_beats(story):
@@ -273,17 +324,18 @@ def test_explicitly_empty_critic_selection_cannot_fall_back_to_rejected_story(mo
 
 def test_hierarchy_saves_final_selection_and_the_exact_reviewed_input(monkeypatch, story):
     selection, candidates = story
-    segments = [{"id": f"s{i}", "start": row["start"], "end": row["end"]}
+    plan = verified_story_fixture(selection, candidates)
+    segments = [{"id": f"s{i}", "start": row["start"], "end": row["end"], "text": row["text"]}
                 for i, row in enumerate(candidates, 1)]
     monkeypatch.setattr(intelligence, "_ollama_inventory", lambda _settings: (True, {"fixture-model"}))
     monkeypatch.setattr(intelligence, "_summarize_story_chapters", lambda *_args: [{"id": "c001"}])
     monkeypatch.setattr(intelligence, "_build_global_outline", lambda *_args: {})
-    monkeypatch.setattr(intelligence, "_build_story_plan", lambda *_args: {"slots": []})
+    monkeypatch.setattr(intelligence, "_build_story_plan", lambda *_args: plan)
     monkeypatch.setattr(intelligence, "_select_story_beats", lambda *_args: (copy.deepcopy(selection), candidates))
     monkeypatch.setattr(intelligence, "_call_ollama_story_pass", lambda *_args: response(verdict="pass", issues=[]))
 
     decision, hierarchy = intelligence.hierarchical_story_edit(
-        candidates, segments, Settings(), {"goal": "short", "target_duration": 30},
+        candidates, segments, Settings(), {"goal": "short", "duration_mode": "style", "target_duration": 30},
     )
 
     assert hierarchy["selection"]["keep_beat_ids"] == decision["story_beat_ids"] == ["b1", "b3"]

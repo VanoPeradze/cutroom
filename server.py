@@ -122,6 +122,7 @@ SETTINGS_FIELDS = {
     "visual_ai",
     "audio_cleanup",
     "instruction",
+    "allow_extractive_rough_cut",
 }
 AUDIO_CLEANUP_FIELDS = {
     "preset",
@@ -347,7 +348,7 @@ def _validate_settings_payload(payload: dict[str, Any]) -> None:
             raise APIInputError("invalid_field", f"{key} has an unsupported value.")
     if "spoken_language" in payload:
         _validate_language(payload["spoken_language"], "spoken_language")
-    for key in ("auto_reframe", "editorial_effects", "captions", "burn_captions"):
+    for key in ("auto_reframe", "editorial_effects", "captions", "burn_captions", "allow_extractive_rough_cut"):
         if key in payload and not isinstance(payload[key], bool):
             raise APIInputError("invalid_field", f"{key} must be a boolean.")
     if "caption_scale" in payload:

@@ -135,6 +135,16 @@ def test_completion_contract_includes_whole_critic_context_and_unresolved_slots(
         "critic_requested_beat_ids": ["context"],
         "unresolved_slot_indexes": [1],
         "unapplied_critic_actions": 0,
+        "semantic_mapping_verified": False,
+        "semantic_review_status": None,
+        "evidence_policy_version": None,
+        "evidence_proof": None,
+        "source_span_policy_version": None,
+        "source_span_constraints": None,
+        "required_context_beat_ids": [],
+        "required_context_segment_ids": [],
+        "semantic_revision": None,
+        "slot_map": selection["slot_map"],
     }
 
 
@@ -240,35 +250,48 @@ def test_two_context_beats_cannot_stand_in_for_a_missing_primary_slot():
     assert "primary" not in decision["story_requirements"]["required_beat_ids"]
 
 
-@pytest.mark.parametrize("slot_count,complete,accepted", [(1, True, True), (1, False, False), (2, True, False)])
-def test_single_beat_exception_requires_one_complete_populated_slot(monkeypatch, slot_count, complete, accepted):
+@pytest.mark.parametrize("slot_count,complete,accepted", [(1, True, True), (1, False, False), (2, True, True)])
+def test_one_complete_source_unit_can_be_cited_by_multiple_provisional_roles(monkeypatch, slot_count, complete, accepted):
+    from cutroom.story_evidence import build_story_evidence_catalog
     beats = [{"id": f"b{i}", "start": (i - 1) * 12, "end": (i - 1) * 12 + 8,
               "duration": 8, "segment_ids": [f"s{i}"],
               "text": "A complete synthetic idea." if complete else "An unfinished synthetic idea"}
              for i in (1, 2)]
-    plan = {"slots": [{"chapter_ids": ["c1"], "desired_seconds": 8}] * slot_count}
+    segments = [{"id": beat["segment_ids"][0], **{k: beat[k] for k in ("start", "end", "text")}} for beat in beats]
+    catalog = build_story_evidence_catalog(beats, segments)
+    choice = next(f"{row['text']} [{row['id']}]" for row in catalog if row["beat_id"] == "b1")
+    plan = {"slots": [{"purpose": f"role{i}", "chapter_ids": ["c1"], "required_context_chapter_ids": [], "desired_seconds": 8}
+                      for i in range(slot_count)]}
     monkeypatch.setattr(intelligence, "_call_ollama_story_pass", lambda *_args: {
-        "slot_selections": [{"slot_index": i, "beat_ids": ["b1"]} for i in range(slot_count)],
-    })
+        "verdict": "fit", "role_selections": {slot["purpose"]: {
+            "primary_anchor_choice": choice, "additional_primary_evidence_choices": [], "context_evidence_choices_by_chapter": {}}
+            for slot in plan["slots"]}, "highlight_beat_ids": [], "title": "Synthetic", "summary": "Unverified"})
     args = (Settings(), [{"id": "c1", "beats": beats}], [{"id": "c1"}], {}, plan,
-            {"target_duration": 20}, "fixture-model")
+            {"target_duration": 20}, "fixture-model", None, None, segments)
     if accepted:
         selected, _ = intelligence._select_story_beats(*args)
         assert selected["keep_beat_ids"] == ["b1"]
+        assert len(selected["slot_map"]) == slot_count
+        assert selected["semantic_mapping_verified"] is False
     else:
-        with pytest.raises(intelligence.StoryPlanningError, match="enough coherent"):
+        with pytest.raises(intelligence.StoryPlanningError, match="invalid precision"):
             intelligence._select_story_beats(*args)
 
 
-def test_single_beat_exception_cannot_use_only_context_and_omit_the_primary_slot(monkeypatch):
-    beats = [{"id": "context", "start": 0, "end": 8, "duration": 8, "text": "Complete context."},
-             {"id": "primary", "start": 10, "end": 18, "duration": 8, "text": "A complete primary idea."}]
+def test_precision_cannot_use_only_context_and_omit_primary_support(monkeypatch):
+    from cutroom.story_evidence import build_story_evidence_catalog
+    beats = [{"id": "context", "start": 0, "end": 8, "duration": 8, "segment_ids": ["s1"], "text": "Complete context."},
+             {"id": "primary", "start": 10, "end": 18, "duration": 8, "segment_ids": ["s2"], "text": "A complete primary idea."}]
+    segments = [{"id": beat["segment_ids"][0], **{k: beat[k] for k in ("start", "end", "text")}} for beat in beats]
+    row = build_story_evidence_catalog(beats, segments)[0]
+    choice = f"{row['text']} [{row['id']}]"
     monkeypatch.setattr(intelligence, "_call_ollama_story_pass", lambda *_args: {
-        "slot_selections": [{"slot_index": 0, "beat_ids": ["context"]}],
-    })
-    with pytest.raises(intelligence.StoryPlanningError, match="enough coherent"):
+        "verdict": "fit", "role_selections": {"result": {"primary_anchor_choice": choice,
+            "additional_primary_evidence_choices": [], "context_evidence_choices_by_chapter": {"c2": [choice]}}},
+        "highlight_beat_ids": [], "title": "Synthetic", "summary": "Unverified"})
+    with pytest.raises(intelligence.StoryPlanningError, match="invalid precision"):
         intelligence._select_story_beats(Settings(),
             [{"id": "c1", "beats": beats[1:]}, {"id": "c2", "beats": beats[:1]}],
             [{"id": "c1"}, {"id": "c2"}], {}, {"slots": [
-                {"chapter_ids": ["c1"], "required_context_chapter_ids": ["c2"]},
-            ]}, {"target_duration": 20}, "fixture-model")
+                {"purpose": "result", "chapter_ids": ["c1"], "required_context_chapter_ids": ["c2"]},
+            ]}, {"target_duration": 20}, "fixture-model", segments=segments)

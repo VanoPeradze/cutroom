@@ -309,3 +309,27 @@ def test_transcription_cancellation_is_not_converted_to_a_warning(monkeypatch):
     monkeypatch.setattr(director, "transcribe", lambda *args, **kwargs: (_ for _ in ()).throw(JobCancelled("stop")))
     with pytest.raises(JobCancelled):
         director._transcribe_safely(Path("unused.mp4"), DummySettings(), "en")
+
+
+def test_story_budget_error_keeps_its_diagnostic_and_bypasses_planner_retry(monkeypatch):
+    from cutroom.jobs import Job, JobContext
+    from cutroom.story_budget import StoryBudgetError
+
+    failure = StoryBudgetError("Required story does not fit.", {
+        "kind": "story_budget", "scope": "current_required_selection",
+        "required_policy_minimum_seconds": 21.46, "target_seconds": 20,
+        "applied_to_timeline": False,
+    })
+    calls = []
+    def reject(*args, **kwargs):
+        calls.append(kwargs)
+        raise failure
+    monkeypatch.setattr(director, "plan_edit", reject)
+    context = JobContext(Job("job_budget", "director", "project_000000000000"), threading.Lock())
+
+    with pytest.raises(StoryBudgetError) as caught:
+        director._plan_edit_with_cancel(context, [], DummySettings(), {}, lambda *_a: None, None)
+
+    assert caught.value is failure
+    assert caught.value.diagnostic["required_policy_minimum_seconds"] == 21.46
+    assert len(calls) == 1

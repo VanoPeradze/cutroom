@@ -15,6 +15,47 @@ def segment(identifier: str, start: float, end: float, text: str) -> dict:
     return {"id": identifier, "start": start, "end": end, "text": text, "words": [], "avg_logprob": -0.1}
 
 
+def mock_source_roles(payload: dict, user: dict, *, final: bool = False) -> tuple[dict, list[str]]:
+    """Supply canonical synthetic choices; production validators remain real."""
+    schema = payload["format"]
+    roles_schema = (schema["properties"]["role_selections"]["anyOf"][0] if final else
+                    schema["anyOf"][0]["properties"]["role_selections"])
+    choices = intelligence._story_evidence_choice_catalog(user["source_evidence"])
+    current = set(user["current_selected_beat_ids"]) if final else None
+    roles, keep = {}, set()
+    purposes = roles_schema["required"]
+    for purpose in purposes:
+        properties = roles_schema["properties"][purpose]["properties"]
+        domain_ref = properties["additional_primary_evidence_choices"]["items"]["$ref"]
+        domain = schema["$defs"][domain_ref.split("/")[-1]]["enum"]
+        per_beat = {}
+        for choice in domain:
+            owner = choices[choice]["beat_id"]
+            if current is None or owner in current:
+                per_beat.setdefault(owner, choice)
+        ordered = sorted(per_beat, key=lambda value: choices[per_beat[value]]["start"])
+        # Two complete source units per role make this synthetic 60-second
+        # target feasible; the final mock retains that same fixed selection.
+        selected = ordered if final else ordered[:2]
+        assert len(selected) == 2
+        primary = [per_beat[value] for value in selected]
+        anchor = primary[-1] if purpose == purposes[-1] else primary[0]
+        anchor_ref = properties["primary_anchor_choice"]["$ref"]
+        assert anchor in schema["$defs"][anchor_ref.split("/")[-1]]["enum"]
+        row = {"primary_anchor_choice": anchor,
+               "additional_primary_evidence_choices": [value for value in primary if value != anchor]}
+        if final:
+            assert user["role_requirements"][purpose]["required_context_chapter_ids"] == []
+            row["context_evidence_choices"] = []
+        else:
+            context = properties["context_evidence_choices_by_chapter"]
+            assert context["required"] == [] and context["properties"] == {}
+            row["context_evidence_choices_by_chapter"] = {}
+        roles[purpose] = row
+        keep.update(selected)
+    return roles, sorted(keep)
+
+
 def main() -> None:
     rows = []
     for index in range(180):
@@ -25,7 +66,10 @@ def main() -> None:
             text = "For example this middle demonstration proves the main claim."
         elif index == 170:
             text = "Finally the result and conclusion deliver the payoff."
-        rows.append(segment(f"s{index}", index * 6.0, index * 6.0 + 5.2, text))
+        # Keep the original recording chronology and coverage. Short synthetic
+        # utterances expose complete units that can fit all three roles under
+        # today's whole-source policy; the old 5.2s fixture needed >=79.44s.
+        rows.append(segment(f"s{index}", index * 6.0, index * 6.0 + 3.0, text))
 
     settings = load_settings()
     settings.raw["ai"]["enabled"] = True
@@ -70,21 +114,25 @@ def main() -> None:
                 {"purpose": "ending", "chapter_ids": [ids[2]], "desired_seconds": 16, "reason": "finish", "required_context_chapter_ids": []},
             ]}
         if "precision editor" in system:
-            summaries = {item["id"]: item for item in user["chapter_summaries"]}
-            selections = []
-            chosen = []
-            for slot_index, slot in enumerate(user["plan"]["slots"]):
-                chapter = summaries[slot["chapter_ids"][0]]
-                beat_id = chapter["key_beat_ids"][0]
-                selections.append({"slot_index": slot_index, "beat_ids": [beat_id]})
-                chosen.append(beat_id)
+            roles, chosen = mock_source_roles(payload, user)
             return {
-                "slot_selections": selections, "highlight_beat_ids": chosen,
-                "opening_beat_id": chosen[0], "closing_beat_id": chosen[-1],
+                "verdict": "fit", "role_selections": roles, "highlight_beat_ids": chosen,
                 "title": "Hierarchical story", "summary": "A coherent story built across the recording.",
             }
         if "continuity critic" in system:
             return {"verdict": "pass", "add_beat_ids": [], "remove_beat_ids": [], "issues": [], "summary": "Continuity is sound."}
+        if "final semantic budget editor" in system:
+            roles, chosen = mock_source_roles(payload, user, final=True)
+            assert set(chosen) == set(user["current_selected_beat_ids"])
+            assert user["sticky_critic_context_beat_ids"] == []
+            cost = intelligence._story_selection_cost(chosen, user["candidates"], rows,
+                                                       {"target_duration": user["target_seconds"]})
+            # Assert feasibility with the actual duration policy. No fake cost,
+            # repeated unit, padding, target change or source trimming is used.
+            assert cost["minimum_safe_seconds"] <= user["target_seconds"]
+            assert cost["approved_seconds"] >= user["minimum_target_seconds"]
+            return {"verdict": "fit", "keep_beat_ids": chosen,
+                    "released_optional_beat_ids": [], "role_selections": roles}
         raise AssertionError(system)
 
     intelligence._call_ollama_strict = fake_call
@@ -111,8 +159,9 @@ def main() -> None:
     assert any("Story Producer" in item for item in calls)
     assert any("precision editor" in item for item in calls)
     assert any("continuity critic" in item for item in calls)
+    assert any("final semantic budget editor" in item for item in calls)
     print(json.dumps({
-        "ok": True, "engine": engine, "chapters": hierarchy["chapter_count"],
+        "ok": True, "mocked_model": True, "engine": engine, "chapters": hierarchy["chapter_count"],
         "story_ranges": editorial["decision"]["story_ranges"], "passes": len(calls),
     }, indent=2))
 

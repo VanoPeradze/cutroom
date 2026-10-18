@@ -326,6 +326,19 @@ Object.assign(he, {
   decision_gameplay_moments: "רגעי משחק שנבחרו לפי האקשן על המסך והסאונד"
 });
 
+Object.assign(en, {
+  allowExtractiveRoughCut: "For Shorts, allow an extractive rough cut if Story AI cannot verify a story",
+  allowExtractiveRoughCutHelp: "Retains selected original utterances in order for review. Custom story instructions may remain unverified.",
+  extractiveRoughCutReady: "Extractive rough cut ready. Original utterances are retained in order; review the context and transcript before exporting.",
+  extractiveRoughCutWarning: "This is an extractive rough cut for review. It preserves the selected source utterances in order; story interpretation remains unverified."
+});
+Object.assign(he, {
+  allowExtractiveRoughCut: "ב־Shorts, לאפשר טיוטה כרונולוגית מתוך המקור אם Story AI אינו מצליח לאמת סיפור",
+  allowExtractiveRoughCutHelp: "המשפטים המקוריים שנבחרו נשמרים לפי סדרם לבדיקה. הוראות הסיפור המותאמות עשויות להישאר ללא אימות.",
+  extractiveRoughCutReady: "טיוטה כרונולוגית מתוך המקור מוכנה. המשפטים המקוריים נשמרו לפי סדרם; יש לבדוק את ההקשר והתמלול לפני הייצוא.",
+  extractiveRoughCutWarning: "זו טיוטת עריכה כרונולוגית מתוך המקור לבדיקה. המשפטים שנבחרו נשמרו לפי סדרם; משמעות הסיפור עדיין לא אומתה."
+});
+
 export const dictionaries = { en, he, ar, es, fr, ru };
 export const RTL_LANGUAGES = new Set(["he", "ar"]);
 

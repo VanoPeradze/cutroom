@@ -11,8 +11,9 @@ The previous separate website checkout is not needed for future updates.
 
 - `public/`: the English/Hebrew page, styling, scripts and generated copies of the real product screenshots and user guides.
 - `app.json`: the existing Expo website project identity, not a credential.
-- `release.json`: exact filenames, sizes, checksums and provenance for the three approved ZIPs, their tag-specific GitHub URLs and retained Expo mirrors.
-- `prepare-download.mjs`: restores that approved ZIP locally without committing it to Git.
+- `release.json`: exact filenames, sizes, checksums and provenance for the Windows, combined-for-Mac and source ZIPs, their tag-specific GitHub URLs and retained Expo mirrors.
+- `prepare-download.mjs`: restores those approved artifacts locally without committing ZIPs to Git. A shared Mac/combined artifact is verified once; conflicting shared metadata is rejected.
+- `retained-downloads.json`: historical 1.1 and October 15 1.2 archives that remain verified and deployed at their original mirror paths, including on a fresh checkout.
 - `prepare-assets.mjs`: copies exactly six canonical repository files into `public/`, entirely offline.
 
 Edit screenshots in `docs/images/{welcome,editor,ai-options}.png`, user guides in
@@ -78,17 +79,17 @@ npm run check
 
 `npm run check` refreshes canonical assets automatically before checking every public link.
 
-The ZIPs are downloaded from the pinned GitHub Release. Their old Expo URLs remain
-available as mirrors, and deployment still includes all three verified files under
+The ZIPs are downloaded from the pinned GitHub Release. Historical Expo URLs remain
+available as mirrors, and deployment includes the current verified files under
 `public/downloads/`. Never remove them when changing the primary links. If GitHub is unavailable,
 provide the already-approved local archive instead:
 
 ```sh
-node prepare-download.mjs ../dist/YOUR-BUILD-FOLDER/CUTROOM-1.1-Beta.zip
+node prepare-download.mjs ../dist/review-fe35453-20261018/CUTROOM-1.2-Beta-combined-review-fe35453.zip
 ```
 
-The optional local path restores the combined ZIP; restore the two platform files
-from the listed mirrors into `public/downloads/` as needed, then run the normal
+The optional local path restores the combined ZIP; restore the Windows and source files
+from their exact local approved archives or listed URLs into `public/downloads/` as needed, then run the normal
 checks. Mirror use never bypasses the pinned size/SHA-256 checks.
 
 An existing ZIP with the wrong checksum is rejected, not overwritten. Review and move it
@@ -97,7 +98,50 @@ ignored by Git. Canonical source assets and release checksums are tracked; gener
 
 ## Change the beta download deliberately
 
-### GitHub download hosting
+### Current public beta: 18 October 2026
+
+The `v1.2-beta-20261018` release targets application source
+`fe35453119305a33e0890a25e627a4fa47ad353d`. It preserves the original review ZIP names
+and bytes. Windows uses `CUTROOM-1.2-Beta-Windows-review-fe35453.zip`; Mac uses
+`CUTROOM-1.2-Beta-combined-review-fe35453.zip` and must open its `mac/` folder.
+`SOURCE-fe35453.zip` is the matching source archive. There is no separate tested Mac ZIP.
+
+This is an explicitly authorized public beta with accepted limits, not a fully
+qualified production release. Native automated Apple Silicon/Intel evidence is
+run [39139136807](https://github.com/VanoPeradze/cutroom/actions/runs/39139136807)
+at orchestration head `7e18c1c622968985cbcbc33abdb33a185a2b2bd3`, distinct from
+the application source. Each architecture passed 69 offline checks, 340 feature
+tests and all 50 required cases with zero skips, including fresh App setup, missing-pip
+recovery and restart persistence. Transcription and model accuracy, Ollama/cloud AI,
+physical clean-device installation, Finder/Gatekeeper/Safari and representative
+English/Hebrew editing and listening acceptance remain pending. The beta preparation
+gate requires exact native provenance and explicit acceptance of those limits.
+
+A pristine Windows 10 Sandbox first run, after installing WinGet 1.29.380,
+private Python 3.12, FFmpeg and Ollama, failed a native DLL check (launcher exit 1,
+no health endpoint). Microsoft Visual C++ x64 runtime is a prerequisite that the
+launcher does not install. In a separate fresh Windows 10 Sandbox with WinGet
+1.29.380 and Microsoft-signed Visual C++ x64 runtime 14.51.36247.0 installed first,
+the unchanged launcher completed setup and `/api/health` reported `ok: true`,
+FFmpeg/FFprobe available, `1.2-beta` and no models. The runtime installer exited 0
+without a reboot; all three checked MSVC DLLs were absent before and present afterward.
+The final fresh-guest probe also received the homepage with HTTP 200, confirmed
+the default configuration was unchanged and found no model files. This establishes
+conditional setup and first HTTP launch, while full guest, physical-device,
+restart and UI acceptance remain pending.
+The [official Microsoft x64 runtime download](https://aka.ms/vc14/vc_redist.x64.exe)
+is linked separately in the English/Hebrew installation help.
+
+Retain both the historical 1.1 mirrors and all three October 15 public 1.2 archives.
+The previous production deployment is immutable at
+`https://cutroom-studio--mkiullrc9j.expo.app/`; its identifier is `mkiullrc9j`.
+An authorized rollback can use the existing pinned CLI:
+
+```sh
+npx --yes eas-cli@24.7.0 deploy:alias --prod --id=mkiullrc9j --non-interactive
+```
+
+### Historical GitHub download migration
 
 The 11 October 2026 migration publishes the existing 10 October package bytes as
 [v1.1-beta-20261011](https://github.com/VanoPeradze/cutroom/releases/tag/v1.1-beta-20261011).

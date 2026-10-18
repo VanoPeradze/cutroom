@@ -39,6 +39,20 @@ test("compact persistent timeline keeps all lanes visible and preserves seek coo
   assert.equal(timeline.timeFromEvent({ clientX: 300 }), 6);
 });
 
+test("extractive rough-cut permission is off by default and saved independently of the actual instruction", () => {
+  const { run } = settingsApp();
+  assert.equal(run("currentSettings().allow_extractive_rough_cut"), false);
+  run('state.project.settings.allow_extractive_rough_cut = true; state.project.settings.instruction = "Keep the full qualification."; hydrateSettings();');
+  assert.equal(run("elements.allowExtractiveRoughCut.checked"), true);
+  assert.equal(run("currentSettings().allow_extractive_rough_cut"), true);
+  assert.equal(run("currentSettings().instruction"), "Keep the full qualification.");
+  run("elements.allowExtractiveRoughCut.checked = false;");
+  assert.equal(run("currentSettings().allow_extractive_rough_cut"), false);
+  assert.equal(run("currentSettings().instruction"), "Keep the full qualification.");
+  const html = fs.readFileSync(path.join(__dirname, "../web/index.html"), "utf8");
+  assert.match(html, /id="allowExtractiveRoughCut" type="checkbox">/);
+});
+
 test("creator frame applies the camera role on top without changing YouTube output", async () => {
   const { run } = app();
   run(`

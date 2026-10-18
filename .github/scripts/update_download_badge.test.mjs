@@ -34,6 +34,29 @@ test('paginates both releases and assets and avoids duplicate asset counts', asy
   assert.equal(calls.length, 5);
 });
 
+test('counts the exact promoted review pair while excluding its draft, source and unrelated reviews', async () => {
+  const promotedWindows = 'CUTROOM-1.2-Beta-Windows-review-fe35453.zip';
+  const promotedCombined = 'CUTROOM-1.2-Beta-combined-review-fe35453.zip';
+  for (const name of [promotedWindows, promotedCombined]) assert.equal(installationZip.test(name), true);
+  for (const name of ['SOURCE-fe35453.zip', promotedWindows + '.sha256', promotedCombined + '.sha256',
+    'CUTROOM-1.2-Beta-Mac-review-fe35453.zip', 'CUTROOM-1.2-Beta-Windows-review-31ebfd0.zip',
+    'CUTROOM-1.2-Beta-combined-review-31ebfd0.zip', 'CUTROOM-1.2-Beta-Windows-review-fe35453-tests.zip',
+    'CUTROOM-1.2-Beta-Windows-review-fe35453.zip.extra']) {
+    assert.equal(installationZip.test(name), false, name);
+  }
+  const calls = [];
+  const api = async path => {
+    calls.push(path);
+    if (path.startsWith('releases?')) return [release(1), release(2, true)];
+    assert.ok(path.startsWith('releases/1/assets?'), 'Private draft assets must never be queried');
+    return [asset(11, promotedWindows, 7), asset(12, promotedCombined, 4),
+      asset(11, promotedWindows, 7), asset(13, 'SOURCE-fe35453.zip', 80),
+      asset(14, 'CUTROOM-1.2-Beta-combined-review-31ebfd0.zip', 90)];
+  };
+  assert.equal((await collectDownloads(api)).message, '174'); // 163 observed Expo + 11 published ZIP requests.
+  assert.equal(calls.length, 2);
+});
+
 test('a later API failure prevents every write and preserves the last good count', async () => {
   const api = async (path, options) => {
     assert.equal(options, undefined, 'No writes may occur after a partial count');

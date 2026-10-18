@@ -2,6 +2,14 @@
 
 **An exploratory Windows/macOS beta, with a Linux source development path, for feedback from creators and editors. Not a production release, security certification or promise of professional-quality automatic edits.** Public access to a download does not change those quality boundaries.
 
+## Source candidate: whole-utterance context and extractive rough cuts - 2026-10-17
+
+- Story selections retain the full original ASR utterances of their selected source units, including negations and qualifications. Displayed summaries quote those utterances verbatim. Source retention does not establish that the model understood their meaning or chose a coherent story.
+- Precision selection requires explicit source quotations for every planned role and required context chapter. Missing roles, unknown quotations and duplicate response keys fail without heuristic role recovery. A model may explicitly refuse a complete selection; that refusal stops before critic review or any rough-cut fallback. Valid source attribution stays provisional until the later semantic review.
+- **For Shorts, allow an extractive rough cut if Story AI cannot verify a story** is an optional Director setting, off by default. After an eligible failed story review, this path can retain the same selected source utterances in chronology, with only verified internal speech-free pauses shortened. It does not add excluded/optional footage, repeat footage or pad silence to fill a target. A selection that cannot meet the duration safely is refused with a source-specific duration explanation.
+- The result is labelled **EXTRACTIVE ROUGH CUT**, requires review, and retains the failed generative review. Custom story instructions and cross-gap references remain unverified. Unclear transcription, interrupted sentences and speaker identity still need listening and manual review before a polished export. This is a separate rough-cut path, not successful generative story acceptance.
+- These source changes require their own final-source, exact-package and platform validation. Historical counts below describe their stated revisions; check the downloaded manifest and release evidence for the actual build.
+
 ## 1.2 Beta - 2026-10-15
 
 - New in this version: caption items you can select, move, trim, hide and correct on the timeline; a mixer with typed values, preview loudness normalization and an export limiter at about −1 dBTP; length top-up and per-step length notes for Shorts; gameplay moments with **Uncertain** and **Not live gameplay**; text templates; and a local check of each export. Details: [changelog](../CHANGELOG.md) and the stage reports in `docs/plans/STAGE1` to `STAGE5`.

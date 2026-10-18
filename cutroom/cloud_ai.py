@@ -507,7 +507,17 @@ def chat(settings, payload, cancel_check=None, timeout=180):
         choice = response["choices"][0]
         if choice.get("finish_reason") != "stop":
             raise ValueError("incomplete response")
-        parsed = json.loads(choice["message"]["content"])
+        if payload.get("_reject_duplicate_keys") is True:
+            def unique_object(pairs):
+                value = {}
+                for key, item in pairs:
+                    if key in value:
+                        raise ValueError("Repeated structured response key")
+                    value[key] = item
+                return value
+            parsed = json.loads(choice["message"]["content"], object_pairs_hook=unique_object)
+        else:
+            parsed = json.loads(choice["message"]["content"])
         if not isinstance(parsed, dict):
             raise ValueError("object required")
         return parsed

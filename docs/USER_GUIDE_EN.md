@@ -239,7 +239,7 @@ In **Selected caption**, choose where a text change applies:
 
 A caption longer than about 84 characters (two lines) is split into several captions. When the speech has no word timing, the time of each part is estimated from its length.
 
-Limits: trimming a clip so that a caption loses its first word can give that caption a new identity, and its own change stops applying (Undo brings it back). Swapping the order of two uses of the same speech also swaps their caption changes.
+Caption-specific text and style changes follow the original clip and its surviving source speech when clips are reordered or trimmed. A caption ID can change after trimming without losing its saved change. If all of that speech is removed, its change remains dormant; restoring that speech in the same clip can restore the change. Replacing the source or transcript does not transfer earlier caption-specific changes to unrelated speech.
 
 ### Correct an AI transcript
 

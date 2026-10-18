@@ -118,7 +118,7 @@ function cacheElements() {
     "projectsButton", "projectsDialog", "dialogProjects", "dialogNewProject", "newProjectButton", "homeButton",
     "advancedButton", "advancedPanel", "closeAdvanced", "studioPreviewDock", "studioDirectorDock", "studioRenderButton", "studioDraftStatus", "studioPanelFraming", "renderButton", "resultRenderButton", "setupPanel", "setupSourceMixerDock", "analysisPanel", "resultPanel", "resultGrid", "previewColumn", "verdictColumn",
     "sourceSlotA", "sourceSlotB", "sourceInputA", "sourceInputB", "cancelUploadA", "cancelUploadB", "audioCalibration", "audioMeterCanvas", "recommendedThreshold", "useRecommendedThreshold", "silenceThreshold", "silenceThresholdOut", "preSilenceMin", "preSilenceMinOut", "preSilenceKeep", "preSilenceKeepOut", "audioCutEstimate", "audioProfileSummary", "editStyleChoices", "editStyleNote", "goalChoices", "goalExplainer", "goalExplainerTitle", "goalExplainerText", "durationGroup", "targetDuration", "durationMode", "durationOutput", "paceChoices", "paceNote",
-    "directorInstruction", "readiness", "generateButton", "jobMessage", "jobProgress", "cancelJobButton", "analysisError", "analysisErrorTitle", "analysisErrorMessage", "retryDirectorButton", "backFromErrorButton", "draftTitle", "draftSummary", "draftEngineBadge",
+    "directorInstruction", "allowExtractiveRoughCut", "readiness", "generateButton", "jobMessage", "jobProgress", "cancelJobButton", "analysisError", "analysisErrorTitle", "analysisErrorMessage", "retryDirectorButton", "backFromErrorButton", "draftTitle", "draftSummary", "draftEngineBadge",
     "reelCandidates", "reelCandidatesTitle", "reelCandidateList", "draftWarning", "draftWarningText", "reviewSpeechSettings", "gameplayMoments",
     "beforeDuration", "afterDuration", "decisionCount", "decisionList", "previewStage", "previewA", "previewB", "previewPaneA", "previewPaneB", "previewPlay", "playButton",
     "previewTime", "previewSeek", "previewMode", "previewModeHint", "previewCaption", "restartPreview", "backToBriefButton", "timelineCanvas", "timelineScroll", "timelineFit", "timelineZoomOut",
@@ -566,6 +566,9 @@ function bindEvents() {
   });
   elements.directorInstruction.addEventListener("input", () => {
     scheduleSettingsPatch({ requiresRebuild: true, reason: "brief" });
+  });
+  elements.allowExtractiveRoughCut?.addEventListener("change", () => {
+    scheduleSettingsPatch({ requiresRebuild: true, reason: "rough-cut fallback" });
   });
 
   for (const slot of ["A", "B"]) {
@@ -1198,6 +1201,7 @@ function hydrateSettings() {
   elements.durationMode.value = settings.duration_mode || "style";
   updateDurationControl(Number(settings.target_duration || 60));
   elements.directorInstruction.value = settings.instruction || "";
+  if (elements.allowExtractiveRoughCut) elements.allowExtractiveRoughCut.checked = settings.allow_extractive_rough_cut === true;
   const embeddedOption = elements.layoutSelect.querySelector('option[value="embedded_stack"]');
   const hasSecondSource = Boolean(state.project.sources?.B);
   if (embeddedOption) { embeddedOption.disabled = hasSecondSource; embeddedOption.hidden = hasSecondSource; }
@@ -1970,6 +1974,7 @@ function currentSettings() {
     target_duration: Number(elements.targetDuration.value),
     duration_mode: elements.durationMode?.value || "style",
     instruction: elements.directorInstruction.value.trim(),
+    allow_extractive_rough_cut: elements.allowExtractiveRoughCut?.checked === true,
     aspect: elements.aspectSelect.value,
     layout: elements.layoutSelect.value,
     resolution: elements.resolutionSelect.value,
@@ -2614,8 +2619,11 @@ function directorCompletionNotice(job, preserved = false) {
     && aiDraftStamp(job.result.draft) === aiDraftStamp(draft));
   const basicCleanup = current && (draft.engine === "deterministic_story_fallback"
     || (draft.quality_review?.warnings || []).some(warning => warning?.type === "story_ai_fallback"));
+  const extractive = current && (draft.editorial_authority === "extractive_rough_cut"
+    || draft.engine === "chronological_extractive_rough_cut"
+    || (draft.quality_review?.warnings || []).some(warning => warning?.type === "extractive_rough_cut"));
   const transcriptFallback = current && (state.project?.analysis?.warnings || []).some(warning => warning?.type === "transcript_fallback");
-  const fallbackWarning = transcriptFallback ? t("speechStyleFallbackReady") : current && draft.engine === "audio_visual_highlights" ? t("audioHighlightsReady")
+  const fallbackWarning = extractive ? t("extractiveRoughCutReady") : transcriptFallback ? t("speechStyleFallbackReady") : current && draft.engine === "audio_visual_highlights" ? t("audioHighlightsReady")
     : basicCleanup ? t("basicCleanupReady") : "";
   const review = draft?.duration_review;
   const targetShortfall = current && review?.duration_mode === "target" && review.shortfall === true;
@@ -3124,13 +3132,15 @@ function renderDraftWarning() {
   const engine = state.project?.draft?.engine;
   const audioHighlights = engine === "audio_visual_highlights";
   const fallback = engine === "deterministic_story_fallback";
+  const extractive = engine === "chronological_extractive_rough_cut"
+    || state.project?.draft?.editorial_authority === "extractive_rough_cut";
   const limitedHighlights = (state.project?.analysis?.warnings || []).some((warning) => warning.type === "limited_highlight_evidence");
   const transcriptFallback = (state.project?.analysis?.warnings || []).some((warning) => warning.type === "transcript_fallback");
   const reviewWarnings = (state.project?.draft?.quality_review?.warnings || [])
     .map((warning) => warning?.message).filter((message) => typeof message === "string" && message);
-  elements.draftWarning.hidden = !audioHighlights && !fallback && !limitedHighlights && !transcriptFallback && !reviewWarnings.length;
+  elements.draftWarning.hidden = !audioHighlights && !fallback && !extractive && !limitedHighlights && !transcriptFallback && !reviewWarnings.length;
   elements.draftWarningText.textContent = [
-    transcriptFallback ? t("transcriptFallbackActionable") : audioHighlights ? t("audioHighlightWarning") : fallback ? t("storyFallbackWarning") : "",
+    extractive ? t("extractiveRoughCutWarning") : transcriptFallback ? t("transcriptFallbackActionable") : audioHighlights ? t("audioHighlightWarning") : fallback ? t("storyFallbackWarning") : "",
     limitedHighlights ? t("limitedHighlightWarning") : "",
     ...reviewWarnings,
   ].filter(Boolean).join(" ");

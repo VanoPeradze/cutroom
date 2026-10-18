@@ -30,6 +30,25 @@ class StabilizationError(ValueError):
     """A safe, actionable stabilization failure for an editor job."""
 
 
+def _filesystem_path(path: Path) -> str:
+    """Use native Windows filesystem paths without changing FFmpeg arguments.
+
+    These paths have already been resolved by stabilize_video. Windows hard
+    linking and deletion can still enforce MAX_PATH on an otherwise valid
+    partial filename; extended paths avoid that limit without an OS setting.
+    """
+    value = str(path)
+    if os.name != "nt":
+        return value
+    if not path.is_absolute() or value.startswith("\\\\.\\"):
+        raise ValueError("Stabilization filesystem paths must be absolute file paths.")
+    if value.startswith("\\\\?\\"):
+        return value
+    if value.startswith("\\\\"):
+        return "\\\\?\\UNC\\" + value[2:]
+    return "\\\\?\\" + value
+
+
 def _run(args, *, timeout, cancel_check=None, cwd=None, threads=2):
     """Drain both pipes while bounded work remains cooperatively cancellable."""
     if cancel_check:
@@ -247,7 +266,7 @@ def stabilize_video(
             # Same-directory hard linking publishes a complete file atomically
             # and fails if another operation claimed this name in the meantime.
             try:
-                os.link(partial, target)
+                os.link(_filesystem_path(partial), _filesystem_path(target))
                 created_target = True
             except FileExistsError as exc:
                 raise StabilizationError("Choose a new output filename; an existing file will not be overwritten.") from exc
@@ -261,6 +280,6 @@ def stabilize_video(
         # Keep FFmpeg command/path diagnostics only in the chained traceback.
         raise StabilizationError("CUTROOM could not stabilize this video. The original is unchanged; try another short recording.") from exc
     finally:
-        partial.unlink(missing_ok=True)
+        Path(_filesystem_path(partial)).unlink(missing_ok=True)
         if created_target and not completed:
-            target.unlink(missing_ok=True)
+            Path(_filesystem_path(target)).unlink(missing_ok=True)

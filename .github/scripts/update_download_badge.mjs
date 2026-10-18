@@ -5,7 +5,9 @@ import {resolve} from 'node:path';
 
 export const repository = 'VanoPeradze/cutroom';
 export const statsBranch = 'download-stats';
-export const installationZip = /^CUTROOM-\d+\.\d+(?:\.\d+)?(?:-Beta)?(?:-(?:Windows|Mac))?\.zip$/;
+// The approved source-pinned review pair keeps its original names on promotion.
+// Do not broaden this exception to arbitrary review, source or test archives.
+export const installationZip = /^(?:CUTROOM-\d+\.\d+(?:\.\d+)?(?:-Beta)?(?:-(?:Windows|Mac))?|CUTROOM-1\.2-Beta-(?:Windows|combined)-review-fe35453)\.zip$/;
 export const expoBaseline = JSON.parse(readFileSync(new URL('../download-request-baseline.json', import.meta.url), 'utf8'));
 
 export function baselineRequests(baseline) {

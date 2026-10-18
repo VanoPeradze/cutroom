@@ -1,6 +1,7 @@
 """Release evidence must reject stale payloads and tests that never really ran."""
 from __future__ import annotations
 
+import ast
 import hashlib
 import importlib.util
 from pathlib import Path
@@ -101,7 +102,26 @@ def test_required_evidence_includes_waveform_stabilization_and_mixer_contracts()
         "test_real_frame_keys_at_native_geometry_before_downscale_and_preserves_source",
         "test_preset_rebuild_reports_preserved_manual_timeline_and_keeps_undo",
         "test_single_moment_style_does_not_join_distant_semantic_stories",
+        "test_rejected_required_slot_is_exposed_without_restoring_its_material",
+        "test_later_budget_slot_restoration_keeps_actual_removal",
+        "test_empty_critic_response_requires_bounded_review_before_applying_story",
     } <= checks.REQUIRED_CASES
+
+
+def test_required_evidence_names_exist_in_selected_test_sources():
+    selected = set()
+    for selector in checks.SELECTORS:
+        relative, *named = selector.split("::")
+        module = ast.parse((ROOT / relative).read_text(encoding="utf-8"))
+        functions = {node.name for node in module.body
+                     if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                     and node.name.startswith("test_")}
+        if named:
+            assert len(named) == 1 and named[0] in functions, selector
+            selected.add(named[0])
+        else:
+            selected.update(functions)
+    assert not (missing := checks.REQUIRED_CASES - selected), sorted(missing)
 
 
 def test_complete_parameterized_junit_is_successful_evidence(tmp_path):

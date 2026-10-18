@@ -32,6 +32,8 @@ jobs:
           node-version: '22'
       - name: Check repository presentation
         run: python scripts/check_repository.py
+      - name: Test offline review-candidate verification
+        run: python -m unittest discover -s packaging/tests -p 'test_*review*.py'
       - name: Run frontend regressions
         run: node --test tests/frontend*.test.cjs
       - name: Check website JavaScript

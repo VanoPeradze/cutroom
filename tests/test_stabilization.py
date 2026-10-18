@@ -8,7 +8,7 @@ import shutil
 import subprocess
 import sys
 import time
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from types import SimpleNamespace
 
 import pytest
@@ -244,6 +244,38 @@ def test_new_file_claimed_during_processing_is_never_overwritten(fake_backend, m
     with pytest.raises(stabilization.StabilizationError, match="existing"):
         stabilization.stabilize_video(source, target, settings)
     assert target.read_bytes() == b"another completed copy" and source.read_bytes() == b"original bytes"
+
+
+@pytest.mark.parametrize("value,expected", [
+    (r"C:\creator footage\copy.mp4", r"\\?\C:\creator footage\copy.mp4"),
+    ("C:\\creator \u05d1\u05d3\u05d9\u05e7\u05d4\\copy.mp4", "\\\\?\\C:\\creator \u05d1\u05d3\u05d9\u05e7\u05d4\\copy.mp4"),
+    (r"\\server\share\copy.mp4", r"\\?\UNC\server\share\copy.mp4"),
+    (r"\\?\C:\creator\copy.mp4", r"\\?\C:\creator\copy.mp4"),
+    (r"\\?\UNC\server\share\copy.mp4", r"\\?\UNC\server\share\copy.mp4"),
+])
+def test_windows_native_filesystem_path_forms_are_explicit(monkeypatch, value, expected):
+    stabilization = importlib.import_module("cutroom.stabilization")
+    # Pure paths test serialization on every platform without changing global
+    # os.name or invoking a network share/device.
+    monkeypatch.setattr(stabilization, "os", SimpleNamespace(name="nt"))
+    assert stabilization._filesystem_path(PureWindowsPath(value)) == expected
+
+
+@pytest.mark.parametrize("value", [r"creator\copy.mp4", r"C:copy.mp4", r"\\.\device\copy.mp4"])
+def test_windows_native_filesystem_path_rejects_relative_and_device_paths(monkeypatch, value):
+    stabilization = importlib.import_module("cutroom.stabilization")
+    monkeypatch.setattr(stabilization, "os", SimpleNamespace(name="nt"))
+    with pytest.raises(ValueError, match="absolute file paths"):
+        stabilization._filesystem_path(PureWindowsPath(value))
+
+
+def test_non_windows_filesystem_paths_remain_unchanged(monkeypatch):
+    stabilization = importlib.import_module("cutroom.stabilization")
+    monkeypatch.setattr(stabilization, "os", SimpleNamespace(name="posix"))
+    for value in (Path("relative.mp4"), Path("/creator footage/copy.mp4")):
+        assert stabilization._filesystem_path(value) == str(value)
+
+
 
 
 def test_invalid_output_clock_is_rejected_before_publication(fake_backend, monkeypatch):

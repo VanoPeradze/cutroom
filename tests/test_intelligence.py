@@ -1,6 +1,38 @@
 from __future__ import annotations
 
+import json
+import pytest
+
 from cutroom.intelligence import enrich_segments, language_from_text, similarity, deterministic_edit
+
+
+@pytest.fixture(autouse=True)
+def _no_real_story_transport(monkeypatch):
+    from cutroom import intelligence
+    def forbid(*_args, **_kwargs):
+        raise AssertionError("Intelligence unit tests must stub every model request.")
+    monkeypatch.setattr(intelligence, "open_ollama", forbid)
+
+
+def _final_evidence_response(payload):
+    source = json.loads(payload["messages"][1]["content"])
+    roles, keep = {}, set()
+    by_id = {row["id"]: row for row in source["source_evidence"]}
+    choice_to_id = {row["choice"]: row["evidence_id"] for row in source["source_evidence_choices"]}
+    id_to_choice = {row["evidence_id"]: row["choice"] for row in source["source_evidence_choices"]}
+    for purpose, requirement in source["role_requirements"].items():
+        primary_ids = [source["evidence_ids_by_chapter"][requirement["allowed_primary_chapter_ids"][0]][0]]
+        context_ids = [source["evidence_ids_by_chapter"][chapter_id][0]
+                       for chapter_id in requirement["required_context_chapter_ids"]]
+        primary = [id_to_choice[identifier] for identifier in primary_ids]
+        context = [id_to_choice[identifier] for identifier in context_ids]
+        roles[purpose] = {"primary_anchor_choice": primary[0], "additional_primary_evidence_choices": primary[1:],
+                          "context_evidence_choices": context}
+        keep.update(by_id[choice_to_id[choice]]["beat_id"] for choice in primary + context)
+    keep.update(source["sticky_critic_context_beat_ids"])
+    return {"verdict": "fit", "keep_beat_ids": sorted(keep),
+            "released_optional_beat_ids": [value for value in source["current_selected_beat_ids"] if value not in keep],
+            "role_selections": roles}
 
 
 def segment(identifier, start, end, text):
@@ -210,31 +242,25 @@ def test_hierarchical_story_pipeline_runs_chapters_outline_plan_selection_and_cr
                 {"purpose": "ending", "chapter_ids": [ids[2]], "desired_seconds": 15, "reason": "finish", "required_context_chapter_ids": []},
             ]}
         if "precision editor" in system:
-            beats = user["candidate_beats"]
-            by_chapter = {}
-            for beat in beats:
-                # Chapter IDs are available through the plan slots; choose one valid beat per slot in order.
-                pass
-            slots = user["plan"]["slots"]
-            selections = []
-            chosen = []
-            for slot_index, slot in enumerate(slots):
-                allowed = set(slot["chapter_ids"] + slot.get("required_context_chapter_ids", []))
-                chapter_lookup = {}
-                for chapter in user["chapter_summaries"]:
-                    chapter_lookup[chapter["id"]] = set(chapter.get("key_beat_ids", []))
-                candidate = next((beat["id"] for beat in beats if any(beat["id"] in chapter_lookup.get(ch, set()) for ch in allowed)), None)
-                if candidate is None:
-                    candidate = beats[min(slot_index, len(beats)-1)]["id"]
-                selections.append({"slot_index": slot_index, "beat_ids": [candidate]})
-                chosen.append(candidate)
-            return {"slot_selections": selections, "highlight_beat_ids": chosen, "opening_beat_id": chosen[0], "closing_beat_id": chosen[-1], "title": "Story", "summary": "Coherent"}
+            # Select only the exact plan-bound choice domains in this synthetic contract.
+            schema = payload["format"]
+            roles = {}
+            for purpose, role in schema["anyOf"][0]["properties"]["role_selections"]["properties"].items():
+                properties = role["properties"]
+                choice = schema["$defs"][properties["primary_anchor_choice"]["$ref"].split("/")[-1]]["enum"][0]
+                context = {chapter_id: [schema["$defs"][domain["items"]["$ref"].split("/")[-1]]["enum"][0]]
+                           for chapter_id, domain in properties["context_evidence_choices_by_chapter"]["properties"].items()}
+                roles[purpose] = {"primary_anchor_choice": choice, "additional_primary_evidence_choices": [],
+                                  "context_evidence_choices_by_chapter": context}
+            return {"verdict": "fit", "role_selections": roles, "highlight_beat_ids": [], "title": "Story", "summary": "Coherent"}
         if "continuity critic" in system:
             return {"verdict": "pass", "add_beat_ids": [], "remove_beat_ids": [], "issues": [], "summary": "Continuity is sound"}
+        if "final semantic budget editor" in system:
+            return _final_evidence_response(payload)
         raise AssertionError(system)
 
     monkeypatch.setattr(intelligence, "_call_ollama_strict", fake_call)
-    editorial, engine = intelligence.plan_edit(rows, Dummy(), {"goal": "short", "target_duration": 60, "language": "en", "performance_mode": "balanced"})
+    editorial, engine = intelligence.plan_edit(rows, Dummy(), {"goal": "short", "target_duration": 100, "language": "en", "performance_mode": "balanced"})
     assert engine == "ollama_hierarchical_story"
     hierarchy = editorial["story_hierarchy"]
     assert hierarchy["chapter_count"] >= 3
@@ -485,7 +511,7 @@ def test_story_hierarchy_cache_reuses_chapters_and_outline(monkeypatch):
         "story_arc": [{"chapter_id": ch["id"], "function": "development", "why_it_matters": "cached"} for ch in chapters],
         "must_keep_chapter_ids": [], "optional_chapter_ids": [], "dependency_pairs": [],
     }
-    brief = {"goal": "short", "target_duration": 180, "language": "en", "performance_mode": "balanced"}
+    brief = {"goal": "short", "duration_mode": "style", "target_duration": 180, "language": "en", "performance_mode": "balanced"}
     cache = {
         "cache_fingerprint": intelligence.story_cache_fingerprint(enriched, brief, "qwen3.5:4b"),
         "cache_pipeline": intelligence.STORY_CACHE_PIPELINE,
@@ -497,7 +523,7 @@ def test_story_hierarchy_cache_reuses_chapters_and_outline(monkeypatch):
     monkeypatch.setattr(intelligence, "_summarize_story_chapters", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("chapter summaries should be cached")))
     monkeypatch.setattr(intelligence, "_build_global_outline", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("outline should be cached")))
 
-    def fake_plan(_settings, _summaries, _outline, _brief, _model, progress=None):
+    def fake_plan(_settings, _summaries, _outline, _brief, _model, progress=None, *_args):
         ids = [chapters[0]["id"], chapters[len(chapters)//2]["id"], chapters[-1]["id"]]
         return {"narrative": "cached hierarchy, new target plan", "slots": [
             {"purpose": "hook", "chapter_ids": [ids[0]], "desired_seconds": 15, "reason": "", "required_context_chapter_ids": []},
@@ -507,13 +533,19 @@ def test_story_hierarchy_cache_reuses_chapters_and_outline(monkeypatch):
 
     monkeypatch.setattr(intelligence, "_build_story_plan", fake_plan)
 
-    def fake_select(_settings, chapters_arg, summaries_arg, outline_arg, plan, brief, model, progress=None):
+    def fake_select(_settings, chapters_arg, summaries_arg, outline_arg, plan, brief, model, progress=None, *_args):
         candidates = intelligence._candidate_beats_for_plan(chapters_arg, plan)
-        chosen = [candidates[0]["id"], candidates[len(candidates)//2]["id"], candidates[-1]["id"]]
-        return {"keep_beat_ids": chosen, "highlight_beat_ids": chosen, "opening_beat_id": chosen[0], "closing_beat_id": chosen[-1], "title": "Cached story", "summary": ""}, candidates
+        chosen = [next(chapter["beats"][0]["id"] for chapter in chapters_arg if chapter["id"] in slot["chapter_ids"])
+                  for slot in plan["slots"]]
+        slot_map = [{"slot_index": index, "purpose": slot["purpose"], "primary_beat_ids": [identifier], "context_beat_ids": [],
+                     "beat_ids": [identifier], "role_evidence": "The selected complete source idea supports " + slot["purpose"] + "."}
+                    for index, (slot, identifier) in enumerate(zip(plan["slots"], chosen))]
+        return {"keep_beat_ids": chosen, "slot_map": slot_map, "semantic_mapping_verified": True,
+                "highlight_beat_ids": chosen, "opening_beat_id": chosen[0], "closing_beat_id": chosen[-1], "title": "Cached story", "summary": ""}, candidates
 
     monkeypatch.setattr(intelligence, "_select_story_beats", fake_select)
-    monkeypatch.setattr(intelligence, "_critic_story_selection", lambda _settings, selection, candidates, outline, plan, brief, model, progress=None: {**selection, "critic": {"verdict": "pass"}})
+    monkeypatch.setattr(intelligence, "_critic_story_selection", lambda _settings, selection, candidates, outline, plan, brief, model, progress=None, *_args: {**selection, "critic": {"verdict": "pass"}})
+    monkeypatch.setattr(intelligence, "_call_ollama_story_pass", lambda _settings, payload, *_args: _final_evidence_response(payload))
 
     decision, hierarchy = intelligence.hierarchical_story_edit(beats, enriched, Dummy(), brief, story_cache=cache)
     assert decision["story_ranges"]
@@ -577,7 +609,7 @@ def test_story_cache_rejects_partial_duplicate_foreign_and_malformed_content():
     )
 
 
-def test_precision_selection_recovers_missing_schema_from_ai_plan(monkeypatch):
+def test_precision_selection_rejects_missing_schema_without_recovering_from_plan(monkeypatch):
     from cutroom import intelligence
 
     beats = [
@@ -602,19 +634,14 @@ def test_precision_selection_recovers_missing_schema_from_ai_plan(monkeypatch):
         lambda *_args, **_kwargs: {"error": "schema drift", "suggestion": "retry"},
     )
 
-    selection, candidates = intelligence._select_story_beats(
-        object(), chapters, summaries, {}, plan,
-        {"target_duration": 60, "performance_mode": "lite"}, "qwen3.5:4b",
-    )
-
-    assert [item["slot_index"] for item in selection["slot_map"]] == [0, 1]
-    assert selection["keep_beat_ids"] == ["b1", "b2"]
-    assert selection["selection_mode"] == "ai_plan_recovery"
-    assert selection["recovered_slot_indexes"] == [0, 1]
-    assert candidates == beats
+    with pytest.raises(intelligence.StoryPlanningError, match="complete precision"):
+        intelligence._select_story_beats(
+            object(), chapters, summaries, {}, plan,
+            {"target_duration": 60, "performance_mode": "lite"}, "qwen3.5:4b",
+        )
 
 
-def test_precision_recovery_uses_distinct_beats_for_slots_in_same_chapter(monkeypatch):
+def test_precision_does_not_assign_distinct_beats_after_invalid_json(monkeypatch):
     from cutroom import intelligence
 
     beats = [
@@ -633,14 +660,11 @@ def test_precision_recovery_uses_distinct_beats_for_slots_in_same_chapter(monkey
         lambda *_args, **_kwargs: (_ for _ in ()).throw(intelligence.StoryPlanningError("invalid JSON")),
     )
 
-    selection, _ = intelligence._select_story_beats(
-        object(), chapters, summaries, {}, plan,
-        {"target_duration": 60, "performance_mode": "lite"}, "qwen3.5:4b",
-    )
-
-    assert set(selection["keep_beat_ids"]) == {"b1", "b2"}
-    assert selection["selection_mode"] == "ai_plan_recovery"
-    assert selection["recovery_reason"] == "invalid JSON"
+    with pytest.raises(intelligence.StoryPlanningError, match="invalid JSON"):
+        intelligence._select_story_beats(
+            object(), chapters, summaries, {}, plan,
+            {"target_duration": 60, "performance_mode": "lite"}, "qwen3.5:4b",
+        )
 
 
 def test_story_budget_fit_prunes_whole_beats_and_preserves_every_plan_slot():

@@ -41,6 +41,27 @@ def test_health_and_project_lifecycle(app):
     assert client.delete(f"/api/projects/{project['id']}").status_code == 200
 
 
+@pytest.mark.parametrize("invalid", ["true", 1, None, {}])
+def test_extractive_rough_cut_opt_in_is_boolean_and_preserves_the_actual_instruction(app, invalid):
+    client = app.test_client()
+    project = client.post("/api/projects", json={"name": "Synthetic rough-cut consent"}).get_json()["project"]
+    url = f"/api/projects/{project['id']}"
+    instruction = "Keep the original qualification with the claim."
+    allowed = client.patch(url, json={"settings": {"allow_extractive_rough_cut": True, "instruction": instruction}})
+    assert allowed.status_code == 200
+    settings = allowed.get_json()["project"]["settings"]
+    assert settings["allow_extractive_rough_cut"] is True
+    assert settings["instruction"] == instruction
+    rejected = client.patch(url, json={"settings": {"allow_extractive_rough_cut": invalid}})
+    assert rejected.status_code == 400
+    after = client.get(url).get_json()["project"]["settings"]
+    assert after["allow_extractive_rough_cut"] is True
+    assert after["instruction"] == instruction
+    disabled = client.patch(url, json={"settings": {"allow_extractive_rough_cut": False}})
+    assert disabled.status_code == 200
+    assert disabled.get_json()["project"]["settings"]["allow_extractive_rough_cut"] is False
+
+
 def test_favicon_is_explicit_and_legacy_path_is_supported(app):
     client = app.test_client()
     index = client.get("/")
