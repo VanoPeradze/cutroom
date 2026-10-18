@@ -91,8 +91,12 @@ test('public beta retains exact automated native provenance and visible pending 
   assert.match(html,/Full physical-device, restart and UI acceptance remain pending\./);
   assert.equal(release.windows_fresh_install_acceptance,'failed-native-dll-check');
   assert.equal(release.windows_fresh_install.result,'failed');
-  assert.equal(release.windows_conditional_setup.result,'setup-and-startup-health-observed-pass');
-  assert.equal(release.windows_conditional_setup.full_guest_acceptance,'pending');
+  assert.equal(release.windows_conditional_setup.result,'isolated_guest_install_and_first_http_launch_passed_with_explicit_winget_and_msvc_prerequisites');
+  assert.equal(release.windows_conditional_setup.scoped_guest_acceptance,'passed');
+  assert.equal(release.windows_conditional_setup.full_guest_acceptance,'not-established-beyond-scoped-install-and-first-http');
+  assert.deepEqual(release.windows_conditional_setup.homepage,{status_code:200,contains_cutroom:true});
+  assert.equal(release.windows_conditional_setup.configuration.before_sha256,release.windows_conditional_setup.configuration.after_sha256);
+  for(const field of ['physical_device_acceptance','restart_acceptance','ui_acceptance']) assert.equal(release.windows_conditional_setup[field],'pending');
   assert.deepEqual(release.windows_conditional_setup.health.models,[]);
   const runtimeHelp=linksTo(region('details','install-help'),'https://aka.ms/vc14/vc_redist.x64.exe');
   assert.equal(runtimeHelp.length,1);

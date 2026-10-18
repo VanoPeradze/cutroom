@@ -125,9 +125,10 @@ launcher does not install. In a separate fresh Windows 10 Sandbox with WinGet
 the unchanged launcher completed setup and `/api/health` reported `ok: true`,
 FFmpeg/FFprobe available, `1.2-beta` and no models. The runtime installer exited 0
 without a reboot; all three checked MSVC DLLs were absent before and present afterward.
-The external test harness then failed on a read-only PowerShell HOME variable before
-homepage/config follow-up checks. This establishes conditional setup and startup
-health, while full guest, physical-device, restart and UI acceptance remain pending.
+The final fresh-guest probe also received the homepage with HTTP 200, confirmed
+the default configuration was unchanged and found no model files. This establishes
+conditional setup and first HTTP launch, while full guest, physical-device,
+restart and UI acceptance remain pending.
 The [official Microsoft x64 runtime download](https://aka.ms/vc14/vc_redist.x64.exe)
 is linked separately in the English/Hebrew installation help.
 

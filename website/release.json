@@ -111,7 +111,7 @@
     "health_endpoint_available": false,
     "prerequisite": "Microsoft Visual C++ x64 runtime",
     "prerequisite_installed_by_launcher": false,
-    "workaround_validation": "setup-and-startup-health-observed-pass"
+    "workaround_validation": "isolated_guest_install_and_first_http_launch_passed_with_explicit_winget_and_msvc_prerequisites"
   },
   "windows_conditional_setup": {
     "environment": "Fresh Windows 10 Sandbox",
@@ -130,19 +130,38 @@
         "download_url": "https://aka.ms/vc14/vc_redist.x64.exe"
       }
     },
-    "result": "setup-and-startup-health-observed-pass",
+    "result": "isolated_guest_install_and_first_http_launch_passed_with_explicit_winget_and_msvc_prerequisites",
     "setup_completed": true,
     "health": {
       "ok": true,
       "ffmpeg": true,
       "ffprobe": true,
       "version": "1.2-beta",
-      "models": []
+      "models": [],
+      "ollama": {
+        "available": true,
+        "models": []
+      }
     },
-    "post_health_harness_result": "External harness failed on read-only PowerShell HOME variable before homepage/config follow-up checks; fresh retry pending.",
-    "full_guest_acceptance": "pending",
+    "post_health_harness_result": "passed-final-fresh-guest-probe",
+    "full_guest_acceptance": "not-established-beyond-scoped-install-and-first-http",
     "physical_device_acceptance": "pending",
     "restart_acceptance": "pending",
-    "ui_acceptance": "pending"
+    "ui_acceptance": "pending",
+    "completed_at": "2026-10-18T16:04:10.3332278Z",
+    "scoped_guest_acceptance": "passed",
+    "homepage": {
+      "status_code": 200,
+      "contains_cutroom": true
+    },
+    "setup_marker_present": true,
+    "python_version": "Python 3.12.14",
+    "configuration": {
+      "before_sha256": "078779d5631d6e43ed783cb08c273ea46f73d903ef910d265d0dbecaa8c33152",
+      "after_sha256": "078779d5631d6e43ed783cb08c273ea46f73d903ef910d265d0dbecaa8c33152",
+      "unchanged": true
+    },
+    "final_model_files": 0,
+    "models_downloaded_or_run": false
   }
 }
