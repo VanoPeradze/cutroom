@@ -212,6 +212,9 @@ jobs:
         with:
           python-version: '3.12'
           architecture: ${{ matrix.architecture }}
+      - name: Use canonical runner temporary storage for review checks
+        shell: bash
+        run: echo "TMPDIR=$(cd "$RUNNER_TEMP" && pwd -P)" >> "$GITHUB_ENV"
       - name: Test review-only provenance, orchestration and transport offline
         timeout-minutes: 3
         run: python -B -X utf8 -m unittest discover -s packaging/tests -p 'test_*review*.py'
