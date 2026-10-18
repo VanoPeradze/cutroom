@@ -212,6 +212,9 @@ jobs:
         with:
           python-version: '3.12'
           architecture: ${{ matrix.architecture }}
+      - name: Test review-only provenance, orchestration and transport offline
+        timeout-minutes: 3
+        run: python -B -X utf8 -m unittest discover -s packaging/tests -p 'test_*review*.py'
       - name: Fetch only the three explicitly pinned unpublished assets
         timeout-minutes: 5
         shell: bash
