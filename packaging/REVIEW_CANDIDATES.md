@@ -12,6 +12,12 @@ commit/tree. No record contains a download URL. Keep the record under review;
 do not regenerate hashes to accept an unexplained change. A historical record
 can only verify its own matching source and artifacts.
 
+The current private pair is anchored by [fe35453.json](review-candidates/fe35453.json)
+for source `fe35453119305a33e0890a25e627a4fa47ad353d`. Its source/identity pass
+keeps native acceptance and release qualification pending. See the
+[qualification summary](../docs/plans/SEMANTIC_ACCEPTANCE_2026-10-17.md) for the
+separate source, feature and human acceptance results.
+
 The command uses Python's standard library and local Git objects only. It never
 imports or executes application or builder code, installs dependencies, downloads
 `tiny.en` or any other model, calls a server, or accesses a remote service.

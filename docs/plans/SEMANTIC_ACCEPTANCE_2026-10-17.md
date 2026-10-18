@@ -43,24 +43,41 @@ acceptance.
   source speech in the original clip across trimming and reordering.
 - Harden Windows stabilization publication at long temporary paths while
   preserving atomic no-overwrite publication, cancellation and owned cleanup.
-  Validation of this repair is in progress.
+- Align three stale required-test references with the current, stricter critic
+  contracts. Keep all 50 requirements, selectors and report validation intact;
+  check required names against their selected test sources to prevent drift.
 
 ## Validation
 
 | Check | Recorded outcome |
 | --- | --- |
-| Previous complete source regression | 2,715 Python passes, two expected Windows platform skips; 623 frontend passes |
-| Precision and compatibility regressions | 468 passed |
-| Standalone hierarchical smoke | Passed with simulated model responses and real source/duration validators |
-| Offline candidate identity | Matching source, Windows and combined archives verified; unpublished review only |
-| Local Windows runtime | Cached-dependency setup, manual editing, captioned export and restart passed; not clean-PC acceptance |
+| Final frozen source regression | 2,729 Python passes, two expected Windows platform skips; 623 frontend passes |
+| Earlier precision and compatibility regressions | 468 passed |
+| Earlier standalone hierarchical smoke | Passed with simulated model responses and real source/duration validators |
+| Offline candidate identity | Final source, Windows and combined archives verified; unpublished review only |
+| Earlier Windows runtime | Cached-dependency setup, manual editing, captioned export and restart passed; setup and launchers unchanged in final pair; not clean-PC acceptance |
+| Windows stabilization path regressions | Four native cases passed in the final full suite; all 36 stabilization cases retained across two modules |
 | Previous required extracted-feature gate | 330 passed, one failed, zero skipped |
-| Current stabilization repair and final matching candidate | Pending |
+| Intermediate extracted-feature gate | 344 tests passed; report gate failed on three stale required-test references, corrected in the final source |
+| Final matching extracted-feature gate | 340 passed, all 50 required cases validated, zero skipped, deselected or expected failures |
+
+The final review source is `fe35453119305a33e0890a25e627a4fa47ad353d`.
+Its [explicit provenance record](../../packaging/review-candidates/fe35453.json)
+pins all 389 source files and the exact Windows and combined ZIPs. The complete
+suite collected 2,731 cases across 128 Python test modules, without deselections
+or expected failures. Frontend and focused counts overlap this suite.
+
+The four native Windows regressions retain the original fixture, test bodies
+and assertions in a separate full-suite module. Nine portable path cases remain
+in the shared feature selection, keeping Windows-only skips out of the native
+Mac feature gate. This organization does not establish native Mac execution.
 
 The previous extracted-feature failure was a reproducible Windows filesystem
 boundary: valid stabilized output could not be published when the generated
-temporary path reached 260 UTF-16 units. The source fix must pass that original
-case and focused native regressions; shortening the test path is not acceptance.
+temporary path reached 260 UTF-16 units. The final gate passed with the original
+geometry and unchanged selectors/report validation. This was Windows execution
+of the combined ZIP's extracted Mac App; it does not establish native macOS
+acceptance. Shortening the test path was not used to obtain a pass.
 
 Package checks verify exact source and manifest identities, the complete payload
 inventory, fresh defaults, privacy exclusions, permissions and platform overlays.
@@ -74,17 +91,15 @@ fresh generative editing quality.
 
 ## Remaining release gates
 
-1. Pass the stabilization repair regressions and required feature gate on the
-   final matching source/package pair.
-2. Complete exact-candidate native Mac Apple Silicon/Intel setup, restart,
+1. Complete exact-candidate native Mac Apple Silicon/Intel setup, restart,
    export and transcription checks. Existing native CI still selects an older
    approved baseline; source-only passes are not current-package acceptance.
-3. Resolve the separate CI-only `tiny.en` download approval. No new model
+2. Resolve the separate CI-only `tiny.en` download approval. No new model
    download is authorized by source validation or Git synchronization.
-4. Obtain fresh accepted Hebrew generative planning under unchanged source,
+3. Obtain fresh accepted Hebrew generative planning under unchanged source,
    exclusion, order and duration rules before claiming that capability.
    Extractive rough-cut review is a separate, narrower result.
-5. Complete clean-device Windows and physical Mac/browser acceptance, plus
+4. Complete clean-device Windows and physical Mac/browser acceptance, plus
    representative speech, caption, mixer and timeline listening/editing review.
    Follow [the manual protocol](../../packaging/REVIEW_ACCEPTANCE.md).
 
