@@ -72,24 +72,76 @@ source allowlist. Adding this maintainer gate does not change or rebuild the
 frozen application candidate. Focused synthetic/provenance regressions run with:
 
 ```sh
-python -B -X utf8 -m unittest discover -s packaging/tests -p test_review_candidate.py
+python -B -X utf8 -m unittest discover -s packaging/tests -p 'test_*review*.py'
 ```
 
-## Remaining native/public gates
+## Explicit native review path
 
-The existing native CI still selects the approved public baseline. That older
-baseline/source comparison is unchanged and can still fail for this newer
-candidate. A passing local review report does not turn that workflow green or
-skip its checks. The native workflow and current/historical approved pins remain
-unchanged. Repository checks run the verifier's synthetic tests; they do not
-consume or publish the private review pair.
+`native_review_candidate.py` is maintainer orchestration outside the frozen App
+inputs. It first proves that the selected record is the unchanged committed
+`HEAD:packaging/review-candidates/*.json` blob, then runs the full identity gate
+again against all three original ZIPs and the current checkout. A saved PASS
+report cannot authorize execution. Only after qualification does it create a
+new report directory and derive an unpublished Windows baseline from the pinned
+archive and verified manifest. No approved pin or application input is edited.
 
-The same offline verifier can run on a native machine when the exact local ZIPs,
-source archive, record and Git objects are provided there. This qualifies source
-identity only. The existing CI has no local-path review-pair input; transporting
-private artifacts into CI would require a separately authorized artifact/workflow
-path, while public immutable staging/pin changes require release authorization.
-Neither transport was performed here.
+```sh
+python -B -X utf8 packaging/native_review_candidate.py \
+  --record packaging/review-candidates/fe35453.json --repo . \
+  --windows-zip /review/inputs/CUTROOM-1.2-Beta-Windows-review-fe35453.zip \
+  --combined-zip /review/inputs/CUTROOM-1.2-Beta-combined-review-fe35453.zip \
+  --source-archive /review/inputs/SOURCE-fe35453.zip \
+  --output-dir /review/new-reports
+```
+
+Default execution only qualifies and prepares local JSON; it does not import App
+code, install anything, or run a model. `--native` explicitly enables native
+macOS/Python 3.12 checks through the existing unchanged strict package verifier,
+FFmpeg/source checks, extracted feature gate, and installation/restart helpers.
+Normal fresh installation and missing-pip recovery are separate strict scenarios;
+neither receives the previous-release restart exception. Archive/source/record
+identity and all six approved pins are checked again around execution. Reports
+remain unpublished and never assert human acceptance or release qualification.
+`--transcribe` requires `--native`, defaults off, and separately permits the
+existing synthetic-English `tiny.en` smoke. It does not establish Hebrew speech
+quality or human editorial acceptance.
+
+The existing `macos.yml` adds an explicit manual review mode. Supply
+`review_release_id` only for the expected **draft**, unpublished
+`cutroom-review-fe35453` release targeting the full frozen source commit. Its
+committed record, exact three asset names and sizes, optional GitHub SHA-256
+digests, release/asset IDs and repository API URLs must match before download.
+Authenticated downloads use asset IDs; metadata download URLs are never used.
+Fresh raw ZIP/Git qualification then precedes dependency installation.
+
+The two standard native runners use the exact downloaded ZIPs without rebuilding
+them. `review_transcribe` defaults **false** and is independent of the historical
+workflow's `transcribe` input. Only JSON evidence is retained for seven days;
+candidate ZIPs, speech and model files are not uploaded as Actions artifacts.
+This path requires an explicitly authorized draft upload and manual dispatch.
+Preparing this code does not create a release, upload assets, dispatch a run or
+authorize a model download.
+
+The ordinary push/PR/public-baseline job and all current/historical approved pins
+keep their existing checks. On source `596dcb2`, both native architectures passed
+2,722 source tests (nine skips) and 623 frontend tests, then failed the unchanged
+old-baseline comparison at `cutroom/caption_items.py`. All subsequent extracted
+feature, install, restart and transcription steps were skipped. A separate manual
+review result must not be presented as a successful public-baseline run.
+
+For this pair, transfer the original Windows ZIP (3,708,965 bytes), combined ZIP
+(7,452,329 bytes) and source ZIP (7,145,010 bytes): **18,306,304 bytes** total.
+Use the 975-byte record from the trusted checkout and retain the frozen Git
+objects. Do not upload private raw test evidence, personal media or models.
+
+Local verification on 2026-10-18 passed all 69 synthetic provenance,
+orchestration and transport regressions. The original `fe35453` pair also passed
+fresh preparation, strict combined-package verification with the derived private
+baseline, and source agreement for all 77 product files per platform. Ordinary
+verification still rejected it with `Unexpected Windows baseline`. The three
+original archive hashes, original verifier and all six public pins stayed
+unchanged. No new native run, installation, model operation, artifact upload or
+workflow dispatch was performed by these local checks.
 
 Native Intel/Apple Silicon execution of the exact candidate, required setup and
 restart checks, `tiny.en` transcription, clean-machine Windows installation,

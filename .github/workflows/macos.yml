@@ -8,6 +8,16 @@ on:
         required: false
         default: true
         type: boolean
+      review_release_id:
+        description: Optional numeric ID of the unpublished cutroom-review-fe35453 draft release
+        required: false
+        default: ''
+        type: string
+      review_transcribe:
+        description: For explicit review mode only, allow CI-only tiny.en download and synthetic transcription
+        required: false
+        default: false
+        type: boolean
   push:
     branches: [master]
     paths:
@@ -38,11 +48,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: macos-${{ github.workflow }}-${{ github.ref }}
+  group: macos-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name == 'workflow_dispatch' && inputs.review_release_id != '' && 'review' || 'public' }}
   cancel-in-progress: true
 
 jobs:
   validate:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.review_release_id == '' }}
     name: macOS 15 / ${{ matrix.architecture }}
     strategy:
       fail-fast: false
@@ -168,4 +179,108 @@ jobs:
             ${{ runner.temp }}/macos-candidate.json
           if-no-files-found: error
           compression-level: 0
+          retention-days: 7
+
+  review:
+    name: Unpublished candidate / macOS 15 / ${{ matrix.architecture }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.review_release_id != '' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            architecture: arm64
+          - runner: macos-15-intel
+            architecture: x64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    env:
+      CUTROOM_NO_BROWSER: '1'
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+      HOMEBREW_NO_INSTALL_CLEANUP: '1'
+      HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: '1'
+      PIP_DISABLE_PIP_VERSION_CHECK: '1'
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - name: Check out review orchestration and frozen Git objects
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+          architecture: ${{ matrix.architecture }}
+      - name: Fetch only the three explicitly pinned unpublished assets
+        timeout-minutes: 5
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REVIEW_RELEASE_ID: ${{ inputs.review_release_id }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REPOSITORY" == 'VanoPeradze/cutroom' ]]
+          [[ "$REVIEW_RELEASE_ID" =~ ^[1-9][0-9]*$ ]]
+          mkdir "$RUNNER_TEMP/review-inputs"
+          gh api "repos/$GITHUB_REPOSITORY/releases/$REVIEW_RELEASE_ID" > "$RUNNER_TEMP/review-release.json"
+          python -B -X utf8 packaging/review_asset_metadata.py \
+            --metadata "$RUNNER_TEMP/review-release.json" \
+            --record packaging/review-candidates/fe35453.json --repo . \
+            --release-id "$REVIEW_RELEASE_ID" > "$RUNNER_TEMP/review-assets.tsv"
+          while IFS=$'\t' read -r asset_id asset_name; do
+            gh api -H 'Accept: application/octet-stream' \
+              "repos/$GITHUB_REPOSITORY/releases/assets/$asset_id" \
+              > "$RUNNER_TEMP/review-inputs/$asset_name"
+          done < "$RUNNER_TEMP/review-assets.tsv"
+      - name: Qualify exact source and archives before installing dependencies
+        timeout-minutes: 3
+        shell: bash
+        run: |
+          python -B -X utf8 packaging/native_review_candidate.py \
+            --record packaging/review-candidates/fe35453.json --repo . \
+            --windows-zip "$RUNNER_TEMP/review-inputs/CUTROOM-1.2-Beta-Windows-review-fe35453.zip" \
+            --combined-zip "$RUNNER_TEMP/review-inputs/CUTROOM-1.2-Beta-combined-review-fe35453.zip" \
+            --source-archive "$RUNNER_TEMP/review-inputs/SOURCE-fe35453.zip" \
+            --output-dir "$RUNNER_TEMP/review-preflight"
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+      - name: Install compatible FFmpeg 7 with subtitle support from official Homebrew
+        timeout-minutes: 10
+        shell: bash
+        run: |
+          brew install ffmpeg@7
+          echo "$(brew --prefix ffmpeg@7)/bin" >> "$GITHUB_PATH"
+      - name: Install isolated feature-test dependencies
+        timeout-minutes: 8
+        shell: bash
+        run: |
+          python -m venv "$RUNNER_TEMP/cutroom-review-venv"
+          "$RUNNER_TEMP/cutroom-review-venv/bin/python" -m pip install -r tests/requirements.txt -c packaging/mac/constraints-macos.txt
+      - name: Run unchanged strict feature and native installation gates on the exact candidate
+        timeout-minutes: 40
+        shell: bash
+        env:
+          REVIEW_TRANSCRIBE: ${{ inputs.review_transcribe && '1' || '0' }}
+          CUTROOM_DATA_DIR: ${{ runner.temp }}/cutroom-review-data
+        run: |
+          extra=()
+          if [[ "$REVIEW_TRANSCRIBE" == '1' ]]; then extra+=(--transcribe); fi
+          "$RUNNER_TEMP/cutroom-review-venv/bin/python" -B -X utf8 packaging/native_review_candidate.py \
+            --record packaging/review-candidates/fe35453.json --repo . \
+            --windows-zip "$RUNNER_TEMP/review-inputs/CUTROOM-1.2-Beta-Windows-review-fe35453.zip" \
+            --combined-zip "$RUNNER_TEMP/review-inputs/CUTROOM-1.2-Beta-combined-review-fe35453.zip" \
+            --source-archive "$RUNNER_TEMP/review-inputs/SOURCE-fe35453.zip" \
+            --output-dir "$RUNNER_TEMP/review-reports" --native "${extra[@]}"
+      - name: Retain private-review JSON evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: CUTROOM-unpublished-review-${{ matrix.architecture }}
+          path: |
+            ${{ runner.temp }}/review-preflight/*.json
+            ${{ runner.temp }}/review-reports/*.json
+          if-no-files-found: warn
           retention-days: 7
