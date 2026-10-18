@@ -79,9 +79,9 @@ REQUIRED_CASES = {
     "test_missing_or_unusable_model_edit_is_labelled_basic_cleanup",
     "test_malformed_or_contradictory_critic_cannot_become_a_pass",
     "test_removing_an_unselected_candidate_is_a_noop_not_an_applied_repair",
-    "test_required_story_slot_retained_without_claiming_critic_removal",
-    "test_later_budget_slot_restoration_reconciles_actual_removal",
-    "test_empty_critic_response_keeps_edit_with_review_warning_through_real_pipeline",
+    "test_rejected_required_slot_is_exposed_without_restoring_its_material",
+    "test_later_budget_slot_restoration_keeps_actual_removal",
+    "test_empty_critic_response_requires_bounded_review_before_applying_story",
     "test_legacy_critic_pass_cannot_bypass_review_on_explicit_rebuild",
     "test_legacy_basic_cleanup_cache_does_not_require_a_story_model",
 }
