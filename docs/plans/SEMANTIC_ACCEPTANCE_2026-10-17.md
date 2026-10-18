@@ -330,3 +330,151 @@ promotion was made. Human listening is an additional outstanding gate, not the
 explanation for the present model failure. NOVA tabs, files, servers and the
 reserved CUTROOM port were left alone.
 
+## Whole-source retention and explicit rough cuts (18 October, `31ebfd0`)
+
+Frozen application source `31ebfd0c4ff24e2d5bced2a93b6fcccf69ba2276`, tree
+`da11eefb4c3cb5a9dac33e1354040b9c3b7a0034`, adds complete source-utterance
+retention and verbatim summaries. Complete canonical ASR records, their words,
+negations, qualifications and required speech handles are protected. Existing
+safe pause fitting may shorten verified pauses. Explicit prerequisite/context
+IDs must already belong to the fixed selected source; they cannot restore
+excluded footage. This protects retained source, without claiming to infer every
+semantic dependency or correct an inaccurate transcript.
+
+An unchecked Short-only option permits a chronological extractive rough cut
+after an eligible failed Story review. The output is visibly labeled
+`EXTRACTIVE ROUGH CUT`, with `editorial_authority=extractive_rough_cut`,
+`semantic_review_status=not_model_reviewed`, `generative_approved=false`,
+`review_required=true` and draft status `requires_review`. Its separate retention
+proof does not manufacture generative roles, approve the failed model response
+or certify custom instruction coverage. Source, exclusion, order, word coverage,
+duration and frame guards still apply. No padding, repetition, slowdown, silent
+source expansion or weakened acceptance gate is used.
+
+### Actual captured-source acceptance
+
+Current planning helpers, Director/save guards and rendering ran on isolated
+copies of actual cached ASR and captured canonical source/critic inputs. English
+revalidated the historical `842026b` final response. Hebrew used the original
+failed generative diagnostic and fixed source, with only the explicit rough-cut
+opt-in added. Legacy upstream response schemas were not coerced into current
+responses. These evaluations made **zero new ASR or inference calls** and do
+not establish a fresh end-to-end Story pipeline.
+
+| Case | Result | Qualification |
+| --- | --- | --- |
+| English, 20-second target | 20.000 seconds / 600 frames; 58 words, 10 complete ASR utterances | Historical story response revalidated; narrow independent transcript and full-summary review passed. |
+| Hebrew, 40-second target | 40.000 seconds / 1,200 frames; 90 words, 7 complete ASR utterances | Extractive rough cut for review; no accepted Hebrew generative story is claimed. |
+| Separate fresh-critic Hebrew scope, 40-second target | 24.82 seconds of allowed source is below the 36-second lower band; correctly refused | Scope remains the current critic-allowed selection; no removed source restored. |
+| Original fixed Hebrew scope, 20-second target | Safe minimum 38.57 seconds exceeds the target; correctly refused | No mandatory unit or utterance dropped to force a fit. |
+
+Both positive cases retain every selected source word and required handle, with
+exact source text/timing, chronological order and zero rejected-source overlap.
+Their summaries reproduce complete retained utterances. Both negative cases
+preserve the prior draft, settings, manual state and exports. Source/capture
+preservation, frozen-source binding, H.264/AAC output and full FFmpeg decode
+checks passed. Automated render checks are not human listening.
+
+| Fresh encoded output | SHA-256 |
+| --- | --- |
+| English 20-second output | `93af57ec2d829ffebe19563b86bbd47b0e88a307d656b14fa4a2e5f7c6a1bccb` |
+| Hebrew 40-second rough cut | `2c47154b7f6179405f80f28d0978d329d5705ea81ae6f72b96fabcfce1641fee` |
+
+The Hebrew render has a new export record but is byte-identical to the inherited
+earlier 40-second output. Its audiovisual selection is unchanged. The repair
+qualifies retention, complete summaries and honest authority; it does not claim
+an improved audiovisual edit or generative story. Garbled ASR terms, cross-gap
+references and an interrupted ending still require listening and editing review.
+Evidence is under `cutroom-extractive-acceptance-prep-20261017-c781f61d` in private
+Temp, including `extractive-acceptance-summary-numeric.json`.
+
+### Final regression and CI provenance
+
+These overlapping checks are separate evidence, not totals to add together.
+
+| Check on frozen application source | Result |
+| --- | --- |
+| Focused Python/API checks | 577 passed |
+| Affected frontend checks | 130 passed |
+| Independent targeted checks | 146 passed |
+| Complete Windows Python regression | **2,675 passed, 2 expected POSIX-only skips**, 102.98 seconds |
+| Complete frontend regression | **623 passed**, no failures or skips |
+| Current-source macOS arm64 and x64 source regression | **2,672 Python passes / 5 skips and 623 frontend passes per architecture** |
+
+The complete local run collected all 2,677 cases from 126 Python modules and all
+24 frontend files, with no deselections, XFAILs or XPASSes. All 382 tracked input
+hashes, harness inputs, runtime executables and six protected release/website
+pins remained unchanged. Guards recorded zero inference requests, real ASR
+construction, model starts, unclassified model transports or refused child
+launches. Five health GET probes and the occupied-port test's bind were blocked;
+only the two owned ephemeral fixture ports were allowed. These are Python/Node
+API guards and owned-process cleanup, rather than an OS firewall claim.
+
+Two earlier complete local runs each recorded 2,674 passes, the same two skips
+and a Hypothesis input-generation speed healthcheck failure; all 623 frontend
+checks passed. Those failed runs remain preserved. The private runner disabled
+plugin autoload and omitted Hypothesis's standard collection hook, charging cold
+constant discovery to the first generated input. An independent focused
+diagnostic measured 1.030 seconds of collection discovery and a 0.093-second
+property call after restoring the standard plugin. The only helper change was
+`-p _hypothesis_pytestplugin`; all health checks, 100 examples, the 200 ms deadline,
+generation domains and assertions remained unchanged. No seed override or test
+source change was used. The subsequent complete run above passed.
+
+Final local evidence: private Temp `cq-f3b26bab/source-regression.json`, SHA-256
+`987116b0b2a6f4bf405c9ee1d5d43400eb1af1c2d70fe6a1326717a4f630b6bb`.
+Harness diagnosis: `cq-hdiag-20b1c847/DIAGNOSIS.md`; corrected runner SHA-256
+`a3e5af1c528d5b656239389101889473f3b2f25b931affc6599b9b013f34f078`.
+
+Current-source Mac CI run `39080812506` checked merge
+`819e30c2923657dc66521fa4ed724438574f295d`. Its tree equals the frozen source
+tree above. Both architectures passed source/frontend tests, then failed the
+strict combined-package comparison with
+`Application source changed since Windows baseline: cutroom/caption_items.py`.
+Six downstream candidate, feature, install/restart/transcription and evidence
+steps were skipped. These passes do not establish native acceptance of a new
+archive. Repository/website checks, dependency audit and CodeQL passed for
+`31ebfd0`. The older `5a754e4` CI result remains separate historical evidence.
+
+### Matching private packages and current decision
+
+Both review archives were built from the exact frozen Git archive. They contain
+no private projects, models, runtimes or credentials. They are available locally
+under ignored `dist/review-31ebfd0-20261018`, with checksum sidecars, `README.md`
+and `verification.json`; they are **unpublished and not qualified for release**.
+
+| Archive | Bytes | SHA-256 |
+| --- | ---: | --- |
+| Windows review ZIP | 3,699,203 | `7c7d22ba196e2978ef9b03095577968f2172d4cd6d1571845513a01543309776` |
+| Combined Windows/Mac review ZIP | 7,432,644 | `e51e625d80cdb700a54a0e765e36a85ef226a6608075f7544d2afc6ab3a11429` |
+
+Windows build ID is `CUTROOM-1.2-beta-20261017-235602`; its manifest SHA-256 is
+`065795b6d17f58b6c23055e9afabce794a736b3e05e57ea8d809e3ca983619ab`.
+Combined build ID is `CUTROOM-1.2-beta-mac-20261018-000218`; its manifest SHA-256
+is `0dcef610f58e3863ff4263275b5da225f4f66c96ac35620272cbdf179723ff0a`.
+Independent checks verified 315 Windows payload hashes, all 316 Windows entries
+in the combined ZIP, 313 identical shared App entries, 311 Git-bound source
+payload paths and seven Mac overlays with correct executable permissions.
+Windows candidate imports, dependency preflight and launcher parsing passed;
+no actual installation is implied. The combined builder's replacement Windows
+metadata existed only in an isolated private copy, explicitly marked unpublished.
+Repository baselines were not edited and their comparisons were not weakened.
+
+**Current decision remains NO-GO for promoting the current public download.**
+Retention/summary/authority repairs and full frozen-source regression now pass.
+The tested Hebrew generative model still has no accepted fresh full-pipeline
+result under the original constraints. The rough cut is an explicit review
+alternative with narrower guarantees. Matching native candidate installation,
+restart and transcription checks, clean-machine Windows coverage and
+representative human listening/manual QA remain outstanding. Native CI still
+requires staging/pinning the exact new candidates and retaining its strict
+payload comparison; its transcription smoke would download `tiny.en` on the
+runner and has not been authorized or run here under the no-new-model-download
+constraint. These blockers are distinct from the repaired source defects.
+
+The published `v1.2-beta-20261015` assets still contain older source. Neither
+these new private archives nor the source passes qualify those current public
+bytes. PR #89 remains draft. No new release, public archive, production website
+deployment or repository release pin was published. NOVA and port 8765 were
+left alone. This report follow-up does not change the frozen application payload.
+
