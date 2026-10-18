@@ -114,6 +114,15 @@ digests, release/asset IDs and repository API URLs must match before download.
 Authenticated downloads use asset IDs; metadata download URLs are never used.
 Fresh raw ZIP/Git qualification then precedes dependency installation.
 
+GitHub rejected the draft fetch with HTTP 403 when the review job used only
+`contents: read`. The proposed exception grants `contents: write` to the
+temporary token of the manual review job only, because draft visibility requires
+push access. This capability requires explicit approval before delivery/run;
+the token has write capability for the whole review job even though transport
+performs only fixed GET requests. The ordinary public job keeps
+`contents: read`, and checkout credentials are not persisted. No personal token,
+repository secret, repository/organization settings change or publication is introduced.
+
 The two standard native runners use the exact downloaded ZIPs without rebuilding
 them. `review_transcribe` defaults **false** and is independent of the historical
 workflow's `transcribe` input. Only JSON evidence is retained for seven days;

@@ -184,6 +184,9 @@ jobs:
   review:
     name: Unpublished candidate / macOS 15 / ${{ matrix.architecture }}
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.review_release_id != '' }}
+    # Draft visibility requires push access. Only the fixed GET transport uses GH_TOKEN.
+    permissions:
+      contents: write
     strategy:
       fail-fast: false
       matrix:
@@ -229,12 +232,14 @@ jobs:
           [[ "$GITHUB_REPOSITORY" == 'VanoPeradze/cutroom' ]]
           [[ "$REVIEW_RELEASE_ID" =~ ^[1-9][0-9]*$ ]]
           mkdir "$RUNNER_TEMP/review-inputs"
+          echo 'Read approved draft metadata by numeric release ID'
           gh api "repos/$GITHUB_REPOSITORY/releases/$REVIEW_RELEASE_ID" > "$RUNNER_TEMP/review-release.json"
           python -B -X utf8 packaging/review_asset_metadata.py \
             --metadata "$RUNNER_TEMP/review-release.json" \
             --record packaging/review-candidates/fe35453.json --repo . \
             --release-id "$REVIEW_RELEASE_ID" > "$RUNNER_TEMP/review-assets.tsv"
           while IFS=$'\t' read -r asset_id asset_name; do
+            echo "Read pinned asset ID $asset_id ($asset_name)"
             gh api -H 'Accept: application/octet-stream' \
               "repos/$GITHUB_REPOSITORY/releases/assets/$asset_id" \
               > "$RUNNER_TEMP/review-inputs/$asset_name"
