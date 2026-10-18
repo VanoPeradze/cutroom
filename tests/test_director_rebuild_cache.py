@@ -343,14 +343,13 @@ def test_recomputed_proof_cannot_authorize_an_unmapped_extra_approved_passage(se
     assert store.state_path(project_id).read_bytes() == before
 
 
-def test_captured_hebrew_role_order_cannot_commit_an_early_result_before_later_setup(semantic_project, monkeypatch):
+def test_role_order_cannot_commit_an_early_result_before_later_setup(semantic_project, monkeypatch):
     from cutroom.story_budget import StoryBudgetError
 
     store, settings, project_id, _calls, context = semantic_project
     roles = get_edit_style("stream_story")["selection_policy"]["story_structure"]
     editorial = _required_story_editorial([("b1", 0, 24.61), ("b3", 43.54, 59.97)])
-    # Preserve the captured failure's source geometry without retaining its
-    # private speech. The timestamped gaps make the complete selection fit 40s.
+    # Timestamped speech gaps keep this complete synthetic selection within its 40s budget.
     for segment, text, words in zip(editorial["segments"], ["Question result.", "Setup evidence."], [
         [{"word": "Question", "start": 0, "end": 12}, {"word": "result.", "start": 14, "end": 24.61}],
         [{"word": "Setup", "start": 43.54, "end": 50}, {"word": "evidence.", "start": 50.6, "end": 59.97}],

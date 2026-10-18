@@ -29,8 +29,8 @@ from .story_spans import (
 )
 from .utils import clamp, merge_ranges, normalize_text, range_duration
 
-STORY_CACHE_PIPELINE = "hierarchical-story-2026-10-18.semantic-target-review-v12.whole-source-context"
-CRITIC_REVIEW_CONTRACT = "critic-review-2026-10-18.semantic-target-review-v14.whole-source-context"
+STORY_CACHE_PIPELINE = "hierarchical-story-2026-10-18.semantic-target-review-v13.precision-role-contract"
+CRITIC_REVIEW_CONTRACT = "critic-review-2026-10-18.semantic-target-review-v15.precision-role-contract"
 EXTRACTIVE_ROUGH_CUT_AUTHORITY = "extractive_rough_cut"
 EXTRACTIVE_ROUGH_CUT_ENGINE = "chronological_extractive_rough_cut"
 
@@ -913,6 +913,16 @@ def _fit_story_request_context(payload: dict[str, Any], mode: str) -> None:
     )
 
 
+def _unique_story_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    """Precision replies cannot silently overwrite a role or context chapter."""
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise json.JSONDecodeError("Repeated structured response key", "", 0)
+        result[key] = value
+    return result
+
+
 def _call_ollama_strict(
     settings: Settings,
     payload: dict[str, Any],
@@ -922,7 +932,10 @@ def _call_ollama_strict(
     from .cloud_ai import enabled, chat
     clean_payload = copy.deepcopy(payload)
     single_attempt = clean_payload.pop("_single_attempt", False) is True
+    reject_duplicate_keys = clean_payload.pop("_reject_duplicate_keys", False) is True
     if enabled(settings):
+        if reject_duplicate_keys:
+            clean_payload["_reject_duplicate_keys"] = True
         return chat(settings, clean_payload, cancel_check=cancel_check, timeout=timeout)
     # The hierarchy preflights Ollama/model availability once before the first pass.
     # Do not re-query /api/tags before every pass; that adds latency without adding safety.
@@ -967,7 +980,7 @@ def _call_ollama_strict(
         content = last_message.get("content")
         if content:
             try:
-                parsed = json.loads(content)
+                parsed = json.loads(content, object_pairs_hook=_unique_story_object) if reject_duplicate_keys else json.loads(content)
             except (TypeError, json.JSONDecodeError) as exc:
                 last_json_error = exc
             else:
@@ -1899,6 +1912,133 @@ def _story_revision_slot_rows(roles: Any, catalog: list[dict[str, Any]],
     return rows
 
 
+def _precision_story_contract(
+    catalog: list[dict[str, Any]], candidates: list[dict[str, Any]],
+    chapters: list[dict[str, Any]], plan: dict[str, Any], brief: dict[str, Any],
+) -> dict[str, Any]:
+    """Bind every planned purpose and context chapter to exact source choices."""
+    slots = plan.get("slots")
+    if not isinstance(slots, list) or not slots or any(not isinstance(row, dict) for row in slots):
+        raise StoryPlanningError("Precision selection needs an explicit narrative plan.")
+    purposes = [row.get("purpose") for row in slots]
+    if (any(not isinstance(value, str) or not value.strip() for value in purposes)
+            or len(purposes) != len(set(purposes))):
+        raise StoryPlanningError("Precision plan purposes must be nonempty and unique.")
+    _validate_configured_story_roles(plan, brief)
+    configured = _configured_story_roles(brief)
+    if configured and set(purposes) != set(configured):
+        raise StoryPlanningError("Precision plan purposes must exactly match the configured story roles.")
+    by_choice = _story_evidence_choice_catalog(catalog)
+    identifiers = [str(row["id"]) for row in candidates]
+    chapter_ids = [str(row["id"]) for row in chapters]
+    if len(identifiers) != len(set(identifiers)) or len(chapter_ids) != len(set(chapter_ids)):
+        raise StoryPlanningError("Precision source identifiers must be unique.")
+    beat_chapters: dict[str, str] = {}
+    for chapter in chapters:
+        for beat in chapter.get("beats", []):
+            identifier = str(beat["id"])
+            if identifier in beat_chapters:
+                raise StoryPlanningError("Precision source beats need one canonical chapter owner.")
+            beat_chapters[identifier] = str(chapter["id"])
+    if any(identifier not in beat_chapters for identifier in identifiers):
+        raise StoryPlanningError("Precision source beats need canonical chapter ownership.")
+    definitions: dict[str, Any] = {}
+    names: dict[tuple[str, ...], str] = {}
+    fit_available = True
+
+    def choice_reference(values: list[str]) -> dict[str, Any]:
+        nonlocal fit_available
+        if not values:
+            fit_available = False
+            return {"type": "string"}  # The fit branch is omitted without canonical support.
+        domain = tuple(values)
+        if domain not in names:
+            name = f"precision_choices_{len(names)}"
+            names[domain] = name
+            definitions[name] = {"type": "string", "enum": values}
+        return {"$ref": "#/$defs/" + names[domain]}
+
+    roles = {}
+    for slot in slots:
+        domains = []
+        for key in ("chapter_ids", "required_context_chapter_ids"):
+            values = slot.get(key)
+            if (not isinstance(values, list) or any(not isinstance(value, str) or value not in chapter_ids for value in values)
+                    or len(values) != len(set(values)) or (key == "chapter_ids" and not values)):
+                raise StoryPlanningError("Precision roles need exact allowed primary and context chapter domains.")
+            domains.append(values)
+        primary, context = domains
+        choices = [choice for choice, row in by_choice.items() if beat_chapters.get(row["beat_id"]) in primary]
+        context_properties = {}
+        for chapter_id in context:
+            values = [choice for choice, row in by_choice.items() if beat_chapters.get(row["beat_id"]) == chapter_id]
+            context_properties[chapter_id] = {"type": "array", "minItems": 1, "uniqueItems": True,
+                                              "items": choice_reference(values)}
+        roles[slot["purpose"]] = {
+            "type": "object", "additionalProperties": False,
+            "properties": {
+                "primary_anchor_choice": choice_reference(choices),
+                "additional_primary_evidence_choices": {"type": "array", "uniqueItems": True, "items": choice_reference(choices)},
+                "context_evidence_choices_by_chapter": {"type": "object", "additionalProperties": False,
+                    "properties": context_properties, "required": list(context),
+                    **({"maxProperties": 0} if not context else {})},
+            },
+            "required": ["primary_anchor_choice", "additional_primary_evidence_choices", "context_evidence_choices_by_chapter"],
+        }
+    fit = {"type": "object", "additionalProperties": False,
+           "properties": {"verdict": {"type": "string", "enum": ["fit"]},
+               "role_selections": {"type": "object", "additionalProperties": False, "properties": roles, "required": purposes},
+               "highlight_beat_ids": {"type": "array", "uniqueItems": True, "items": {"type": "string", "enum": identifiers}},
+               "title": {"type": "string"}, "summary": {"type": "string"}},
+           "required": ["verdict", "role_selections", "highlight_beat_ids", "title", "summary"]}
+    refusal = {"type": "object", "additionalProperties": False,
+               "properties": {"verdict": {"type": "string", "enum": ["no_fit"]},
+                   "reason": {"type": "string", "enum": ["unsupported_roles", "insufficient_context", "source_order", "target_budget"]},
+                   "missing_purposes": {"type": "array", "uniqueItems": True, "items": {"type": "string", "enum": purposes}}},
+               "required": ["verdict", "reason", "missing_purposes"]}
+    # anyOf and local definitions are already used by the final story grammar.
+    return {"anyOf": [fit, refusal] if fit_available else [refusal], "$defs": definitions}
+
+
+def _precision_story_slot_rows(
+    roles: Any, catalog: list[dict[str, Any]], candidates: list[dict[str, Any]],
+    chapters: list[dict[str, Any]], plan: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Normalize explicit per-chapter choices without assigning missing roles."""
+    purposes = [row["purpose"] for row in plan["slots"]]
+    if not isinstance(roles, dict) or set(roles) != set(purposes):
+        raise ValueError("Every planned purpose needs one explicit precision assignment.")
+    by_choice = _story_evidence_choice_catalog(catalog)
+    beat_chapters = {str(beat["id"]): str(chapter["id"]) for chapter in chapters for beat in chapter.get("beats", [])}
+    normalized = {}
+    for slot in plan["slots"]:
+        row = roles[slot["purpose"]]
+        if not isinstance(row, dict) or set(row) != {"primary_anchor_choice", "additional_primary_evidence_choices", "context_evidence_choices_by_chapter"}:
+            raise ValueError("Precision roles need an explicit primary anchor and chapter-keyed context choices.")
+        contexts = row["context_evidence_choices_by_chapter"]
+        required = slot["required_context_chapter_ids"]
+        if not isinstance(contexts, dict) or set(contexts) != set(required):
+            raise ValueError("Every required context chapter needs an explicit quotation list.")
+        primary = row["additional_primary_evidence_choices"]
+        if not isinstance(primary, list):
+            raise ValueError("Additional primary choices must be a quotation list.")
+        for choice in [row["primary_anchor_choice"], *primary]:
+            if (not isinstance(choice, str) or choice not in by_choice
+                    or beat_chapters.get(by_choice[choice]["beat_id"]) not in slot["chapter_ids"]):
+                raise ValueError("Primary quotations must belong to the planned primary chapters.")
+        flattened = []
+        for chapter_id in required:
+            values = contexts[chapter_id]
+            if (not isinstance(values, list) or not values or len(values) != len(set(value for value in values if isinstance(value, str)))
+                    or any(not isinstance(value, str) or value not in by_choice
+                           or beat_chapters.get(by_choice[value]["beat_id"]) != chapter_id for value in values)):
+                raise ValueError("Context quotations must be unique exact choices from their required chapter.")
+            flattened.extend(values)
+        normalized[slot["purpose"]] = {"primary_anchor_choice": row["primary_anchor_choice"],
+            "additional_primary_evidence_choices": primary, "context_evidence_choices": flattened}
+    return _story_revision_slot_rows(normalized, catalog, plan)
+
+
 def _story_target_reasoning_policy(settings: Settings, model: str) -> dict[str, Any]:
     """The bounded final grammar uses compact output for every model."""
     return {"mode": "compact", "think": False, "num_predict": 2400,
@@ -2606,31 +2746,32 @@ def _select_story_beats(
             reduced.extend(item for item in rows if str(item["id"]) in keep_ids)
         candidates = sorted(reduced, key=lambda item: float(item["start"]))[:max_candidates]
     valid = {str(item["id"]): item for item in candidates}
-    valid_ids = set(valid)
     source_catalog = build_story_evidence_catalog(candidates, segments) if segments else []
     candidate_segment_ids = {str(identifier) for beat in candidates for identifier in beat.get("segment_ids", [])}
+    precision_schema = _precision_story_contract(source_catalog, candidates, chapters, plan, brief)
     payload = {
         "model": model,
         "stream": False,
-        "format": STORY_SELECTION_SCHEMA,
+        "format": precision_schema,
+        "_single_attempt": True, "_reject_duplicate_keys": True,
         "_performance_mode": mode,
         "options": {"temperature": 0.04, "num_ctx": 16384 if mode == "quality" else 12288, "num_predict": 1500},
         "messages": [
             {
                 "role": "system",
                 "content": (
-                    "You are CUTROOM's precision editor. The story has already been understood and planned. Now choose the exact STORY BEATS that best realize each slot. "
-                    "Do not optimize for dramatic standalone quotes. Preserve complete ideas, prerequisite context, chronology and cause/effect. "
-                    "Stay close to the target duration; audio cleanup happens later. Every planned story slot must receive at least one beat. "
-                    "Return JSON only with keys slot_selections,highlight_beat_ids,opening_beat_id,closing_beat_id,title,summary. "
-                    "slot_selections is a list of {slot_index,purpose,primary_beat_ids,context_beat_ids,primary_evidence_ids,context_evidence_ids,temporal_witness_id}. "
-                    "Use the exact planned purpose, assign primary beats only from chapter_ids, and explicitly assign context beats from EVERY required_context_chapter_id. "
-                    "Context IDs may come ONLY from required_context_chapter_ids; use an empty context list when that chapter list is empty. "
-                    "Choose canonical source_evidence IDs that actually support each role, with a citation for every mapped beat. "
-                    "Every cited fragment requires its entire canonical ASR utterance as mandatory context, including all negations and qualifications; preserve the complete supplied source unit. "
-                    "temporal_witness_id must be one primary_evidence_id; witnesses follow narrative role order and the final role belongs to the final selected passage. "
-                    "Source quotes are authoritative; outline/summary prose is unverified interpretation. A conclusion can be a stated refusal, decision or qualified claim. "
-                    "Only use supplied beat and evidence IDs; never invent events or English proof claims."
+                    "You are CUTROOM's precision editor. Source quotes and full ASR utterances are authoritative; outline and summary prose are unverified interpretations. "
+                    "Choose fit only if the verbatim source supports EVERY exact planned purpose, complete prerequisite context and chronological role order. "
+                    "Return role_selections keyed by every exact plan purpose. For each role choose primary_anchor_choice and additional_primary_evidence_choices "
+                    "only from its planned chapter_ids. Copy exact source_evidence_choices strings, including their canonical reference. "
+                    "Fill context_evidence_choices_by_chapter for EVERY required_context_chapter_id with at least one exact choice from that chapter; "
+                    "use an empty object only when no context chapters are required. The same choice can supply primary and context when both allow it; this does not repeat footage. "
+                    "Every quoted fragment requires its ENTIRE canonical ASR utterance, including all negations and qualifications. "
+                    "Primary anchors follow planned role order in source playback; the final role must belong to the final selected passage. "
+                    "An acknowledgment, filler or unfinished phrase alone cannot establish a role. A conclusion can be an explicit refusal, decision or qualified claim. "
+                    "Do not invent events, outcomes, proof claims or missing endings. If source cannot support a role, its context, source order or target budget, "
+                    "return no_fit with reason and missing_purposes, without quotation assignments. A truthful no_fit is preferable to unsupported role assignments. "
+                    "For fit return only verdict,role_selections,highlight_beat_ids,title,summary. For no_fit return only verdict,reason,missing_purposes. "
                     + _on_screen_guidance(candidates)
                 ),
             },
@@ -2643,6 +2784,7 @@ def _select_story_beats(
                     "plan": plan,
                     "chapter_summaries": summaries,
                     "source_evidence": source_catalog,
+                    "source_evidence_choices": list(_story_evidence_choice_catalog(source_catalog)),
                     "source_span_policy_version": SOURCE_SPAN_POLICY_VERSION,
                     "source_utterances": [{"id": str(row["id"]), "start": row["start"], "end": row["end"], "text": str(row.get("text") or "")}
                                           for row in (segments or [])
@@ -2657,139 +2799,47 @@ def _select_story_beats(
             },
         ],
     }
-    selection_error: str | None = None
+    result = _call_ollama_story_pass(settings, payload, 300 if mode == "quality" else 220, cancel_check)
+    purposes = [row["purpose"] for row in plan["slots"]]
+    if isinstance(result, dict) and result.get("verdict") == "no_fit":
+        missing = result.get("missing_purposes")
+        if (set(result) != {"verdict", "reason", "missing_purposes"}
+                or not isinstance(result.get("reason"), str)
+                or result["reason"] not in {"unsupported_roles", "insufficient_context", "source_order", "target_budget"}
+                or not isinstance(missing, list) or any(not isinstance(value, str) or value not in purposes for value in missing)
+                or len(missing) != len(set(missing))):
+            raise StoryPlanningError("Story AI returned an invalid precision refusal.")
+        raise StoryBudgetError("Story AI could not verify a complete story from this selection. No new draft was applied.",
+            {"reason": "precision_no_fit", "stage": "precision", "precision": {"attempts": 1,
+             "verdict": "no_fit", "reason": result["reason"], "missing_purposes": list(missing)}})
+    if (not isinstance(result, dict) or result.get("verdict") != "fit"
+            or set(result) != {"verdict", "role_selections", "highlight_beat_ids", "title", "summary"}
+            or not isinstance(result.get("title"), str) or not isinstance(result.get("summary"), str)):
+        raise StoryPlanningError("Story AI did not return a complete precision selection or explicit refusal.")
     try:
-        result = _call_ollama_story_pass(
-            settings,
-            payload,
-            300 if mode == "quality" else 220,
-            cancel_check,
-        )
-    except StoryPlanningError as exc:
-        # Chapter understanding, the global outline and the narrative plan are
-        # already model-authored. If only the final schema pass drifts, recover
-        # exact source beats from that plan instead of throwing all prior work away.
-        result = {}
-        selection_error = str(exc)
-    beat_to_chapter = {str(beat["id"]): chapter["id"] for chapter in chapters for beat in chapter["beats"]}
-    raw_slots = result.get("slot_selections") if isinstance(result.get("slot_selections"), list) else []
-    slot_map: list[dict[str, Any]] = []
-    keep: list[str] = []
-    seen_slots: set[int] = set()
-    for row in raw_slots:
-        if not isinstance(row, dict) or type(row.get("slot_index")) is not int:
-            continue
-        slot_index = row["slot_index"]
-        if slot_index < 0 or slot_index >= len(plan.get("slots", [])) or slot_index in seen_slots:
-            continue
-        slot = plan["slots"][slot_index]
-        allowed_chapters = {str(value) for value in slot.get("chapter_ids", [])} | {str(value) for value in slot.get("required_context_chapter_ids", [])}
-        explicit = isinstance(row.get("primary_beat_ids"), list) and isinstance(row.get("context_beat_ids"), list)
-        raw_ids = row["primary_beat_ids"] + row["context_beat_ids"] if explicit else row.get("beat_ids", [])
-        beat_ids = [
-            str(value) for value in raw_ids
-            if str(value) in valid_ids and beat_to_chapter.get(str(value)) in allowed_chapters
-        ]
-        if not beat_ids:
-            continue
-        seen_slots.add(slot_index)
-        beat_ids = sorted(dict.fromkeys(beat_ids), key=lambda identifier: float(valid[identifier]["start"]))
-        slot_map.append({"slot_index": slot_index, "purpose": row.get("purpose") if explicit else slot.get("purpose"),
-                         "beat_ids": beat_ids,
-                         **({"primary_beat_ids": row["primary_beat_ids"], "context_beat_ids": row["context_beat_ids"],
-                             **{key: copy.deepcopy(row[key]) for key in ("primary_evidence_ids", "context_evidence_ids", "temporal_witness_id")
-                                if key in row}} if explicit else {})})
-        for identifier in beat_ids:
-            if identifier not in keep:
-                keep.append(identifier)
-    expected_slots = set(range(len(plan.get("slots", []))))
-    recovered_slots: list[int] = []
-    key_beat_ids = {
-        str(value)
-        for summary in summaries
-        for value in summary.get("key_beat_ids", [])
-        if str(value) in valid_ids
-    }
-    role_groups = {
-        "hook": {"hook"},
-        "setup": {"hook", "context"},
-        "context": {"hook", "context"},
-        "proof": {"example", "result"},
-        "example": {"example", "result"},
-        "payoff": {"result", "conclusion"},
-        "ending": {"result", "conclusion"},
-        "conclusion": {"result", "conclusion"},
-    }
-    for slot_index in sorted(expected_slots - seen_slots):
-        slot = plan["slots"][slot_index]
-        allowed_chapters = {str(value) for value in slot.get("chapter_ids", [])} | {
-            str(value) for value in slot.get("required_context_chapter_ids", [])
-        }
-        available = [
-            beat for identifier, beat in valid.items()
-            if beat_to_chapter.get(identifier) in allowed_chapters
-        ]
-        if not available:
-            continue
-        purpose = str(slot.get("purpose") or "").lower()
-        expected_roles = next((roles for cue, roles in role_groups.items() if cue in purpose), set())
-        unused = [beat for beat in available if str(beat["id"]) not in keep]
-        chosen = max(
-            unused or available,
-            key=lambda beat: (
-                1 if str(beat["id"]) in key_beat_ids else 0,
-                1 if str(beat.get("role_hint") or "") in expected_roles else 0,
-                float(beat.get("editorial_score", 0.0)),
-                float(beat.get("novelty", 0.0)),
-                -float(beat.get("start", 0.0)) if slot_index == 0 else float(beat.get("start", 0.0)),
-            ),
-        )
-        identifier = str(chosen["id"])
-        seen_slots.add(slot_index)
-        recovered_slots.append(slot_index)
-        slot_map.append({"slot_index": slot_index, "purpose": slot.get("purpose"), "beat_ids": [identifier]})
-        if identifier not in keep:
-            keep.append(identifier)
-    if seen_slots != expected_slots:
-        raise StoryPlanningError("Story AI left one or more narrative slots without source material.")
-    keep.sort(key=lambda identifier: float(valid[identifier]["start"]))
-    single_slot_complete = (
-        len(plan.get("slots", [])) == 1 and len(keep) == 1 and seen_slots == {0}
-        and _sentence_ending_complete(str(valid[keep[0]].get("text", "")))
-        and str(beat_to_chapter[keep[0]]) in {str(value) for value in plan["slots"][0].get("chapter_ids", [])}
-        and {str(value) for value in plan["slots"][0].get("required_context_chapter_ids", [])}
-        <= {str(beat_to_chapter[identifier]) for identifier in keep}
-    )
-    minimum_keep = 1 if len(candidates) <= 1 or single_slot_complete else 2
-    if len(keep) < minimum_keep:
-        raise StoryPlanningError("Story AI did not select enough coherent source material.")
+        slot_map = _precision_story_slot_rows(result["role_selections"], source_catalog, candidates, chapters, plan)
+        keep = sorted({identifier for row in slot_map for key in ("primary_beat_ids", "context_beat_ids") for identifier in row[key]},
+                      key=lambda identifier: float(valid[identifier]["start"]))
+        slot_map = _validated_story_slot_map(slot_map, keep, candidates, chapters, plan)
+        proof = _story_evidence_proof(slot_map, keep, candidates, segments or [], plan, brief)
+        if not _story_units_complete(keep, candidates, segments or []):
+            raise ValueError("Precision selection requires complete canonical source units.")
+        highlights = result["highlight_beat_ids"]
+        if (not isinstance(highlights, list) or any(not isinstance(value, str) or value not in keep for value in highlights)
+                or len(highlights) != len(set(highlights))):
+            raise ValueError("Precision highlights must be unique selected source identifiers.")
+    except (ValueError, TypeError, KeyError) as exc:
+        raise StoryPlanningError("Story AI returned invalid precision source assignments. No new draft was applied.") from exc
     clean = {
-        "keep_beat_ids": keep,
-        "slot_map": sorted(slot_map, key=lambda item: item["slot_index"]),
-        "highlight_beat_ids": [str(value) for value in result.get("highlight_beat_ids", []) if str(value) in keep][:8],
-        "opening_beat_id": keep[0],
-        "closing_beat_id": keep[-1],
-        "title": result["title"].strip()[:120] if isinstance(result.get("title"), str) and result["title"].strip() else "CUTROOM story",
-        "title_beat_ids": list(keep),
-        "summary": str(result.get("summary") or "")[:600],
-        "selection_mode": "ai_plan_recovery" if recovered_slots or selection_error else "model",
-        "recovered_slot_indexes": recovered_slots,
-        "recovery_reason": selection_error,
+        "keep_beat_ids": keep, "slot_map": proof["slot_map"], "highlight_beat_ids": highlights[:8],
+        "opening_beat_id": keep[0], "closing_beat_id": keep[-1],
+        "title": result["title"].strip()[:120] or "CUTROOM story", "title_beat_ids": list(keep),
+        "summary": _extractive_story_summary(proof), "summary_source": SUMMARY_SOURCE,
+        "selection_mode": "model", "recovered_slot_indexes": [], "recovery_reason": None,
+        "evidence_policy_version": EVIDENCE_POLICY_VERSION, "evidence_proof": proof,
+        # Source attribution/order does not establish the model's interpretation.
+        "semantic_mapping_verified": False, "semantic_review_status": "provisional_precision_selection",
     }
-    try:
-        clean["slot_map"] = _validated_story_slot_map(clean["slot_map"], keep, candidates, chapters, plan)
-        proof = _story_evidence_proof(clean["slot_map"], keep, candidates, segments or [], plan, brief)
-        clean["slot_map"] = proof["slot_map"]
-        clean["evidence_policy_version"] = EVIDENCE_POLICY_VERSION
-        clean["evidence_proof"] = proof
-        clean["summary"] = _extractive_story_summary(proof)
-        clean["summary_source"] = SUMMARY_SOURCE
-        # Precision evidence is provisional until the bounded model review;
-        # attribution checks alone do not establish the narrative interpretation.
-        clean["semantic_mapping_verified"] = False
-        clean["semantic_review_status"] = "provisional_precision_selection"
-    except (ValueError, TypeError, KeyError):
-        clean["semantic_mapping_verified"] = False
     return clean, candidates
 
 
