@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from cutroom.jobs import Job, JobContext
+from cutroom.ffmpeg_compat import export_capabilities
 from cutroom.render import _expected_output_duration, _run_ffmpeg_process
 
 
@@ -108,8 +109,8 @@ def test_real_render_shows_a_instead_of_black_before_and_after_short_b(tmp_path,
         ffmpeg, "-hide_banner", "-loglevel", "error",
         "-f", "lavfi", "-i", "color=c=red:s=160x90:r=30:d=2",
         "-f", "lavfi", "-i", "color=c=blue:s=160x90:r=30:d=1",
-        "-filter_complex_script", str(graph_path), *maps,
-        "-vsync", "1", "-r:v", "30", "-t", "2.0",
+        *export_capabilities(ffmpeg).graph_file_args(graph_path), *maps,
+        *export_capabilities(ffmpeg).cfr_args, "-r:v", "30", "-t", "2.0",
         "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1",
     ], check=True, capture_output=True, timeout=15)
     frame_size = 160 * 90 * 3

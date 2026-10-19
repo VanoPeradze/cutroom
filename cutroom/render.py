@@ -18,6 +18,7 @@ from .captions import build_ass, build_srt, normalize_caption_settings
 from .composition import chroma_background_asset, chroma_source, chroma_video_targets, select_embedded_candidate, source_chroma_key
 from .effects import build_chroma_key_nodes, chroma_key_capability, compile_automatic_effects
 from .frame_rates import project_export_fps, with_export_options
+from .ffmpeg_compat import export_capabilities
 from .cache_keys import stable_fingerprint
 from .jobs import JobCancelled, JobContext
 from .media import probe_media
@@ -1589,6 +1590,8 @@ def render_project(context: JobContext, project_id: str, store: ProjectStore, se
     quality = str(options.get("quality") or project.get("settings", {}).get("quality", "balanced"))
     context.check_cancelled()
     ensure_render_storage(project, settings, store.project_dir(project_id), options)
+    capabilities = export_capabilities(settings.ffmpeg)
+    context.check_cancelled()
     encoder, encoder_args = _software_encoder(quality) if options.get("_force_software") else choose_encoder(settings, quality)
     export_id = new_id("export")
     caption_ass: Path | None = None
@@ -1643,19 +1646,19 @@ def render_project(context: JobContext, project_id: str, store: ProjectStore, se
     normalization_filter = _final_audio_filter(project) if has_audio else "anull"
     normalize_audio = has_audio and normalization_filter != "anull"
     render_target = normalization_stage if normalize_audio else partial
-    command = [settings.ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-i", str(source_a)]
+    command = [capabilities.executable, "-hide_banner", "-loglevel", "error", "-y", "-i", str(source_a)]
     needs_source_b_input = "[1:v]" in graph or "[1:a]" in graph or bool(library_clips(project)) or bool(chroma_inputs)
     if source_b and needs_source_b_input:
         command += ["-i", str(source_b)]
     command += media_inputs
     command += chroma_inputs
     command += [
-        "-filter_complex_script", str(graph_path), *maps,
+        *capabilities.graph_file_args(graph_path), *maps,
         "-c:v", encoder, *encoder_args,
         # Emit a real CFR stream with a decodable terminal frame. Passthrough
         # can leave the last packet marked discard in MP4; CFR output is supported
-        # by FFmpeg 4.4 and matches the graph's explicit frame contract.
-        "-vsync", "1", "-r:v", str(fps),
+        # by both modern FFmpeg and the legacy FFmpeg 4.4 option fallback.
+        *capabilities.cfr_args, "-r:v", str(fps),
         "-threads", str(max(1, int(settings.raw.get("ffmpeg_threads", 4)))),
     ]
     if has_audio and normalize_audio:
@@ -1686,7 +1689,7 @@ def render_project(context: JobContext, project_id: str, store: ProjectStore, se
             context.check_cancelled()
             context.update(0.83, "Normalizing final audio...")
             normalize_command = [
-                settings.ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
+                capabilities.executable, "-hide_banner", "-loglevel", "error", "-y",
                 "-i", str(normalization_stage),
                 "-map", "0:v:0", "-map", "0:a:0", "-c:v", "copy",
                 "-af", normalization_filter,

@@ -45,9 +45,9 @@ test('Windows and Mac have separate archives with an optional combined download 
     assert.match(mirror[0][2], /mirror/i);
     assert.ok(linksTo(html, `/downloads/${entry.filename}.sha256`).length >= 1);
   }
-  assert.equal(release.filename, 'CUTROOM-1.2-Beta-20261019.zip');
-  assert.equal(release.platforms.windows.filename, 'CUTROOM-1.2-Beta-Windows-20261019.zip');
-  assert.equal(release.platforms.mac.filename, 'CUTROOM-1.2-Beta-Mac-20261019.zip');
+  assert.equal(release.filename, 'CUTROOM-1.2-Beta-20261019-hotfix1.zip');
+  assert.equal(release.platforms.windows.filename, 'CUTROOM-1.2-Beta-Windows-20261019-hotfix1.zip');
+  assert.equal(release.platforms.mac.filename, 'CUTROOM-1.2-Beta-Mac-20261019-hotfix1.zip');
   assert.notEqual(release.platforms.mac.filename, release.filename);
   assert.ok(!release.platforms.mac.folder, 'The standalone Mac launcher is beside App, without a mac subfolder');
   assert.equal(linksTo(html, release.url).length, 1); // Optional combined ZIP help link, separate from the Mac button.
@@ -56,7 +56,7 @@ test('Windows and Mac have separate archives with an optional combined download 
   assert.match(html, /Mac has its own ZIP\. Extract it and run START CUTROOM\.command beside App\./);
   assert.match(region('details', 'install-help'), /The optional combined ZIP has exactly two folders: windows and mac/);
   const source = release.source_archive;
-  assert.equal(source.filename, 'SOURCE-20261019.zip');
+  assert.equal(source.filename, 'SOURCE-20261019-hotfix1.zip');
   for (const url of [source.url, `/downloads/${source.filename}`, `/downloads/${source.filename}.sha256`]) assert.equal(linksTo(html,url).length,1);
   assert.equal(downloadEntries(release).length,4);
   assert.doesNotMatch(html, /href="[^"]*Linux[^"\n]*\.zip/i);
@@ -65,8 +65,8 @@ test('Windows and Mac have separate archives with an optional combined download 
 
 test('download metadata pins a dated release and preserves Expo mirrors and provenance', () => {
   const release = JSON.parse(readFileSync(new URL('./release.json', import.meta.url), 'utf8'));
-  assert.equal(release.github_release.tag, 'v1.2-beta-20261019');
-  assert.equal(release.github_release.previous_public_tag, 'v1.2-beta-20261018');
+  assert.equal(release.github_release.tag, 'v1.2-beta-20261019-hotfix1');
+  assert.equal(release.github_release.previous_public_tag, 'v1.2-beta-20261019');
   assert.equal(release.github_release.tag_commit, release.source_commit);
   assert.equal(release.github_release.package_bytes_changed, false);
   assert.equal(release.github_release.url, `${repository}/releases/tag/${release.github_release.tag}`);
@@ -81,10 +81,10 @@ test('public beta retains exact automated native provenance and visible pending 
   assertPublishable(release);
   assert.equal(release.release_state,'beta');
   assert.equal(release.full_release_qualified,false);
-  assert.equal(release.source_commit,'7019b6423ce9d66531e933ee5cac42968f9e96e7');
-  assert.equal(release.github_release.tag,'v1.2-beta-20261019');
-  assert.equal(release.native_validation.run_id,39244037429);
-  assert.equal(release.validated_pr_head,'b28561c7a3d277e90381d2e720eb50ab2fe001fb');
+  assert.equal(release.source_commit,'0c28168999f3500092d1954b9a17419400648684');
+  assert.equal(release.github_release.tag,'v1.2-beta-20261019-hotfix1');
+  assert.equal(release.native_validation.run_id,39251933403);
+  assert.equal(release.validated_pr_head,'f7925c9be4f05adcc2a88b2698a1971b71be0083');
   assert.equal(release.native_validation.transcription_run,false);
   for (const architecture of ['arm64','x64']) {
     const checks = release.native_validation.architectures[architecture];
@@ -96,12 +96,30 @@ test('public beta retains exact automated native provenance and visible pending 
   assert.match(html,/Public beta\./);
   assert.match(html,/Windows requires WinGet and Microsoft Visual C\+\+ x64 runtime first\./);
   assert.match(html,/The required Visual C\+\+ runtime is not installed by the launcher\./);
-  assert.equal(release.windows_fresh_install_acceptance,'pending-new-source');
-  assert.equal(release.windows_fresh_install.result,'not_run');
+  assert.equal(release.windows_fresh_install_acceptance,'passed-scoped-windows-10-sandbox');
+  assert.equal(release.windows_fresh_install.result,'passed_scoped_guest_install_exports_and_process_restart');
   assert.equal(release.windows_fresh_install.application_source_commit,release.source_commit);
+  assert.equal(release.windows_fresh_install.source_tree,release.source_tree);
   assert.equal(release.windows_fresh_install.archive_sha256,release.platforms.windows.sha256);
+  assert.equal(release.windows_fresh_install.archive_sha256,'acde14ad365c8d0f12dd0816c33c5d690e7d3780afa28bbba464c7d371b35d1f');
+  assert.equal(release.windows_fresh_install.manifest_sha256,'ee461fc08bb4331bf2715a03d1ea45e2a495e98ba08bd503ffe2934366952409');
   assert.equal(release.windows_fresh_install.prerequisite_installed_by_launcher,false);
-  for(const field of ['physical_device_acceptance','restart_acceptance','ui_acceptance']) assert.equal(release.windows_fresh_install[field],'pending');
+  for(const field of ['fresh_install','portrait_encoded_export','landscape_encoded_export','full_decode',
+    'process_restart_acceptance','saved_project_and_export_bytes','model_cache_audit']) assert.equal(release.windows_fresh_install[field],'passed');
+  assert.equal(release.windows_fresh_install.encoded_export_count,2);
+  assert.equal(release.windows_fresh_install.configuration_unchanged,true);
+  assert.equal(release.windows_fresh_install.restart_acceptance,'application-process-only');
+  assert.equal(release.windows_fresh_install.os_reboot_acceptance,'not_performed');
+  assert.equal(release.windows_fresh_install.model_inference,'not_run');
+  for(const field of ['physical_device_acceptance','physical_windows11_acceptance','ui_acceptance']) assert.equal(release.windows_fresh_install[field],'pending');
+  for(const binary of ['ffmpeg','ffprobe']) {
+    const runtime=release.windows_fresh_install.runtime[binary];
+    assert.equal(runtime.major,9);
+    assert.match(runtime.version_first_line,new RegExp(`^${binary} version 9\\.0\\.2-`));
+    assert.match(runtime.sha256,/^[a-f0-9]{64}$/);
+  }
+  assert.match(release.windows_fresh_install.scope,/Windows 10 Sandbox/);
+  assert.match(release.windows_fresh_install.scope,/no human UI\/listening, physical Windows 11, OS reboot, SmartScreen, quarantine or model acceptance/);
   assert.equal(release.windows_conditional_setup,undefined,'Previous Windows results must not qualify the new downloads');
   const previous = release.historical_windows_validation.find(entry=>entry.release_tag==='v1.2-beta-20261018');
   assert.ok(previous,'Preserve the previous Windows validation as history');
@@ -120,6 +138,18 @@ test('public beta retains exact automated native provenance and visible pending 
   assert.equal(previous.windows_conditional_setup.configuration.before_sha256,previous.windows_conditional_setup.configuration.after_sha256);
   for(const field of ['physical_device_acceptance','restart_acceptance','ui_acceptance']) assert.equal(previous.windows_conditional_setup[field],'pending');
   assert.deepEqual(previous.windows_conditional_setup.health.models,[]);
+  const preceding = release.historical_windows_validation.find(entry=>entry.release_tag==='v1.2-beta-20261019');
+  assert.ok(preceding,'Preserve the exact preceding package regression as history');
+  assert.equal(preceding.application_source_commit,'7019b6423ce9d66531e933ee5cac42968f9e96e7');
+  assert.equal(preceding.archive_sha256,'24fc4767c7c80547308f03484c043d58e81c2592dcfdce6288e96cd3a98ccb89');
+  const regression=preceding.subsequent_exact_package_validation;
+  assert.equal(regression.source_commit,preceding.application_source_commit);
+  assert.equal(regression.archive_sha256,preceding.archive_sha256);
+  assert.equal(regression.status,'blocked_or_failed');
+  assert.equal(regression.observed_error,"Unrecognized option 'filter_complex_script'");
+  assert.equal(regression.observed_ffmpeg,'Gyan.FFmpeg 9.0.2');
+  assert.equal(regression.actual_results.completed_export_count,0);
+  assert.match(regression.scope,/Historical regression only; does not qualify the hotfix/);
   const runtimeHelp=linksTo(region('details','install-help'),'https://aka.ms/vc14/vc_redist.x64.exe');
   assert.equal(runtimeHelp.length,1);
   assertLocalized(runtimeHelp[0]);

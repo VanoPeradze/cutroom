@@ -1,14 +1,14 @@
 {
   "version": "1.2-beta",
-  "filename": "CUTROOM-1.2-Beta-Windows-20261019.zip",
-  "bytes": 2955433,
-  "sha256": "24fc4767c7c80547308f03484c043d58e81c2592dcfdce6288e96cd3a98ccb89",
-  "url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261019/CUTROOM-1.2-Beta-Windows-20261019.zip",
+  "filename": "CUTROOM-1.2-Beta-Windows-20261019-hotfix1.zip",
+  "bytes": 2963939,
+  "sha256": "acde14ad365c8d0f12dd0816c33c5d690e7d3780afa28bbba464c7d371b35d1f",
+  "url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261019-hotfix1/CUTROOM-1.2-Beta-Windows-20261019-hotfix1.zip",
   "mirrors": [
-    "https://cutroom-studio.expo.app/downloads/CUTROOM-1.2-Beta-Windows-20261019.zip"
+    "https://cutroom-studio.expo.app/downloads/CUTROOM-1.2-Beta-Windows-20261019-hotfix1.zip"
   ],
-  "build_id": "CUTROOM-1.2-beta-20261019-111922",
-  "manifest_sha256": "71ca49c2dd3b2d74a51cf9cd4ec62a7b78cbdd1f83b1c2dcf87e4085eed4d5ae",
-  "source_commit": "7019b6423ce9d66531e933ee5cac42968f9e96e7",
-  "note": "Qualified source-bound beta; fresh Windows installation remains pending. Historical validation pins are preserved."
+  "build_id": "CUTROOM-1.2-beta-20261019-122416",
+  "manifest_sha256": "ee461fc08bb4331bf2715a03d1ea45e2a495e98ba08bd503ffe2934366952409",
+  "source_commit": "0c28168999f3500092d1954b9a17419400648684",
+  "note": "Exact source-bound hotfix; fresh Windows 10 Sandbox install, two encoded exports and application-process restart passed with documented prerequisites. Physical Windows 11 and OS reboot remain pending; historical validation pins are preserved."
 }

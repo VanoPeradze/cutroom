@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2 Beta - 2026-10-19 - FFmpeg export compatibility hotfix
+
+- A fresh Windows installation could open successfully but fail every video export after setup installed FFmpeg 9.0.2. Its renderer still requested the removed `-filter_complex_script` and `-vsync` options.
+- Export now checks the configured FFmpeg executable and selects working graph-file and constant-frame-rate options. Older compatible builds retain their supported options. Filter graphs remain in files, including graphs longer than the Windows command-line limit.
+- Windows setup and launch, and Mac dependency preflight, verify real graph-file/CFR execution and required export codecs before reporting readiness. This does not establish human editing, speech/model accuracy, physical-device acceptance or OS-reboot persistence.
+
 ## 1.2 Beta - 2026-10-19 - Stable editing workspace, custom mixer and clearer camera status
 
 - The project library stays on the left, the preview in the centre, selected-item tools on the right and the timeline below. Switching tools keeps one inspector width, including on short laptop windows. Both region dividers support keyboard resizing.

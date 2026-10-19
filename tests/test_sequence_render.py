@@ -13,6 +13,7 @@ import pytest
 from cutroom import render
 from cutroom.captions import build_srt
 from cutroom.config import load_settings
+from cutroom.ffmpeg_compat import export_capabilities
 from cutroom.jobs import Job, JobContext
 from cutroom.projects import ProjectStore
 from test_source_tracks_render import clip, media  # Reuse isolated color/tone fixtures.
@@ -122,7 +123,7 @@ def test_real_sequence_export_reorders_extends_and_preserves_audio_gaps(tmp_path
     script.write_text(graph, encoding="utf-8")
     output = tmp_path / "sequence.mp4"
     result = subprocess.run([ffmpeg, "-v", "error", "-y", "-i", str(paths[0]), "-i", str(paths[1]),
-                             "-filter_complex_script", str(script), *maps, "-c:v", "libx264", "-preset", "ultrafast",
+                             *export_capabilities(ffmpeg).graph_file_args(script), *maps, "-c:v", "libx264", "-preset", "ultrafast",
                              "-c:a", "aac", "-r", str(fps), "-t", "6", str(output)], capture_output=True, timeout=20)
     assert result.returncode == 0, result.stderr.decode(errors="replace")
     metadata = json.loads(subprocess.check_output([ffprobe, "-v", "error", "-show_streams", "-of", "json", str(output)]))

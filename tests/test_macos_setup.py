@@ -42,6 +42,7 @@ def test_preflight_requires_subtitles_h264_and_aac(monkeypatch):
         return "ffmpeg version test"
 
     monkeypatch.setattr(preflight, "_capture", capture)
+    monkeypatch.setattr(preflight, "_check_export_options", lambda _command: None)
     failures = preflight.check_system()
     assert any("libass" in item for item in failures)
     assert any("libx264" in item for item in failures)
@@ -61,27 +62,51 @@ def test_preflight_accepts_compatible_ffmpeg_and_reports_missing_commands(monkey
         return "version"
 
     monkeypatch.setattr(preflight, "_capture", capture)
+    monkeypatch.setattr(preflight, "_check_export_options", lambda _command: None)
     assert preflight.check_system() == []
     monkeypatch.setattr(preflight, "_capture", lambda *args: (_ for _ in ()).throw(FileNotFoundError("missing")))
     assert len(preflight.check_system()) == 2
 
 
-@pytest.mark.parametrize("missing", ["-filter_complex_script", "-vsync"])
-def test_preflight_rejects_removed_render_options_even_with_all_codecs(monkeypatch, missing):
+@pytest.mark.parametrize("graph_option", ["-filter_complex_script", "-/filter_complex"])
+def test_preflight_accepts_shared_legacy_or_modern_export_capability(monkeypatch, graph_option):
+    from cutroom import ffmpeg_compat
+
+    probes = []
+
     def capture(command, *args):
         if "-filters" in args:
             return " ... subtitles V->V Render subtitles using libass\n"
         if "-encoders" in args:
             return " V....D libx264 H.264\n A..... aac AAC\n"
         if "-h" in args:
-            return "\n".join(f"{option} value  description" for option in ("-filter_complex_script", "-vsync") if option != missing)
+            pytest.fail("Preflight must use the renderer's shared probe instead of assuming legacy options")
         return "ffmpeg version 9.0.1"
 
     monkeypatch.setattr(preflight, "_capture", capture)
+    monkeypatch.setattr(ffmpeg_compat, "export_capabilities", lambda command: probes.append(command) or {"graph_file_option": graph_option})
+    assert preflight.check_system() == []
+    assert len(probes) == 1
+
+
+def test_preflight_rejects_failed_shared_export_probe_even_with_all_codecs(monkeypatch):
+    from cutroom import ffmpeg_compat
+
+    def capture(command, *args):
+        if "-filters" in args:
+            return " ... subtitles V->V Render subtitles using libass\n"
+        if "-encoders" in args:
+            return " V....D libx264 H.264\n A..... aac AAC\n"
+        return "ffmpeg version 9.0.2"
+
+    def incompatible(_command):
+        raise RuntimeError("File-based graph/CFR probe failed")
+
+    monkeypatch.setattr(preflight, "_capture", capture)
+    monkeypatch.setattr(ffmpeg_compat, "export_capabilities", incompatible)
     failures = preflight.check_system()
     assert len(failures) == 1
-    assert missing in failures[0]
-    assert "use ffmpeg@7" in failures[0]
+    assert "File-based graph/CFR probe failed" in failures[0]
 
 
 def test_override_validation_does_not_require_unconfigured_binary(monkeypatch):
