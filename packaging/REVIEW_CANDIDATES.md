@@ -46,9 +46,19 @@ The final hotfix record is [0c28168.json](review-candidates/0c28168.json), sourc
 `0c28168999f3500092d1954b9a17419400648684`. It also includes the English/Hebrew
 README links for the hotfix downloads; the renderer and compatibility helper are
 unchanged from the tested intermediate source. The manual workflow selects this
-final record and its three exact private ZIPs. Its own fresh Windows and native
-Mac qualification is required before publication; intermediate reports do not
-qualify this new archive identity.
+final record and its three exact private ZIPs. Its fresh Windows 10 Sandbox test
+passed installation with documented WinGet/VC++ prerequisites, both encoded
+exports and same-port application-process restart with saved state/output hashes
+preserved. No operating-system reboot or physical Windows 11 claim is made.
+Native run [39251933403](https://github.com/VanoPeradze/cutroom/actions/runs/39251933403)
+passed ARM and Intel at orchestration head `f7925c9be4f05adcc2a88b2698a1971b71be0083`:
+each ran 69 offline checks, 348 extracted feature tests and all 50 required cases
+with no skips, plus fresh installation, restart and missing-pip recovery. No
+models or transcription were requested. Intermediate reports do not qualify
+this final archive identity. The exact copies were published as
+[v1.2-beta-20261019-hotfix1](https://github.com/VanoPeradze/cutroom/releases/tag/v1.2-beta-20261019-hotfix1);
+the record itself stays a private-review source anchor, not a full-release or
+human/physical/AI acceptance claim. Earlier releases and historical pins remain.
 
 The command uses Python's standard library and local Git objects only. It never
 imports or executes application or builder code, installs dependencies, downloads

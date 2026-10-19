@@ -32,6 +32,29 @@ test('older distinct platform archives remain supported', () => {
   const platforms = {windows:{...release,filename:'CUTROOM-1.1-Beta-Windows.zip'},mac:{...release,filename:'CUTROOM-1.1-Beta-Mac.zip'}};
   assert.equal(downloadEntries({...release,platforms}).length,3);
 });
+
+test('dated hotfix packages keep source separate and require exact approved bytes', () => {
+  const combined = {...release,filename:'CUTROOM-1.2-Beta-20261019-hotfix1.zip',
+    platforms:{windows:{...release,filename:'CUTROOM-1.2-Beta-Windows-20261019-hotfix1.zip'},
+      mac:{...release,filename:'CUTROOM-1.2-Beta-Mac-20261019-hotfix1.zip'}},
+    source_archive:{...release,filename:'SOURCE-20261019-hotfix1.zip'}};
+  assert.deepEqual(downloadEntries(combined).map(entry => entry.filename), [combined.filename,
+    combined.platforms.windows.filename,combined.platforms.mac.filename,combined.source_archive.filename]);
+  assert.equal(verifyArchive(bytes,combined.source_archive),bytes);
+  assert.throws(()=>verifyArchive(Buffer.alloc(1),combined.source_archive),/size mismatch/);
+  assert.throws(()=>verifyArchive(Buffer.alloc(bytes.length),combined.source_archive),/checksum mismatch/);
+});
+
+test('dated source hotfix names cannot broaden into arbitrary names or paths', () => {
+  for (const filename of ['SOURCE-20261019-hotfix0.zip','SOURCE-20261019-hotfix01.zip',
+    'SOURCE-2026101-hotfix1.zip','SOURCE-202610199-hotfix1.zip','SOURCE-20261019-hotfix.zip',
+    'SOURCE-20261019-hotfix1-extra.zip','SOURCE-20261019-hotfix1.zip?download=1',
+    'SOURCE-20261019-hotfix1.zip\n','SOURCE-20261019-hotfix1.zip\r','SOURCE-20261019-hotfix1.zip\u2028',
+    '../SOURCE-20261019-hotfix1.zip','..\\SOURCE-20261019-hotfix1.zip',
+    'SOURCE-20261019-hotfix1/evil.zip','SOURCE-20261019-hotfix1\\evil.zip']) {
+    assert.throws(()=>downloadEntries({...release,source_archive:{...release,filename}}),/filename/);
+  }
+});
 test('local candidates cannot enter the existing production deployment workflow', () => {
   assert.throws(()=>assertPublishable({...release,release_state:'local-candidate'}),/Local candidate/);
   assert.throws(()=>assertPublishable({...release,platforms:{}}),/validation provenance/);
