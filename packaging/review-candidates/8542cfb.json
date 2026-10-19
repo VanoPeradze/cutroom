@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "kind": "cutroom-private-review-candidate",
+  "published": false,
+  "qualified_for_release": false,
+  "native_candidate_status": "pending",
+  "source": {
+    "commit": "8542cfb38275dcfacf2ad98788331ed8815a63f8",
+    "tree": "487c1d3405eba47c015a02b4b6839c3a744a776d",
+    "archive_sha256": "275528f02f0a7b9f7c7e2cc2a23498f15f41367771ec549d95f26bef34624df1",
+    "archive_bytes": 4957649,
+    "files": 421
+  },
+  "windows": {
+    "bytes": 2963812,
+    "sha256": "72cd8487e6a77442995cf34c5d4f58058972163affde57a49631e628880a65a7",
+    "manifest_sha256": "90bb43041951adef313204dabf3a09e162f69e5ddf26cad219e54e9e49695af7",
+    "build_id": "CUTROOM-1.2-beta-20261019-121756"
+  },
+  "combined": {
+    "bytes": 5962862,
+    "sha256": "8caf05c633368b4abdb39f6c014441c5bfb9274fbc0c6a162eed6fb990d6f45c",
+    "manifest_sha256": "cbaadd3c562923f7c7a0ade406c906cb972f21240073183f8d3cc28d9aad8af8",
+    "build_id": "CUTROOM-1.2-beta-mac-20261019-121756"
+  }
+}

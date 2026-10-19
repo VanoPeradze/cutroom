@@ -28,8 +28,19 @@ recovery. The orchestration head is `b28561c7a3d277e90381d2e720eb50ab2fe001fb`;
 the App source remains `7019b64`. The private record itself remains review only.
 Public beta metadata records the separately authorized promotion and pending
 Windows fresh-install, physical-device, human, model and real A/B acceptance.
-The manual review workflow selects this record and accepts exactly its three private ZIPs.
+That manual run selected this record and accepted exactly its three private ZIPs.
 No model download or transcription is enabled by default.
+
+The October 19 FFmpeg hotfix candidate is anchored by [8542cfb.json](review-candidates/8542cfb.json)
+for source `8542cfb38275dcfacf2ad98788331ed8815a63f8`. The prior public Windows
+package installed and opened in a fresh Windows Sandbox, but its first real
+export failed after setup selected FFmpeg 9.0.2. The hotfix checks graph-file/CFR
+capabilities and uses working modern or legacy options. Local synthetic exports
+passed on FFmpeg 7.1.1 and 9.0.2; 346 relevant regressions passed without skips.
+These configured-host checks do not replace exact-package native qualification.
+The manual review workflow now selects this hotfix record and exactly its three
+private ZIPs. Fresh Windows Sandbox exports/restart and both native Mac jobs
+remain pending. Public downloads and historical validation pins are unchanged.
 
 The command uses Python's standard library and local Git objects only. It never
 imports or executes application or builder code, installs dependencies, downloads
