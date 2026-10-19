@@ -1673,14 +1673,14 @@ export class TimelineView {
       } else this.setSelection(gesture.previousSelection,false);
     }
     if (gesture.kind === "move") {
-      this.onSelectionChange?.(this.selection);
+      this.onSelectionChange?.(this.selection, {kind:gesture.kind});
       if (gesture.dragged && !gesture.collision && Number.isFinite(gesture.moveStart) && Math.abs(gesture.moveStart - gesture.clip.start) > .001) {
         this.onEdit?.(gesture.target === "edit" || gesture.rangeMove
           ? { action: "sequence_move_range", start: gesture.clip.start, end: gesture.clip.end, to: gesture.moveStart, ...(gesture.target !== "edit" ? { slot: gesture.target } : {}) }
           : { action: "track_move", slot: gesture.target, clip_id: gesture.clip.id, start: gesture.moveStart });
       }
     }
-    if (["range", "edge", "clip", "layout", "locked"].includes(gesture.kind)) this.onSelectionChange?.(this.selection);
+    if (["range", "edge", "clip", "layout", "locked"].includes(gesture.kind)) this.onSelectionChange?.(this.selection, {kind:gesture.kind});
     if (gesture.kind === "layout" && !gesture.dragged && this.canEdit()) this.onLayoutSelect?.({ ...gesture.layout });
     if (gesture.kind === "remove_between" && !gesture.dragged && this.inEditLane(event)) this.cutOutAt(this.timeFromEvent(event));
     if (gesture.kind === "blade" && !gesture.dragged && this.inEditLane(event) && this.canEdit()) {

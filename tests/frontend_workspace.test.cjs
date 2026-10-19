@@ -49,7 +49,7 @@ class Element extends Target {
 }
 const event = (extra = {}) => ({ preventDefault() {}, stopPropagation() {}, stopImmediatePropagation() {}, ...extra });
 
-function harness({ fullscreen = "supported", savedHeight = null, storageDenied = false, inspector = false, savedWidth = null, savedCollapsed = null, width = 1280, translate } = {}) {
+function harness({ fullscreen = "supported", savedHeight = null, storageDenied = false, inspector = false, savedWidth = null, savedWidths = {}, savedCollapsed = null, width = 1280, translate } = {}) {
   const doc = new Target(); doc.ids = new Map(); doc.getElementById = (id) => doc.ids.get(id) || null;
   doc.createElement = (tag) => new Element(tag, doc); doc.documentElement = doc.createElement("html"); doc.body = doc.createElement("body"); doc.documentElement.appendChild(doc.body);
   const add = (parent, tag, id, className = "") => { const el = doc.createElement(tag); if (id) el.id = id; el.className = className; parent.appendChild(el); return el; };
@@ -68,7 +68,7 @@ function harness({ fullscreen = "supported", savedHeight = null, storageDenied =
   const win = new Target(); win.innerHeight = 720; win.innerWidth = width;
   let redraws = 0, shortcuts = 0, requests = 0, exits = 0; const frames = new Map(); let id = 0;
   win.requestAnimationFrame = (fn) => { frames.set(++id, fn); return id; }; win.cancelAnimationFrame = (id) => frames.delete(id);
-  const store = new Map([["cutroom-timeline-height-v3", savedHeight],["cutroom-inspector-width-v1",savedWidth],["cutroom-inspector-collapsed-v1",savedCollapsed]]);
+  const store = new Map([["cutroom-timeline-height-v3", savedHeight],["cutroom-inspector-width-v1",savedWidth],["cutroom-inspector-collapsed-v1",savedCollapsed],...Object.entries(savedWidths)]);
   win.localStorage = { getItem: (k) => { if (storageDenied) throw Error("Denied"); return store.get(k) ?? null; },
     setItem: (k, v) => { if (storageDenied) throw Error("Denied"); store.set(k, v); }, removeItem: (k) => store.delete(k) };
   let observerCallback; win.MutationObserver = class { constructor(fn) { observerCallback = fn; } observe() {} disconnect() { observerCallback = null; } };
@@ -217,10 +217,10 @@ test("one accessible tool toggle and separator control the original inspector wi
 test("inspector keyboard bounds preserve room for preview and restore a wider saved preference after resize", () => {
   const h = harness({inspector:true}), divider = h.el("workspaceInspectorDivider");
   assert.equal(h.controller.setInspectorWidth(9999),420);
-  assert.equal(h.store.get("cutroom-inspector-width-v2"),"420");
+  assert.equal(h.store.get("cutroom-inspector-width-v3"),"420");
   h.panel.rect.width=961; h.win.emit("resize"); h.flush();
   assert.equal(divider.getAttribute("aria-valuenow"),"326");
-  assert.equal(h.store.get("cutroom-inspector-width-v2"),"420");
+  assert.equal(h.store.get("cutroom-inspector-width-v3"),"420");
   h.panel.rect.width=1280; h.win.emit("resize"); h.flush();
   assert.equal(divider.getAttribute("aria-valuenow"),"420");
   divider.emit("keydown",event({key:"Home"})); assert.equal(divider.getAttribute("aria-valuenow"),"280");
@@ -231,18 +231,18 @@ test("inspector keyboard bounds preserve room for preview and restore a wider sa
 test("inspector drag, RTL arrows, cancellation and double-click use display preferences only", () => {
   const h = harness({inspector:true}), d=h.el("workspaceInspectorDivider");
   d.emit("pointerdown",event({button:0,pointerId:4,clientX:400}));
-  d.emit("pointermove",event({pointerId:5,clientX:470})); assert.equal(d.getAttribute("aria-valuenow"),"344");
-  d.emit("pointermove",event({pointerId:4,clientX:352})); assert.equal(d.getAttribute("aria-valuenow"),"392");
-  d.emit("pointerup",event({pointerId:4})); assert.equal(h.store.get("cutroom-inspector-width-v2"),"392");
+  d.emit("pointermove",event({pointerId:5,clientX:470})); assert.equal(d.getAttribute("aria-valuenow"),"400");
+  d.emit("pointermove",event({pointerId:4,clientX:384})); assert.equal(d.getAttribute("aria-valuenow"),"416");
+  d.emit("pointerup",event({pointerId:4})); assert.equal(h.store.get("cutroom-inspector-width-v3"),"416");
   h.doc.documentElement.dir="rtl";
-  d.emit("keydown",event({key:"ArrowLeft"})); assert.equal(d.getAttribute("aria-valuenow"),"376");
+  d.emit("keydown",event({key:"ArrowLeft"})); assert.equal(d.getAttribute("aria-valuenow"),"400");
   d.emit("pointerdown",event({button:0,pointerId:6,clientX:400}));
-  d.emit("pointermove",event({pointerId:6,clientX:430})); assert.equal(d.getAttribute("aria-valuenow"),"406");
-  d.emit("keydown",event({key:"Escape"})); assert.equal(d.getAttribute("aria-valuenow"),"376");
-  assert.equal(h.store.get("cutroom-inspector-width-v2"),"376");
+  d.emit("pointermove",event({pointerId:6,clientX:430})); assert.equal(d.getAttribute("aria-valuenow"),"420");
+  d.emit("keydown",event({key:"Escape"})); assert.equal(d.getAttribute("aria-valuenow"),"400");
+  assert.equal(h.store.get("cutroom-inspector-width-v3"),"400");
   assert.equal(h.panel.classList.contains("inspector-resizing"),false);
-  d.emit("dblclick"); assert.equal(d.getAttribute("aria-valuenow"),"344");
-  assert.equal(h.store.has("cutroom-inspector-width-v2"),false);
+  d.emit("dblclick"); assert.equal(d.getAttribute("aria-valuenow"),"400");
+  assert.equal(h.store.has("cutroom-inspector-width-v3"),false);
   assert.equal(h.a.parentElement,h.stage); assert.equal(h.b.parentElement,h.stage);
 });
 
@@ -266,7 +266,7 @@ test("tool labels and separator announcements refresh through the injected live 
   h.doc.documentElement.lang="he";h.doc.documentElement.dir="rtl";h.observe();h.flush();
   assert.equal(h.el("workspaceToolsToggle").textContent,dictionary.inspectorHide);
   assert.equal(h.el("workspaceInspectorDivider").getAttribute("aria-label"),dictionary.inspectorResize);
-  assert.equal(h.el("workspaceInspectorDivider").getAttribute("aria-valuetext"),"רוחב: 344 פיקסלים");
+  assert.equal(h.el("workspaceInspectorDivider").getAttribute("aria-valuetext"),"רוחב: 400 פיקסלים");
   h.controller.setInspectorCollapsed(true);assert.equal(h.el("workspaceToolsToggle").textContent,dictionary.inspectorShow);
 });
 
@@ -282,18 +282,16 @@ test("tool display preferences tolerate invalid storage and cleanup restores acc
   assert.equal(h.panel.properties.has("--workspace-inspector-width"),false);
 });
 
-test("focused workspaces keep independent widths, retain edit preference and never move media", () => {
+test("context workspaces share the user width and never move media or jump the preview", () => {
   const h = harness({inspector:true, savedWidth:"400"});
-  h.controller.setWorkspace("audio");
-  assert.equal(h.panel.dataset.workspace,"audio");
-  assert.equal(h.el("workspaceInspectorDivider").getAttribute("aria-valuenow"),"400");
+  for(const mode of ['audio','framing','transcript','media','settings','timeline']){
+    h.controller.setWorkspace(mode);assert.equal(h.panel.dataset.workspace,mode);
+    assert.equal(h.el("workspaceInspectorDivider").getAttribute("aria-valuenow"),"400");
+  }
   h.controller.setInspectorWidth(720);
-  h.controller.setWorkspace("framing");
-  assert.equal(h.el("workspaceInspectorDivider").getAttribute("aria-valuenow"),"344");
-  h.controller.setWorkspace("timeline");
-  assert.equal(h.el("workspaceInspectorDivider").getAttribute("aria-valuenow"),"400");
-  h.controller.setWorkspace("audio");
-  assert.equal(h.el("workspaceInspectorDivider").getAttribute("aria-valuenow"),"420");
+  for(const mode of ['framing','timeline','audio']){
+    h.controller.setWorkspace(mode);assert.equal(h.el("workspaceInspectorDivider").getAttribute("aria-valuenow"),"420");
+  }
   h.panel.rect.width = 961; h.win.emit("resize"); h.flush();
   assert.equal(h.el("workspaceInspectorDivider").getAttribute("aria-valuenow"),"326");
   h.panel.rect.width = 1280; h.win.emit("resize"); h.flush();
@@ -302,26 +300,73 @@ test("focused workspaces keep independent widths, retain edit preference and nev
   h.controller.setWorkspace("invalid"); assert.equal(h.panel.dataset.workspace,"audio");
 });
 
-test("Edit effects preserves separate widths across tabs without moving or restarting video", () => {
+test("Edit effects and context tabs retain the shared width without moving or restarting video", () => {
   const h = harness({inspector:true,savedWidth:"400"});
   h.controller.setEditEffects(true);
-  assert.equal(h.el("workspaceInspectorDivider").getAttribute("aria-valuenow"),"344");
+  assert.equal(h.el("workspaceInspectorDivider").getAttribute("aria-valuenow"),"400");
   h.controller.setInspectorWidth(510);
   h.controller.setWorkspace("framing");
-  assert.equal(h.el("workspaceInspectorDivider").getAttribute("aria-valuenow"),"344");
+  assert.equal(h.el("workspaceInspectorDivider").getAttribute("aria-valuenow"),"420");
   h.controller.setWorkspace("timeline");
   assert.equal(h.el("workspaceInspectorDivider").getAttribute("aria-valuenow"),"420");
   h.controller.setEditEffects(false);
-  assert.equal(h.el("workspaceInspectorDivider").getAttribute("aria-valuenow"),"400");
+  assert.equal(h.el("workspaceInspectorDivider").getAttribute("aria-valuenow"),"420");
   assert.equal(h.a.parentElement,h.stage);
   assert.equal(h.preview.parentElement,h.dock);
 });
 
 test("oversized legacy display settings fall back without deleting old keys or changing media", () => {
   const h=harness({inspector:true,savedWidth:"860",savedHeight:"800"});
-  assert.equal(h.el("workspaceInspectorDivider").getAttribute("aria-valuenow"),"344");
+  assert.equal(h.el("workspaceInspectorDivider").getAttribute("aria-valuenow"),"400");
   assert.equal(h.el("workspaceDivider").getAttribute("aria-valuenow"),"256");
   assert.equal(h.store.get("cutroom-inspector-width-v1"),"860");
   assert.equal(h.store.get("cutroom-timeline-height-v3"),"800");
   assert.equal(h.a.parentElement,h.stage); assert.equal(h.b.parentElement,h.stage);
+});
+
+test("shared width migrates reasonable old global preferences without changing legacy context keys",()=>{
+  const legacy={'cutroom-inspector-width-v2':'384','cutroom-inspector-width-v2-audio':'420','cutroom-inspector-width-v2-effects':'280'};
+  const h=harness({inspector:true,savedWidth:'400',savedWidths:legacy});
+  assert.equal(h.el('workspaceInspectorDivider').getAttribute('aria-valuenow'),'384');
+  h.controller.setWorkspace('audio');h.controller.setEditEffects(true);
+  assert.equal(h.el('workspaceInspectorDivider').getAttribute('aria-valuenow'),'384');
+  h.controller.setInspectorWidth(368);
+  assert.equal(h.store.get('cutroom-inspector-width-v3'),'368');
+  for(const [key,value] of Object.entries(legacy))assert.equal(h.store.get(key),value);
+  assert.equal(h.store.get('cutroom-inspector-width-v1'),'400');
+});
+
+test("saved shared width wins over old context widths and defaults stay stable without storage",()=>{
+  const h=harness({inspector:true,savedWidths:{'cutroom-inspector-width-v3':'376','cutroom-inspector-width-v2':'300','cutroom-inspector-width-v2-audio':'420'}});
+  for(const mode of ['timeline','audio','framing','transcript','settings']){
+    h.controller.setWorkspace(mode);assert.equal(h.el('workspaceInspectorDivider').getAttribute('aria-valuenow'),'376');
+  }
+  const denied=harness({inspector:true,storageDenied:true});
+  for(const mode of ['timeline','audio','framing','transcript','settings']){
+    denied.controller.setWorkspace(mode);assert.equal(denied.el('workspaceInspectorDivider').getAttribute('aria-valuenow'),'400');
+  }
+});
+
+test("a sensible legacy width opens safely on a narrow laptop and returns when the window widens",()=>{
+  const h=harness({inspector:true,width:900,savedWidths:{'cutroom-inspector-width-v2':'400'}});
+  assert.equal(h.el('workspaceInspectorDivider').getAttribute('aria-valuenow'),'306');
+  h.controller.setWorkspace('audio');h.panel.rect.width=1280;h.win.emit('resize');h.flush();
+  assert.equal(h.el('workspaceInspectorDivider').getAttribute('aria-valuenow'),'400');
+  assert.equal(h.store.get('cutroom-inspector-width-v2'),'400');
+  assert.equal(h.store.has('cutroom-inspector-width-v3'),false);
+});
+
+test("900 by 600 laptop keeps both resizers active within truthful bounds and retains media",()=>{
+  const h=harness({inspector:true,width:900});h.panel.rect.height=548;h.win.innerHeight=600;
+  const tabs=h.doc.createElement('nav');tabs.className='advanced-tabs';tabs.rect={height:48};h.panel.append(tabs);
+  h.win.emit('resize');h.flush();
+  const horizontal=h.el('workspaceDivider'),vertical=h.el('workspaceInspectorDivider');
+  horizontal.emit('keydown',event({key:'Home'}));const first=Number(horizontal.getAttribute('aria-valuenow'));
+  horizontal.emit('keydown',event({key:'ArrowUp'}));const next=Number(horizontal.getAttribute('aria-valuenow'));
+  assert.ok(next>first);assert.ok(next<=Number(horizontal.getAttribute('aria-valuemax')));
+  assert.ok(h.panel.rect.height-44-48-8-next>=220,'short laptop retains a usable preview dock');
+  vertical.emit('keydown',event({key:'Home'}));vertical.emit('keydown',event({key:'ArrowLeft'}));
+  assert.equal(vertical.getAttribute('aria-valuenow'),'296');
+  h.controller.setWorkspace('audio');assert.equal(vertical.getAttribute('aria-valuenow'),'296');
+  assert.equal(h.a.parentElement,h.stage);assert.equal(h.preview.parentElement,h.dock);
 });

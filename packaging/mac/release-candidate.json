@@ -1,14 +1,17 @@
 {
-  "bytes": 7452329,
-  "sha256": "e6973fcace0766e43767e0a14e1833dc35e820b9e5b19895ed57e688ff2ff731",
-  "filename": "CUTROOM-1.2-Beta-combined-review-fe35453.zip",
-  "url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261018/CUTROOM-1.2-Beta-combined-review-fe35453.zip",
   "version": "1.2-beta",
   "layout": "windows-mac-folders-v1",
-  "build_id": "CUTROOM-1.2-beta-mac-20261018-035808",
-  "manifest_sha256": "18cd303a1895bdb6b5b154b5592831b3b4a520f8682eb6a72fa17e496931689a",
-  "source_commit": "fe35453119305a33e0890a25e627a4fa47ad353d",
-  "native_validation_url": "https://github.com/VanoPeradze/cutroom/actions/runs/39139136807",
-  "native_validation_commit": "7e18c1c622968985cbcbc33abdb33a185a2b2bd3",
-  "note": "Exact existing combined ZIP from the source-pinned fe35453 review pair, promoted without rebuilding for the explicitly authorized exploratory public beta. Native macOS 15 arm64/x64 run 39139136807 passed 69 offline review checks and 340 feature checks per architecture, all 50 required feature cases with zero skips, fresh App setup, missing-pip recovery and restart persistence. No transcription or model inference was run, and no models were downloaded. Physical Mac Finder/Gatekeeper/Safari and human editing/listening/AI quality remain unverified. The default clean Windows installer failed without a separately installed Microsoft Visual C++ x64 runtime; WinGet plus signed runtime preparation enabled setup/startup health, with full physical-device/restart/UI acceptance still pending. This combined ZIP is also the Mac download; no standalone Mac archive is promoted. CI retains strict payload comparison, and historical validation pins remain unchanged."
+  "filename": "CUTROOM-1.2-Beta-20261019.zip",
+  "bytes": 5946045,
+  "sha256": "bccfea9d1fbbe7f562313c586f9ccc2bb0e6cb71ceff09b3fc852a00cfed8773",
+  "url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261019/CUTROOM-1.2-Beta-20261019.zip",
+  "mirrors": [
+    "https://cutroom-studio.expo.app/downloads/CUTROOM-1.2-Beta-20261019.zip"
+  ],
+  "build_id": "CUTROOM-1.2-beta-mac-20261019-111923",
+  "manifest_sha256": "ceeefa809b0104adec834f1ef4d737637c8654d759bbcb1865bc4d56a30b76d3",
+  "source_commit": "7019b6423ce9d66531e933ee5cac42968f9e96e7",
+  "native_validation_url": "https://github.com/VanoPeradze/cutroom/actions/runs/39244037429",
+  "native_validation_commit": "b28561c7a3d277e90381d2e720eb50ab2fe001fb",
+  "note": "Exact native-tested combined archive; separate Mac download is its verified App/launcher projection. No physical or model acceptance is implied."
 }

@@ -33,6 +33,7 @@ def semantic_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     def attach(current):
         current["sources"]["A"] = {
             "slot": "A", "name": "source.mp4", "relative_path": "media/source-A.mp4",
+            "generation": "fixture-source-generation",
             "duration": 300.0, "width": 1920, "height": 1080,
             "has_audio": True, "size": source.stat().st_size,
         }
@@ -81,7 +82,7 @@ def semantic_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     })
     monkeypatch.setattr(director, "detect_scenes", lambda *_args, **_kwargs: [])
     monkeypatch.setattr(director, "analyze_faces_and_embedded_camera", lambda *_args, **_kwargs: {
-        "version": VISION_ANALYSIS_VERSION, "focus_safe": False,
+        "version": VISION_ANALYSIS_VERSION, "available": True, "focus_safe": False,
     })
 
     def context():
@@ -118,6 +119,88 @@ def test_new_editorial_instruction_replans_without_retranscription(semantic_proj
     director.refine_project(context(), project_id, store, settings, "new_variation")
 
     assert calls == {"transcribe": 1, "plan": 2}
+
+
+@pytest.mark.parametrize("reuse_context", [False, True])
+@pytest.mark.parametrize("availability", [False, None, "true"])
+def test_rebuild_retries_failed_camera_profiles_without_reusing_failure(
+    semantic_project, monkeypatch, reuse_context, availability,
+):
+    store, settings, project_id, calls, context = semantic_project
+    vision_calls = []
+
+    def repair_camera(_path, _duration, **_kwargs):
+        vision_calls.append(True)
+        return {"version": VISION_ANALYSIS_VERSION, "available": True,
+                "embedded_camera": None, "focus_safe": False}
+
+    def record_failure(current):
+        failed = {
+            "version": VISION_ANALYSIS_VERSION, "available": availability,
+            "source_generation": "fixture-source-generation", "sample_count": 56,
+            "embedded_camera": None, "reason": "preparation_error",
+            "warning": "AttributeError: module 'cv2' has no attribute 'CascadeClassifier'",
+        }
+        if availability is None:
+            failed.pop("available")
+        current["pre_analysis"]["vision"]["A"] = copy.deepcopy(failed)
+        if reuse_context:
+            current["analysis"]["vision"] = failed
+        else:
+            current["analysis"] = None
+        current["draft"] = None
+
+    store.update(project_id, record_failure)
+    monkeypatch.setattr(director, "analyze_faces_and_embedded_camera", repair_camera)
+    director.analyze_project(context(), project_id, store, settings)
+
+    assert len(vision_calls) == 1
+    assert store.load(project_id)["analysis"]["vision"]["available"] is True
+    assert calls["transcribe"] == (1 if reuse_context else 2)
+
+
+def test_rebuild_reuses_successful_negative_camera_analysis(semantic_project, monkeypatch):
+    store, settings, project_id, calls, context = semantic_project
+
+    def negative(current):
+        current["analysis"]["vision"] = {
+            "version": VISION_ANALYSIS_VERSION, "available": True,
+            "embedded_camera": None, "focus_safe": False,
+        }
+
+    def unexpected_detection(*_args, **_kwargs):
+        raise AssertionError("A successful negative camera scan is reusable")
+
+    store.update(project_id, negative)
+    monkeypatch.setattr(director, "analyze_faces_and_embedded_camera", unexpected_detection)
+    director.analyze_project(context(), project_id, store, settings)
+    assert calls == {"transcribe": 1, "plan": 1}
+
+
+def test_rebuild_preserves_camera_unavailability_as_a_visible_warning(semantic_project, monkeypatch):
+    store, settings, project_id, calls, context = semantic_project
+    attempts = []
+    failure = {
+        "version": VISION_ANALYSIS_VERSION, "available": False,
+        "reason": "opencv_detector_unavailable", "warning": "Camera classifiers could not load",
+        "embedded_camera": None,
+    }
+    store.update(project_id, lambda current: current["analysis"].update(vision=copy.deepcopy(failure)))
+
+    def unavailable(*_args, **_kwargs):
+        attempts.append(True)
+        return copy.deepcopy(failure)
+
+    monkeypatch.setattr(director, "analyze_faces_and_embedded_camera", unavailable)
+    for _ in range(2):
+        director.analyze_project(context(), project_id, store, settings)
+        saved = store.load(project_id)
+        assert saved["analysis"]["vision"]["available"] is False
+        warning = next(row for row in saved["analysis"]["warnings"] if row["type"] == "camera_detection")
+        assert "could not run" in warning["message"]
+        assert "run setup" not in warning["message"].lower(), "Generic errors may come from media decoding"
+    assert len(attempts) == 2, "A continuing camera failure remains retryable"
+    assert calls["transcribe"] == 1, "Camera retries do not require retranscription"
 
 
 def test_empty_target_pruning_does_not_restore_the_entire_source(semantic_project, monkeypatch):
@@ -1194,6 +1277,7 @@ def test_prepared_embedded_layout_survives_generation_refinement_and_rebuild(sem
         current["settings"].update({"layout": "embedded_stack", "performance_mode": "quality"})
         current["pre_analysis"]["vision"]["A"] = {
             "version": VISION_ANALYSIS_VERSION,
+            "available": True,
             "source_generation": "combined-recording", "sample_count": 6,
             "embedded_camera": {**geometry, "detector": VISION_ANALYSIS_VERSION},
         }
@@ -1248,6 +1332,7 @@ def test_preparation_cannot_enable_unselected_or_stale_embedded_layout(semantic_
         current["settings"]["performance_mode"] = "quality"
         profile = {
             "version": VISION_ANALYSIS_VERSION,
+            "available": True,
             "source_generation": "combined-recording", "sample_count": 6,
             "embedded_camera": {"x": .72, "y": .06, "w": .24, "h": .25},
         }

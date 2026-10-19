@@ -332,7 +332,9 @@ class UploadTooLargeError(ValueError):
 
 def copy_upload(file_storage: Any, destination: Path, max_bytes: int) -> int:
     destination.parent.mkdir(parents=True, exist_ok=True)
-    temp = destination.with_name(f".{destination.name}.{uuid.uuid4().hex}.partial")
+    # Keep the atomic staging file beside its destination without repeating a
+    # potentially long basename and exceeding Windows path limits.
+    temp = destination.with_name(f".{uuid.uuid4().hex}")
     total = 0
     try:
         with temp.open("wb") as handle:

@@ -27,7 +27,7 @@ function assertLocalized(link) {
   assert.match(link[0], />[^<>]*[A-Za-z][^<>]*</, 'The default link text must be English');
 }
 
-test('Windows uses its archive and Mac uses the exact combined archive with folder instructions', () => {
+test('Windows and Mac have separate archives with an optional combined download and exact source', () => {
   const release = JSON.parse(readFileSync(new URL('./release.json', import.meta.url), 'utf8'));
   const buttons = [...html.matchAll(/<a\b[^>]*class="[^"]*\bbutton\b[^"]*"[^>]*>/g)];
   assert.equal(buttons.length, 2);
@@ -45,22 +45,28 @@ test('Windows uses its archive and Mac uses the exact combined archive with fold
     assert.match(mirror[0][2], /mirror/i);
     assert.ok(linksTo(html, `/downloads/${entry.filename}.sha256`).length >= 1);
   }
-  assert.equal(release.platforms.mac.filename, release.filename);
-  assert.equal(release.platforms.mac.folder, 'mac');
-  assert.equal(linksTo(html, release.url).length, 2); // Mac button and the combined ZIP help link.
+  assert.equal(release.filename, 'CUTROOM-1.2-Beta-20261019.zip');
+  assert.equal(release.platforms.windows.filename, 'CUTROOM-1.2-Beta-Windows-20261019.zip');
+  assert.equal(release.platforms.mac.filename, 'CUTROOM-1.2-Beta-Mac-20261019.zip');
+  assert.notEqual(release.platforms.mac.filename, release.filename);
+  assert.ok(!release.platforms.mac.folder, 'The standalone Mac launcher is beside App, without a mac subfolder');
+  assert.equal(linksTo(html, release.url).length, 1); // Optional combined ZIP help link, separate from the Mac button.
   assert.equal(linksTo(html, `/downloads/${release.filename}`).length, 1);
-  assert.equal(linksTo(html, `/downloads/${release.filename}.sha256`).length, 2);
-  assert.match(html, /Mac download includes both platforms\. Extract it, open mac\//);
+  assert.equal(linksTo(html, `/downloads/${release.filename}.sha256`).length, 1);
+  assert.match(html, /Mac has its own ZIP\. Extract it and run START CUTROOM\.command beside App\./);
+  assert.match(region('details', 'install-help'), /The optional combined ZIP has exactly two folders: windows and mac/);
   const source = release.source_archive;
+  assert.equal(source.filename, 'SOURCE-20261019.zip');
   for (const url of [source.url, `/downloads/${source.filename}`, `/downloads/${source.filename}.sha256`]) assert.equal(linksTo(html,url).length,1);
-  assert.equal(downloadEntries(release).length,3);
+  assert.equal(downloadEntries(release).length,4);
   assert.doesNotMatch(html, /href="[^"]*Linux[^"\n]*\.zip/i);
   assert.ok(linksTo(html, `${repository}/blob/master/docs/PLATFORMS.md#linux-source-based-development-path`).length);
 });
 
 test('download metadata pins a dated release and preserves Expo mirrors and provenance', () => {
   const release = JSON.parse(readFileSync(new URL('./release.json', import.meta.url), 'utf8'));
-  assert.match(release.github_release.tag, /^v\d+\.\d+-beta-\d{8}$/);
+  assert.equal(release.github_release.tag, 'v1.2-beta-20261019');
+  assert.equal(release.github_release.previous_public_tag, 'v1.2-beta-20261018');
   assert.equal(release.github_release.tag_commit, release.source_commit);
   assert.equal(release.github_release.package_bytes_changed, false);
   assert.equal(release.github_release.url, `${repository}/releases/tag/${release.github_release.tag}`);
@@ -75,34 +81,53 @@ test('public beta retains exact automated native provenance and visible pending 
   assertPublishable(release);
   assert.equal(release.release_state,'beta');
   assert.equal(release.full_release_qualified,false);
-  assert.equal(release.source_commit,'fe35453119305a33e0890a25e627a4fa47ad353d');
-  assert.equal(release.github_release.tag,'v1.2-beta-20261018');
+  assert.equal(release.source_commit,'7019b6423ce9d66531e933ee5cac42968f9e96e7');
+  assert.equal(release.github_release.tag,'v1.2-beta-20261019');
+  assert.equal(release.native_validation.run_id,39244037429);
+  assert.equal(release.validated_pr_head,'b28561c7a3d277e90381d2e720eb50ab2fe001fb');
+  assert.equal(release.native_validation.transcription_run,false);
   for (const architecture of ['arm64','x64']) {
     const checks = release.native_validation.architectures[architecture];
     assert.equal(checks.offline_checks_passed,69);
-    assert.equal(checks.feature_tests_passed,340);
+    assert.equal(checks.feature_tests_passed,348);
     assert.equal(checks.required_cases_passed,50);
     assert.equal(checks.skipped,0);
   }
   assert.match(html,/Public beta\./);
-  assert.match(html,/default setup without the runtime failed\./);
-  assert.match(html,/Setup and startup health passed with these prerequisites in Windows 10 Sandbox/);
+  assert.match(html,/Windows requires WinGet and Microsoft Visual C\+\+ x64 runtime first\./);
   assert.match(html,/The required Visual C\+\+ runtime is not installed by the launcher\./);
-  assert.match(html,/Full physical-device, restart and UI acceptance remain pending\./);
-  assert.equal(release.windows_fresh_install_acceptance,'failed-native-dll-check');
-  assert.equal(release.windows_fresh_install.result,'failed');
-  assert.equal(release.windows_conditional_setup.result,'isolated_guest_install_and_first_http_launch_passed_with_explicit_winget_and_msvc_prerequisites');
-  assert.equal(release.windows_conditional_setup.scoped_guest_acceptance,'passed');
-  assert.equal(release.windows_conditional_setup.full_guest_acceptance,'not-established-beyond-scoped-install-and-first-http');
-  assert.deepEqual(release.windows_conditional_setup.homepage,{status_code:200,contains_cutroom:true});
-  assert.equal(release.windows_conditional_setup.configuration.before_sha256,release.windows_conditional_setup.configuration.after_sha256);
-  for(const field of ['physical_device_acceptance','restart_acceptance','ui_acceptance']) assert.equal(release.windows_conditional_setup[field],'pending');
-  assert.deepEqual(release.windows_conditional_setup.health.models,[]);
+  assert.equal(release.windows_fresh_install_acceptance,'pending-new-source');
+  assert.equal(release.windows_fresh_install.result,'not_run');
+  assert.equal(release.windows_fresh_install.application_source_commit,release.source_commit);
+  assert.equal(release.windows_fresh_install.archive_sha256,release.platforms.windows.sha256);
+  assert.equal(release.windows_fresh_install.prerequisite_installed_by_launcher,false);
+  for(const field of ['physical_device_acceptance','restart_acceptance','ui_acceptance']) assert.equal(release.windows_fresh_install[field],'pending');
+  assert.equal(release.windows_conditional_setup,undefined,'Previous Windows results must not qualify the new downloads');
+  const previous = release.historical_windows_validation.find(entry=>entry.release_tag==='v1.2-beta-20261018');
+  assert.ok(previous,'Preserve the previous Windows validation as history');
+  assert.match(previous.scope,/Historical only/);
+  assert.equal(previous.application_source_commit,'fe35453119305a33e0890a25e627a4fa47ad353d');
+  assert.equal(previous.archive_sha256,'d20f33568ebaeb702717baade8e2a76dda88cb10e81461d61cc48ec96f725aca');
+  assert.notEqual(previous.application_source_commit,release.source_commit);
+  assert.equal(previous.windows_fresh_install_acceptance,'failed-native-dll-check');
+  assert.equal(previous.windows_fresh_install.result,'failed');
+  assert.equal(previous.windows_conditional_setup.application_source_commit,previous.application_source_commit);
+  assert.equal(previous.windows_conditional_setup.archive_sha256,previous.archive_sha256);
+  assert.equal(previous.windows_conditional_setup.result,'isolated_guest_install_and_first_http_launch_passed_with_explicit_winget_and_msvc_prerequisites');
+  assert.equal(previous.windows_conditional_setup.scoped_guest_acceptance,'passed');
+  assert.equal(previous.windows_conditional_setup.full_guest_acceptance,'not-established-beyond-scoped-install-and-first-http');
+  assert.deepEqual(previous.windows_conditional_setup.homepage,{status_code:200,contains_cutroom:true});
+  assert.equal(previous.windows_conditional_setup.configuration.before_sha256,previous.windows_conditional_setup.configuration.after_sha256);
+  for(const field of ['physical_device_acceptance','restart_acceptance','ui_acceptance']) assert.equal(previous.windows_conditional_setup[field],'pending');
+  assert.deepEqual(previous.windows_conditional_setup.health.models,[]);
   const runtimeHelp=linksTo(region('details','install-help'),'https://aka.ms/vc14/vc_redist.x64.exe');
   assert.equal(runtimeHelp.length,1);
   assertLocalized(runtimeHelp[0]);
-  assert.match(html,/Transcription, Ollama\/cloud AI, physical clean-device installation, Finder\/Gatekeeper\/Safari/);
-  assert.match(html,/representative English\/Hebrew editing and listening acceptance remain pending\./);
+  assert.match(html,/Automated checks do not replace a test on your computer\./);
+  assert.match(html,/Transcription and AI, physical-device installation, Finder\/Gatekeeper\/Safari/);
+  assert.match(html,/representative English\/Hebrew editing and listening still need manual acceptance\./);
+  assert.match(html,/confirm that both sources show the same moment before relying on synchronization/);
+  assert.match(html,/an empty B track does not create camera footage/);
 });
 
 test('source and issue links remain visible without competing with download', () => {
@@ -128,7 +153,8 @@ test('language switching preserves links, images and actionable controls', () =>
   const languageLink = linksTo(html, '?lang=he');
   assert.equal(languageLink.length, 1);
   assert.match(languageLink[0][1], /lang="he"/);
-  assert.match(languageLink[0][1], /aria-label="Read this website in Hebrew"/);
+  assert.match(languageLink[0][2], /[\u0590-\u05ff]/);
+  assert.doesNotMatch(languageLink[0][1], /aria-label=/, 'The visible language name is the accessible name');
 });
 
 test('the concise introduction shows an authentic bilingual dark editor preview', () => {
@@ -148,8 +174,8 @@ test('the concise introduction shows an authentic bilingual dark editor preview'
   assert.match(image, /fetchpriority="high"/);
   const imageUrl = image.match(/src="([^"]+)"/)[1];
   assert.ok(region('dialog', 'imageDialog').includes(`src="${imageUrl}"`), 'Enlargement must show the same real screenshot');
-  assert.match(hero, /Actual editor · Synthetic gameplay demo/);
-  assert.match(hero, /No third-party game is shown\./);
+  assert.match(hero, /Actual editor · Captured 19 October 2026/);
+  assert.match(hero, /No third-party footage or real person is shown\./);
   assert.doesNotMatch(html, /(?:welcome|ai-options)\.png|\bdata-shot=|<table\b/);
 });
 
@@ -190,8 +216,50 @@ test('keyboard focus, reduced motion and screenshot enlargement remain available
   assert.match(reducedMotion, /transition:none!important/);
   assert.match(reducedMotion, /animation:none!important/);
   assert.match(html, /<button\b[^>]*id="expandShot"[^>]*aria-label="[^"]+"/);
-  assert.match(html, /<dialog\b[^>]*id="imageDialog"[^>]*aria-label="[^"]+"/);
+  assert.match(html, /<dialog\b[^>]*id="imageDialog"[^>]*aria-labelledby="imageDialogTitle"[^>]*aria-describedby="imageDialogHelp"/);
   assert.match(html, /<button\b[^>]*id="closeImage"/);
+});
+
+test('skip navigation, named mobile links and tab hosts retain valid accessible semantics', () => {
+  assert.equal([...html.matchAll(/<main\b/g)].length, 1);
+  assert.match(html, /<main\b[^>]*id="main"[^>]*tabindex="-1"/);
+  assert.match(html, /<a\b[^>]*class="skip"[^>]*href="#main"/);
+  assert.doesNotMatch(html, /tabindex="[1-9]\d*"/);
+  const github = linksTo(region('nav'), repository)[0];
+  assert.match(github[1], /aria-label="[^"]*GitHub[^"]*"/);
+  assert.match(github[1], /data-he-aria="[^"]*GitHub[^"]*"/);
+  assert.match(html, /class="download-action" role="group" aria-label="[^"]+"/);
+  assert.doesNotMatch(html, /<article\b[^>]*class="tour-panel"/);
+  assert.equal(linksTo(region('footer'), '#accessibility-help').length, 1);
+  const help = region('details', 'accessibility-help');
+  assert.match(help, /<summary\b[^>]*data-he="[^"]*[\u0590-\u05ff]/);
+  assertLocalized(linksTo(help, `${repository}/issues/new/choose`)[0]);
+});
+
+test('theme text and dual focus colors retain readable contrast', () => {
+  const tokens = Object.fromEntries([...css.matchAll(/--([a-z-]+):\s*(#[a-f0-9]{6})\b/gi)].map(match => [match[1], match[2]]));
+  function luminance(hex) {
+    const channels = hex.slice(1).match(/../g).map(part => {
+      const value = parseInt(part, 16) / 255;
+      return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+    });
+    return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+  }
+  function contrast(first, second) {
+    const pair = [luminance(first), luminance(second)].sort((a, b) => b - a);
+    return (pair[0] + 0.05) / (pair[1] + 0.05);
+  }
+  for (const foreground of ['text', 'dim', 'muted']) {
+    for (const background of ['bg', 'panel']) {
+      assert.ok(contrast(tokens[foreground], tokens[background]) >= 4.5, `${foreground} on ${background} must retain text contrast`);
+    }
+  }
+  assert.ok(contrast(tokens.ink, tokens.cyan) >= 4.5, 'Download labels need readable contrast');
+  for (const foreground of ['#183127', '#476353', '#486555']) assert.ok(contrast(foreground, '#e7eadd') >= 4.5);
+  assert.ok(contrast(tokens.cyan, tokens.bg) >= 3 && contrast(tokens.bg, '#e7eadd') >= 3,
+    'The two focus-ring colors must remain distinguishable on dark and light sections');
+  assert.match(css, /:focus-visible\s*\{[^}]*box-shadow:/);
+  assert.match(css, /@media\(forced-colors:active\)/);
 });
 
 test('the workspace tour follows the editor order and stays readable without script', () => {
@@ -199,9 +267,10 @@ test('the workspace tour follows the editor order and stays readable without scr
   assert.deepEqual(tabs.map(tab => tab[1]), ['media', 'edit', 'layout', 'audio', 'captions', 'output']);
   for (const [, id, label] of tabs) {
     assert.match(label, /<span\b[^>]*data-he="[^"]*[֐-׿]/, `${id} tab needs a Hebrew label`);
-    const panel = html.match(new RegExp(`<article\\b[^>]*id="panel-${id}"[^>]*>`))?.[0];
+    const panel = html.match(new RegExp(`<div\\b[^>]*id="panel-${id}"[^>]*>`))?.[0];
     assert.ok(panel, `Missing ${id} panel`);
     assert.match(panel, new RegExp(`aria-labelledby="tab-${id}"`));
+    assert.match(panel, /role="region"/, 'Without JavaScript every named workspace remains a valid region');
     assert.doesNotMatch(panel, /\bhidden\b/, 'Panels are hidden only by the script that makes tabs usable');
   }
   assert.doesNotMatch(html, /role="tab(?:list|panel)?"/, 'Tab roles are added by script, never promised in static HTML');

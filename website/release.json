@@ -2,30 +2,30 @@
   "version": "1.2-beta",
   "label": "1.2 Beta",
   "layout": "windows-mac-folders-v1",
-  "filename": "CUTROOM-1.2-Beta-combined-review-fe35453.zip",
-  "bytes": 7452329,
-  "sha256": "e6973fcace0766e43767e0a14e1833dc35e820b9e5b19895ed57e688ff2ff731",
-  "build_id": "CUTROOM-1.2-beta-mac-20261018-035808",
+  "filename": "CUTROOM-1.2-Beta-20261019.zip",
+  "bytes": 5946045,
+  "sha256": "bccfea9d1fbbe7f562313c586f9ccc2bb0e6cb71ceff09b3fc852a00cfed8773",
+  "build_id": "CUTROOM-1.2-beta-mac-20261019-111923",
   "release_state": "beta",
   "public_beta_authorized": true,
   "full_release_qualified": false,
-  "source_commit": "fe35453119305a33e0890a25e627a4fa47ad353d",
+  "source_commit": "7019b6423ce9d66531e933ee5cac42968f9e96e7",
   "uncommitted_changes": false,
-  "mac_validation_url": "https://github.com/VanoPeradze/cutroom/actions/runs/39139136807",
-  "validated_pr_head": "7e18c1c622968985cbcbc33abdb33a185a2b2bd3",
+  "mac_validation_url": "https://github.com/VanoPeradze/cutroom/actions/runs/39244037429",
+  "validated_pr_head": "b28561c7a3d277e90381d2e720eb50ab2fe001fb",
   "native_mac_validation": "automated-passed",
-  "native_validation_app_source_commit": "fe35453119305a33e0890a25e627a4fa47ad353d",
-  "native_mac_validation_scope": "Automated Apple Silicon and Intel checks; transcription and physical desktop acceptance were not run.",
+  "native_validation_app_source_commit": "7019b6423ce9d66531e933ee5cac42968f9e96e7",
+  "native_mac_validation_scope": "Automated native combined Mac payload on arm64/x64; standalone Mac projection verified byte-for-byte. No physical desktop or transcription acceptance.",
   "native_validation": {
-    "run_id": 39139136807,
-    "head_commit": "7e18c1c622968985cbcbc33abdb33a185a2b2bd3",
-    "application_source_commit": "fe35453119305a33e0890a25e627a4fa47ad353d",
+    "run_id": 39244037429,
+    "head_commit": "b28561c7a3d277e90381d2e720eb50ab2fe001fb",
+    "application_source_commit": "7019b6423ce9d66531e933ee5cac42968f9e96e7",
     "transcription_run": false,
     "architectures": {
       "arm64": {
         "status": "passed",
         "offline_checks_passed": 69,
-        "feature_tests_passed": 340,
+        "feature_tests_passed": 348,
         "required_cases_passed": 50,
         "skipped": 0,
         "fresh_app_install": "passed",
@@ -35,7 +35,7 @@
       "x64": {
         "status": "passed",
         "offline_checks_passed": 69,
-        "feature_tests_passed": 340,
+        "feature_tests_passed": 348,
         "required_cases_passed": 50,
         "skipped": 0,
         "fresh_app_install": "passed",
@@ -44,124 +44,148 @@
       }
     }
   },
-  "windows_fresh_install_acceptance": "failed-native-dll-check",
-  "url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261018/CUTROOM-1.2-Beta-combined-review-fe35453.zip",
+  "url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261019/CUTROOM-1.2-Beta-20261019.zip",
   "mirrors": [
-    "https://cutroom-studio.expo.app/downloads/CUTROOM-1.2-Beta-combined-review-fe35453.zip"
+    "https://cutroom-studio.expo.app/downloads/CUTROOM-1.2-Beta-20261019.zip"
   ],
   "github_release": {
-    "tag": "v1.2-beta-20261018",
-    "url": "https://github.com/VanoPeradze/cutroom/releases/tag/v1.2-beta-20261018",
-    "tag_commit": "fe35453119305a33e0890a25e627a4fa47ad353d",
-    "publication_date": "2026-10-18",
+    "tag": "v1.2-beta-20261019",
+    "url": "https://github.com/VanoPeradze/cutroom/releases/tag/v1.2-beta-20261019",
+    "tag_commit": "7019b6423ce9d66531e933ee5cac42968f9e96e7",
+    "publication_date": "2026-10-19",
     "package_bytes_changed": false,
-    "package_bytes_basis": "Exact original fe35453 review archives; no rebuild or rename.",
-    "previous_public_tag": "v1.2-beta-20261015"
+    "package_bytes_basis": "Byte-identical renamed copies of the qualified review archives and verified standalone Mac projection.",
+    "previous_public_tag": "v1.2-beta-20261018"
   },
   "platforms": {
     "windows": {
-      "filename": "CUTROOM-1.2-Beta-Windows-review-fe35453.zip",
-      "bytes": 3708965,
-      "sha256": "d20f33568ebaeb702717baade8e2a76dda88cb10e81461d61cc48ec96f725aca",
-      "build_id": "CUTROOM-1.2-beta-20261018-035807",
-      "url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261018/CUTROOM-1.2-Beta-Windows-review-fe35453.zip",
+      "filename": "CUTROOM-1.2-Beta-Windows-20261019.zip",
+      "bytes": 2955433,
+      "sha256": "24fc4767c7c80547308f03484c043d58e81c2592dcfdce6288e96cd3a98ccb89",
+      "url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261019/CUTROOM-1.2-Beta-Windows-20261019.zip",
       "mirrors": [
-        "https://cutroom-studio.expo.app/downloads/CUTROOM-1.2-Beta-Windows-review-fe35453.zip"
-      ]
+        "https://cutroom-studio.expo.app/downloads/CUTROOM-1.2-Beta-Windows-20261019.zip"
+      ],
+      "build_id": "CUTROOM-1.2-beta-20261019-111922"
     },
     "mac": {
-      "filename": "CUTROOM-1.2-Beta-combined-review-fe35453.zip",
-      "bytes": 7452329,
-      "sha256": "e6973fcace0766e43767e0a14e1833dc35e820b9e5b19895ed57e688ff2ff731",
-      "folder": "mac",
-      "url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261018/CUTROOM-1.2-Beta-combined-review-fe35453.zip",
+      "filename": "CUTROOM-1.2-Beta-Mac-20261019.zip",
+      "bytes": 2966875,
+      "sha256": "ba6f3a87df7251841072840ab038e264c0bd01e625b7d3e43c4dbf3158aa7272",
+      "url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261019/CUTROOM-1.2-Beta-Mac-20261019.zip",
       "mirrors": [
-        "https://cutroom-studio.expo.app/downloads/CUTROOM-1.2-Beta-combined-review-fe35453.zip"
-      ]
+        "https://cutroom-studio.expo.app/downloads/CUTROOM-1.2-Beta-Mac-20261019.zip"
+      ],
+      "build_id": "CUTROOM-1.2-beta-mac-20261019-111923",
+      "layout": "mac-app-folder-v1",
+      "combined_archive_sha256": "bccfea9d1fbbe7f562313c586f9ccc2bb0e6cb71ceff09b3fc852a00cfed8773",
+      "native_validation_basis": "Byte-identical App/launcher projection of the tested combined Mac payload; projection manifest differs."
     }
   },
   "source_archive": {
-    "filename": "SOURCE-fe35453.zip",
-    "bytes": 7145010,
-    "sha256": "85676db384d8b487416fb3ce2901ac0c481db5487afdceabd19b5ea6cdb496c7",
-    "url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261018/SOURCE-fe35453.zip",
+    "filename": "SOURCE-20261019.zip",
+    "bytes": 6420847,
+    "sha256": "f087a1d349a3a8f1e0fc580b59f299764a352cbe18203183a1014bff6729c55d",
+    "url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261019/SOURCE-20261019.zip",
     "mirrors": [
-      "https://cutroom-studio.expo.app/downloads/SOURCE-fe35453.zip"
+      "https://cutroom-studio.expo.app/downloads/SOURCE-20261019.zip"
     ]
   },
-  "update_date": "2026-10-18",
-  "release_summary": "Public beta of the exact fe35453 review build, with remaining acceptance checks disclosed.",
+  "update_date": "2026-10-19",
+  "release_summary": "Updated editor beta; exact source/native evidence and remaining acceptance limits recorded.",
   "known_limitations": [
-    "Default clean Windows 10 first run without Microsoft Visual C++ x64 runtime failed a native DLL check. Setup and startup health passed in fresh Sandbox after WinGet and the signed runtime were installed; full physical-device, restart and UI acceptance remain pending.",
-    "Transcription, speech accuracy, Ollama and cloud AI acceptance remain pending.",
-    "Physical clean-device installation and Mac Finder, Gatekeeper and Safari checks remain pending.",
-    "Representative English/Hebrew editing, captions and listening acceptance remain pending.",
-    "AI-selected continuity and endings require review; green-screen edges may need adjustment."
+    "Fresh Windows installation of this new source has not been repeated; physical-device, restart and manual acceptance remain pending. WinGet and Microsoft Visual C++ x64 runtime are prerequisites.",
+    "Automated native checks used no transcription/model inference and do not establish AI or speech accuracy.",
+    "Physical Mac Finder/Gatekeeper/Safari and representative English/Hebrew editing/listening acceptance remain pending.",
+    "Actual A/B recording alignment is not established by camera detection or controlled export checks; confirm a matching timestamp pair.",
+    "This is an authorized beta, not a fully qualified production release."
   ],
   "accepted_limitations": [
-    "Default Windows first-run DLL failure is retained. Conditional WinGet plus signed Visual C++ x64 setup/startup health passed; full guest, physical-device, restart and UI acceptance remain pending.",
-    "Automated native checks do not establish transcription or model accuracy.",
-    "Physical desktop and representative English/Hebrew editorial/listening acceptance remain pending.",
-    "This is an authorized public beta, not a fully qualified production release."
+    "Fresh Windows installation of this new source has not been repeated; physical-device, restart and manual acceptance remain pending. WinGet and Microsoft Visual C++ x64 runtime are prerequisites.",
+    "Automated native checks used no transcription/model inference and do not establish AI or speech accuracy.",
+    "Physical Mac Finder/Gatekeeper/Safari and representative English/Hebrew editing/listening acceptance remain pending.",
+    "Actual A/B recording alignment is not established by camera detection or controlled export checks; confirm a matching timestamp pair.",
+    "This is an authorized beta, not a fully qualified production release."
   ],
+  "source_tree": "4c4b7494308c01d02b573384ef78f7bc9f357f0d",
+  "windows_fresh_install_acceptance": "pending-new-source",
   "windows_fresh_install": {
-    "environment": "Pristine Windows 10 Sandbox with WinGet 1.29.380",
-    "result": "failed",
-    "launcher_exit_code": 1,
-    "health_endpoint_available": false,
-    "prerequisite": "Microsoft Visual C++ x64 runtime",
+    "application_source_commit": "7019b6423ce9d66531e933ee5cac42968f9e96e7",
+    "archive_sha256": "24fc4767c7c80547308f03484c043d58e81c2592dcfdce6288e96cd3a98ccb89",
+    "result": "not_run",
+    "prerequisite": "WinGet and Microsoft Visual C++ x64 runtime",
     "prerequisite_installed_by_launcher": false,
-    "workaround_validation": "isolated_guest_install_and_first_http_launch_passed_with_explicit_winget_and_msvc_prerequisites"
-  },
-  "windows_conditional_setup": {
-    "environment": "Fresh Windows 10 Sandbox",
-    "application_source_commit": "fe35453119305a33e0890a25e627a4fa47ad353d",
-    "archive_sha256": "d20f33568ebaeb702717baade8e2a76dda88cb10e81461d61cc48ec96f725aca",
-    "application_payload_changed": false,
-    "prerequisites": {
-      "winget_version": "1.29.380",
-      "visual_cpp_x64": {
-        "version": "14.51.36247.0",
-        "signature": "Microsoft-signed",
-        "installer_exit_code": 0,
-        "reboot_required": false,
-        "required_msvc_dlls_present_before": 0,
-        "required_msvc_dlls_present_after": 3,
-        "download_url": "https://aka.ms/vc14/vc_redist.x64.exe"
-      }
-    },
-    "result": "isolated_guest_install_and_first_http_launch_passed_with_explicit_winget_and_msvc_prerequisites",
-    "setup_completed": true,
-    "health": {
-      "ok": true,
-      "ffmpeg": true,
-      "ffprobe": true,
-      "version": "1.2-beta",
-      "models": [],
-      "ollama": {
-        "available": true,
-        "models": []
-      }
-    },
-    "post_health_harness_result": "passed-final-fresh-guest-probe",
-    "full_guest_acceptance": "not-established-beyond-scoped-install-and-first-http",
     "physical_device_acceptance": "pending",
     "restart_acceptance": "pending",
-    "ui_acceptance": "pending",
-    "completed_at": "2026-10-18T16:04:10.3332278Z",
-    "scoped_guest_acceptance": "passed",
-    "homepage": {
-      "status_code": 200,
-      "contains_cutroom": true
-    },
-    "setup_marker_present": true,
-    "python_version": "Python 3.12.14",
-    "configuration": {
-      "before_sha256": "078779d5631d6e43ed783cb08c273ea46f73d903ef910d265d0dbecaa8c33152",
-      "after_sha256": "078779d5631d6e43ed783cb08c273ea46f73d903ef910d265d0dbecaa8c33152",
-      "unchanged": true
-    },
-    "final_model_files": 0,
-    "models_downloaded_or_run": false
-  }
+    "ui_acceptance": "pending"
+  },
+  "historical_windows_validation": [
+    {
+      "windows_fresh_install_acceptance": "failed-native-dll-check",
+      "windows_fresh_install": {
+        "environment": "Pristine Windows 10 Sandbox with WinGet 1.29.380",
+        "result": "failed",
+        "launcher_exit_code": 1,
+        "health_endpoint_available": false,
+        "prerequisite": "Microsoft Visual C++ x64 runtime",
+        "prerequisite_installed_by_launcher": false,
+        "workaround_validation": "isolated_guest_install_and_first_http_launch_passed_with_explicit_winget_and_msvc_prerequisites"
+      },
+      "windows_conditional_setup": {
+        "environment": "Fresh Windows 10 Sandbox",
+        "application_source_commit": "fe35453119305a33e0890a25e627a4fa47ad353d",
+        "archive_sha256": "d20f33568ebaeb702717baade8e2a76dda88cb10e81461d61cc48ec96f725aca",
+        "application_payload_changed": false,
+        "prerequisites": {
+          "winget_version": "1.29.380",
+          "visual_cpp_x64": {
+            "version": "14.51.36247.0",
+            "signature": "Microsoft-signed",
+            "installer_exit_code": 0,
+            "reboot_required": false,
+            "required_msvc_dlls_present_before": 0,
+            "required_msvc_dlls_present_after": 3,
+            "download_url": "https://aka.ms/vc14/vc_redist.x64.exe"
+          }
+        },
+        "result": "isolated_guest_install_and_first_http_launch_passed_with_explicit_winget_and_msvc_prerequisites",
+        "setup_completed": true,
+        "health": {
+          "ok": true,
+          "ffmpeg": true,
+          "ffprobe": true,
+          "version": "1.2-beta",
+          "models": [],
+          "ollama": {
+            "available": true,
+            "models": []
+          }
+        },
+        "post_health_harness_result": "passed-final-fresh-guest-probe",
+        "full_guest_acceptance": "not-established-beyond-scoped-install-and-first-http",
+        "physical_device_acceptance": "pending",
+        "restart_acceptance": "pending",
+        "ui_acceptance": "pending",
+        "completed_at": "2026-10-18T16:04:10.3332278Z",
+        "scoped_guest_acceptance": "passed",
+        "homepage": {
+          "status_code": 200,
+          "contains_cutroom": true
+        },
+        "setup_marker_present": true,
+        "python_version": "Python 3.12.14",
+        "configuration": {
+          "before_sha256": "078779d5631d6e43ed783cb08c273ea46f73d903ef910d265d0dbecaa8c33152",
+          "after_sha256": "078779d5631d6e43ed783cb08c273ea46f73d903ef910d265d0dbecaa8c33152",
+          "unchanged": true
+        },
+        "final_model_files": 0,
+        "models_downloaded_or_run": false
+      },
+      "release_tag": "v1.2-beta-20261018",
+      "application_source_commit": "fe35453119305a33e0890a25e627a4fa47ad353d",
+      "archive_sha256": "d20f33568ebaeb702717baade8e2a76dda88cb10e81461d61cc48ec96f725aca",
+      "scope": "Historical only; does not qualify the new source or downloads."
+    }
+  ]
 }

@@ -104,6 +104,19 @@ def test_python_import_failure_is_actionable(monkeypatch):
     assert any("faster_whisper: OSError: native library cannot load" in error for error in preflight.check_python())
 
 
+def test_python_preflight_rejects_camera_backend_after_successful_imports(monkeypatch):
+    from cutroom import vision
+
+    monkeypatch.setattr(preflight, "REQUIRED_MODULES", ())
+
+    def unavailable():
+        raise RuntimeError("the required detector XML file is missing")
+
+    monkeypatch.setattr(vision, "check_camera_detector_capability", unavailable)
+    failures = preflight.check_python()
+    assert any("Camera detector" in failure and "XML file is missing" in failure for failure in failures)
+
+
 @pytest.mark.parametrize("version", ["19.0.0", "19.1.2", "18.0.0", "unrecognized"])
 def test_python_preflight_rejects_incompatible_pyav_even_without_imports(monkeypatch, version):
     monkeypatch.setattr(preflight, "package_version", lambda name: version)

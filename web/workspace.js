@@ -1,6 +1,6 @@
 // Display-only controls. No project edits, media restarts, or playback changes.
 const TIMELINE_HEIGHT_KEY = "cutroom-timeline-height-v4";
-const INSPECTOR_WIDTH_KEY = "cutroom-inspector-width-v2";
+const INSPECTOR_WIDTH_KEY = "cutroom-inspector-width-v3";
 const INSPECTOR_COLLAPSED_KEY = "cutroom-inspector-collapsed-v1";
 
 export function initWorkspace({ document: doc = document, window: win = window, onResize = () => {}, openShortcuts = () => {}, translate = (key, fallback) => fallback } = {}) {
@@ -20,7 +20,6 @@ export function initWorkspace({ document: doc = document, window: win = window, 
   let preferredWidth = null;
   let workspaceMode = "timeline";
   let editEffects = false;
-  const widthKey = () => workspaceMode === "timeline" && !editEffects ? INSPECTOR_WIDTH_KEY : `${INSPECTOR_WIDTH_KEY}-${workspaceMode === "timeline" ? "effects" : workspaceMode}`;
   let inspectorCollapsed = false;
   let inspectorGesture = null;
   const listeners = [];
@@ -85,20 +84,21 @@ export function initWorkspace({ document: doc = document, window: win = window, 
   };
   const readWidthPreference = () => {
     try {
-      const current = win.localStorage.getItem(widthKey());
+      const current = win.localStorage.getItem(INSPECTOR_WIDTH_KEY);
       const legacy = current === null;
-      const saved = legacy ? win.localStorage.getItem(widthKey().replace('width-v2','width-v1')) : current;
+      const saved = current ?? win.localStorage.getItem('cutroom-inspector-width-v2') ?? win.localStorage.getItem('cutroom-inspector-width-v1');
       const value = Number(saved), bounds = widthBounds();
       // Retain sensible display preferences; oversized old panels return to the
       // balanced default. Old keys and all project settings remain untouched.
       return saved !== null && Number.isFinite(value) && value >= bounds.minimum
-        && (!legacy || value <= bounds.maximum) ? value : null;
+        && (!legacy || value <= 420) ? value : null;
     } catch { return null; }
   };
   const applyInspector = () => {
     if (!inspector) return null;
     const bounds = widthBounds();
-    const defaultWidth = workspaceMode === "audio" ? 400 : 344;
+    // Context changes should not move the preview or the clip under the pointer.
+    const defaultWidth = 400;
     const width = Math.round(Math.min(bounds.maximum, Math.max(bounds.minimum, preferredWidth ?? defaultWidth)));
     panel.style.setProperty("--workspace-inspector-width", `${width}px`);
     panel.classList.toggle("inspector-collapsed", inspectorCollapsed);
@@ -117,8 +117,8 @@ export function initWorkspace({ document: doc = document, window: win = window, 
   };
   const saveInspector = () => {
     try {
-      if (preferredWidth === null) win.localStorage.removeItem(widthKey());
-      else win.localStorage.setItem(widthKey(), String(preferredWidth));
+      if (preferredWidth === null) win.localStorage.removeItem(INSPECTOR_WIDTH_KEY);
+      else win.localStorage.setItem(INSPECTOR_WIDTH_KEY, String(preferredWidth));
       win.localStorage.setItem(INSPECTOR_COLLAPSED_KEY, String(inspectorCollapsed));
     } catch { /* Display controls also work without preference storage. */ }
   };
@@ -135,7 +135,6 @@ export function initWorkspace({ document: doc = document, window: win = window, 
     if (mode !== workspaceMode) {
       endInspectorResize(null, true);
       workspaceMode = mode;
-      preferredWidth = readWidthPreference();
     }
     panel.dataset.workspace = mode;
     applyInspector(); scheduleResize();
@@ -145,7 +144,6 @@ export function initWorkspace({ document: doc = document, window: win = window, 
     endInspectorResize(null, true);
     editEffects = Boolean(effects);
     panel.dataset.editEffects = String(editEffects);
-    preferredWidth = readWidthPreference();
     applyInspector(); scheduleResize();
   };
   const setInspectorCollapsed = (collapsed) => {
@@ -203,7 +201,8 @@ export function initWorkspace({ document: doc = document, window: win = window, 
     // the monitor. Even a previously oversized timeline preserves the player.
     const minimum = 184;
     const dockHeight = panel.querySelector(".advanced-tabs")?.getBoundingClientRect().height || 0;
-    const monitorMinimum = Math.min(420, Math.max(320, Math.round(height * .5)));
+    const monitorMinimum = height < 700 ? Math.max(220, Math.round(height * .42))
+      : Math.min(420, Math.max(320, Math.round(height * .5)));
     const maximum = Math.max(minimum, Math.floor(height - headerHeight - dockHeight - 8 - monitorMinimum));
     // 256 px fits the standard lanes (video, layout, original audio, captions) without scrolling.
     return { minimum, maximum, defaultHeight: Math.min(300, Math.max(256, Math.round(height * .28))) };

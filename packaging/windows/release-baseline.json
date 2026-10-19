@@ -1,11 +1,14 @@
 {
   "version": "1.2-beta",
-  "filename": "CUTROOM-1.2-Beta-Windows-review-fe35453.zip",
-  "build_id": "CUTROOM-1.2-beta-20261018-035807",
-  "bytes": 3708965,
-  "sha256": "d20f33568ebaeb702717baade8e2a76dda88cb10e81461d61cc48ec96f725aca",
-  "manifest_sha256": "d3a5af27228338a97986b676e7c4e54d436845c395923d38644453bd59e83f76",
-  "url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261018/CUTROOM-1.2-Beta-Windows-review-fe35453.zip",
-  "source_commit": "fe35453119305a33e0890a25e627a4fa47ad353d",
-  "note": "Exact existing Windows archive from the source-pinned fe35453 review pair, promoted without rebuilding for the explicitly authorized exploratory public beta. A fresh Windows 10 guest with WinGet alone failed native dependency loading; the launcher does not install the required Microsoft Visual C++ x64 runtime. With WinGet 1.29.380 and signed Microsoft runtime 14.51.36247.0 prepared separately, unchanged setup and startup health succeeded without models. This conditional result does not qualify the default installer, physical-device restart or manual UI acceptance. Native macOS 15 arm64/x64 no-model checks of the matching combined ZIP passed in run 39139136807. Transcription/model quality, Finder/Gatekeeper/Safari and human editorial/listening acceptance remain pending. The package manifest retains clean_machine_install_verified=false. Historical validation pins and the earlier public release remain unchanged."
+  "filename": "CUTROOM-1.2-Beta-Windows-20261019.zip",
+  "bytes": 2955433,
+  "sha256": "24fc4767c7c80547308f03484c043d58e81c2592dcfdce6288e96cd3a98ccb89",
+  "url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261019/CUTROOM-1.2-Beta-Windows-20261019.zip",
+  "mirrors": [
+    "https://cutroom-studio.expo.app/downloads/CUTROOM-1.2-Beta-Windows-20261019.zip"
+  ],
+  "build_id": "CUTROOM-1.2-beta-20261019-111922",
+  "manifest_sha256": "71ca49c2dd3b2d74a51cf9cd4ec62a7b78cbdd1f83b1c2dcf87e4085eed4d5ae",
+  "source_commit": "7019b6423ce9d66531e933ee5cac42968f9e96e7",
+  "note": "Qualified source-bound beta; fresh Windows installation remains pending. Historical validation pins are preserved."
 }

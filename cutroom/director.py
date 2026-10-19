@@ -74,6 +74,7 @@ def _prepared_vision_is_reusable(
 
     if (
         not isinstance(profile, dict)
+        or profile.get("available") is not True
         or not source_generation
         or profile.get("version") != VISION_ANALYSIS_VERSION
         or str(profile.get("source_generation") or "") != source_generation
@@ -407,7 +408,7 @@ def _manual_sync_offset(project: dict[str, Any]) -> float | None:
 
 
 def _safe_automatic_sync(value: dict[str, Any] | None) -> dict[str, Any] | None:
-    """Neutralize weak automatic matches, including cached results from older releases."""
+    """Preserve explicit rejection and neutralize unsafe cached automatic matches."""
 
     if not isinstance(value, dict):
         return value
@@ -415,13 +416,21 @@ def _safe_automatic_sync(value: dict[str, Any] | None) -> dict[str, Any] | None:
     if str(result.get("method") or "") == "manual":
         return result
     confidence = _finite_number(result.get("confidence"), 0.0)
-    if confidence >= MIN_AUTOMATIC_SYNC_CONFIDENCE:
+    offset = _finite_number(result.get("offset"), math.nan)
+    explicitly_unconfirmed = (
+        ("reliable" in result and result["reliable"] is not True)
+        or result.get("status") == "unconfirmed"
+    )
+    valid_offset = math.isfinite(offset) and abs(offset) <= 600.0
+    if confidence >= MIN_AUTOMATIC_SYNC_CONFIDENCE and valid_offset and not explicitly_unconfirmed:
         result["reliable"] = True
         return result
     measured_offset = _finite_number(result.get("measured_offset"), _finite_number(result.get("offset"), 0.0))
     result["measured_offset"] = round(measured_offset, 3)
     result["offset"] = 0.0
     result["reliable"] = False
+    result["status"] = "unconfirmed"
+    result.setdefault("warning", "Automatic sync is unconfirmed; check source placement before using source B.")
     return result
 
 
@@ -3435,6 +3444,7 @@ def analyze_project(
         reusable_context
         and cached_analysis
         and isinstance(cached_analysis.get("vision"), dict)
+        and cached_analysis.get("vision", {}).get("available") is True
         and cached_analysis.get("vision", {}).get("version") == VISION_ANALYSIS_VERSION
         and cache_fingerprints_match(cached_fingerprints, cache_fingerprints, ("vision",))
     )
@@ -3548,13 +3558,18 @@ def analyze_project(
                 vision = {}
 
     # Vision semantics are versioned independently from transcript/audio caches.
-    # Refresh only this cheap sampled analysis when loading a legacy candidate;
-    # otherwise old false positives could survive the stricter detector forever.
+    # Refresh only this cheap sampled analysis for legacy or failed profiles.
+    # A detector failure must not survive a repaired runtime through the cache.
     if reusable_context and need_vision and not reusable_vision:
         context.update(max(0.45, float(context.job.progress)), "Refreshing speaker and framing detection")
         vision = resolve_source_vision()
     if accepted_prepared_embedded is not None:
         vision = {**vision, "embedded_camera": accepted_prepared_embedded}
+    camera_warning = (
+        "Automatic camera detection could not run. Review the camera layout manually; "
+        "check the source video and detector before retrying."
+        if need_vision and vision.get("available") is not True else None
+    )
 
     transcript_quality = transcript_quality_report(transcript)
     transcription_attempts = [_transcription_attempt(transcript, transcription_warning)]
@@ -3751,6 +3766,7 @@ def analyze_project(
             "status": "context_ready",
             "warnings": (
                 ([{"type": "transcription", "message": transcription_warning}] if transcription_warning else [])
+                + ([{"type": "camera_detection", "message": camera_warning}] if camera_warning else [])
                 + ([copy.deepcopy(transcript_fallback)] if transcript_fallback else [])
                 + ([{
                     "type": "nonverbal_highlights",
@@ -4279,6 +4295,7 @@ def analyze_project(
         "engine": engine,
         "warnings": (
             ([{"type": "transcription", "message": transcription_warning}] if transcription_warning else [])
+            + ([{"type": "camera_detection", "message": camera_warning}] if camera_warning else [])
             + ([{"type": "visual_ai", "message": visual_warning}] if visual_warning else [])
             + ([copy.deepcopy(transcript_fallback)] if transcript_fallback else [])
             + ([{

@@ -422,3 +422,35 @@ body .home-hub .recent-list .recent-project, body .home-hub .recent-list .recent
 /* Reel option cards used a fixed near-black background, so in Day mode their
    theme-coloured text was dark on dark. */
 #resultPanel .reel-candidate { background:var(--surface-inset); }
+
+/* Editing styles are choices with readable differences, including at narrow widths. */
+.director-panel .edit-style-section { min-width:0; }
+.director-panel .edit-style-section > p { font-size:12px; line-height:1.6; margin-bottom:12px; }
+.director-panel .edit-style-grid { grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr)); gap:10px; }
+.director-panel .edit-style-card { grid-template-columns:16px minmax(0,1fr); align-content:start; gap:10px; min-height:128px; padding:12px; text-align:start; }
+.director-panel .edit-style-card > span { gap:6px; }
+.director-panel .edit-style-card strong { font-size:13px; line-height:1.4; overflow-wrap:anywhere; }
+.director-panel .edit-style-card small { display:block; font-size:11px; line-height:1.55; }
+.director-panel .edit-style-card em { color:var(--paper-dim); font:500 10px/1.5 var(--font,system-ui); letter-spacing:0; }
+.director-panel .edit-style-card > b { display:block; margin-top:2px; padding:3px 6px; border-radius:4px; background:var(--surface-inset); color:var(--paper-dim); font:500 10px/1.4 var(--font,system-ui); }
+.director-panel .edit-style-card .style-story-flow { display:none; }
+.director-panel .edit-style-card[aria-checked=true] { border-color:var(--cyan); box-shadow:inset 0 0 0 1px var(--cyan); }
+.director-panel .edit-style-card[aria-checked=true] > b { color:var(--cyan-text); }
+.director-panel .edit-style-note { font-size:12px; line-height:1.6; }
+.output-preset:focus-visible { outline:2px solid var(--focus-ring,var(--cyan)); outline-offset:3px; }
+.output-presets { min-width:0; }
+.output-preset { min-width:0; }
+.output-preset :is(b,small) { min-width:0; overflow-wrap:anywhere; }
+#studioPanelSettings { container-type:inline-size; container-name:output-controls; }
+@container output-controls (max-width:300px) {
+  #studioPanelSettings .output-control-grid > label { grid-template-columns:minmax(0,1fr); gap:8px; }
+  #studioPanelSettings .output-control-grid small { grid-column:1; }
+  #studioPanelSettings .studio-segmented { flex-wrap:wrap; width:100%; }
+  #studioPanelSettings .studio-segmented > button { flex:1 0 auto; }
+}
+@media (min-width:900px) and (max-width:1099px) {
+  .output-preset { grid-template-columns:38px minmax(0,1fr); column-gap:8px; padding:10px 8px; }
+  .output-preset .output-preset-shape { max-width:34px; }
+  .output-preset b { font-size:12px; }
+  .output-preset small { font-size:11px; }
+}

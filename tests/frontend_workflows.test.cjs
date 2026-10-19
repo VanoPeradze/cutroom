@@ -184,6 +184,37 @@ function settingsApp() {
   return fixture;
 }
 
+test("source preparation refresh replaces stale camera errors without replaying the draft or changing saved warnings", () => {
+  const {run} = app();
+  run(`
+    renderReadiness = renderAudioCalibration = renderSourceMixer = () => {};
+    globalThis.previewSideEffects = 0;
+    setupPreviewSources = seekPreview = () => { previewSideEffects += 1; };
+    for (const slot of ['A','B']) elements['sourceSlot'+slot].querySelector('.source-loaded').querySelector('video').load=()=>{};
+    state.project.sources.A={url:'/a.mp4',generation:'current-source',duration:100,width:1920,height:1080};
+    state.project.manual={}; state.project.draft.layout='A'; state.project.draft.embedded_layout_confirmed=false;
+    state.project.analysis={vision:{version:EMBEDDED_CAMERA_DETECTOR_VERSION,available:false,
+      reason:'opencv_detector_unavailable',embedded_camera:null},
+      warnings:[{type:'camera_detection',message:'Automatic camera detection could not run.'}]};
+    renderSources();
+  `);
+  assert.equal(run("elements.cameraDetection.querySelector('b').textContent"), "Automatic camera detection unavailable");
+  assert.equal(run("elements.draftWarning.hidden"), false);
+  run(`
+    state.project.pre_analysis={vision:{A:{version:EMBEDDED_CAMERA_DETECTOR_VERSION,
+      source_generation:'current-source',available:true,
+      embedded_camera:{x:.7,y:.1,w:.2,h:.2,requires_confirmation:true,detector:EMBEDDED_CAMERA_DETECTOR_VERSION}}}};
+    renderSources();
+  `);
+  assert.equal(run("elements.cameraDetection.querySelector('b').textContent"), "Possible camera area found");
+  assert.equal(run("elements.draftWarning.hidden"), true, "A successful current retry supersedes the stale camera failure");
+  assert.equal(run("state.project.analysis.warnings.length"), 1, "UI refresh must not rewrite original analysis");
+  assert.equal(run("previewSideEffects"), 0);
+  assert.equal(run("embeddedLayoutConfirmed()"), false);
+  run(`state.project.pre_analysis.vision.A.source_generation='old-source'; renderSources();`);
+  assert.equal(run("elements.draftWarning.hidden"), false, "An unrelated source cannot clear the warning");
+});
+
 test("live media and mixer autosaves do not pause, seek or reload the preview", async () => {
   for (const action of ['media_update','set_audio_mixer']) {
     const {run}=app();

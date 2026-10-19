@@ -30,6 +30,15 @@ export function mixerNormalization(project) {
   return { target: Number.isFinite(target) ? Math.max(-24, Math.min(-10, target)) : -16 };
 }
 
+// The control and saved mixer share one 0.1 dB domain. Pointer precision changes
+// travel sensitivity, never the gain curve, audio graph or export values.
+export function faderGain(value) {
+  return Math.round(Math.max(-60, Math.min(12, Number(value) || 0)) * 10) / 10;
+}
+export function faderPointerGain(start, delta, travel, fine = false) {
+  return faderGain(start + delta / Math.max(1, travel) * 72 * (fine ? .1 : 1));
+}
+
 export function visualMotion(clip, time) {
   const progress = Math.max(0, Math.min(1, (time - clip.start) / Math.max(.001, clip.end - clip.start)));
   if (clip.motion === 'zoom_in') return `scale(${1 + .12 * progress})`;
@@ -89,12 +98,13 @@ export class MediaStudio {
       </details>
       <details class="audio-mixer" data-editor-shortcuts="off"><summary><span>Audio mixer</span><small class="mixer-summary-level">Paused</small></summary>
         <div class="mixer-body">
-        <p class="mixer-help">Mute changes preview & export. Solo isolates a channel in preview only.</p>
+        <p class="mixer-help" id="mixerFaderHelp">Shift + drag for precision. Arrow keys: 0.5 dB; Shift + arrow: 0.1 dB.</p>
         <div class="mixer-channels"></div>
         <div class="mixer-master"></div>
         <label class="ducking-choice"><input type="checkbox" data-ducking> Lower music while speech plays</label>
         <p class="mixer-level-text">Play to monitor the mix.</p>
         <p class="mixer-help mixer-normalization" role="note"></p>
+        <p class="mixer-help">M: mute in preview & export. S: solo in preview only. Reset returns a fader to 0 dB.</p>
         <p class="mixer-help mixer-export-note">Meters show live sample peaks of the browser mix, before the preview limiter. The export keeps true peaks under −1 dBTP.</p>
         <datalist id="mixerZeroMark"><option value="0" label="0 dB"></option></datalist>
         </div>
@@ -109,17 +119,40 @@ export class MediaStudio {
       const label = document.createElement('div'); label.className = 'mixer-fader';
       const heading = document.createElement('span'); heading.className = 'mixer-channel-heading';
       const title = document.createElement('span'); title.textContent = name; title.dataset.channelName = role;
-      const range = document.createElement('input'); range.type = 'range'; range.min = '-60'; range.max = '12'; range.step = '0.5'; range.dataset.mix = `${role}_db`; range.setAttribute('aria-label', `${name} volume`);
-      range.setAttribute('list', 'mixerZeroMark'); range.title = 'Double-click to reset to 0 dB';
+      const range = document.createElement('input'); range.type = 'range'; range.min = '-60'; range.max = '12'; range.step = '0.1'; range.dataset.mix = `${role}_db`; range.setAttribute('aria-label', `${name} volume`);
+      range.dataset.mixOrientation = role === 'master' ? 'horizontal' : 'vertical';
+      range.setAttribute('aria-orientation', range.dataset.mixOrientation);
+      range.setAttribute('aria-describedby', 'mixerFaderHelp');
+      range.setAttribute('list', 'mixerZeroMark'); range.title = 'Drag to adjust; hold Shift for precision. Double-click to reset to 0 dB.';
       // A typed value (0.1 dB), the same value the fader and the export use.
       const level = document.createElement('span'); level.className = 'mixer-db';
       const typed = document.createElement('input'); typed.type = 'number'; typed.min = '-60'; typed.max = '12'; typed.step = '0.1'; typed.dataset.mixNumber = `${role}_db`;
       typed.setAttribute('aria-label', `${name} level in dB`); typed.inputMode = 'decimal';
       const unit = document.createElement('span'); unit.textContent = 'dB'; unit.setAttribute('aria-hidden', 'true');
-      const reset = document.createElement('button'); reset.type = 'button'; reset.className = 'mixer-reset'; reset.textContent = '0'; reset.dataset.mixReset = `${role}_db`;
+      const reset = document.createElement('button'); reset.type = 'button'; reset.className = 'mixer-reset'; reset.textContent = '0 dB'; reset.dataset.mixReset = `${role}_db`;
       reset.title = 'Reset to 0 dB'; reset.setAttribute('aria-label', `Reset ${name} to 0 dB`);
-      level.append(typed,unit,reset);
-      heading.append(title,level); label.append(heading,range); row.append(label);
+      level.append(typed,unit);
+      const lane = document.createElement('div'); lane.className = 'mixer-fader-lane';
+      const scale = document.createElement('div'); scale.className = 'mixer-fader-scale'; scale.setAttribute('aria-hidden', 'true');
+      for (const db of [12, 0, -12, -24, -36, -48, -60]) {
+        const mark = document.createElement('span'); mark.dataset.db = String(db); mark.textContent = db > 0 ? `+${db}` : String(db);
+        mark.style.setProperty('--mark-from-top', `${(12 - db) / 72 * 100}%`);
+        mark.style.setProperty('--mark-from-left', `${(db + 60) / 72 * 100}%`);
+        scale.append(mark);
+      }
+      const control = document.createElement('div'); control.className = 'mixer-fader-control';
+      const rail = document.createElement('span'); rail.className = 'mixer-fader-rail'; rail.setAttribute('aria-hidden', 'true');
+      const travel = document.createElement('span'); travel.className = 'mixer-fader-travel'; travel.setAttribute('aria-hidden', 'true');
+      const cap = document.createElement('span'); cap.className = 'mixer-fader-cap';
+      const grip = document.createElement('span'); grip.className = 'mixer-fader-grip'; cap.append(grip); travel.append(cap);
+      control.append(rail,travel,range); lane.append(scale,control);
+      range.addEventListener('pointerdown', event => this.startFaderDrag(event, range));
+      range.addEventListener('pointermove', event => this.moveFaderDrag(event));
+      range.addEventListener('pointerup', event => this.endFaderDrag(event));
+      range.addEventListener('pointercancel', event => this.endFaderDrag(event));
+      range.addEventListener('lostpointercapture', event => this.endFaderDrag(event));
+      range.addEventListener('keydown', event => this.faderKeydown(event, range));
+      heading.append(title,level); label.append(heading,lane); row.append(label);
       const signal = document.createElement('div'); signal.className = 'mixer-signal';
       const meter = document.createElement('meter'); meter.className = role === 'master' ? 'mixer-meter mixer-channel-meter' : 'mixer-channel-meter';
       meter.min = 0; meter.max = 1; meter.high = .95; meter.optimum = .65; meter.value = 0;
@@ -131,6 +164,7 @@ export class MediaStudio {
         const mute = document.createElement('button'); mute.type = 'button'; mute.textContent = 'M'; mute.title = 'Mute in preview and export'; mute.dataset.mute = role; mute.setAttribute('aria-label', `Mute ${name} in preview and export`); actions.append(mute);
         const solo = document.createElement('button'); solo.type = 'button'; solo.textContent = 'S'; solo.title = 'Solo in preview only'; solo.dataset.solo = role; solo.setAttribute('aria-label', `Solo ${name} in preview only`); actions.append(solo);
       }
+      actions.append(reset);
       this.channelMeters.set(role,{row,meter,level:peak});
       root.querySelector(role === 'master' ? '.mixer-master' : '.mixer-channels').append(row);
     }
@@ -166,6 +200,80 @@ export class MediaStudio {
       eventRoot.addEventListener('dblclick',onDoubleClick);
     }
   }
+  setFaderVisual(input, db) {
+    const control = input.closest?.('.mixer-fader-control');
+    const progress = (faderGain(db) + 60) / 72;
+    control?.style.setProperty('--fader-from-top', `${(1 - progress) * 100}%`);
+    control?.style.setProperty('--fader-from-left', `${progress * 100}%`);
+    control?.classList.toggle('at-unity', Math.abs(db) < .05);
+  }
+  setFaderGain(input, value) {
+    const gain = faderGain(value);
+    input.value = String(gain);
+    this.setFaderVisual(input, gain);
+    if (gain !== faderGain(this.mixer()[input.dataset.mix])) this.queueMixer({[input.dataset.mix]: gain});
+  }
+  startFaderDrag(event, input) {
+    if (event.button != null && event.button !== 0) return;
+    event.preventDefault();
+    if (this.options.busy() || input.disabled) return;
+    this.endFaderDrag();
+    const horizontal = input.dataset.mixOrientation === 'horizontal', rect = input.getBoundingClientRect();
+    const coordinate = horizontal ? event.clientX : event.clientY;
+    const travel = Math.max(1, (horizontal ? rect.width : rect.height) - 22);
+    const original = faderGain(this.mixer()[input.dataset.mix]);
+    const progress = (original + 60) / 72;
+    const center = (horizontal ? rect.left : rect.top) + 11 + (horizontal ? progress : 1 - progress) * travel;
+    input.focus({preventScroll:true});
+    // Grabbing the cap preserves the grab point. A rail click seeks the fader;
+    // holding Shift always starts a relative, ten-times-finer adjustment.
+    const value = event.shiftKey || Math.abs(coordinate - center) <= 14 ? original
+      : faderGain(-60 + (horizontal ? coordinate - rect.left - 11 : rect.bottom - coordinate - 11) / travel * 72);
+    this.faderDrag = {input, pointerId:event.pointerId, projectId:this.project()?.id, horizontal, travel,
+      original, anchorValue:value, anchor:coordinate, last:coordinate, value, fine:Boolean(event.shiftKey)};
+    input.closest('.mixer-fader-control').classList.add('is-dragging');
+    try { input.setPointerCapture?.(event.pointerId); }
+    catch { this.endFaderDrag(); return; }
+    this.setFaderGain(input, value);
+  }
+  moveFaderDrag(event) {
+    const drag = this.faderDrag;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    if (drag.projectId !== this.project()?.id || this.options.busy()) { this.endFaderDrag(); return; }
+    const coordinate = drag.horizontal ? event.clientX : event.clientY;
+    if (Boolean(event.shiftKey) !== drag.fine) {
+      drag.anchor = drag.last; drag.anchorValue = drag.value; drag.fine = Boolean(event.shiftKey);
+    }
+    drag.value = faderPointerGain(drag.anchorValue, (coordinate - drag.anchor) * (drag.horizontal ? 1 : -1), drag.travel, drag.fine);
+    drag.last = coordinate;
+    this.setFaderGain(drag.input, drag.value);
+  }
+  endFaderDrag(event) {
+    const drag = this.faderDrag;
+    if (!drag || (event && event.pointerId !== drag.pointerId)) return;
+    this.faderDrag = null;
+    drag.input.closest?.('.mixer-fader-control')?.classList.remove('is-dragging');
+    try { if (drag.input.hasPointerCapture?.(drag.pointerId)) drag.input.releasePointerCapture(drag.pointerId); }
+    catch { /* The browser may already have revoked capture on focus/navigation. */ }
+  }
+  faderKeydown(event, input) {
+    if (event.key === 'Escape' && this.faderDrag?.input === input) {
+      event.preventDefault();
+      const {original,projectId} = this.faderDrag;
+      this.endFaderDrag();
+      if (projectId === this.project()?.id && !this.options.busy() && !input.disabled) this.setFaderGain(input, original);
+      return;
+    }
+    if (event.altKey || event.ctrlKey || event.metaKey) return;
+    const directions = {ArrowUp:1, ArrowRight:1, ArrowDown:-1, ArrowLeft:-1, PageUp:1, PageDown:-1};
+    if (!(event.key in directions) && !['Home','End'].includes(event.key)) return;
+    event.preventDefault();
+    if (this.options.busy() || input.disabled) return;
+    const value = faderGain(this.mixer()[input.dataset.mix]);
+    this.setFaderGain(input, event.key === 'Home' ? -60 : event.key === 'End' ? 12
+      : value + directions[event.key] * (event.shiftKey ? .1 : event.key.startsWith('Page') ? 6 : .5));
+  }
   openMixer() { if (this.audioRoot) this.audioRoot.open = true; }
   project() { return this.options.project(); }
   clips() { return (this.project()?.manual?.media_clips || []).map(clip => ({...clip,...this.overrides.get(clip.id)})); }
@@ -199,7 +307,7 @@ export class MediaStudio {
   select(id) { this.selected = id; this.render(); }
   render() {
     const project = this.project();
-    if (this.projectId !== project?.id) { this.pause(); this.clearPlayers(); this.pending.clear(); this.overrides.clear(); this.saving=null; this.mixerOverride = null; this.selected = null; this.solo = null; clearTimeout(this.timer); this.projectId = project?.id; }
+    if (this.projectId !== project?.id) { this.endFaderDrag(); this.pause(); this.clearPlayers(); this.pending.clear(); this.overrides.clear(); this.saving=null; this.mixerOverride = null; this.selected = null; this.solo = null; clearTimeout(this.timer); this.projectId = project?.id; }
     const library = this.library; library.replaceChildren();
     if (this.sourceLibrary) {
       this.sourceLibrary.replaceChildren();
@@ -248,9 +356,16 @@ export class MediaStudio {
     const mixer = this.mixer();
     const root = this.audioRoot || this.root;
     const sourceName = root.querySelector('[data-channel-name=source]');
-    if (sourceName) sourceName.textContent = `Original · ${this.options.audioSlot?.() || this.project()?.manual?.source_mixer?.audio_slot || this.project()?.settings?.audio_source || 'A'}`;
+    if (sourceName) sourceName.textContent = `Original ${this.options.audioSlot?.() || this.project()?.manual?.source_mixer?.audio_slot || this.project()?.settings?.audio_source || 'A'}`;
     root.querySelector('[data-ducking]').checked=Boolean(mixer.ducking);
-    for (const input of root.querySelectorAll('[data-mix]')) { if (document.activeElement !== input) input.value = mixer[input.dataset.mix] || 0; }
+    for (const input of root.querySelectorAll('[data-mix]')) {
+      const db = Number(mixer[input.dataset.mix]) || 0;
+      // Ranges have no unfinished typed draft. Reset/undo while focused must
+      // update the native value as well as the bespoke cap and spoken value.
+      input.value = db;
+      input.setAttribute('aria-valuetext', `${db > 0 ? '+' : ''}${db.toFixed(1)} dB`);
+      this.setFaderVisual(input, db);
+    }
     for (const input of root.querySelectorAll('[data-mix-number]')) { if (document.activeElement !== input) input.value = (Number(mixer[input.dataset.mixNumber]) || 0).toFixed(1); }
     for (const button of root.querySelectorAll('[data-mix-reset]')) button.disabled = !Number(mixer[button.dataset.mixReset] || 0);
     this.renderNormalization(mixer, root);

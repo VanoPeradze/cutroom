@@ -458,15 +458,32 @@ def test_single_combined_source_has_manual_embedded_camera_fallback():
     ):
         assert f'id="{element_id}"' in HTML
 
+    detection = function_block(APP, "embeddedCameraDetection", "cameraDetectionUnavailableHelp")
+    assert "state.project?.pre_analysis?.vision?.A" in detection
+    assert 'state.project?.sources?.A?.generation || ""' in detection
+    assert "state.system?.vision_analysis_version || EMBEDDED_CAMERA_DETECTOR_VERSION" in detection
+    assert "const preparedVisionIsCurrent = sourceGeneration" in detection
+    assert "preparedVision.version === detectorVersion" in detection
+    assert 'String(preparedVision.source_generation || "") === sourceGeneration' in detection
+    assert "analyzedVision?.version === detectorVersion" in detection
+    analyzed_ready = "if (analyzedVisionIsCurrent && analyzedVision.available === true) return analyzedVision"
+    prepared_ready = "if (preparedVisionIsCurrent && preparedVision.available === true) return preparedVision"
+    assert analyzed_ready in detection and prepared_ready in detection
+    assert detection.index(analyzed_ready) < detection.index(prepared_ready)
+    assert "return analyzedVisionIsCurrent ? analyzedVision : preparedVisionIsCurrent ? preparedVision : null" in detection
+
     candidate = function_block(APP, "embeddedCameraCandidate", "embeddedCameraIsActive")
-    assert "state.project?.manual?.embedded_camera" in candidate
-    assert "state.project?.pre_analysis?.vision?.A" in candidate
+    assert "if (state.project?.sources?.B) return null" in candidate
+    assert "normalizedEmbeddedGeometry(state.project?.manual?.embedded_camera)" in candidate
+    manual_ready = 'if (manual) return { ...manual, candidate_source: "manual", manual: true, requires_confirmation: true }'
+    assert manual_ready in candidate
+    assert "const vision = embeddedCameraDetection()" in candidate
+    assert "if (vision?.available !== true) return null" in candidate
+    assert candidate.index(manual_ready) < candidate.index("const vision = embeddedCameraDetection()")
+    assert candidate.index("if (vision?.available !== true) return null") < candidate.index("normalizedEmbeddedGeometry(vision?.embedded_camera)")
     assert "state.system?.vision_analysis_version || EMBEDDED_CAMERA_DETECTOR_VERSION" in candidate
-    assert "const preparedVisionIsCurrent = sourceGeneration" in candidate
-    assert "preparedVisionIsCurrent" in candidate
-    assert "analyzedVisionIsCurrent" in candidate
-    assert "analyzedVision?.version === detectorVersion" in candidate
-    assert "analyzedVisionIsCurrent" in candidate and "preparedVisionIsCurrent ? preparedVision : null" in candidate
+    assert "if (vision.version !== detectorVersion || candidate.detector !== detectorVersion) return null" in candidate
+    assert "if (candidate.requires_confirmation !== true) return null" in candidate
     active = function_block(APP, "embeddedCameraIsActive", "embeddedEditorCandidateKey")
     assert "if (!embeddedCameraCandidate()) return false" in active
     assert "if (state.project?.draft) return embeddedLayoutConfirmed()" in active

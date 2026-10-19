@@ -1,4 +1,4 @@
-"""Combine the frozen product payload, with an explicit documentation-only refresh."""
+"""Combine a pinned Windows payload and reviewed Mac overlays without replacing public pins."""
 from __future__ import annotations
 
 import argparse
@@ -52,8 +52,8 @@ def _baseline() -> dict:
 
 
 def _selected_baseline(windows_baseline: Path | None) -> dict:
-    # Historical archives require an explicit independently pinned metadata file.
-    # New builds and ordinary verification always retain the current release pin.
+    # Historical or unpublished archives need an explicit independently reviewed
+    # metadata file. Omitting it always retains the current approved release pin.
     return (_baseline() if windows_baseline is None
             else json.loads(windows_baseline.read_text(encoding="utf-8")))
 
@@ -258,10 +258,12 @@ def refresh_documentation(root: Path, archive: Path, output_dir: Path, *, build_
     return target
 
 
-def build_package(root: Path, windows_zip: Path, output_dir: Path, *, build_id: str | None = None) -> Path:
-    baseline = _baseline()
+def build_package(root: Path, windows_zip: Path, output_dir: Path, *, build_id: str | None = None,
+                  windows_baseline: Path | None = None) -> Path:
+    baseline = _selected_baseline(windows_baseline)
     if windows_zip.stat().st_size != baseline["bytes"] or sha(windows_zip.read_bytes()) != baseline["sha256"]:
-        raise ValueError("Input is not the approved Windows ZIP")
+        selection = "approved" if windows_baseline is None else "explicitly selected"
+        raise ValueError(f"Input is not the {selection} Windows ZIP")
     verify_windows_package(windows_zip)
     windows = _read_archive(windows_zip)
     original = _verify_frozen_windows(windows, baseline)
@@ -314,7 +316,7 @@ def build_package(root: Path, windows_zip: Path, output_dir: Path, *, build_id: 
                 info.compress_type = zipfile.ZIP_DEFLATED
                 info.external_attr = (0o100755 if name.endswith((".sh", ".command")) else 0o100644) << 16
                 bundle.writestr(info, data)
-        verify_package(staged)
+        verify_package(staged, windows_baseline=windows_baseline)
         data = staged.read_bytes()
         with target.open("xb") as handle:
             handle.write(data)
@@ -348,10 +350,10 @@ def main() -> None:
     parser.add_argument("--verify", type=Path)
     parser.add_argument("--refresh-docs", type=Path, metavar="APPROVED_COMBINED_ZIP")
     parser.add_argument("--windows-baseline", type=Path,
-                        help="Explicit historical Windows checksum metadata; verification/docs refresh only")
+                        help="Explicit reviewed Windows checksum metadata for a local ZIP, verification or docs refresh")
     args = parser.parse_args()
-    if args.windows_baseline and not (args.verify or args.refresh_docs):
-        parser.error("--windows-baseline requires --verify or --refresh-docs")
+    if args.windows_baseline and not (args.verify or args.refresh_docs or (args.windows_zip and not args.download_baseline)):
+        parser.error("--windows-baseline requires --windows-zip, --verify or --refresh-docs; it cannot override --download-baseline")
     if args.refresh_docs:
         if args.verify or args.windows_zip or args.download_baseline:
             parser.error("--refresh-docs cannot be combined with other actions")
@@ -362,7 +364,8 @@ def main() -> None:
         preservation = "product unchanged; reviewed documentation refreshed" if "documentation_revision" in manifest else "Windows unchanged"
         print(f"Verified {manifest['build_id']}: {preservation}, identical shared app, two OS folders")
     elif args.windows_zip and not args.download_baseline:
-        print(build_package(ROOT, args.windows_zip, args.output_dir))
+        print(build_package(ROOT, args.windows_zip, args.output_dir,
+                            windows_baseline=args.windows_baseline))
     elif args.download_baseline and not args.windows_zip:
         with tempfile.TemporaryDirectory(prefix="cutroom-windows-baseline-") as scratch:
             path = Path(scratch) / "windows.zip"

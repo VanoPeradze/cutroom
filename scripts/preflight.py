@@ -58,6 +58,13 @@ def main() -> int:
         failures.append(f"Speech audio decoder: {type(exc).__name__}: {exc}")
 
     try:
+        from cutroom.vision import check_camera_detector_capability
+
+        check_camera_detector_capability()
+    except Exception as exc:
+        failures.append(f"Camera detector: {type(exc).__name__}: {exc}")
+
+    try:
         from cutroom.config import load_settings
 
         settings = load_settings()

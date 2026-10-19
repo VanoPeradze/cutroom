@@ -2613,19 +2613,27 @@ def _prepare_source_impl(
                 "sample_count": preparation_samples,
                 "profile": "lite",
             }
-        context.checkpoint("Saving camera detection")
+        context.checkpoint("Saving camera detection result")
+        vision_available = vision_profile.get("available") is True
+        embedded_camera_detected = bool(vision_profile.get("embedded_camera")) if vision_available else None
 
         def save_vision_profile(latest: dict[str, Any]) -> None:
             current = latest.get("sources", {}).get(slot)
             if not current or current.get("generation") != generation:
                 raise JobCancelled("Source was replaced during camera detection")
             latest.setdefault("pre_analysis", {}).setdefault("vision", {})[slot] = vision_profile
-            current["embedded_camera_detected"] = bool((vision_profile or {}).get("embedded_camera"))
+            # None means the detector could not search; False is a real negative.
+            current["embedded_camera_detected"] = embedded_camera_detected
 
         store.update(project_id, save_vision_profile)
         # This explicit post-save boundary lets the UI refresh without racing the
         # project write or waiting for the full audio scan/proxy.
-        context.update(0.075, "Camera detection ready")
+        camera_message = (
+            "Camera area found; review the suggestion" if embedded_camera_detected
+            else "Camera detection finished; no camera area found" if vision_available
+            else "Automatic camera detection unavailable; mark the camera area manually"
+        )
+        context.update(0.075, camera_message)
 
     # Measure audio before building a proxy. This gives the user a real dB waveform
     # and recommended silence line without waiting for browser transcoding.
@@ -2727,13 +2735,18 @@ def _prepare_source_impl(
     context.checkpoint("Saving prepared source")
     context.commit()
     store.update(project_id, finish_preparation)
-    context.update(1.0, "Source ready")
+    camera_unavailable = vision_profile is not None and vision_profile.get("available") is not True
+    context.update(1.0, "Source ready; automatic camera detection unavailable" if camera_unavailable else "Source ready")
     return {
         "slot": slot,
         "preview": preview_relative,
         "thumbnails": thumbnails,
         "audio_profile_ready": bool(audio_profile.get("available")),
-        "embedded_camera_detected": bool((vision_profile or {}).get("embedded_camera")),
+        "embedded_camera_detected": (
+            bool(vision_profile.get("embedded_camera")) if vision_profile and vision_profile.get("available") is True else None
+        ),
+        "camera_detection_available": vision_profile.get("available") is True if vision_profile is not None else None,
+        "camera_detection_reason": vision_profile.get("reason") if camera_unavailable else None,
     }
 
 

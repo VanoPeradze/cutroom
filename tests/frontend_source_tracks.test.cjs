@@ -76,6 +76,50 @@ test('explicit empty tracks stay empty; moved clips map timeline to source time'
   assert.deepEqual(plain(run('trackClips(state.project,"B")')), []);
 });
 
+test('B-required preview states the fallback during empty B coverage and clears it at mapped footage', () => {
+  const {run} = harness();
+  run('syncSecondaryPreview(1);');
+  assert.equal(run('elements.cameraBadge.textContent'), 'A · B unavailable');
+  assert.equal(run('elements.cameraBadge.dataset.missingSource'), 'B');
+  assert.match(run('elements.cameraBadge.title'), /no mapped footage/);
+  run('syncSecondaryPreview(3);');
+  assert.equal(run('elements.cameraBadge.dataset.missingSource'), '');
+  assert.equal(run('elements.cameraBadge.textContent'), 'B', 'only B exists in this independent-track interval');
+  run('state.project.manual.source_tracks.B=[]; syncSecondaryPreview(9);');
+  assert.equal(run('elements.cameraBadge.textContent'), 'A · B unavailable');
+  assert.deepEqual(plain(run('state.project.manual.source_tracks.B')), []);
+});
+
+test('explicit B picture retiming holds its end frame without losing camera coverage or logical source clock', () => {
+  const {run} = harness();
+  run(`state.project.sources.A.duration=20; state.project.sources.B={duration:20,video_duration:10,has_audio:true};
+    state.project.manual.source_tracks={A:[{id:'a',start:0,end:20,source_start:0}],B:[{id:'b',start:0,end:20,source_start:0,video_speed:1,video_source_start:0}]};
+    state.project.draft={keep_ranges:[{start:0,end:20}],camera_plan:[{start:0,end:20,camera:'stacked'}]};
+    syncSecondaryPreview(15);`);
+  assert.equal(run('elements.previewB.hidden'), false);
+  assert.equal(run('elements.cameraBadge.textContent'), 'STACKED');
+  assert.equal(run('elements.cameraBadge.dataset.missingSource'), '');
+  assert.equal(run('elements.previewB.currentTime'), 9.96, 'hold the last picture rather than switching to A');
+  assert.equal(run('elements.previewB.paused'), true);
+  assert.equal(run('trackAt(state.project,"B",15).sourceTime'), 15, 'picture holding does not change the audio/source clock');
+  run('delete state.project.manual.source_tracks.B[0].video_speed; delete state.project.manual.source_tracks.B[0].video_source_start; syncSecondaryPreview(15);');
+  assert.equal(run('elements.cameraBadge.textContent'), 'A · B unavailable', 'ordinary video still ends at its actual video duration');
+});
+
+test('audible speed-1 B picture hold keeps the actual media player on its longer source audio clock', async () => {
+  const {run} = harness();
+  run(`state.project.sources.A.duration=20; state.project.sources.B={duration:20,video_duration:10,has_audio:true};
+    state.project.manual.source_tracks={A:[{id:'a',start:0,end:20,source_start:0}],B:[{id:'b',start:0,end:20,source_start:0,video_speed:1}]};
+    state.project.draft={keep_ranges:[{start:0,end:20}],camera_plan:[{start:0,end:20,camera:'stacked'}]};
+    mixer.audioSlot='B'; state.preview.playing=true; syncSecondaryPreview(15);`);
+  await Promise.resolve(); await Promise.resolve();
+  assert.equal(run('elements.previewB.hidden'), false);
+  assert.equal(run('elements.previewB.muted'), false);
+  assert.equal(run('elements.previewB.currentTime'), 15, 'audible player seeks to source audio, never back to last video frame');
+  assert.equal(run('elements.previewB.paused'), false, 'longer source audio keeps playing during native picture hold');
+  assert.equal(run('elements.cameraBadge.textContent'), 'STACKED');
+});
+
 test('independent clock pauses and seeks without depending on either media clock', async () => {
   const h = harness();
   h.run('globalThis.clock=new SourceTimelineClock(); clock.seek(4); clock.play();');

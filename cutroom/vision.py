@@ -10,6 +10,73 @@ from .composition import FACE_LAYOUT_VERSION
 
 VISION_ANALYSIS_VERSION = FACE_LAYOUT_VERSION
 
+_CAMERA_CASCADE_FILES = (
+    "haarcascade_frontalface_default.xml",
+    "haarcascade_frontalface_alt2.xml",
+    "haarcascade_profileface.xml",
+)
+
+
+def _camera_detector_error(detail: str) -> RuntimeError:
+    return RuntimeError(
+        f"Camera detection is unavailable: {detail}. "
+        "Run CUTROOM setup again to install its compatible OpenCV dependency."
+    )
+
+
+def _load_camera_classifiers(cv2: Any) -> list[Any]:
+    """Validate and load the actual detector assets before opening any video.
+
+    Importing cv2 is insufficient: some OpenCV packages omit the cascade API or
+    its XML files. Exercise each loaded classifier on a small blank frame so an
+    incompatible backend fails as unavailable, rather than as a negative search.
+    The analyzer reuses these same classifier instances for the video frames.
+    """
+    classifier_type = getattr(cv2, "CascadeClassifier", None)
+    if not callable(classifier_type):
+        raise _camera_detector_error("OpenCV has no CascadeClassifier API")
+    cascade_directory = getattr(getattr(cv2, "data", None), "haarcascades", None)
+    if not cascade_directory:
+        raise _camera_detector_error("OpenCV has no bundled Haar cascade directory")
+    cascade_root = Path(cascade_directory)
+    try:
+        import numpy as np
+
+        blank = np.zeros((64, 64), dtype=np.uint8)
+    except Exception as exc:
+        raise _camera_detector_error(f"the detector smoke frame could not be created ({exc})") from exc
+
+    classifiers = []
+    for filename in _CAMERA_CASCADE_FILES:
+        cascade_path = cascade_root / filename
+        if not cascade_path.is_file():
+            raise _camera_detector_error(f"the required detector file {filename} is missing")
+        try:
+            classifier = classifier_type(str(cascade_path))
+            if classifier.empty():
+                raise RuntimeError("the classifier is empty")
+            classifier.detectMultiScale(blank, scaleFactor=1.10, minNeighbors=4, minSize=(28, 28))
+        except Exception as exc:
+            raise _camera_detector_error(f"the detector file {filename} could not run ({exc})") from exc
+        classifiers.append(classifier)
+    return classifiers
+
+
+def check_camera_detector_capability() -> dict[str, Any]:
+    """Require real bundled camera detectors, without video, models or network."""
+    try:
+        import cv2
+    except Exception as exc:
+        raise _camera_detector_error(f"OpenCV could not be imported ({exc})") from exc
+    classifiers = _load_camera_classifiers(cv2)
+    return {
+        "available": True,
+        "opencv_version": str(getattr(cv2, "__version__", "unknown")),
+        "classifier_count": len(classifiers),
+        "cascade_files": list(_CAMERA_CASCADE_FILES),
+        "smoke_check": "detectMultiScale_blank_frame",
+    }
+
 
 def normalized_vision_sample_count(value: Any, fallback: int) -> int:
     """Return the bounded number of frames used by every vision entry point."""
@@ -243,21 +310,21 @@ def analyze_faces_and_embedded_camera(
         import cv2
     except ImportError:
         return {"version": VISION_ANALYSIS_VERSION, "available": False, "reason": "opencv_not_installed", "faces": [], "focus": {"x": 0.5, "y": 0.5}, "focus_safe": False, "embedded_camera": None}
-
-    capture = cv2.VideoCapture(str(path))
-    if not capture.isOpened():
-        return {"version": VISION_ANALYSIS_VERSION, "available": False, "reason": "video_open_failed", "faces": [], "focus": {"x": 0.5, "y": 0.5}, "focus_safe": False, "embedded_camera": None}
-    cascade_root = Path(cv2.data.haarcascades)
-    classifiers = [
-        cv2.CascadeClassifier(str(cascade_root / "haarcascade_frontalface_default.xml")),
-        cv2.CascadeClassifier(str(cascade_root / "haarcascade_frontalface_alt2.xml")),
-    ]
-    profile_classifier = cv2.CascadeClassifier(str(cascade_root / "haarcascade_profileface.xml"))
-    detections: list[dict[str, float]] = []
-    frame_width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH) or 0)
-    frame_height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
-    sample_count = normalized_vision_sample_count(samples, 24)
     try:
+        detectors = _load_camera_classifiers(cv2)
+    except RuntimeError as exc:
+        return {"version": VISION_ANALYSIS_VERSION, "available": False, "reason": "opencv_detector_unavailable", "warning": str(exc), "faces": [], "focus": {"x": 0.5, "y": 0.5}, "focus_safe": False, "embedded_camera": None}
+
+    classifiers, profile_classifier = detectors[:2], detectors[2]
+    detections: list[dict[str, float]] = []
+    decoded_samples = 0
+    sample_count = normalized_vision_sample_count(samples, 24)
+    capture = cv2.VideoCapture(str(path))
+    try:
+        if not capture.isOpened():
+            return {"version": VISION_ANALYSIS_VERSION, "available": False, "reason": "video_open_failed", "faces": [], "focus": {"x": 0.5, "y": 0.5}, "focus_safe": False, "embedded_camera": None}
+        frame_width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH) or 0)
+        frame_height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
         for index in range(sample_count):
             if cancel_check:
                 cancel_check()
@@ -266,6 +333,7 @@ def analyze_faces_and_embedded_camera(
             ok, frame = capture.read()
             if not ok or frame is None:
                 continue
+            decoded_samples += 1
             if progress:
                 progress((index + 1) / sample_count, "Finding the creator camera and screen")
             # Downscale large frames for much cheaper detection while retaining the
@@ -304,13 +372,26 @@ def analyze_faces_and_embedded_camera(
     finally:
         capture.release()
 
+    if not decoded_samples:
+        return {
+            "version": VISION_ANALYSIS_VERSION,
+            "available": False,
+            "reason": "video_decode_failed",
+            "warning": "No video frames could be decoded for camera detection. Check that the source video is readable and try importing it again.",
+            "decoded_samples": 0,
+            "faces": [],
+            "focus": {"x": 0.5, "y": 0.5},
+            "focus_safe": False,
+            "embedded_camera": None,
+        }
+
     if not detections:
-        return {"version": VISION_ANALYSIS_VERSION, "available": True, "reason": "no_stable_face", "faces": [], "focus": {"x": 0.5, "y": 0.5}, "focus_safe": False, "embedded_camera": None}
+        return {"version": VISION_ANALYSIS_VERSION, "available": True, "reason": "no_stable_face", "decoded_samples": decoded_samples, "faces": [], "focus": {"x": 0.5, "y": 0.5}, "focus_safe": False, "embedded_camera": None}
 
     clusters = _cluster_face_detections(detections, sample_count)
     best = clusters[0] if clusters else None
     if not best:
-        return {"version": VISION_ANALYSIS_VERSION, "available": True, "reason": "no_stable_face", "faces": [], "focus": {"x": 0.5, "y": 0.5}, "focus_safe": False, "embedded_camera": None}
+        return {"version": VISION_ANALYSIS_VERSION, "available": True, "reason": "no_stable_face", "decoded_samples": decoded_samples, "faces": [], "focus": {"x": 0.5, "y": 0.5}, "focus_safe": False, "embedded_camera": None}
 
     # For auto reframe, prefer the most persistent face cluster rather than a random
     # large transient face from gameplay footage.
@@ -325,6 +406,7 @@ def analyze_faces_and_embedded_camera(
     return {
         "version": VISION_ANALYSIS_VERSION,
         "available": True,
+        "decoded_samples": decoded_samples,
         "frame": {"width": frame_width, "height": frame_height},
         "faces": best["detections"],
         "face_clusters": [

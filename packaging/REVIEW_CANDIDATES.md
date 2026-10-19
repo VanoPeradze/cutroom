@@ -12,11 +12,24 @@ commit/tree. No record contains a download URL. Keep the record under review;
 do not regenerate hashes to accept an unexplained change. A historical record
 can only verify its own matching source and artifacts.
 
-The current private pair is anchored by [fe35453.json](review-candidates/fe35453.json)
+The historical October 18 private pair is anchored by [fe35453.json](review-candidates/fe35453.json)
 for source `fe35453119305a33e0890a25e627a4fa47ad353d`. Its source/identity pass
 keeps native acceptance and release qualification pending. See the
 [qualification summary](../docs/plans/SEMANTIC_ACCEPTANCE_2026-10-17.md) for the
 separate source, feature and human acceptance results.
+
+The October 19 candidate is anchored by [7019b64.json](review-candidates/7019b64.json)
+for source `7019b6423ce9d66531e933ee5cac42968f9e96e7`. Both packages were built
+from that exact Git source archive. Its local source and platform-projection gates
+passed. Native run [39244037429](https://github.com/VanoPeradze/cutroom/actions/runs/39244037429)
+then passed on both ARM and Intel: 69 offline checks, 348 extracted feature tests,
+all 50 required cases with zero skips, fresh installation, restart and missing-pip
+recovery. The orchestration head is `b28561c7a3d277e90381d2e720eb50ab2fe001fb`;
+the App source remains `7019b64`. The private record itself remains review only.
+Public beta metadata records the separately authorized promotion and pending
+Windows fresh-install, physical-device, human, model and real A/B acceptance.
+The manual review workflow selects this record and accepts exactly its three private ZIPs.
+No model download or transcription is enabled by default.
 
 The command uses Python's standard library and local Git objects only. It never
 imports or executes application or builder code, installs dependencies, downloads
