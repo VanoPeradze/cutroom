@@ -21,8 +21,14 @@ separate source, feature and human acceptance results.
 The October 19 candidate is anchored by [7019b64.json](review-candidates/7019b64.json)
 for source `7019b6423ce9d66531e933ee5cac42968f9e96e7`. Both packages were built
 from that exact Git source archive. Its local source and platform-projection gates
-passed; native installation and release qualification remain pending. The manual
-review workflow selects this record and accepts exactly its three private ZIPs.
+passed. Native run [39244037429](https://github.com/VanoPeradze/cutroom/actions/runs/39244037429)
+then passed on both ARM and Intel: 69 offline checks, 348 extracted feature tests,
+all 50 required cases with zero skips, fresh installation, restart and missing-pip
+recovery. The orchestration head is `b28561c7a3d277e90381d2e720eb50ab2fe001fb`;
+the App source remains `7019b64`. The private record itself remains review only.
+Public beta metadata records the separately authorized promotion and pending
+Windows fresh-install, physical-device, human, model and real A/B acceptance.
+The manual review workflow selects this record and accepts exactly its three private ZIPs.
 No model download or transcription is enabled by default.
 
 The command uses Python's standard library and local Git objects only. It never

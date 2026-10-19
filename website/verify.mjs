@@ -37,22 +37,33 @@ assert.equal(JSON.parse(readFileSync(resolve(root,'package.json'),'utf8')).versi
 assert.ok(html.includes('WINDOWS + MAC · 1.2 BETA'), 'The download must display both platforms and 1.2 Beta');
 assertPublishable(release);
 assert.equal(release.release_state, 'beta');
-assert.equal(release.source_commit, 'fe35453119305a33e0890a25e627a4fa47ad353d');
-assert.equal(release.platforms.mac.filename, release.filename);
-assert.equal(release.platforms.mac.folder, 'mac');
-assert.ok(html.includes('Mac download includes both platforms. Extract it, open mac/'), 'Mac download must explain the combined archive');
-assert.ok(html.includes('Public beta.') && html.includes('acceptance remain pending.'), 'Disclose beta acceptance limits');
+assert.equal(release.source_commit, '7019b6423ce9d66531e933ee5cac42968f9e96e7');
+assert.equal(release.filename, 'CUTROOM-1.2-Beta-20261019.zip');
+assert.equal(release.platforms.windows.filename, 'CUTROOM-1.2-Beta-Windows-20261019.zip');
+assert.equal(release.platforms.mac.filename, 'CUTROOM-1.2-Beta-Mac-20261019.zip');
+assert.equal(release.source_archive.filename, 'SOURCE-20261019.zip');
+assert.equal(downloadEntries(release).length,4,'Four distinct public archives must be prepared');
+assert.notEqual(release.platforms.mac.filename, release.filename);
+assert.ok(!release.platforms.mac.folder,'The standalone Mac launcher must not require a mac subfolder');
+assert.ok(html.includes('Mac has its own ZIP. Extract it and run START CUTROOM.command beside App.'), 'Explain the standalone Mac launcher');
+assert.ok(html.includes('Public beta.') && html.includes('still need manual acceptance.'), 'Disclose beta acceptance limits');
 assert.ok(html.includes('START CUTROOM.command') && html.includes('exactly two folders: windows and mac'), 'Both platform launchers must be explained');
 assert.ok(html.includes('/downloads/'+zip+'"'), 'The download must match the release manifest');
 assert.ok(html.includes('/downloads/'+zip+'.sha256"'), 'The checksum link must match the release manifest');
 assert.ok(!html.includes('5.6.1'), 'Stale application version on the public page');
 assert.match(release.sha256, /^[a-f0-9]{64}$/);
 assert.ok(Number.isSafeInteger(release.bytes) && release.bytes > 0);
-assert.match(release.github_release.tag, /^v\d+\.\d+-beta-\d{8}$/);
+assert.equal(release.github_release.tag, 'v1.2-beta-20261019');
+assert.equal(release.github_release.previous_public_tag, 'v1.2-beta-20261018');
 assert.equal(release.github_release.tag_commit, release.source_commit);
 const releaseBase = `https://github.com/VanoPeradze/cutroom/releases/download/${release.github_release.tag}/`;
 const retained = JSON.parse(readFileSync(resolve(root,'retained-downloads.json'),'utf8'));
-assert.equal(retained.length,6,'Preserve all historical 1.1 and October 15 1.2 mirrors');
+const retainedTags = new Map([
+  ...['CUTROOM-1.1-Beta.zip','CUTROOM-1.1-Beta-Windows.zip','CUTROOM-1.1-Beta-Mac.zip'].map(filename=>[filename,'v1.1-beta-20261011']),
+  ...['CUTROOM-1.2-Beta.zip','CUTROOM-1.2-Beta-Windows.zip','CUTROOM-1.2-Beta-Mac.zip'].map(filename=>[filename,'v1.2-beta-20261015']),
+  ...['CUTROOM-1.2-Beta-Windows-review-fe35453.zip','CUTROOM-1.2-Beta-combined-review-fe35453.zip','SOURCE-fe35453.zip'].map(filename=>[filename,'v1.2-beta-20261018']),
+]);
+assert.deepEqual(retained.map(entry=>entry.filename).sort(),[...retainedTags.keys()].sort(),'Preserve all historical 1.1, October 15 and October 18 mirrors');
 uniqueDownloadEntries([...downloadEntries(release), ...retained]);
 for (const entry of downloadEntries(release)) {
   assert.equal(entry.url, releaseBase + entry.filename);
@@ -67,7 +78,7 @@ for (const entry of downloadEntries(release)) {
   assert.equal(sidecar[1], entry.filename);
 }
 for (const entry of retained) {
-  assert.match(entry.url,/^https:\/\/github\.com\/VanoPeradze\/cutroom\/releases\/download\/v1\.[12]-beta-202610(?:11|15)\//);
+  assert.equal(entry.url,`https://github.com/VanoPeradze/cutroom/releases/download/${retainedTags.get(entry.filename)}/${entry.filename}`);
   verifyArchive(readFileSync(resolve(root,'public/downloads',entry.filename)),entry);
   const sidecar = readFileSync(resolve(root,'public/downloads',entry.filename+'.sha256'),'utf8').trim().split(/\s+/);
   assert.equal(sidecar[0],entry.sha256);

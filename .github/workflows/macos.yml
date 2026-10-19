@@ -107,7 +107,7 @@ jobs:
         shell: bash
         run: |
           ffmpeg -version
-          "$RUNNER_TEMP/cutroom-regression-venv/bin/python" -m pytest
+          "$RUNNER_TEMP/cutroom-regression-venv/bin/python" -m pytest -ra
       - name: Run frontend regressions
         timeout-minutes: 3
         run: node --test tests/frontend*.test.cjs

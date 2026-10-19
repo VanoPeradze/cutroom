@@ -5,6 +5,8 @@
   const labels = [...document.querySelectorAll('[data-he-aria]')].map(node => ({node, en: node.getAttribute('aria-label'), he: node.dataset.heAria}));
   const languageSwitch = document.getElementById('languageSwitch');
   const dialog = document.getElementById('imageDialog');
+  const screenshotButton = document.getElementById('expandShot');
+  let screenshotOpener = null;
   let language = new URL(location.href).searchParams.get('lang') === 'he' ? 'he' : 'en';
   function renderLanguage() {
     document.documentElement.lang = language;
@@ -17,7 +19,6 @@
     labels.forEach(item => { item.node.setAttribute('aria-label', item[language]); });
     languageSwitch.textContent = language === 'he' ? 'English' : 'עברית';
     languageSwitch.lang = language === 'he' ? 'en' : 'he';
-    languageSwitch.setAttribute('aria-label', language === 'he' ? 'Read this website in English' : 'קריאת האתר בעברית');
     languageSwitch.href = (language === 'he' ? '?lang=en' : '?lang=he') + location.hash;
     document.title = language === 'he' ? 'CUTROOM — שעות של חומר. דקות לקליפ מצוין.' : 'CUTROOM — Hours of footage. Minutes to a great clip.';
     document.querySelector('meta[name="description"]').content = language === 'he'
@@ -32,9 +33,16 @@
     history.replaceState(null, '', url);
     renderLanguage();
   });
-  document.getElementById('expandShot').addEventListener('click', () => dialog.showModal());
+  screenshotButton.addEventListener('click', event => {
+    screenshotOpener = event.currentTarget;
+    dialog.showModal();
+  });
   document.getElementById('closeImage').addEventListener('click', () => dialog.close());
   dialog.addEventListener('click', event => { if (event.target === dialog) dialog.close(); });
+  dialog.addEventListener('close', () => {
+    screenshotOpener?.focus({preventScroll: true});
+    screenshotOpener = null;
+  });
 
   // Workspace tour: without this script every panel stays visible in reading order.
   const tabList = document.querySelector('.tour-tabs');
@@ -72,9 +80,24 @@
   function revealLinkedHelp() {
     const target = document.getElementById(location.hash.slice(1));
     const details = target?.closest('details');
-    if (details) { details.open = true; target.scrollIntoView({block:'start'}); }
+    if (details) {
+      details.open = true;
+      const focusTarget = target === details ? details.querySelector('summary') : target;
+      if (focusTarget !== details.querySelector('summary')) focusTarget.tabIndex = -1;
+      focusTarget.focus({preventScroll: true});
+      target.scrollIntoView({block:'start'});
+    }
   }
   window.addEventListener('hashchange', revealLinkedHelp);
+  document.addEventListener('click', event => {
+    const link = event.target.closest?.('a[href^="#"]');
+    if (!link || event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+    const hash = link.getAttribute('href');
+    if (hash === location.hash && document.getElementById(hash.slice(1))?.closest('details')) {
+      event.preventDefault();
+      revealLinkedHelp();
+    }
+  });
   renderLanguage();
   revealLinkedHelp();
 })();
