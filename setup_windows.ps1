@@ -541,7 +541,7 @@ try {
 
     Write-Step "Checking the completed installation"
     Invoke-External -FilePath $venvPython -Arguments @(
-        "-c", "import flask, waitress, numpy, cv2, faster_whisper, cutroom; print('Python dependencies ready')"
+        "-c", "import flask, waitress, numpy, cv2, faster_whisper, cutroom; from cutroom.vision import check_camera_detector_capability; check_camera_detector_capability(); print('Python dependencies ready')"
     ) -FailureMessage "CUTROOM dependency verification failed."
     Invoke-External -FilePath $venvPython -Arguments @(
         "-m", "compileall", "-q", "server.py", "cutroom"

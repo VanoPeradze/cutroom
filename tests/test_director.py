@@ -33,6 +33,7 @@ def _segments():
 def test_prepared_vision_reuse_requires_generation_and_enough_samples():
     profile = {
         "version": FACE_LAYOUT_VERSION,
+        "available": True,
         "source_generation": "source-generation",
         "sample_count": 12,
     }
@@ -41,6 +42,27 @@ def test_prepared_vision_reuse_requires_generation_and_enough_samples():
     assert _prepared_vision_is_reusable(profile, "", 12) is False
     assert _prepared_vision_is_reusable({**profile, "source_generation": ""}, "", 12) is False
     assert _prepared_vision_is_reusable({**profile, "sample_count": "invalid"}, "source-generation", 12) is False
+
+
+@pytest.mark.parametrize("availability", [False, None, 0, 1, "true", "false"])
+def test_failed_or_malformed_prepared_vision_is_never_reused(availability):
+    profile = {
+        "version": FACE_LAYOUT_VERSION, "available": availability,
+        "source_generation": "source-generation", "sample_count": 56,
+        "reason": "preparation_error", "embedded_camera": None,
+    }
+    assert _prepared_vision_is_reusable(profile, "source-generation", 12) is False
+    profile.pop("available")
+    assert _prepared_vision_is_reusable(profile, "source-generation", 12) is False
+
+
+def test_successful_negative_prepared_vision_can_be_reused():
+    profile = {
+        "version": FACE_LAYOUT_VERSION, "available": True,
+        "source_generation": "source-generation", "sample_count": 12,
+        "embedded_camera": None, "reason": "no_faces_detected",
+    }
+    assert _prepared_vision_is_reusable(profile, "source-generation", 12) is True
 
 
 def test_bounded_cuts_respect_balanced_limit_for_long_form():
@@ -73,6 +95,35 @@ def test_cached_low_confidence_sync_is_neutralized_but_manual_sync_is_not():
     assert automatic["measured_offset"] == 18.0
     assert automatic["reliable"] is False
     assert manual["offset"] == 1.25
+
+
+@pytest.mark.parametrize("rejection", [{"reliable": False}, {"status": "unconfirmed"}, {"reliable": "true"}])
+def test_explicitly_unconfirmed_sync_is_not_promoted_by_high_confidence(rejection):
+    cached = {"offset": 18.0, "confidence": .95, "method": "audio_cross_correlation", **rejection}
+    result = _safe_automatic_sync(cached)
+
+    assert result["offset"] == 0.0
+    assert result["measured_offset"] == 18.0
+    assert result["reliable"] is False
+    assert result["status"] == "unconfirmed"
+    assert cached["offset"] == 18.0
+
+
+@pytest.mark.parametrize("offset", [float("nan"), float("inf"), -float("inf"), 600.01, -600.01, None, "invalid"])
+def test_invalid_automatic_offset_is_unconfirmed_instead_of_silently_dropped_downstream(offset):
+    result = _safe_automatic_sync({"offset": offset, "confidence": .95, "method": "audio_cross_correlation"})
+
+    assert result["offset"] == 0.0
+    assert result["reliable"] is False
+    assert result["status"] == "unconfirmed"
+
+
+@pytest.mark.parametrize("method", ["audio_cross_correlation", "source_tracks"])
+def test_valid_legacy_or_explicit_track_mapping_keeps_its_offset(method):
+    result = _safe_automatic_sync({"offset": 2.125, "confidence": .95, "method": method})
+
+    assert result["offset"] == 2.125
+    assert result["reliable"] is True
 
 
 def test_reel_candidates_reuse_story_beats_and_produce_distinct_valid_edits():

@@ -86,6 +86,12 @@ def check_python(*, imports: bool = True) -> list[str]:
                 importlib.import_module(name)
             except Exception as exc:
                 failures.append(f"Python module {name}: {type(exc).__name__}: {exc}")
+        try:
+            from cutroom.vision import check_camera_detector_capability
+
+            check_camera_detector_capability()
+        except Exception as exc:
+            failures.append(f"Camera detector: {type(exc).__name__}: {exc}")
     return failures
 
 

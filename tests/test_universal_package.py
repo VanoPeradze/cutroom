@@ -139,9 +139,72 @@ def test_historical_archive_requires_its_explicit_exact_windows_pin(package_sour
             combined.verify_package(archive, windows_baseline=metadata)
 
 
-@pytest.mark.parametrize("build_arguments", [["--download-baseline"], ["--windows-zip", "old.zip"]])
-def test_historical_pin_cannot_override_new_candidate_construction(monkeypatch, build_arguments):
-    monkeypatch.setattr(sys, "argv", ["build_universal_package.py", "--windows-baseline", "old.json", *build_arguments])
+def reviewed_windows_candidate(package_source, tmp_path):
+    root, _, _ = package_source
+    (root / "server.py").write_text("reviewed new application source", encoding="utf-8")
+    archive = legacy.build_package(root, tmp_path / "review-windows", build_id="reviewed")
+    with zipfile.ZipFile(archive) as package:
+        manifest_hash = combined.sha(package.read("App/TEST_BUILD.json"))
+    pin = {"bytes": archive.stat().st_size, "sha256": combined.sha(archive.read_bytes()),
+           "manifest_sha256": manifest_hash}
+    metadata = tmp_path / "reviewed-windows.json"
+    metadata.write_bytes(legacy._bytes_json(pin))
+    return archive, metadata, pin
+
+
+def test_explicit_reviewed_candidate_builds_without_replacing_approved_baseline(package_source, tmp_path):
+    approved = dict(combined._baseline())
+    windows, metadata, pin = reviewed_windows_candidate(package_source, tmp_path)
+    root, _, output = package_source
+    archive = combined.build_package(root, windows, output, build_id="reviewed",
+                                     windows_baseline=metadata)
+    assert combined._baseline() == approved
+    assert json.loads(metadata.read_bytes()) == pin
+    assert combined.verify_package(archive, windows_baseline=metadata)["windows_baseline_sha256"] == pin["sha256"]
+    with zipfile.ZipFile(archive) as package, zipfile.ZipFile(windows) as original:
+        for name in original.namelist():
+            assert package.read("windows/" + name) == original.read(name)
+        assert package.read("mac/App/server.py") == b"reviewed new application source"
+    with pytest.raises(ValueError, match="approved Windows ZIP"):
+        combined.build_package(root, windows, output, build_id="no-override")
+    with pytest.raises(ValueError, match="Windows baseline"):
+        combined.verify_package(archive)
+
+
+@pytest.mark.parametrize("changed_pin", ["bytes", "sha256", "manifest_sha256"])
+def test_explicit_candidate_rejects_wrong_independent_pin_before_output(package_source, tmp_path, changed_pin):
+    windows, metadata, pin = reviewed_windows_candidate(package_source, tmp_path)
+    pin[changed_pin] = pin[changed_pin] + 1 if changed_pin == "bytes" else "0" * 64
+    metadata.write_bytes(legacy._bytes_json(pin))
+    root, _, output = package_source
+    with pytest.raises(ValueError, match="Windows ZIP|baseline manifest"):
+        combined.build_package(root, windows, output, build_id="wrong-pin", windows_baseline=metadata)
+    assert not output.exists()
+
+
+def test_explicit_candidate_still_rejects_source_changed_after_windows_build(package_source, tmp_path):
+    windows, metadata, _ = reviewed_windows_candidate(package_source, tmp_path)
+    root, _, output = package_source
+    (root / "server.py").write_text("unreviewed later source", encoding="utf-8")
+    with pytest.raises(ValueError, match="Application source changed"):
+        combined.build_package(root, windows, output, build_id="changed", windows_baseline=metadata)
+    assert not output.exists()
+
+
+def test_cli_explicit_local_candidate_uses_selected_baseline(package_source, tmp_path, monkeypatch, capsys):
+    windows, metadata, _ = reviewed_windows_candidate(package_source, tmp_path)
+    root, _, output = package_source
+    monkeypatch.setattr(combined, "ROOT", root)
+    monkeypatch.setattr(sys, "argv", ["build_universal_package.py", "--windows-zip", str(windows),
+                                    "--windows-baseline", str(metadata), "--output-dir", str(output)])
+    combined.main()
+    archive = Path(capsys.readouterr().out.strip())
+    assert archive.is_file()
+    assert combined.verify_package(archive, windows_baseline=metadata)["windows_files_unchanged"] is True
+
+
+def test_explicit_pin_cannot_redirect_approved_baseline_download(monkeypatch):
+    monkeypatch.setattr(sys, "argv", ["build_universal_package.py", "--windows-baseline", "old.json", "--download-baseline"])
     monkeypatch.setattr(combined, "download_baseline", lambda *args: pytest.fail("Do not download a historical candidate"))
     monkeypatch.setattr(combined, "build_package", lambda *args: pytest.fail("Do not build from a historical override"))
     with pytest.raises(SystemExit) as error:

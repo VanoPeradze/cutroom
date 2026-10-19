@@ -1,4 +1,11 @@
 // User-authored text lives on the edit clock, independently of the AI transcript.
+const TEXT_TEMPLATES = [
+  {id:'plain',name:'Plain text',detail:'Text at your chosen position.'},
+  {id:'lower_third',name:'Lower third',detail:'Name and optional second line, fixed at the lower left.'},
+  {id:'chapter',name:'Chapter card',detail:'A centered heading with an optional second line.'},
+  {id:'callout',name:'Callout',detail:'A boxed note, fixed at the upper left.'},
+  {id:'highlight',name:'Highlight',detail:'Yellow emphasis at your chosen position.'},
+];
 export function textStyle(clip, width, height, previewHeight) {
   const base = Math.max(28, Math.min(72, Math.round(height * (height >= width ? .048 : .042))));
   const size = Math.max(20, Math.min(108, Math.round(base * (clip.scale || 100) / 100)));
@@ -22,10 +29,16 @@ export class TextStudio {
       <div class="text-recovery" hidden><button type="button" data-retry>Retry save</button><button type="button" data-discard>Discard unsaved text changes</button></div>
       <label class="text-search">Find custom text<input type="search" data-search placeholder="Search titles and captions"></label>
       <div class="text-clip-list" aria-label="Custom titles and captions"></div><button type="button" data-more hidden>Show more</button>
+      <p class="text-selection-empty">Select custom text from the list to edit its template and timing.</p>
       <section class="text-inspector" hidden data-editor-shortcuts="off"><h4>Edit selected text</h4>
         <label>Text<textarea data-text="text" dir="auto" rows="3" maxlength="1000"></textarea></label>
+        <section class="text-template-section" aria-label="Text template">
+          <h5>Template</h5>
+          <div class="text-template-picker" role="radiogroup" aria-label="Text template" aria-describedby="textTemplateDescription">${TEXT_TEMPLATES.map((template,index)=>`<button type="button" data-template-choice="${template.id}" role="radio" aria-checked="${index===0}" tabindex="${index===0?0:-1}"><span class="text-template-mark" aria-hidden="true">Aa</span><span>${template.name}</span></button>`).join('')}</div>
+          <p class="text-template-description" id="textTemplateDescription"></p>
+          <select data-text="template" hidden aria-label="Text template">${TEXT_TEMPLATES.map(template=>`<option value="${template.id}">${template.name}</option>`).join('')}</select>
+        </section>
         <div class="text-fields"><label>Start (seconds)<input type="number" data-text="start" min="0" step="0.01"></label><label>End (seconds)<input type="number" data-text="end" min="0.08" step="0.01"></label>
-        <label>Template<select data-text="template"><option value="plain">Plain text</option><option value="lower_third">Lower third (name + role)</option><option value="chapter">Chapter card</option><option value="callout">Callout</option><option value="highlight">Highlight</option></select></label>
         <label data-template-field="subtext">Second line<input type="text" data-text="subtext" dir="auto" maxlength="200" placeholder="Role, label or date"></label>
         <label data-template-field="position">Position<select data-text="position"><option value="top">Top</option><option value="center">Center</option><option value="bottom">Bottom</option></select></label>
         <label>Style<select data-text="style"><option value="clean">Clean</option><option value="bold">Bold</option><option value="boxed">Boxed</option></select></label>
@@ -34,10 +47,13 @@ export class TextStudio {
         <p class="text-help">Changes preview immediately and save automatically. Drag this text clip or its edges on the timeline. Simultaneous text in the same position can overlap.</p>
       </section>`;
     this.status=root.querySelector('.text-status'); this.inspector=root.querySelector('.text-inspector');
+    this.emptySelection=root.querySelector('.text-selection-empty');
+    this.templatePicker=root.querySelector('.text-template-picker'); this.templateDescription=root.querySelector('.text-template-description');
     this.layer=document.createElement('div'); this.layer.className='custom-text-layer'; this.layer.setAttribute('aria-hidden','true'); stage.append(this.layer);
     const onClick=event=>{
       const button=event.target.closest('button'); if(!button)return;
-      if(button.dataset.add) void this.add(button.dataset.add);
+      if(button.dataset.templateChoice) this.chooseTemplate(button.dataset.templateChoice);
+      else if(button.dataset.add) void this.add(button.dataset.add);
       else if(button.hasAttribute('data-import')) this.find('input[type=file]').click();
       else if(button.dataset.textId) void this.select(button.dataset.textId,true);
       else if(button.hasAttribute('data-retry')) void this.flush();
@@ -52,13 +68,14 @@ export class TextStudio {
     root.addEventListener('input',event=>{
       const key=event.target.dataset.text; if(!key||!this.selected)return;
       const value=['start','end','scale'].includes(key) ? (event.target.value==='' ? NaN : Number(event.target.value)) : event.target.value;
-      if(key==='template')this.showTemplateFields(value);
+      if(key==='template')this.renderTemplates(value);
       this.queueClip(this.selected,{[key]:value});
     });
+    this.templatePicker.addEventListener('keydown',event=>this.templateKeydown(event));
     this.observer=new ResizeObserver(()=>this.options.preview()); this.observer.observe(stage);
     this.libraryRoot=options.libraryRoot;
     if(this.libraryRoot){
-      for(const node of [...root.children]) if(node!==this.inspector)this.libraryRoot.append(node);
+      for(const node of [...root.children]) if(node!==this.inspector&&node!==this.emptySelection)this.libraryRoot.append(node);
       this.libraryRoot.addEventListener('click',onClick);
     }
   }
@@ -75,14 +92,46 @@ export class TextStudio {
     if(this.selected&&!clip)this.selected=null;
     if(previousSelection&&previousSelection!==this.selected)this.options.selectionRemoved?.(previousSelection);
     this.inspector.hidden=!clip;
+    if(this.emptySelection){this.emptySelection.hidden=Boolean(clip);this.emptySelection.textContent=p?.draft?'Select custom text from the list to edit its template and timing.':'Create an edit before adding text and templates.';}
     if(clip) for(const input of this.root.querySelectorAll('[data-text]')) {
       if(force||document.activeElement!==input)input.value=clip[input.dataset.text] ?? (input.dataset.text==='template' ? 'plain' : '');
-      input.disabled=this.importing;
+      input.disabled=this.importing||(this.options.busy()&&!this.saving);
     }
-    this.showTemplateFields(clip?.template||'plain');
+    this.renderTemplates(clip?.template||'plain');
     this.find('.text-recovery').hidden=!this.pending.size;
     this.find('.text-search').hidden = !this.clips().length;
     this.renderList();
+  }
+  renderTemplates(template){
+    this.showTemplateFields(template);
+    if(!this.templatePicker)return;
+    const selected=TEXT_TEMPLATES.find(item=>item.id===template)||TEXT_TEMPLATES[0];
+    for(const button of this.templatePicker.querySelectorAll('[data-template-choice]')){
+      const checked=button.dataset.templateChoice===selected.id;
+      button.setAttribute('aria-checked',String(checked));button.tabIndex=checked?0:-1;
+      // Our automatic save can briefly mark the app busy. Keep its existing
+      // controls focusable while later choices queue behind that same save.
+      button.disabled=!this.project()?.draft||!this.selected||this.importing||(this.options.busy()&&!this.saving);
+    }
+    this.templateDescription.textContent=selected.detail;
+  }
+  chooseTemplate(template){
+    if(!TEXT_TEMPLATES.some(item=>item.id===template)||!this.project()?.draft||this.importing||(this.options.busy()&&!this.saving))return false;
+    const clip=this.clips().find(item=>item.id===this.selected);if(!clip)return false;
+    if((clip.template||'plain')!==template)this.queueClip(clip.id,{template});
+    const select=this.root.querySelector('[data-text=template]');if(select)select.value=template;
+    this.renderTemplates(template);return true;
+  }
+  templateKeydown(event){
+    if(event.altKey||event.ctrlKey||event.metaKey)return;
+    const steps={ArrowRight:1,ArrowDown:1,ArrowLeft:-1,ArrowUp:-1};
+    if(!(event.key in steps)&&!['Home','End'].includes(event.key))return;
+    const buttons=[...this.templatePicker.querySelectorAll('[data-template-choice]')].filter(button=>!button.disabled);
+    const index=buttons.indexOf(event.target.closest('[data-template-choice]'));if(index<0||!buttons.length)return;
+    event.preventDefault();
+    const rtl=document.documentElement.dir==='rtl'&&['ArrowLeft','ArrowRight'].includes(event.key)?-1:1;
+    const next=event.key==='Home'?0:event.key==='End'?buttons.length-1:(index+steps[event.key]*rtl+buttons.length)%buttons.length;
+    if(this.chooseTemplate(buttons[next].dataset.templateChoice))buttons[next].focus();
   }
   // Lower thirds and chapter cards have a second line; they and callouts have a fixed place.
   showTemplateFields(template){
@@ -93,6 +142,7 @@ export class TextStudio {
     const list=this.find('.text-clip-list'), query=this.find('[data-search]').value.trim().toLocaleLowerCase();
     const clips=this.clips().filter(c=>c.text.toLocaleLowerCase().includes(query)).sort((a,b)=>a.start-b.start);
     list.replaceChildren();
+    if(!clips.length){const empty=document.createElement('p');empty.className='text-list-empty';empty.textContent=query?'No custom text matches your search.':'No custom text yet. Add text or a caption to choose a template.';list.append(empty);}
     for(const clip of clips.slice(0,this.limit)) {
       const button=document.createElement('button');button.type='button';button.dataset.textId=clip.id;button.setAttribute('aria-pressed',String(clip.id===this.selected));
       const label=document.createElement('span');label.textContent=clip.text;label.dir='auto';

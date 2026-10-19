@@ -50,6 +50,76 @@ def test_virtual_sequence_compacts_every_keep_without_mutating_source_draft_or_t
     assert value == before
 
 
+def short_camera_project():
+    """A short independent camera recording beside a much longer screen take."""
+    value = project()
+    value["sources"]["A"]["duration"] = 2285.583
+    value["sources"]["B"]["duration"] = 158.35
+    value["draft"].update(
+        keep_ranges=[{"start": 244, "end": 264.6}, {"start": 1086.4, "end": 1101.8},
+                     {"start": 1185.4, "end": 1216.2}, {"start": 1307.4, "end": 1330.6}],
+        cuts=[], output_duration=90, removed_duration=2195.583,
+    )
+    value["draft"]["camera_plan"] = [
+        {**row, "camera": "stacked"} for row in value["draft"]["keep_ranges"]
+    ]
+    return value
+
+
+@pytest.mark.parametrize("offset,expected", [
+    (0, []),
+    (244, [(0, 20.6, 0)]),
+    (260, [(16, 20.6, 0)]),
+])
+def test_short_camera_projects_only_real_overlap_without_restarting_at_each_keep(offset, expected):
+    value = short_camera_project()
+    value["analysis"]["sync"] = {"offset": offset}
+    before = copy.deepcopy(value)
+    view, duration = materialize_sequence(value)
+    assert duration == 90
+    assert geometry(view, "B") == expected
+    # Compact edit time must not become the camera's local-media time. The
+    # later story excerpts have no B footage at these offsets, even though
+    # their compact edit positions are within the camera's physical duration.
+    a_clips = source_track_clips(view, "A")
+    assert sum(clip["end"] - clip["start"] for clip in a_clips) == pytest.approx(90)
+    for edit_time, source_time in [(0, 244), (19, 263), (20.6, 1086.4),
+                                   (36, 1185.4), (66.8, 1307.4)]:
+        clip = next(clip for clip in a_clips if clip["start"] <= edit_time < clip["end"])
+        assert clip["source_start"] + edit_time - clip["start"] == pytest.approx(source_time)
+    assert view["sources"] == before["sources"]
+    assert value == before
+
+
+def test_explicit_camera_gap_is_not_repopulated_by_valid_global_overlap():
+    value = short_camera_project()
+    value["analysis"]["sync"] = {"offset": 244}
+    value["manual"]["source_tracks"] = {"B": []}
+    before = copy.deepcopy(value)
+    view, _ = materialize_sequence(value)
+    assert geometry(view, "B") == []
+    assert view["manual"]["sequence"]["base_source_tracks"] == {"B": []}
+    assert value == before
+
+
+def test_independently_placed_camera_retains_its_local_clock_across_story_projection():
+    value = short_camera_project()
+    # This explicit placement is not the implicit B-at-zero recording. Applying
+    # the global sync again, or using compact edit time, would show wrong media.
+    value["analysis"]["sync"] = {"offset": 0}
+    value["manual"]["source_tracks"] = {
+        "B": [{"id": "independent-camera", "start": 240, "end": 260,
+               "source_start": 50, "video_speed": 2, "video_source_start": 60}],
+    }
+    before = copy.deepcopy(value)
+    view, _ = materialize_sequence(value)
+    assert geometry(view, "B") == [(0, 16, 54)]
+    camera = source_track_clips(view, "B")[0]
+    assert camera["video_speed"] == 2
+    assert camera["video_source_start"] == 68
+    assert value == before
+
+
 def test_projection_includes_manual_split_layout_and_existing_independent_track_boundaries():
     value = project()
     value["draft"]["edit_points"] = [1]

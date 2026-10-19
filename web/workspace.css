@@ -195,3 +195,49 @@ dialog.workspace-guide-dialog .dialog-shell { padding: 26px 28px; }
   dialog.workspace-guide-dialog .dialog-shell { padding: 20px 18px; }
   .workspace-guide-dialog .dialog-shell > header { align-items: flex-start; }
 }
+
+/* Stable editing regions. This contract also covers short laptop windows;
+   older presentation layers otherwise switch them into conflicting phone grids. */
+#advancedPanel.studio-workspace > :is(.studio-shelf,.studio-preview-dock,.advanced-content,.studio-timeline-dock) { min-width:0; min-height:0; }
+#advancedPanel #studioPreviewDock .preview-column:not(.video-expanded) { --monitor-controls-space:64px; height:100%; min-height:0; display:grid; grid-template-columns:minmax(0,1fr); grid-template-rows:minmax(0,1fr) auto; gap:8px; }
+#advancedPanel #studioPreviewDock .preview-column:not(.video-expanded) .preview-controls { margin:0; }
+#advancedPanel #studioPreviewDock .preview-stage { min-width:0; justify-self:center; }
+#advancedPanel #studioInspector :is(#studioShelfCaptions,#studioShelfOutput) { min-width:0; padding:0 0 16px; margin:0 0 16px; border-bottom:1px solid var(--line); }
+#advancedPanel #studioInspector :is(#studioShelfCaptions,#studioShelfOutput) > .shelf-heading { margin-bottom:12px; padding-bottom:0; border:0; }
+#advancedPanel #studioInspector :is(#studioShelfCaptions,#studioShelfOutput)[hidden] { display:none; }
+#advancedPanel #studioInspector #studioShelfCaptions :is(.text-search,.text-clip-list,.text-import) { max-width:100%; }
+#advancedPanel #studioInspector .text-clip-list { max-height:180px; overflow:auto; }
+#advancedPanel #studioInspector .output-presets { grid-template-columns:repeat(2,minmax(0,1fr)); }
+#advancedPanel #studioInspector .output-preset { grid-template-columns:34px minmax(0,1fr); gap:4px 8px; padding:8px; }
+#advancedPanel #studioInspector .output-preset .output-preset-shape { max-width:30px; }
+#advancedPanel #studioInspector .output-preset :is(b,small) { font-size:12px; }
+#advancedPanel #studioInspector .output-preset:last-child { grid-column:1/-1; }
+
+@media (min-width:900px) and (min-height:540px) {
+  body.studio-open #advancedPanel.studio-workspace:not([hidden]) { inset:var(--app-chrome-height,52px) 0 0; height:calc(100dvh - var(--app-chrome-height,52px)); max-height:none; display:grid; grid-template-columns:clamp(180px,17vw,252px) minmax(0,1fr) 8px var(--workspace-inspector-width,360px); grid-template-rows:38px minmax(0,1fr) 8px var(--workspace-timeline-height,256px) 48px; gap:0; padding:0; overflow:hidden; }
+  #advancedPanel.studio-workspace > .studio-header { grid-column:2; grid-row:1; min-width:0; height:38px; min-height:38px; padding:0 12px; }
+  #advancedPanel.studio-workspace > .studio-shelf { grid-column:1; grid-row:1/3; max-height:none; overflow:auto; padding:16px 12px; border-top:0; border-inline-end:1px solid var(--line); overscroll-behavior:contain; }
+  #advancedPanel.studio-workspace > .studio-preview-dock { grid-column:2; grid-row:2; overflow:hidden; padding:0 12px 8px; }
+  #advancedPanel.studio-workspace > .advanced-content { grid-column:4; grid-row:1/3; overflow:auto; overscroll-behavior:contain; padding:16px; }
+  #advancedPanel.studio-workspace > .inspector-divider { display:flex; align-items:center; justify-content:center; grid-column:3; grid-row:1/3; cursor:ew-resize; touch-action:none; background:var(--surface-chrome); }
+  #advancedPanel.studio-workspace > .workspace-divider { display:block; grid-column:1/-1; grid-row:3; }
+  #advancedPanel.studio-workspace > .studio-timeline-dock { grid-column:1/-1; grid-row:4; min-height:0; overflow:hidden; padding:0 10px 8px; }
+  #advancedPanel.studio-workspace > .advanced-tabs { grid-column:1/-1; grid-row:5; position:static; transform:none; width:100%; max-width:none; height:48px; margin:0; padding:0 max(12px,calc((100% - 900px)/2)); }
+  #advancedPanel.studio-workspace > .advanced-tabs button { height:47px; min-height:0; padding-block:4px; }
+  body.studio-open #advancedPanel.studio-workspace.inspector-collapsed:not([hidden]) { grid-template-columns:clamp(180px,17vw,252px) minmax(0,1fr) 0 0; }
+  #advancedPanel.studio-workspace.inspector-collapsed > :is(.advanced-content,.inspector-divider) { display:none; }
+}
+
+@media (max-width:899px),(max-height:539px) {
+  body.studio-open #advancedPanel.studio-workspace:not([hidden]) { inset:var(--app-chrome-height,52px) 0 0; height:calc(100dvh - var(--app-chrome-height,52px)); display:grid; grid-template-columns:minmax(0,1fr); grid-template-rows:38px minmax(220px,46dvh) var(--workspace-timeline-height,256px) max-content max-content; align-content:start; padding:0 0 56px; overflow:auto; }
+  #advancedPanel.studio-workspace > :is(.studio-header,.studio-preview-dock,.studio-timeline-dock,.studio-shelf,.advanced-content) { grid-column:1/-1; }
+  #advancedPanel.studio-workspace > .studio-header { grid-row:1; height:38px; min-height:38px; padding:0 10px; }
+  #advancedPanel.studio-workspace > .studio-preview-dock { grid-row:2; padding:0 10px 8px; overflow:hidden; }
+  #advancedPanel.studio-workspace > .studio-timeline-dock { grid-row:3; min-height:0; overflow:hidden; padding:0 6px 8px; }
+  #advancedPanel.studio-workspace > .studio-shelf { grid-row:4; max-height:320px; overflow:auto; padding:16px 12px; }
+  #advancedPanel.studio-workspace > .advanced-content { grid-row:5; overflow:visible; min-height:0; padding:16px 12px; }
+  #advancedPanel.studio-workspace > :is(.workspace-divider,.inspector-divider) { display:none; }
+  #advancedPanel.studio-workspace > .advanced-tabs { position:fixed; inset:auto 0 0; z-index:210; display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); width:100%; max-width:none; height:52px; margin:0; padding:0 4px; overflow:hidden; }
+  #advancedPanel.studio-workspace > .advanced-tabs button { min-width:0; height:51px; min-height:0; padding:4px 2px; gap:3px; }
+  #advancedPanel.studio-workspace > .advanced-tabs button span { font-size:11px; }
+}

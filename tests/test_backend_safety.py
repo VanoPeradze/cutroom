@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from cutroom.config import load_settings
-from cutroom.media import copy_upload
+from cutroom.media import UploadTooLargeError, copy_upload
 from server import JSON_BODY_LIMIT, create_app
 
 
@@ -201,6 +201,61 @@ def test_copy_upload_removes_unique_partial_on_any_failure(tmp_path: Path):
 
     assert not destination.exists()
     assert not list(tmp_path.iterdir())
+
+
+@pytest.mark.parametrize("layout", ["long_basename", "deep_directory"])
+def test_copy_upload_keeps_temporary_path_short_and_replaces_only_after_complete_copy(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, layout: str):
+    # Both a long basename and a deep directory can leave a valid final path
+    # too little room for staging names inflated by a basename or suffix.
+    if layout == "long_basename":
+        filename_length = max(16, 220 - len(str(tmp_path)) - 1)
+        destination = tmp_path / ("recording-" + "x" * (filename_length - 14) + ".mp4")
+    else:
+        directory_length = max(1, 220 - len(str(tmp_path)) - 1)
+        destination = tmp_path / ("d" * directory_length) / "original.wav"
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    original = b"existing media stays intact until the copy finishes"
+    payload = b"replacement media bytes"
+    destination.write_bytes(original)
+    opened = []
+    path_open = Path.open
+
+    def record_open(path, mode="r", *args, **kwargs):
+        if mode == "wb":
+            opened.append(path)
+        return path_open(path, mode, *args, **kwargs)
+
+    class ObservingStream(io.BytesIO):
+        def read(self, size=-1):
+            assert destination.read_bytes() == original
+            return super().read(size)
+
+    monkeypatch.setattr(Path, "open", record_open)
+    assert copy_upload(SimpleNamespace(stream=ObservingStream(payload)), destination, len(payload)) == len(payload)
+    assert destination.read_bytes() == payload
+    assert len(opened) == 1
+    partial = opened[0]
+    assert partial.parent == destination.parent
+    assert len(str(partial)) <= max(len(str(destination)), len(str(destination.parent)) + 34)
+    token = partial.name.removeprefix(".")
+    assert partial.name.startswith(".") and len(token) == 32
+    assert all(character in "0123456789abcdef" for character in token)
+    assert not partial.exists()
+    assert list(destination.parent.iterdir()) == [destination]
+
+
+def test_copy_upload_size_limit_preserves_destination_and_other_upload_partial(tmp_path: Path):
+    destination = tmp_path / "source-A.mp4"
+    other_upload = tmp_path / ("." + "f" * 32)
+    destination.write_bytes(b"existing source")
+    other_upload.write_bytes(b"another in-flight upload")
+
+    with pytest.raises(UploadTooLargeError):
+        copy_upload(SimpleNamespace(stream=io.BytesIO(b"too much data")), destination, 3)
+
+    assert destination.read_bytes() == b"existing source"
+    assert other_upload.read_bytes() == b"another in-flight upload"
+    assert set(tmp_path.iterdir()) == {destination, other_upload}
 
 
 def test_json_endpoints_require_small_object_bodies(app):

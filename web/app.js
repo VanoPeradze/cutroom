@@ -1,18 +1,18 @@
 import { applyTranslations, dictionaries } from "./i18n.js?v=1.2-beta";
-import { TimelineView, formatTime, editableClips, timelineDuration, sequenceBlocks, sequenceGaps, rippleMoveStart } from "./timeline.js?v=1.2-beta";
-import { MediaStudio } from "./media-studio.js?v=1.2-beta";
+import { TimelineView, formatTime, editableClips, timelineDuration, sequenceBlocks, sequenceGaps, rippleMoveStart } from "./timeline.js?v=1.2-beta-20261019";
+import { MediaStudio } from "./media-studio.js?v=1.2-beta-20261019";
 import { StabilizationStudio } from "./stabilization-studio.js?v=1.2-beta";
 import { ChromaStudio } from "./chroma-studio.js?v=1.2-beta";
 import { ChromaPreview } from "./chroma-preview.js?v=1.2-beta";
-import { SourceReview } from "./source-review.js?v=1.2-beta";
-import { initWorkspace } from "./workspace.js?v=1.2-beta";
+import { SourceReview } from "./source-review.js?v=1.2-beta-20261019";
+import { initWorkspace } from "./workspace.js?v=1.2-beta-20261019";
 import { KEYBOARD_PROFILES, resolveEditorShortcut, isEditorTransportSpace, shortcutRows } from "./keyboard.js?v=1.2-beta";
 import { AudioThresholdView } from "./audio-meter.js?v=1.2-beta";
 import { initWelcome, workflowSettings, cloudProviderName } from "./welcome.js?v=1.2-beta";
 import { initLocalModels } from "./local-models.js?v=1.2-beta";
 import { trackClips, trackAt, hasSourceTracks, SourceTimelineClock } from "./source-tracks.js?v=1.2-beta";
 import { initTrackProtection } from "./track-protection.js?v=1.2-beta";
-import { TextStudio } from "./text-studio.js?v=1.2-beta";
+import { TextStudio } from "./text-studio.js?v=1.2-beta-20261019";
 import { initNumericScrub } from "./numeric-scrub.js?v=1.2-beta";
 
 const $ = (selector, root = document) => root.querySelector(selector);
@@ -321,7 +321,7 @@ function initializeTextStudio() {
     project: () => state.project, edit: applyManualEdit, time: previewTimelineTime, duration: editorDuration,
     busy: foregroundBusy, preview: updateTextPreview, dimensions: previewExportDimensions,
     seek: time => { pauseAllMedia(); if (previewUsesSourceTime()) setPreviewMode("edit"); seekSourcePreview(time); },
-    selected: id => { if (state.timeline) { if (id) state.timeline.clearSelection(); state.timeline.mediaSelection = id; state.timeline.scheduleDraw(); if (id) state.timeline.revealMedia(id); } },
+    selected: id => { if (state.timeline) { if (id) state.timeline.clearSelection(); state.timeline.mediaSelection = id; state.timeline.scheduleDraw(); if (id && !state.timeline.gesture) state.timeline.revealMedia(id); } },
     selectionRemoved: id => { if (state.timeline?.mediaSelection === id) { state.timeline.mediaSelection = null; state.timeline.clearSelection(); state.timeline.scheduleDraw(); } },
   });
 }
@@ -498,14 +498,14 @@ async function boot() {
     change: (slot, locked) => applyManualEdit("set_track_lock", { slot, locked }) });
   state.timeline = new TimelineView(elements.timelineCanvas, elements.timelineScroll,
     (time) => { pauseAllMedia(); seekSourcePreview(time); }, setManualSelection, handleTimelineEdit,
-    { onToolStateChange: renderTimelineToolStatus, canEdit: () => !foregroundBusy() && !state.transcriptSaving && !state.manualEditBusy && !state.textStudio?.dirty(),
+    { onToolStateChange: renderTimelineToolStatus, canEdit: canEditTimeline,
       onLayoutSelect: openTimelineLayout, getTrackClips: trackClips, getAudioSlot: () => sourceMixerSettings().audioSlot,
       onTargetChange: (target) => setEditTarget(target, true),
-      onMediaSelect: id => { pauseAllMedia(); state.timeline?.clearSelection(); if (id.startsWith("text_")) { void state.textStudio?.select(id); selectAdvancedTab("transcript"); } else { state.mediaStudio?.select(id); selectAdvancedTab("media"); } },
+      onMediaSelect: id => { void selectTimelineMedia(id); },
       onMediaEdit: (id, patch) => { const studio = id.startsWith("text_") ? state.textStudio : state.mediaStudio; studio?.queueClip(id,patch); return studio?.flush(); },
       onMediaPreview: (id, patch) => (id.startsWith("text_") ? state.textStudio : state.mediaStudio)?.previewClip(id,patch),
       onMediaAction: editLayerAction,
-      onCaptionSelect: id => { void selectCaptionItem(id); },
+      onCaptionSelect: id => { void selectCaptionItem(id, { reveal: false }); },
       onCaptionEdit: (id, times) => runCaptionAction("caption_update", { caption_id: id, ...times }),
       onCaptionAction: (action, detail) => runCaptionAction(action, detail),
       onCaptionOpen: id => { void selectCaptionItem(id, { seek: true, focus: true }); } });
@@ -1701,6 +1701,10 @@ function renderSources() {
   renderReadiness();
   renderAudioCalibration();
   renderSourceMixer();
+  if (state.project?.draft) {
+    renderCameraDetection();
+    renderDraftWarning();
+  }
 }
 
 function renderReadiness() {
@@ -3136,12 +3140,16 @@ function renderDraftWarning() {
     || state.project?.draft?.editorial_authority === "extractive_rough_cut";
   const limitedHighlights = (state.project?.analysis?.warnings || []).some((warning) => warning.type === "limited_highlight_evidence");
   const transcriptFallback = (state.project?.analysis?.warnings || []).some((warning) => warning.type === "transcript_fallback");
+  const cameraWarnings = embeddedCameraDetection()?.available === true ? [] : (state.project?.analysis?.warnings || [])
+    .filter((warning) => warning?.type === "camera_detection")
+    .map((warning) => warning.message).filter((message) => typeof message === "string" && message);
   const reviewWarnings = (state.project?.draft?.quality_review?.warnings || [])
     .map((warning) => warning?.message).filter((message) => typeof message === "string" && message);
-  elements.draftWarning.hidden = !audioHighlights && !fallback && !extractive && !limitedHighlights && !transcriptFallback && !reviewWarnings.length;
+  elements.draftWarning.hidden = !audioHighlights && !fallback && !extractive && !limitedHighlights && !transcriptFallback && !cameraWarnings.length && !reviewWarnings.length;
   elements.draftWarningText.textContent = [
     extractive ? t("extractiveRoughCutWarning") : transcriptFallback ? t("transcriptFallbackActionable") : audioHighlights ? t("audioHighlightWarning") : fallback ? t("storyFallbackWarning") : "",
     limitedHighlights ? t("limitedHighlightWarning") : "",
+    ...cameraWarnings,
     ...reviewWarnings,
   ].filter(Boolean).join(" ");
 }
@@ -3451,7 +3459,8 @@ function renderSourceCompositionPreview(mixer, cropOverride = null) {
     side_by_side: uiCopy("הראשון משמאל", "First source on the left"),
     pip: uiCopy("המקור הראשי ברקע", "Primary source in the background"),
   };
-  elements.sourceCompositionMode.textContent = labels[selectedLayout] || selectedLayout;
+  elements.sourceCompositionMode.textContent = `${labels[selectedLayout] || selectedLayout} · layout example`;
+  elements.sourceCompositionMode.title = "Original-source layout example. The edit shows B only where B footage is mapped on its timeline.";
   elements.firstSlotName.textContent = uiCopy(
     `${mixer.firstSlot} למעלה ב־Stack · ${mixer.firstSlot} משמאל ב־Split`,
     `${mixer.firstSlot} on top in Stack · ${mixer.firstSlot} on the left in Split`,
@@ -3504,9 +3513,7 @@ function renderSourceMixer() {
     elements.swapSourceOrder.textContent = state.sourceMixerLayout === "side_by_side" ? "Swap left / right · whole edit" : "Swap top / bottom · whole edit";
   }
   elements.sourceSyncOffset.value = String(Math.round(mixer.syncOffset * 1000) / 1000);
-  elements.sourceSyncStatus.textContent = mixer.hasManualSync
-    ? uiCopy("תיקון ידני פעיל", "Manual sync override")
-    : uiCopy(`אוטומטי: ${mixer.syncOffset.toFixed(2)} שנ׳`, `Automatic: ${mixer.syncOffset.toFixed(2)}s`);
+  elements.sourceSyncStatus.textContent = sourceSyncDescription(mixer);
   elements.screenSourceName.textContent = state.project.sources[mixer.screenSlot]?.name || mixer.screenSlot;
   elements.cameraSourceName.textContent = state.project.sources[mixer.cameraSlot]?.name || mixer.cameraSlot;
   for (const control of [elements.screenSourceSelect, elements.cameraSourceSelect]) {
@@ -3550,7 +3557,7 @@ function renderSourceMixer() {
   elements.resetSourceSync.disabled = busy || !mixer.hasManualSync;
   if (Object.hasOwn(state.project?.manual?.source_tracks || {}, "B")) {
     for (const control of [elements.sourceSyncOffset, elements.resetSourceSync, elements.sourceBEarlier, elements.sourceBLater]) if (control) control.disabled = true;
-    elements.sourceSyncStatus.textContent = "B has independent clips. Move B clips on the timeline to adjust their sync without moving A.";
+    elements.sourceSyncStatus.textContent += " B uses independent clips. Adjust existing B clips on the timeline; the offset field does not move them.";
   }
   elements.applyLayoutSelection.textContent = selection
     ? `Apply to ${formatSourceTime(selection.start)}–${formatSourceTime(selection.end)}`
@@ -3666,17 +3673,109 @@ function renderSourceIdentity(mixer, busy) {
     }
   }
   for (const control of [elements.sourceBEarlier, elements.sourceBLater]) if (control) control.disabled = busy || !sources.B;
-  if (!elements.sourceBCoverage || !sources.B) return;
-  if (Object.hasOwn(state.project?.manual?.source_tracks || {}, "B")) {
-    elements.sourceBCoverage.textContent = `B uses ${trackClips(state.project, "B").length} independent clips. See the B track for positions and gaps. B audio is silent in gaps when selected.`;
-    elements.sourceBCoverage.dataset.warning = "false";
+  renderSourceBCoverage(mixer);
+}
+
+function sourceSyncDescription(mixer = sourceMixerSettings()) {
+  if (mixer.hasManualSync) return `Manual offset: ${mixer.syncOffset.toFixed(2)}s. Check a shared moment in both recordings.`;
+  const sync = state.project?.analysis?.sync || {};
+  const method = String(sync.method || "").toLowerCase();
+  const unconfirmed = sync.reliable === false || sync.status === "unconfirmed";
+  const prefix = unconfirmed ? "Sync unconfirmed: " : "";
+  if (method === "source_tracks") return `${prefix}Independent B clip placement. Clip positions set the alignment; no automatic audio match was measured for this placement. Review the alignment before export.`;
+  if (method === "manual") return `${prefix}Manual source placement: ${mixer.syncOffset.toFixed(2)}s. Check a shared moment in both recordings.`;
+  const confidence = Number(sync.confidence);
+  const audioMethod = !method || method === "audio_cross_correlation";
+  const confirmed = audioMethod && !unconfirmed
+    && (sync.reliable === true || sync.status === "confirmed" || (Number.isFinite(confidence) && confidence >= .18));
+  if (confirmed) return `Automatic audio match: ${mixer.syncOffset.toFixed(2)}s. Review the alignment before export.`;
+  return `Sync unconfirmed: ${mixer.syncOffset.toFixed(2)}s is not a verified shared start. ${sync.warning || "Compare the same sound or visual event in both recordings before placing B."}`;
+}
+
+function sourceBEditCoverage(project, mixer, selection = null) {
+  const limit = Number(project?.sources?.B?.video_duration) > 0
+    ? Number(project.sources.B.video_duration) : Math.max(0, Number(project?.sources?.B?.duration) || 0);
+  const ranges = selection ? [selection] : project?.draft?.keep_ranges || [{ start: 0, end: Number(project?.sources?.A?.duration) || 0 }];
+  const union = values => {
+    const merged = [];
+    for (const range of values.filter(item => Number.isFinite(item.start) && Number.isFinite(item.end) && item.end > item.start).sort((a, b) => a.start - b.start)) {
+      const previous = merged.at(-1);
+      if (previous && range.start <= previous.end) previous.end = Math.max(previous.end, range.end);
+      else merged.push({ start: range.start, end: range.end });
+    }
+    return merged;
+  };
+  const scope = union(ranges.map(range => ({ start: Number(range.start), end: Number(range.end) })));
+  const clips = trackClips(project, "B", mixer.syncOffset);
+  const mapped = union(clips.map(clip => Object.hasOwn(clip, "video_speed") && limit > 0
+    // Explicit picture retiming holds its final frame through the clip end,
+    // matching the render contract without changing the audio clock.
+    ? { start: Number(clip.start), end: Number(clip.end) }
+    : {
+      start: Math.max(Number(clip.start), Number(clip.start) - Number(clip.source_start)),
+      end: Math.min(Number(clip.end), Number(clip.start) + limit - Number(clip.source_start)),
+    }));
+  const duration = scope.reduce((total, range) => total + range.end - range.start, 0);
+  const covered = scope.reduce((total, range) => total + mapped.reduce((sum, clip) => sum + Math.max(0, Math.min(range.end, clip.end) - Math.max(range.start, clip.start)), 0), 0);
+  return { duration, covered, full: duration > 0 && covered >= duration - .001, clips: clips.length };
+}
+
+function renderSourceBCoverage(mixer = sourceMixerSettings(), preview = null) {
+  const target = elements.sourceBCoverage;
+  if (!target) return;
+  if (!state.project?.sources?.B) {
+    target.textContent = "";
+    for (const id of ["sourceBCoverageNotice", "sourceBReviewPlacement"]) {
+      const control = document.getElementById?.(id);
+      if (control) control.hidden = true;
+    }
     return;
   }
-  const coverage = sourceBCoverage(sources, mixer.syncOffset);
-  elements.sourceBCoverage.textContent = coverage.end > coverage.start
-    ? `B is available at ${formatSourceTime(coverage.start)}–${formatSourceTime(coverage.end)} on A's timeline.${coverage.full ? "" : " Outside this range, the edit falls back to A; B audio may be silent."}`
-    : "B does not overlap A at this offset. Adjust sync; the edit cannot show B here.";
-  elements.sourceBCoverage.dataset.warning = String(!coverage.full);
+  const original = sourceBCoverage(state.project.sources, mixer.syncOffset);
+  const originalText = original.end > original.start
+    ? `At this offset, original B covers ${formatSourceTime(original.start)}-${formatSourceTime(original.end)} on source A's clock.`
+    : "At this offset, the original recordings have no overlapping time.";
+  const project = editorProject();
+  const coverage = sourceBEditCoverage(project, mixer, state.manualSelection);
+  const scope = state.manualSelection ? "the selection" : "this edit";
+  const hasEdit = Boolean(state.project.draft);
+  let text = originalText;
+  if (hasEdit) {
+    text = !coverage.covered
+      ? `No B footage is mapped into ${scope}. A CAMERA or split layout cannot add missing footage. ${originalText}`
+      : coverage.full
+        ? `B has footage throughout ${scope}. ${originalText}`
+        : `B covers ${coverage.covered.toFixed(2)} of ${coverage.duration.toFixed(2)} seconds in ${scope}. Gaps in B's picture use the available A footage. ${originalText}`;
+    if (!coverage.full) text += " Review Original footage for B and place only a matching section using Insert a copy by time; existing B clips can be moved or trimmed on the timeline.";
+  }
+  if (preview?.requiresB && !preview.available) text = `B has no mapped frame at the playhead; preview uses ${preview.fallback === "gap" ? "an empty frame" : "source A"}. ${text}`;
+  const warning = hasEdit ? !coverage.full : !original.full;
+  if (target.textContent !== text) target.textContent = text;
+  target.dataset.warning = String(warning || Boolean(preview?.requiresB && !preview.available));
+  let notice = document.getElementById?.("sourceBCoverageNotice");
+  if (!notice && typeof elements.sourceMixerHelp?.after === "function") {
+    notice = document.createElement("p"); notice.id = "sourceBCoverageNotice";
+    notice.className = "source-range-status";
+    elements.sourceMixerHelp.after(notice);
+  }
+  if (notice) {
+    const syncText = sourceSyncDescription(mixer);
+    const unconfirmed = syncText.startsWith("Sync unconfirmed:");
+    notice.hidden = !warning && !unconfirmed;
+    notice.textContent = `${warning ? text : ""}${warning && unconfirmed ? " " : ""}${unconfirmed ? syncText : ""}`;
+  }
+  let review = document.getElementById?.("sourceBReviewPlacement");
+  if (!review && state.project.editor_sequence && typeof target.after === "function") {
+    review = document.createElement("button");
+    review.id = "sourceBReviewPlacement"; review.type = "button"; review.className = "button ghost compact";
+    review.textContent = "Review B placement";
+    review.addEventListener("click", () => { if (sourceMixerControlBusy()) return; setEditTarget("B"); openSourceReview(); });
+    (notice || target).after(review);
+  }
+  if (review) {
+    review.hidden = !state.project.editor_sequence || coverage.full || !hasEdit;
+    review.disabled = sourceMixerControlBusy();
+  }
 }
 
 function sourceBCoverage(sources, offset) {
@@ -3734,9 +3833,9 @@ function placeSourceMixer(hasSource) {
     elements.setupSourceMixerDock.hidden = false;
     return;
   }
-  const layoutHome = document.getElementById("studioShelfLayout") || elements.studioPanelFraming;
+  const layoutHome = elements.studioPanelFraming;
   if (layoutHome && elements.sourceMixer.parentElement !== layoutHome) {
-    // The same controls return to the composition shelf after preparation.
+    // Keep one instance of the actual layout controls in the right inspector.
     layoutHome.appendChild(elements.sourceMixer);
   }
   if (elements.setupSourceMixerDock) elements.setupSourceMixerDock.hidden = true;
@@ -4013,10 +4112,7 @@ function normalizedEmbeddedGeometry(raw) {
   return geometry.content_region ? geometry : null;
 }
 
-function embeddedCameraCandidate() {
-  if (state.project?.sources?.B) return null;
-  const manual = normalizedEmbeddedGeometry(state.project?.manual?.embedded_camera);
-  if (manual) return { ...manual, candidate_source: "manual", manual: true, requires_confirmation: true };
+function embeddedCameraDetection() {
   const preparedVision = state.project?.pre_analysis?.vision?.A;
   const sourceGeneration = String(state.project?.sources?.A?.generation || "");
   const detectorVersion = String(state.system?.vision_analysis_version || EMBEDDED_CAMERA_DETECTOR_VERSION);
@@ -4024,18 +4120,42 @@ function embeddedCameraCandidate() {
     && preparedVision
     && preparedVision.version === detectorVersion
     && String(preparedVision.source_generation || "") === sourceGeneration;
-  // Once Director has authoritative analysis, never resurrect an earlier upload
-  // suggestion that the final pass rejected. Before Director, a generation-bound
-  // preparation result makes the camera suggestion available immediately.
+  // A successful Director pass is authoritative, including a genuine negative.
+  // A failed pass must not mask a successful current-source preparation retry.
   const analyzedVision = state.project?.analysis?.vision;
   const analyzedVisionIsCurrent = analyzedVision?.version === detectorVersion;
-  const vision = analyzedVisionIsCurrent
-    ? analyzedVision
-    : preparedVisionIsCurrent ? preparedVision : null;
+  if (analyzedVisionIsCurrent && analyzedVision.available === true) return analyzedVision;
+  if (preparedVisionIsCurrent && preparedVision.available === true) return preparedVision;
+  return analyzedVisionIsCurrent ? analyzedVision : preparedVisionIsCurrent ? preparedVision : null;
+}
+
+function cameraDetectionUnavailableHelp(detection) {
+  const explanation = uiCopy(
+    "זיהוי המצלמה האוטומטי לא הצליח לבדוק אם קיימת מצלמה בהקלטה.",
+    "Automatic camera detection could not run. It did not confirm whether a camera is present.",
+  );
+  const recovery = detection?.reason === "video_decode_failed"
+    ? uiCopy("לא ניתן היה לקרוא את פריימי הווידאו שנדגמו. בדוק שהסרטון המקורי מתנגן ונסה שוב, או סמן את אזור המצלמה ידנית.",
+      "The sampled video frames could not be read. Check that the source video plays, then retry detection or mark the camera area manually.")
+    : ["opencv_not_installed", "opencv_detector_unavailable"].includes(detection?.reason)
+      ? uiCopy("הפעל שוב את התקנת CUTROOM כדי לתקן את רכיב הזיהוי ונסה שוב, או סמן את אזור המצלמה ידנית.",
+        "Run CUTROOM setup to repair the detector and retry, or mark the camera area manually.")
+      : uiCopy("בדוק את הסרטון המקורי ואת רכיב הזיהוי לפני ניסיון נוסף, או סמן את אזור המצלמה ידנית.",
+        "Check the source video and detector before retrying, or mark the camera area manually.");
+  return `${explanation} ${recovery}`;
+}
+
+function embeddedCameraCandidate() {
+  if (state.project?.sources?.B) return null;
+  const manual = normalizedEmbeddedGeometry(state.project?.manual?.embedded_camera);
+  if (manual) return { ...manual, candidate_source: "manual", manual: true, requires_confirmation: true };
+  const vision = embeddedCameraDetection();
+  if (vision?.available !== true) return null;
   const candidate = normalizedEmbeddedGeometry(vision?.embedded_camera);
   if (!candidate) return null;
   // Older detectors produced false positives in gameplay HUDs. Only the
   // confirmation-only detector may offer this layout to the user.
+  const detectorVersion = String(state.system?.vision_analysis_version || EMBEDDED_CAMERA_DETECTOR_VERSION);
   if (vision.version !== detectorVersion || candidate.detector !== detectorVersion) return null;
   if (candidate.requires_confirmation !== true) return null;
   return { ...candidate, candidate_source: "vision", manual: false };
@@ -4090,12 +4210,15 @@ function resetEmbeddedEditor() {
 function renderEmbeddedSaveState() {
   const editor = state.embeddedEditor;
   const active = embeddedCameraIsActive();
+  const detection = embeddedCameraDetection();
   if (elements.embeddedCameraState) {
     elements.embeddedCameraState.classList.toggle("active", active && !editor.dirty);
     elements.embeddedCameraState.textContent = editor.error ? "Save failed — retry"
       : editor.dirty ? "Saving…"
       : active ? "Saved"
-      : embeddedCameraCandidate()?.candidate_source === "vision" ? "Review camera area" : "Mark your camera";
+      : embeddedCameraCandidate()?.candidate_source === "vision" ? "Review camera area"
+      : detection && detection.available !== true ? "Automatic detection unavailable"
+      : "Mark your camera";
   }
   if (elements.saveEmbeddedCamera) {
     elements.saveEmbeddedCamera.hidden = !editor.error && (active || editor.dirty);
@@ -4278,8 +4401,13 @@ function renderEmbeddedCameraEditor() {
 
   const active = embeddedCameraIsActive();
   renderEmbeddedSaveState();
+  const detection = embeddedCameraDetection();
   elements.embeddedCameraHelp.textContent = candidate?.candidate_source === "vision"
     ? "Check that the suggested area contains your camera. Moving the frame previews and saves your camera layout automatically."
+    : detection && detection.available !== true
+      ? cameraDetectionUnavailableHelp(detection)
+    : detection?.available === true && !candidate
+      ? "Automatic detection found no camera area in the sampled frames. If your recording includes a camera, mark its area manually."
     : "If your recording includes a camera, drag its frame here. The edited preview updates immediately and changes save automatically.";
   const busy = embeddedEditorBusy();
   if (elements.embeddedCameraSeek) {
@@ -4634,13 +4762,17 @@ function syncIndependentMedia(slot, point, needed, forceSeek = false, sourceSlot
   const rawPictureTime = Number(point.clip.video_source_start ?? point.clip.source_start) + (point.sourceTime-point.clip.source_start)*speed;
   const source = playbackProject()?.sources?.[sourceSlot];
   const limit = Number(source?.video_duration || source?.duration || video.duration);
-  const retimed = speed !== 1 || point.clip.video_source_start != null;
-  const pictureTime = retimed ? Math.max(0, Math.min(rawPictureTime, limit > 0 ? Math.max(0,limit-.04) : rawPictureTime)) : point.sourceTime;
+  const retimed = Object.hasOwn(point.clip, "video_speed") || point.clip.video_source_start != null;
+  // A speed-1 picture sharing the audible source clock can use the container's
+  // native end-of-picture hold while its longer audio continues. Pausing that
+  // player at the last picture would also pause the selected source audio.
+  const nativeAudioClock = !video.muted && speed === 1 && Math.abs(rawPictureTime - point.sourceTime) < .000001;
+  const pictureTime = retimed && !nativeAudioClock ? Math.max(0, Math.min(rawPictureTime, limit > 0 ? Math.max(0,limit-.04) : rawPictureTime)) : point.sourceTime;
   video.playbackRate = speed;
   if (forceSeek || changedClip || Math.abs(video.currentTime - pictureTime) > .12) {
     try { video.currentTime = pictureTime; } catch { /* loadedmetadata/timeupdate can retry. */ }
   }
-  if (retimed && limit > 0 && rawPictureTime >= limit-.035) {
+  if (retimed && !nativeAudioClock && limit > 0 && rawPictureTime >= limit-.035) {
     if (state.preview[pendingKey]) state.preview[pendingKey].cancelled = true;
     video.pause();
     return;
@@ -4697,13 +4829,15 @@ function syncSecondaryPreview(globalTime) {
   const pointB = independent ? embeddedB ? pointA : trackAt(project, "B", globalTime, mixer.syncOffset) : null;
   const sourceA = project.sources?.A;
   const sourceAVideoDuration = Number(sourceA?.video_duration) > 0 ? Number(sourceA.video_duration) : Number(sourceA?.duration || 0);
-  const sourceAAvailable = !independent || Boolean(pointA && pointA.sourceTime < sourceAVideoDuration);
+  const sourceAAvailable = !independent || Boolean(pointA && sourceAVideoDuration > 0
+    && (Object.hasOwn(pointA.clip, "video_speed") || pointA.sourceTime < sourceAVideoDuration));
   const offset = mixer.syncOffset;
   const sourceBTime = independent ? pointB?.sourceTime : globalTime - offset;
   const sourceBVideoDuration = Number(sourceB?.video_duration);
   const sourceBDuration = Number.isFinite(sourceBVideoDuration) && sourceBVideoDuration > 0
     ? sourceBVideoDuration : Number(sourceB?.duration || 0);
-  const sourceBAvailable = Boolean(sourceB && (!independent || pointB) && sourceBTime >= 0 && sourceBTime < sourceBDuration);
+  const sourceBAvailable = Boolean(sourceB && (!independent || pointB) && sourceBTime >= 0 && sourceBDuration > 0
+    && (independent && Object.hasOwn(pointB.clip, "video_speed") || sourceBTime < sourceBDuration));
   const requiresB = ["B", "stacked", "side_by_side", "pip"].includes(requestedCamera)
     || (requestedCamera === "screen" && mixer.screenSlot === "B")
     || (requestedCamera === "camera" && mixer.cameraSlot === "B");
@@ -4748,7 +4882,15 @@ function syncSecondaryPreview(globalTime) {
     screen: uiCopy("מסך", "SCREEN"), camera: uiCopy("מצלמה", "CAMERA"), stacked: uiCopy("מעל / מתחת", "STACKED"),
     side_by_side: uiCopy("זה לצד זה", "SPLIT"), pip: "PIP", embedded_stack: uiCopy("מצלמה פנימית", "SCREEN + CAM"),
   };
-  elements.cameraBadge.textContent = camera === "gap" ? "GAP" : cameraLabels[camera] || singleSlot;
+  const missingB = Boolean(sourceB && requiresB && !sourceBAvailable);
+  elements.cameraBadge.textContent = missingB && camera === "A" ? "A · B unavailable" : camera === "gap" ? "GAP" : cameraLabels[camera] || singleSlot;
+  elements.cameraBadge.dataset.missingSource = missingB ? "B" : "";
+  elements.cameraBadge.title = missingB ? "Source B has no mapped footage at this playhead. Check B coverage and source alignment before export." : "";
+  const coverageKey = `${project.id}:${requiresB}:${sourceBAvailable}:${camera}`;
+  if (state.preview.bCoverageKey !== coverageKey) {
+    state.preview.bCoverageKey = coverageKey;
+    renderSourceBCoverage(mixer, { requiresB, available: sourceBAvailable, fallback: camera });
+  }
   // With one recording and no composition, the "A" label only covers the video.
   elements.cameraBadge.hidden = !state.project?.sources?.B && !cameraLabels[camera] && camera !== "gap";
 
@@ -4982,9 +5124,13 @@ function selectedCaptionItem() {
   return captionItems().find(item => item.id === state.captionSelection) || null;
 }
 
-async function selectCaptionItem(id, { seek = false, focus = false } = {}) {
+async function selectCaptionItem(id, { seek = false, focus = false, reveal = true } = {}) {
   const next = id || null;
-  if (next !== state.captionSelection && state.captionDirty && selectedCaptionItem()) await saveCaptionItem();
+  const request = beginInspectorSelection();
+  if (!(await prepareInspectorSelection(request))) { restoreInspectorSelection(request); return false; }
+  if (next && state.textStudio?.selected && await state.textStudio.select(null) === false) { restoreInspectorSelection(request); return false; }
+  if (!inspectorSelectionCurrent(request) || state.captionDirty) { restoreInspectorSelection(request); return false; }
+  if (next) state.mediaStudio?.select(null);
   state.captionSelection = next;
   state.captionDirty = false;
   state.captionStatus = "";
@@ -4994,13 +5140,17 @@ async function selectCaptionItem(id, { seek = false, focus = false } = {}) {
     pauseAllMedia();
     state.timeline?.clearSelection();
     selectAdvancedTab("transcript");
-    state.timeline?.revealCaption?.(item.id);
+    // Timeline pointerdown already computed its gesture time. Revealing a
+    // partially offscreen caption there would change scrollLeft mid-gesture.
+    if (reveal) state.timeline?.revealCaption?.(item.id);
     const time = previewTimelineTime();
     if (seek || time < item.start || time >= item.end) seekSourcePreview(item.start + Math.min(.02, (item.end - item.start) / 2));
   }
   renderCaptionInspector();
+  if (item) elements.captionItemEditor?.scrollIntoView({block:"nearest", inline:"nearest"});
   if (item && focus) { elements.captionItemText?.focus(); elements.captionItemText?.select(); }
   updatePreviewCaption(previewPlaybackTime());
+  return true;
 }
 
 function renderCaptionInspector() {
@@ -5037,15 +5187,19 @@ function renderCaptionInspector() {
   elements.captionItemSave.disabled = busy || !state.captionDirty;
   elements.captionItemPrevious.disabled = index <= 0;
   elements.captionItemNext.disabled = index < 0 || index >= items.length - 1;
-  elements.captionItemStatus.textContent = state.captionStatus || (state.captionDirty ? "Unsaved changes" : "");
+  elements.captionItemStatus.textContent = state.captionStatus || (state.captionDirty ? "Unsaved changes. Save or press Escape before editing another timeline item." : "");
 }
 
-async function runCaptionAction(action, detail) {
+async function runCaptionAction(action, detail, {saveDraft = false} = {}) {
+  if (state.captionDirty && !saveDraft) { state.captionStatus = "Save or discard the caption text before changing its timeline item."; renderCaptionInspector(); return null; }
+  const projectId = state.project?.id, captionId = state.captionSelection, bufferRevision = state.captionBufferRevision || 0;
   state.captionStatus = "Saving…";
   renderCaptionInspector();
   const result = await applyManualEdit(action, detail);
-  state.captionStatus = result ? "Saved" : "";
-  if (result) state.captionDirty = false;
+  if (projectId !== state.project?.id || captionId !== state.captionSelection) return result;
+  const sameBuffer = bufferRevision === (state.captionBufferRevision || 0);
+  state.captionStatus = result && sameBuffer ? "Saved" : state.captionDirty ? "Unsaved changes" : "";
+  if (result && sameBuffer) state.captionDirty = false;
   renderCaptionInspector();
   return result;
 }
@@ -5070,7 +5224,7 @@ async function saveCaptionItem() {
   const scale = scaleText ? Math.round(Number(scaleText)) : "";
   if (scale !== (item.scale ?? "")) detail.scale = scale;
   if (Object.keys(detail).length === 1) { state.captionDirty = false; renderCaptionInspector(); return null; }
-  return runCaptionAction("caption_update", detail);
+  return runCaptionAction("caption_update", detail, {saveDraft:true});
 }
 
 function moveCaptionSelection(step) {
@@ -5082,7 +5236,7 @@ function moveCaptionSelection(step) {
 function bindCaptionItemEvents() {
   const editor = elements.captionItemEditor;
   if (!editor) return;
-  const markDirty = () => { state.captionDirty = true; state.captionStatus = ""; renderCaptionInspector(); };
+  const markDirty = () => { state.captionBufferRevision = (state.captionBufferRevision || 0) + 1; state.captionDirty = true; state.captionStatus = ""; renderCaptionInspector(); };
   editor.addEventListener("input", markDirty);
   editor.addEventListener("change", markDirty);
   editor.addEventListener("submit", (event) => { event.preventDefault(); void saveCaptionItem(); });
@@ -5470,7 +5624,13 @@ function followChromaSelection() {
 }
 
 function selectAdvancedTab(tab) {
-  document.querySelectorAll("[data-shelf]").forEach(shelf => { shelf.hidden = !shelf.dataset.shelf.split(" ").includes(tab); });
+  // The project library is a stable left anchor. Existing context libraries
+  // move, with their handlers intact, beside their tools in the right pane.
+  for (const [libraryId,panelId] of [["studioShelfCaptions","studioPanelTranscript"],["studioShelfOutput","studioPanelSettings"]]) {
+    const library = document.getElementById(libraryId), panel = document.getElementById(panelId);
+    if (library?.parentElement && panel && library.parentElement !== panel) { library.classList.add("studio-context-library"); panel.prepend(library); }
+  }
+  document.querySelectorAll("[data-shelf]").forEach(shelf => { shelf.hidden = shelf.id === "studioShelfMedia" ? false : !shelf.dataset.shelf.split(" ").includes(tab); });
   elements.advancedPanel?.workspaceController?.setWorkspace(tab);
   elements.advancedPanel?.workspaceController?.showInspector();
   if (tab === "audio") state.mediaStudio?.openMixer();
@@ -5648,6 +5808,8 @@ async function saveCrop() {
 
 function renderCameraDetection() {
   const candidate = embeddedCameraCandidate();
+  const detection = embeddedCameraDetection();
+  const unavailable = detection && detection.available !== true;
   const sourceA = state.project?.sources?.A;
   const hasB = Boolean(state.project?.sources?.B);
   elements.cameraDetection.hidden = !sourceA || hasB || embeddedCameraIsActive();
@@ -5655,12 +5817,16 @@ function renderCameraDetection() {
   const title = $("b", elements.cameraDetection);
   const help = $("p", elements.cameraDetection);
   const active = embeddedCameraIsActive();
-  title.textContent = active
+  title.textContent = unavailable && !active && !candidate
+    ? uiCopy("זיהוי מצלמה אוטומטי אינו זמין", "Automatic camera detection unavailable")
+    : active
     ? uiCopy("מצלמה פנימית פעילה", "Embedded camera active")
     : candidate
       ? uiCopy("נמצא אזור מצלמה אפשרי", "Possible camera area found")
       : uiCopy("המצלמה לא זוהתה אוטומטית", "Camera was not detected automatically");
-  help.textContent = active
+  help.textContent = unavailable && !active && !candidate
+    ? cameraDetectionUnavailableHelp(detection)
+    : active
     ? uiCopy("אפשר לשנות את המסגרת ידנית ב־Source Mixer. השינוי יופיע מיד בעריכה.", "Adjust the frame manually in Source Mixer; the edit updates immediately.")
     : candidate
       ? uiCopy("בדקו את המסגרת לפני אישור. המערכת לעולם לא תשכפל את המקור בלי בחירה שלכם.", "Check the frame before confirming. CUTROOM never duplicates the source without your choice.")
@@ -5671,7 +5837,7 @@ function renderCameraDetection() {
   renderStreamerLayoutTip();
 }
 
-function setManualSelection(selection) {
+function setManualSelection(selection, context = {}) {
   const start = Number(selection?.start);
   const end = Number(selection?.end);
   state.manualSelection = Number.isFinite(start) && Number.isFinite(end) && end - start >= (state.project?.editor_sequence ? 1 / 60 - 1e-6 : .03) ? { start: Math.min(start, end), end: Math.max(start, end) } : null;
@@ -5680,6 +5846,110 @@ function setManualSelection(selection) {
   renderSourceMixer();
   highlightTranscriptSelection();
   if (state.project?.editor_sequence && elements.cropX && elements.cropSourceSelect) loadCropControls(elements.cropSourceSelect.value, false);
+  if (state.studio.open && ["clip","move","locked"].includes(context.kind)
+    && state.manualSelection && selectedTimelineClip()) void revealSourceClipInspector();
+}
+
+function beginInspectorSelection() {
+  state.inspectorSelectionEpoch = (state.inspectorSelectionEpoch || 0) + 1;
+  return { epoch:state.inspectorSelectionEpoch, projectId:state.project?.id };
+}
+
+function canEditTimeline() {
+  return !foregroundBusy() && !state.transcriptSaving && !state.manualEditBusy
+    && !state.captionDirty && !state.captionContextSave && !state.textStudio?.dirty();
+}
+
+function inspectorSelectionCurrent(request) {
+  return request.epoch === state.inspectorSelectionEpoch && request.projectId === state.project?.id;
+}
+
+async function prepareInspectorSelection(request) {
+  if (foregroundBusy()) return false;
+  if (state.captionDirty && selectedCaptionItem()) {
+    if (!state.captionContextSave) {
+      const save = Promise.resolve().then(() => saveCaptionItem());
+      state.captionContextSave = save;
+      void save.finally(() => { if (state.captionContextSave === save) state.captionContextSave = null; }).catch(() => {});
+    }
+    try { await state.captionContextSave; } catch { return false; }
+    // Validation/API failures leave the user's caption draft intact. A null
+    // result can also mean a valid unchanged draft, so inspect dirty state.
+    if (state.captionDirty) return false;
+  }
+  if ((state.textStudio?.dirty?.() || state.textStudio?.pending?.size || state.textStudio?.saving)
+    && await state.textStudio.flush() === false) return false;
+  if ((state.mediaStudio?.pending?.size || state.mediaStudio?.saving)
+    && await state.mediaStudio.flush() === false) return false;
+  return inspectorSelectionCurrent(request) && !state.captionDirty;
+}
+
+function restoreInspectorSelection(request) {
+  if (!inspectorSelectionCurrent(request) || !state.timeline) return;
+  state.timeline.cancelGesture?.();
+  const caption = selectedCaptionItem();
+  const media = state.textStudio?.selected || state.mediaStudio?.selected;
+  if (!caption && !media) return;
+  state.manualSelection = null;
+  state.timeline.clearSelection(false);
+  if (caption) state.timeline.selectCaption?.(caption.id, false);
+  else { state.timeline.selectCaption?.(null, false); state.timeline.mediaSelection = media; }
+  state.timeline.scheduleDraw?.();
+  renderManualControls();
+}
+
+function clearCaptionInspectorSelection() {
+  state.captionSelection = null; state.captionDirty = false; state.captionStatus = "";
+  state.timeline?.selectCaption?.(null, false);
+  renderCaptionInspector();
+}
+
+async function selectTimelineMedia(id) {
+  const request = beginInspectorSelection();
+  pauseAllMedia();
+  if (!(await prepareInspectorSelection(request))) { restoreInspectorSelection(request); return false; }
+  const text = state.project?.manual?.text_clips?.find(clip => clip.id === id);
+  const media = state.project?.manual?.media_clips?.find(clip => clip.id === id);
+  if (!text && !media) return false;
+  if (text) {
+    if (await state.textStudio?.select(id) === false || !inspectorSelectionCurrent(request) || state.captionDirty) { restoreInspectorSelection(request); return false; }
+    state.mediaStudio?.select(null);
+  } else {
+    if (state.textStudio?.selected && await state.textStudio.select(null) === false) { restoreInspectorSelection(request); return false; }
+    if (!inspectorSelectionCurrent(request) || state.captionDirty) { restoreInspectorSelection(request); return false; }
+    state.mediaStudio?.select(id);
+  }
+  clearCaptionInspectorSelection();
+  state.timeline?.clearSelection();
+  if (state.timeline) state.timeline.mediaSelection = id;
+  selectAdvancedTab(text ? "transcript" : "media");
+  if (text) state.textStudio?.inspector?.scrollIntoView({block:"nearest", inline:"nearest"});
+  else {
+    const root = state.mediaStudio?.root;
+    const asset = state.project?.assets?.[media.asset_id];
+    // This edits only the selected clip's volume_db/fades. The Audio tab's
+    // Original/Music/Voiceover/Effects strips intentionally remain group gains.
+    if (asset?.kind === "audio") {
+      const audio = root?.querySelector(".media-clip-audio"); if (audio) audio.open = true;
+    }
+    root?.querySelector(".media-inspector")?.scrollIntoView({block:"nearest", inline:"nearest"});
+  }
+  state.timeline?.scheduleDraw?.();
+  return true;
+}
+
+async function revealSourceClipInspector() {
+  const request = beginInspectorSelection();
+  if (!(await prepareInspectorSelection(request))) { restoreInspectorSelection(request); return false; }
+  if (state.textStudio?.selected && await state.textStudio.select(null) === false) { restoreInspectorSelection(request); return false; }
+  if (!inspectorSelectionCurrent(request) || state.captionDirty || !selectedTimelineClip()) { restoreInspectorSelection(request); return false; }
+  state.mediaStudio?.select(null);
+  clearCaptionInspectorSelection();
+  if (state.timeline) state.timeline.mediaSelection = null;
+  selectAdvancedTab("timeline");
+  selectEditTool("clip");
+  elements.clipTrimForm?.scrollIntoView({block:"nearest", inline:"nearest"});
+  return true;
 }
 
 function activeEditTarget() {
@@ -5961,6 +6231,7 @@ function renderTimelineToolStatus() {
 }
 
 async function handleTimelineEdit(edit) {
+  if (state.captionDirty || state.captionContextSave) { toast("Save or discard the caption text before editing footage."); return null; }
   const target = edit.target || activeEditTarget();
   const locked = state.trackProtection?.lockedNames(edit.slot || target) || [];
   if (locked.length) { toast(`Track ${locked.join(" + ")} is locked. Unlock it in Edit → Track protection.`); return null; }
@@ -6204,10 +6475,10 @@ function renderClipTrim() {
     elements.clipTrimIn.value = clip.start.toFixed(3);
     elements.clipTrimOut.value = clip.end.toFixed(3);
     if (elements.clipSourceIn) elements.clipSourceIn.value = Number(clip.source_start || 0).toFixed(3);
-    elements.clipTrimStatus.textContent = together ? "Move to start closes the old position and inserts this cut on A+B. No footage is overwritten. Undo restores the move."
+    elements.clipTrimStatus.textContent = together ? "Drag either white edge of the selected clip to trim A+B together. These fields select times; Move to start moves the linked cut. Undo restores changes."
       : target === "edit" ? "Non-destructive · undoable" : "Move to start closes the old position and inserts on this track only. The other source stays still. Undo restores the move.";
   }
-  state.trimClip = { ...clip, key, projectId: state.project.id };
+  state.trimClip = { ...clip, key, projectId: state.project.id, ...(["A","B"].includes(target) ? {slot:target} : {}) };
   elements.clipTrimTitle.textContent = together ? `Clip ${clip.index + 1} · linked A/B` : target === "edit" ? `Clip ${clip.index + 1}` : `Source ${target} clip`;
   const busy = state.manualEditBusy || foregroundBusy();
   for (const control of [elements.clipTrimIn, elements.clipTrimOut, elements.clipTrimApply, elements.clipSourceIn, elements.clipMove]) if (control) control.disabled = busy;

@@ -151,7 +151,7 @@ function fixture({mediaReady = true} = {}) {
   return {run, nodes, tabs, panels, document};
 }
 
-test('Layout returns the same source controls to the composition shelf after setup and on reopening drafts', () => {
+test('Layout returns the same source controls to the right inspector after setup and on reopening drafts', () => {
   for (const direction of ['ltr', 'rtl']) {
     const {run, nodes, document} = fixture({mediaReady:false});
     document.documentElement.dir = direction;
@@ -163,22 +163,44 @@ test('Layout returns the same source controls to the composition shelf after set
     panel.append(framing, mixer);
     const project = run('JSON.stringify(state.project)');
     run('placeSourceMixer(true)');
-    assert.deepEqual(panel.children, [framing]);
-    const shelf = nodes.get('studioShelfLayout');
-    assert.deepEqual(shelf.children, [mixer]);
+    assert.deepEqual(panel.children, [framing,mixer]);
+    const shelf = document.getElementById('studioShelfLayout');
+    assert.deepEqual(shelf.children, []);
     run('globalThis.existingDraft=state.project.draft;state.project.draft=null;placeSourceMixer(true)');
     assert.equal(mixer.parentElement, nodes.get('setupSourceMixerDock'));
     assert.equal(nodes.get('setupSourceMixerDock').hidden, false);
     let handled = 0; mixer.addEventListener('click', () => handled++);
     run('state.project.draft=existingDraft;placeSourceMixer(true);placeSourceMixer(true)');
-    assert.deepEqual(panel.children, [framing]);
-    assert.deepEqual(shelf.children, [mixer], direction + ': setup must return the same composition controls');
+    assert.deepEqual(panel.children, [framing,mixer], direction + ': setup must return the same composition controls');
+    assert.deepEqual(shelf.children, []);
     assert.equal(nodes.get('setupSourceMixerDock').hidden, true);
     assert.equal(nodes.get('setupSourceMixerDock').children.length, 0);
     dispatch('click', mixer); assert.equal(handled, 1, 'Moving the existing controls retains their handlers');
     assert.equal(run('JSON.stringify(state.project)'), project);
     assert.deepEqual(plain(run('requests')), []); assert.deepEqual(plain(run('mutations')), []);
   }
+});
+
+test('Project media stays on the left while existing caption and output libraries move once to their inspectors',()=>{
+  const {run,document}=fixture({mediaReady:false});
+  const left=document.getElementById('studioShelf');
+  const media=document.getElementById('studioShelfMedia'),captions=document.getElementById('studioShelfCaptions'),output=document.getElementById('studioShelfOutput');
+  media.dataset.shelf='media timeline audio';captions.dataset.shelf='transcript';output.dataset.shelf='settings';
+  left.append(media,captions,output);
+  const query=document.querySelectorAll.bind(document);
+  document.querySelectorAll=selector=>selector==='[data-shelf]'?[media,captions,output]:query(selector);
+  run('renderTranscript=loadCropControls=()=>{};');
+  const before=run('JSON.stringify(state.project)');
+  for(const tab of ['transcript','settings','framing','audio','timeline']){
+    run(`selectAdvancedTab('${tab}');`);
+    assert.equal(media.parentElement,left);assert.equal(media.hidden,false);
+    assert.equal(captions.parentElement,document.getElementById('studioPanelTranscript'));
+    assert.equal(output.parentElement,document.getElementById('studioPanelSettings'));
+    assert.equal(captions.hidden,tab!=='transcript');assert.equal(output.hidden,tab!=='settings');
+  }
+  assert.equal(document.getElementById('studioPanelTranscript').children.filter(node=>node===captions).length,1);
+  assert.equal(document.getElementById('studioPanelSettings').children.filter(node=>node===output).length,1);
+  assert.equal(run('JSON.stringify(state.project)'),before);
 });
 
 test('Audio is an accessible primary tab opening the actual existing mixer without changing the edit', () => {
@@ -353,4 +375,49 @@ test('relocated mixer restores saved gain, selected source label and measured ma
   assert.match(audio.querySelector('.mixer-level-text').textContent, /Live browser mix/);
   run('state.mediaStudio.pause();'); assert.equal(audio.querySelector('.mixer-meter').value, 0);
   assert.match(audio.querySelector('.mixer-summary-level').textContent, /Paused/);
+});
+
+test('each visible mixer strip exposes its real dB scale, precise gain and keyboard-accessible reset', () => {
+  const {run,nodes}=fixture(),audio=nodes.get('studioPanelAudio');
+  run('state.mediaStudio.renderMixer();');
+  for(const role of ['source','music','voice','effects','master']) {
+    const row=audio.querySelector(`[data-channel=${role}]`);
+    const range=row.querySelector('[data-mix]'),typed=row.querySelector('[data-mix-number]');
+    const scale=row.querySelector('.mixer-fader-scale'),reset=row.querySelector('[data-mix-reset]');
+    assert.deepEqual(scale.children.map(mark=>mark.textContent),['+12','0','-12','-24','-36','-48','-60']);
+    assert.equal(scale.getAttribute('aria-hidden'),'true','visual tick labels do not duplicate the native control semantics');
+    assert.equal(range.type,'range'); assert.equal(range.min,'-60'); assert.equal(range.max,'12');
+    assert.equal(range.step,'0.1','native semantics accept the same fine values as the saved gain');
+    assert.match(range.getAttribute('aria-label'),/volume/);
+    assert.match(typed.getAttribute('aria-label'),/level in dB/);
+    assert.equal(reset.type,'button'); assert.equal(reset.textContent,'0 dB');
+    assert.equal(reset.getAttribute('aria-label').startsWith('Reset '),true);
+    range.value='-7.5'; dispatch('input',range);
+    assert.equal(Number(typed.value),-7.5);
+    assert.equal(range.getAttribute('aria-valuetext'),'-7.5 dB');
+    assert.equal(reset.disabled,false);
+    dispatch('click',reset);
+    assert.equal(run(`state.mediaStudio.pending.get('mixer').${role}_db`),0);
+    assert.equal(Number(range.value),0); assert.equal(Number(typed.value),0);
+    assert.equal(range.getAttribute('aria-valuetext'),'0.0 dB');
+    assert.equal(reset.disabled,true);
+  }
+  const master=audio.querySelector('[data-channel=master]');
+  assert.equal(master.querySelector('[data-mute]'),null);
+  assert.equal(master.querySelector('[data-solo]'),null);
+  assert.equal(run('previewCalls.length'),10,'one persisted gain preview per slider/reset action');
+  assert.deepEqual(plain(run('requests')),[]);
+  assert.deepEqual(plain(run('mutations')),[]);
+});
+
+test('double-click reset keeps a focused native fader, custom cap gain and spoken value synchronized', () => {
+  const {run,nodes}=fixture(),audio=nodes.get('studioPanelAudio');
+  const range=audio.querySelector('[data-mix=music_db]');
+  run(`document.activeElement=state.mediaStudio.audioRoot.querySelector('[data-mix=music_db]');`);
+  range.value='12';dispatch('input',range);assert.equal(Number(range.value),12);
+  dispatch('dblclick',range);
+  assert.equal(Number(range.value),0,'a focused range has no typed draft to retain after reset');
+  assert.equal(Number(audio.querySelector('[data-mix-number=music_db]').value),0);
+  assert.equal(range.getAttribute('aria-valuetext'),'0.0 dB');
+  assert.equal(run('state.mediaStudio.pending.get("mixer").music_db'),0);
 });

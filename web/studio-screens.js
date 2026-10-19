@@ -25,6 +25,21 @@
     }).observe(target, options);
   };
 
+  function radioKeydown(event, buttons) {
+    if (event.altKey || event.ctrlKey || event.metaKey) return;
+    const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key];
+    if (!step && !["Home", "End"].includes(event.key)) return;
+    const enabled = buttons.filter((button) => !button.disabled);
+    const index = enabled.indexOf(event.target.closest('[role="radio"]'));
+    if (index < 0 || !enabled.length) return;
+    event.preventDefault();
+    const rtl = doc.documentElement.dir === "rtl" && ["ArrowLeft", "ArrowRight"].includes(event.key) ? -1 : 1;
+    const nextIndex = event.key === "Home" ? 0 : event.key === "End" ? enabled.length - 1
+      : (index + step * rtl + enabled.length) % enabled.length;
+    enabled[nextIndex].click();
+    enabled[nextIndex].focus();
+  }
+
   // A select shown as a row of buttons. The select stays in the DOM (hidden)
   // and remains the control that saves the setting.
   function segmented(select, labels = {}) {
@@ -57,15 +72,7 @@
         button.disabled = select.disabled;
       }
     };
-    group.addEventListener("keydown", (event) => {
-      const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key];
-      if (!step) return;
-      event.preventDefault();
-      const rtl = doc.documentElement.dir === "rtl" && event.key.startsWith("Arrow") && ["ArrowLeft", "ArrowRight"].includes(event.key) ? -1 : 1;
-      const index = buttons.findIndex((button) => button.dataset.value === select.value);
-      const next = buttons[(index + step * rtl + buttons.length) % buttons.length];
-      next.click(); next.focus();
-    });
+    group.addEventListener("keydown", (event) => radioKeydown(event, buttons));
     select.classList.add("studio-segmented-source");
     select.after(group);
     select.addEventListener("change", sync);
@@ -120,8 +127,10 @@
     const sync = () => tiles.forEach((tile) => {
       const checked = tile.dataset.aspect === aspect.value;
       tile.setAttribute("aria-checked", String(checked));
+      tile.tabIndex = checked ? 0 : -1;
       tile.disabled = aspect.disabled;
     });
+    presets.addEventListener("keydown", (event) => radioKeydown(event, tiles));
     aspect.addEventListener("change", sync);
     observe(aspect, sync, { attributes: true });
     syncers.add(sync);

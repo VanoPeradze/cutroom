@@ -844,6 +844,67 @@ def test_source_a_preparation_persists_generation_bound_embedded_camera_suggesti
     assert result["embedded_camera_detected"] is True
 
 
+@pytest.mark.parametrize("case", ["exception", "unavailable", "decoder", "missing_availability", "negative"])
+def test_source_camera_failure_is_not_reported_as_a_successful_negative(
+    app, monkeypatch: pytest.MonkeyPatch, case,
+):
+    store = app.extensions["cutroom_store"]
+    project = store.create("truthful camera status")
+    generation = "camera-status-generation"
+    project["sources"]["A"] = _source("A", generation=generation, has_audio=False)
+    store.save(project)
+    (store.project_dir(project["id"]) / "media" / "source-A.mp4").write_bytes(b"media")
+    messages = []
+
+    def camera_result(*_args, **_kwargs):
+        if case == "exception":
+            raise AttributeError("module 'cv2' has no attribute 'CascadeClassifier'")
+        profile = {"version": server.VISION_ANALYSIS_VERSION, "embedded_camera": None}
+        if case != "missing_availability":
+            profile["available"] = case == "negative"
+        if case == "unavailable":
+            profile.update(reason="opencv_detector_unavailable", warning="Camera classifiers could not load")
+            # Erroneous geometry in a failed response must not turn failure into detection.
+            profile["embedded_camera"] = {"x": .7, "y": .1, "w": .2, "h": .2}
+        elif case == "decoder":
+            profile.update(reason="video_decode_failed", warning="No sampled video frames could be read")
+        return profile
+
+    monkeypatch.setattr(server, "analyze_faces_and_embedded_camera", camera_result)
+    monkeypatch.setattr(server, "extract_thumbnails", lambda *_args, **_kwargs: [])
+    context = JobContext(
+        Job("job_camera_status", "prepare_source", project["id"]), threading.Lock(),
+        on_change_locked=lambda job: messages.append(job.message),
+    )
+    before_manual = store.load(project["id"])["manual"]
+    result = server._prepare_source(
+        context, project["id"], "A", generation, store, app.extensions["cutroom_settings"],
+    )
+    saved = store.load(project["id"])
+    assert saved["sources"]["A"]["preparation"] == "ready", "Camera failure must not discard playable media"
+    assert saved["manual"] == before_manual
+    assert "Camera detection ready" not in messages
+    if case == "negative":
+        assert saved["sources"]["A"]["embedded_camera_detected"] is False
+        assert result["camera_detection_available"] is True
+        assert result["embedded_camera_detected"] is False
+        assert "Camera detection finished; no camera area found" in messages
+        assert context.job.message == "Source ready"
+    else:
+        assert saved["sources"]["A"]["embedded_camera_detected"] is None
+        assert result["camera_detection_available"] is False
+        assert result["embedded_camera_detected"] is None
+        assert "Automatic camera detection unavailable; mark the camera area manually" in messages
+        assert context.job.message == "Source ready; automatic camera detection unavailable"
+        assert not any("no camera area found" in message for message in messages)
+        if case == "exception":
+            assert result["camera_detection_reason"] == "preparation_error"
+        elif case == "unavailable":
+            assert result["camera_detection_reason"] == "opencv_detector_unavailable"
+        elif case == "decoder":
+            assert result["camera_detection_reason"] == "video_decode_failed"
+
+
 def test_source_replacement_during_camera_detection_cannot_publish_stale_pre_analysis(
     app, monkeypatch: pytest.MonkeyPatch,
 ):

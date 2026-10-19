@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import re
 import zipfile
 from pathlib import Path
+from urllib.parse import unquote, urlsplit
 
 import pytest
 
@@ -82,6 +84,24 @@ def test_archive_hashes_inventory_and_first_run_files(source, tmp_path):
         for name in builder.PACKAGING_FILES:
             assert bundle.read(Path(name).name) == (source / name).read_bytes()
     assert target.with_suffix(".zip.sha256").read_text().split()[0] == builder.hashlib.sha256(target.read_bytes()).hexdigest()
+
+
+def test_current_readme_images_ship_with_the_downloaded_readme(source, tmp_path):
+    # Exercise the actual maintained README, rather than deriving expected links
+    # from the packager's allowlist and missing a new gallery image in both.
+    (source / "README.md").write_bytes((ROOT / "README.md").read_bytes())
+    target = builder.build_package(source, tmp_path / "out", build_id="readme-images")
+    manifest = builder.verify_package(target)
+    with zipfile.ZipFile(target) as bundle:
+        readme = bundle.read("App/README.md").decode("utf-8")
+        links = re.findall(r'(?:src|href)=["\']([^"\']+)["\']', readme)
+        images = {unquote(urlsplit(link).path) for link in links
+                  if not urlsplit(link).scheme and urlsplit(link).path.endswith((".png", ".svg"))}
+        assert images, "The README gallery must be exercised"
+        for image in images:
+            member = "App/" + image
+            assert member in manifest["files"], f"Missing downloaded README image: {image}"
+            assert bundle.read(member) == (source / image).read_bytes()
 
 
 def test_existing_package_is_not_overwritten(source, tmp_path):

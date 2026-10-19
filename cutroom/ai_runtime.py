@@ -33,9 +33,17 @@ def resolve_ollama_executable() -> str | None:
     """Use a configured executable, PATH, or standard Windows install paths."""
     override = os.environ.get("CUTROOM_OLLAMA", "").strip().strip('"')
     if override:
-        candidate = Path(override).expanduser()
-        return str(candidate.resolve()) if candidate.is_file() else shutil.which(override)
-    found = shutil.which("ollama")
+        try:
+            candidate = Path(override).expanduser()
+            return str(candidate.resolve()) if candidate.is_file() else shutil.which(override)
+        except OSError:
+            # An explicit but inaccessible executable must not select a
+            # different installation or break the local AI status response.
+            return None
+    try:
+        found = shutil.which("ollama")
+    except OSError:
+        found = None
     if found:
         return found
     candidates: list[Path] = []
@@ -47,7 +55,15 @@ def resolve_ollama_executable() -> str | None:
     ):
         if os.environ.get(variable):
             candidates.append(Path(os.environ[variable]) / suffix)
-    return next((str(path.resolve()) for path in candidates if path.is_file()), None)
+    for path in candidates:
+        try:
+            if path.is_file():
+                return str(path.resolve())
+        except OSError:
+            # A restricted account may not inspect another user's install.
+            # Keep looking only in the existing standard candidate order.
+            continue
+    return None
 
 
 def _endpoint(settings: Settings) -> urllib.parse.SplitResult:

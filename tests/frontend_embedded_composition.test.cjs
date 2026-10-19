@@ -101,6 +101,140 @@ test('opening camera controls does not activate or save a suggested/default rect
   assert.equal(run('elements.saveEmbeddedCamera.hidden'), false);
 });
 
+test('camera detector failure is shown as unavailable rather than a successful negative', () => {
+  const {run} = embeddedEditingApp();
+  run(`delete state.project.manual.embedded_camera;
+    state.project.draft.embedded_layout_confirmed=false; state.project.draft.layout='A';
+    state.project.sources.A.generation='current-source';
+    state.project.pre_analysis={vision:{A:{version:EMBEDDED_CAMERA_DETECTOR_VERSION,
+      source_generation:'current-source', available:false, reason:'opencv_detector_unavailable',
+      embedded_camera:{x:.7,y:.1,w:.2,h:.2,requires_confirmation:true,detector:EMBEDDED_CAMERA_DETECTOR_VERSION}}}};
+    renderEmbeddedCameraEditor();`);
+  assert.equal(run('embeddedCameraCandidate()'), null, 'Failed detector geometry must not become a suggestion');
+  assert.equal(run('elements.embeddedCameraState.textContent'), 'Automatic detection unavailable');
+  assert.match(run('elements.embeddedCameraHelp.textContent'), /did not confirm whether a camera is present/);
+  assert.equal(run('savedCalls.length'), 0);
+  assert.equal(run('elements.saveEmbeddedCamera.hidden'), false, 'Manual camera marking stays available');
+
+  run(`state.project.pre_analysis.vision.A={version:EMBEDDED_CAMERA_DETECTOR_VERSION,
+    source_generation:'current-source', available:true, embedded_camera:null}; renderEmbeddedCameraEditor();`);
+  assert.match(run('elements.embeddedCameraHelp.textContent'), /found no camera area in the sampled frames/);
+  assert.doesNotMatch(run('elements.embeddedCameraState.textContent'), /unavailable/);
+  assert.equal(run('savedCalls.length'), 0);
+});
+
+test('malformed camera availability cannot create an automatic suggestion', () => {
+  const {run} = embeddedEditingApp();
+  run(`delete state.project.manual.embedded_camera;
+    state.project.draft.embedded_layout_confirmed=false; state.project.draft.layout='A';
+    state.project.sources.A.generation='current-source';
+    state.project.pre_analysis={vision:{A:{version:EMBEDDED_CAMERA_DETECTOR_VERSION,
+      source_generation:'current-source', embedded_camera:{x:.7,y:.1,w:.2,h:.2,
+      requires_confirmation:true,detector:EMBEDDED_CAMERA_DETECTOR_VERSION}}}};`);
+  for (const availability of [undefined, null, 1, 'true', 'false']) {
+    run(`state.project.pre_analysis.vision.A.available=${JSON.stringify(availability) ?? 'undefined'};
+      renderEmbeddedCameraEditor();`);
+    assert.equal(run('embeddedCameraCandidate()'), null);
+    assert.equal(run('elements.embeddedCameraState.textContent'), 'Automatic detection unavailable');
+  }
+});
+
+test('camera failure warning remains visible for a project with a separate source B', () => {
+  const {run} = app();
+  run(`elements.draftWarning=element(); elements.draftWarningText=element();
+    state.project.sources.B={url:'/b.mp4',duration:10};
+    state.project.manual.source_tracks={B:[]};
+    state.project.analysis={warnings:[{type:'camera_detection',message:'Automatic camera detection could not run.'}]};
+    renderDraftWarning();`);
+  assert.equal(run('elements.draftWarning.hidden'), false);
+  assert.match(run('elements.draftWarningText.textContent'), /Automatic camera detection could not run/);
+  assert.equal(run('state.project.manual.source_tracks.B.length'), 0);
+  assert.equal(run('state.project.sources.B.url'), '/b.mp4');
+  run(`state.project.analysis.warnings=[]; renderDraftWarning();`);
+  assert.equal(run('elements.draftWarning.hidden'), true);
+});
+
+test('a successful authoritative negative does not resurrect an older suggestion or alter a saved manual camera', () => {
+  const {run} = embeddedEditingApp();
+  run(`delete state.project.manual.embedded_camera;
+    state.project.draft.embedded_layout_confirmed=false; state.project.draft.layout='A';
+    state.project.sources.A.generation='current-source';
+    state.project.pre_analysis={vision:{A:{version:EMBEDDED_CAMERA_DETECTOR_VERSION,
+      source_generation:'current-source', available:true,
+      embedded_camera:{x:.7,y:.1,w:.2,h:.2,requires_confirmation:true,detector:EMBEDDED_CAMERA_DETECTOR_VERSION}}}};
+    state.project.analysis={vision:{version:EMBEDDED_CAMERA_DETECTOR_VERSION,available:true,
+      embedded_camera:null}}; renderEmbeddedCameraEditor();`);
+  assert.equal(run('embeddedCameraCandidate()'), null);
+  assert.equal(run('elements.embeddedCameraState.textContent'), 'Mark your camera');
+  run(`state.project.manual.embedded_camera={x:.1,y:.1,w:.2,h:.2};
+    state.project.draft.embedded_layout_confirmed=true; state.project.draft.layout='embedded_stack';
+    renderEmbeddedCameraEditor();`);
+  assert.equal(run('embeddedCameraCandidate().candidate_source'), 'manual');
+  assert.equal(run('embeddedCameraCandidate().x'), .1);
+  assert.equal(run('elements.embeddedCameraState.textContent'), 'Saved');
+  assert.equal(run('savedCalls.length'), 0);
+});
+
+test('a successful current-source preparation retry supersedes failed analysis without confirming its camera', () => {
+  const {run} = embeddedEditingApp();
+  run(`delete state.project.manual.embedded_camera;
+    state.project.draft.embedded_layout_confirmed=false; state.project.draft.layout='A';
+    state.project.sources.A.generation='current-source';
+    state.project.analysis={vision:{version:EMBEDDED_CAMERA_DETECTOR_VERSION,available:false,
+      reason:'opencv_detector_unavailable',embedded_camera:null}};
+    state.project.pre_analysis={vision:{A:{version:EMBEDDED_CAMERA_DETECTOR_VERSION,
+      source_generation:'current-source',available:false,reason:'opencv_detector_unavailable',embedded_camera:null}}};
+    renderEmbeddedCameraEditor();`);
+  assert.equal(run('embeddedCameraCandidate()'), null);
+  assert.equal(run('elements.embeddedCameraState.textContent'), 'Automatic detection unavailable');
+  run(`state.project.pre_analysis.vision.A={version:EMBEDDED_CAMERA_DETECTOR_VERSION,
+    source_generation:'current-source',available:true,
+    embedded_camera:{x:.7,y:.1,w:.2,h:.2,requires_confirmation:true,detector:EMBEDDED_CAMERA_DETECTOR_VERSION}};
+    renderEmbeddedCameraEditor();`);
+  assert.equal(run('embeddedCameraCandidate().candidate_source'), 'vision');
+  assert.equal(run('embeddedCameraCandidate().x'), .7);
+  assert.equal(run('elements.embeddedCameraState.textContent'), 'Review camera area');
+  assert.equal(run('embeddedLayoutConfirmed()'), false);
+  assert.equal(run('savedCalls.length'), 0);
+
+  run(`state.project.pre_analysis.vision.A.source_generation='old-source'; renderEmbeddedCameraEditor();`);
+  assert.equal(run('embeddedCameraCandidate()'), null, 'A success from a different source cannot mask the error');
+  assert.equal(run('elements.embeddedCameraState.textContent'), 'Automatic detection unavailable');
+  run(`state.project.pre_analysis.vision.A.source_generation='current-source';
+    state.project.analysis.vision={version:EMBEDDED_CAMERA_DETECTOR_VERSION,available:true,
+      embedded_camera:{x:.4,y:.1,w:.2,h:.2,requires_confirmation:true,detector:EMBEDDED_CAMERA_DETECTOR_VERSION}};`);
+  assert.equal(run('embeddedCameraCandidate().x'), .4, 'Successful full analysis remains preferred');
+});
+
+test('camera banner and editor distinguish decoder failures from missing detector dependencies', () => {
+  const {run} = embeddedEditingApp();
+  run(`delete state.project.manual.embedded_camera;
+    state.project.draft.embedded_layout_confirmed=false; state.project.draft.layout='A';
+    state.project.sources.A.generation='current-source';
+    elements.cameraDetection=element(); elements.useEmbeddedCamera=element();
+    globalThis.bannerTitle=element(); globalThis.bannerHelp=element();
+    elements.cameraDetection.querySelector=selector => selector==='b' ? bannerTitle : bannerHelp;
+    document.getElementById=()=>null;`);
+  for (const reason of ['opencv_detector_unavailable', 'video_decode_failed', 'preparation_error']) {
+    run(`state.project.pre_analysis={vision:{A:{version:EMBEDDED_CAMERA_DETECTOR_VERSION,
+      source_generation:'current-source',available:false,reason:${JSON.stringify(reason)},embedded_camera:null}}};
+      renderEmbeddedCameraEditor(); renderCameraDetection();`);
+    assert.equal(run('bannerTitle.textContent'), 'Automatic camera detection unavailable');
+    assert.equal(run('bannerHelp.textContent'), run('elements.embeddedCameraHelp.textContent'));
+    assert.equal(run('elements.cameraDetection.hidden'), false);
+    assert.equal(run('elements.useEmbeddedCamera.textContent'), 'Mark manually');
+    if (reason === 'opencv_detector_unavailable') assert.match(run('bannerHelp.textContent'), /Run CUTROOM setup/);
+    else assert.doesNotMatch(run('bannerHelp.textContent'), /Run CUTROOM setup/);
+    if (reason === 'video_decode_failed') assert.match(run('bannerHelp.textContent'), /Check that the source video plays/);
+  }
+  run(`state.project.pre_analysis.vision.A.available=true; renderCameraDetection();`);
+  assert.equal(run('bannerTitle.textContent'), 'Camera was not detected automatically');
+  run(`state.project.sources.B={url:'/b.mp4',duration:10}; state.project.manual.source_tracks={B:[]};
+    renderCameraDetection();`);
+  assert.equal(run('elements.cameraDetection.hidden'), true, 'A separate source keeps its existing banner behavior');
+  assert.equal(run('state.project.manual.source_tracks.B.length'), 0);
+});
+
 test('camera input changes the main composition immediately and coalesces changes before saving', async () => {
   const {run} = embeddedEditingApp();
   run(`state.project.draft.embedded_layout_confirmed=false; state.project.draft.layout='A';

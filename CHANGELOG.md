@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.2 Beta - 2026-10-19 - Stable editing workspace, custom mixer and clearer camera status
+
+- The project library stays on the left, the preview in the centre, selected-item tools on the right and the timeline below. Switching tools keeps one inspector width, including on short laptop windows. Both region dividers support keyboard resizing.
+- Select footage to open its existing trim controls, a caption to edit its text and timing, or imported audio to open that clip's volume and fades. Invalid or failed caption saves retain the typed draft; delayed saves cannot overwrite newer text or another project's draft. Source effects follow the explicitly selected A/B target.
+- Importing into a long Windows project path no longer fails because the upload's temporary filename repeats the full recording name. Uploads retain their size limit, atomic replacement and cleanup on interruption; the operating system's overall path limits still apply.
+- Audio input faders have recessed rails, gripped metal caps, a readable dB scale, typed values, visible resets and measured peak levels. Shift enables fine dragging and 0.1 dB keyboard adjustments. Master has its own wide control; narrow panels use two columns. Existing normalization, saved mute and preview-only Solo behavior are preserved.
+- Editing styles show their descriptions. Text templates expose the existing five designs with keyboard selection, contextual fields and clear empty-selection states. Output presets support keyboard navigation and narrow panels.
+- Setup checks that the installed camera detector can actually load and run its classifiers. Failed detection is distinguished from a valid result with no camera, and failed cached analysis can be retried.
+- Automatic audio alignment uses the real overlap between recordings and labels weak or ambiguous matches as unconfirmed. Missing B footage is explained at the edit and playhead; no camera timing is invented. Actual A/B alignment still requires a matching source timestamp pair when shared audio cannot establish it.
+- README and website guidance are shorter, platform-specific and illustrated with current captures of an original generated demonstration project. These images demonstrate the interface, not AI editing quality.
+
 ## 1.2 Beta - 2026-10-15 - Editable captions, a trustworthy mixer and checked exports
 
 - **Automatic captions are timeline items.** Click a caption in the Captions lane to select it (the playhead stays put), drag it to move it, drag its edges to trim it, double-click or press Enter to edit it, and press Delete to hide it. The preview outlines the selected caption, and clicking a caption on the video selects it. A **Selected caption** inspector edits the text, start and end, style, position and size, with Previous/Next.

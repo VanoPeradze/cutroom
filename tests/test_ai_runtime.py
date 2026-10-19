@@ -324,6 +324,78 @@ def test_resolver_uses_path_then_standard_windows_install(tmp_path, monkeypatch)
     assert REAL_RESOLVER() == str(executable.resolve())
 
 
+@pytest.mark.parametrize("operation", ["is_file", "resolve"])
+@pytest.mark.parametrize("accessible_fallback", [False, True])
+def test_resolver_skips_inaccessible_standard_install(tmp_path, monkeypatch, operation, accessible_fallback):
+    monkeypatch.delenv("CUTROOM_OLLAMA", raising=False)
+    monkeypatch.setattr(ai_runtime.shutil, "which", Mock(return_value=None))
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    monkeypatch.delenv("ProgramFiles", raising=False)
+    monkeypatch.delenv("ProgramFiles(x86)", raising=False)
+    denied = tmp_path / "Programs" / "Ollama" / "ollama.exe"
+    denied.parent.mkdir(parents=True)
+    denied.touch()
+    fallback = tmp_path / "Microsoft" / "WinGet" / "Links" / "ollama.exe"
+    if accessible_fallback:
+        fallback.parent.mkdir(parents=True)
+        fallback.touch()
+    expected = str(fallback.resolve()) if accessible_fallback else None
+    original = getattr(ai_runtime.Path, operation)
+
+    def inspect(path, *args, **kwargs):
+        if path == denied:
+            raise PermissionError("standard installation is inaccessible")
+        return original(path, *args, **kwargs)
+
+    monkeypatch.setattr(ai_runtime.Path, operation, inspect)
+    assert REAL_RESOLVER() == expected
+
+
+@pytest.mark.parametrize("operation", ["is_file", "resolve"])
+def test_resolver_inaccessible_override_is_unavailable_without_other_lookup(tmp_path, monkeypatch, operation):
+    denied = tmp_path / "explicit ollama.exe"
+    denied.touch()
+    monkeypatch.setenv("CUTROOM_OLLAMA", str(denied))
+    which = Mock(return_value="unrelated-installation")
+    monkeypatch.setattr(ai_runtime.shutil, "which", which)
+    original = getattr(ai_runtime.Path, operation)
+
+    def inspect(path, *args, **kwargs):
+        if path == denied:
+            raise PermissionError("explicit installation is inaccessible")
+        return original(path, *args, **kwargs)
+
+    monkeypatch.setattr(ai_runtime.Path, operation, inspect)
+    assert REAL_RESOLVER() is None
+    which.assert_not_called()
+
+
+def test_resolver_path_lookup_oserror_still_checks_standard_install(tmp_path, monkeypatch):
+    monkeypatch.delenv("CUTROOM_OLLAMA", raising=False)
+    monkeypatch.setattr(ai_runtime.shutil, "which", Mock(side_effect=PermissionError("PATH is inaccessible")))
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    executable = tmp_path / "Programs" / "Ollama" / "ollama.exe"
+    executable.parent.mkdir(parents=True)
+    executable.touch()
+    assert REAL_RESOLVER() == str(executable.resolve())
+
+
+def test_resolver_explicit_command_keeps_its_own_path_lookup(monkeypatch):
+    monkeypatch.setenv("CUTROOM_OLLAMA", "custom-cutroom-ollama")
+    which = Mock(return_value="C:/custom/ollama.exe")
+    monkeypatch.setattr(ai_runtime.shutil, "which", which)
+    assert REAL_RESOLVER() == "C:/custom/ollama.exe"
+    which.assert_called_once_with("custom-cutroom-ollama")
+
+
+def test_resolver_inaccessible_explicit_command_lookup_is_unavailable(monkeypatch):
+    monkeypatch.setenv("CUTROOM_OLLAMA", "custom-cutroom-ollama")
+    which = Mock(side_effect=PermissionError("explicit PATH lookup is inaccessible"))
+    monkeypatch.setattr(ai_runtime.shutil, "which", which)
+    assert REAL_RESOLVER() is None
+    which.assert_called_once_with("custom-cutroom-ollama")
+
+
 def test_environment_preserves_user_model_idle_policy(settings, monkeypatch):
     monkeypatch.setenv("OLLAMA_KEEP_ALIVE", "45s")
     monkeypatch.setenv("OLLAMA_MODELS", "D:/models")

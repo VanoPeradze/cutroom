@@ -44,6 +44,13 @@ IMAGE_FILES = (
     "docs/images/welcome.png", "docs/images/editor.png", "docs/images/ai-options.png",
     "docs/images/readme-banner.svg",
     "docs/images/readme-hero.png",
+    "docs/images/readme/studio-edit-20261019.png",
+    "docs/images/readme/studio-home-20261019.png",
+    "docs/images/readme/studio-media-20261019.png",
+    "docs/images/readme/studio-layout-20261019.png",
+    "docs/images/readme/studio-audio-20261019.png",
+    "docs/images/readme/studio-captions-20261019.png",
+    "docs/images/readme/studio-output-20261019.png",
 )
 PACKAGING_FILES = (
     "packaging/windows/START CUTROOM.bat",

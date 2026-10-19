@@ -8,4 +8,5 @@ faster-whisper==1.2.1
 av>=18.1.0,<19
 # Pin the Windows CUDA wheel verified with this speech runtime.
 ctranslate2==4.8.3; sys_platform == "win32"
-opencv-python-headless>=5.0.0.93,<6
+# The embedded-camera detector uses the Haar APIs/XML assets removed from main OpenCV 5.
+opencv-python-headless==4.14.0.94
