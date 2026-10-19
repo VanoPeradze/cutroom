@@ -18,8 +18,8 @@
 
 <p align="center">
   <a href="https://cutroom-studio.expo.app/"><strong>Website</strong></a> ·
-  <a href="https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261019/CUTROOM-1.2-Beta-Windows-20261019.zip"><strong>Download for Windows</strong></a> ·
-  <a href="https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261019/CUTROOM-1.2-Beta-Mac-20261019.zip"><strong>Download for Mac</strong></a> ·
+  <a href="https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261019-hotfix1/CUTROOM-1.2-Beta-Windows-20261019-hotfix1.zip"><strong>Download for Windows</strong></a> ·
+  <a href="https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261019-hotfix1/CUTROOM-1.2-Beta-Mac-20261019-hotfix1.zip"><strong>Download for Mac</strong></a> ·
   <a href="docs/USER_GUIDE_EN.md">User guide</a> ·
   <a href="docs/README_HE.md">Hebrew README</a>
 </p>
@@ -86,7 +86,7 @@ Captured on **19 October 2026**, the screenshots show the actual editor with an 
 
 ### Download for Windows or macOS
 
-1. Download the [Windows ZIP](https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261019/CUTROOM-1.2-Beta-Windows-20261019.zip) or the [Mac ZIP](https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261019/CUTROOM-1.2-Beta-Mac-20261019.zip).
+1. Download the [Windows ZIP](https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261019-hotfix1/CUTROOM-1.2-Beta-Windows-20261019-hotfix1.zip) or the [Mac ZIP](https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261019-hotfix1/CUTROOM-1.2-Beta-Mac-20261019-hotfix1.zip).
 2. Extract the entire archive and open the folder containing **App** and the launcher.
 3. Open the launcher beside the **App** folder: **START CUTROOM.bat** on Windows, **START CUTROOM.command** on macOS.
 4. CUTROOM opens in your browser. Keep the launch window open while you edit; closing the browser alone does not stop CUTROOM.
@@ -96,11 +96,13 @@ Captured on **19 October 2026**, the screenshots show the actual editor with an 
 > [!WARNING]
 > Before the first Windows launch, make sure WinGet is available and install the [official Microsoft Visual C++ x64 runtime](https://aka.ms/vc14/vc_redist.x64.exe). The CUTROOM launcher does not install this prerequisite. See the [platform guide](docs/PLATFORMS.md) for setup and troubleshooting.
 
-[Release notes](https://github.com/VanoPeradze/cutroom/releases/tag/v1.2-beta-20261019). The [18 October beta](https://github.com/VanoPeradze/cutroom/releases/tag/v1.2-beta-20261018) remains available for rollback. To update, extract a fresh copy separately and back up your projects before moving them.
+[Release notes](https://github.com/VanoPeradze/cutroom/releases/tag/v1.2-beta-20261019-hotfix1). The [18 October beta](https://github.com/VanoPeradze/cutroom/releases/tag/v1.2-beta-20261018) remains available for rollback. To update, extract a fresh copy separately and back up your projects before moving them.
 
-The release includes SHA-256 sidecars for the [Windows ZIP](https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261019/CUTROOM-1.2-Beta-Windows-20261019.zip.sha256), [Mac ZIP](https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261019/CUTROOM-1.2-Beta-Mac-20261019.zip.sha256) and [combined ZIP](https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261019/CUTROOM-1.2-Beta-20261019.zip.sha256). The [dated release notes](https://github.com/VanoPeradze/cutroom/releases/tag/v1.2-beta-20261019) identify the exact app source and recorded checks.
+This hotfix addresses a Windows export failure after fresh setup selected FFmpeg 9.0.2. Setup and rendering now verify supported graph-file and constant-frame-rate options. See the release notes for the exact tested packages and remaining acceptance limits.
 
-An optional [Windows + Mac ZIP](https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261019/CUTROOM-1.2-Beta-20261019.zip) contains both platforms. Open **windows** or **mac** inside it before launching.
+The release includes SHA-256 sidecars for the [Windows ZIP](https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261019-hotfix1/CUTROOM-1.2-Beta-Windows-20261019-hotfix1.zip.sha256), [Mac ZIP](https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261019-hotfix1/CUTROOM-1.2-Beta-Mac-20261019-hotfix1.zip.sha256) and [combined ZIP](https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261019-hotfix1/CUTROOM-1.2-Beta-20261019-hotfix1.zip.sha256). The [dated release notes](https://github.com/VanoPeradze/cutroom/releases/tag/v1.2-beta-20261019-hotfix1) identify the exact app source and recorded checks.
+
+An optional [Windows + Mac ZIP](https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261019-hotfix1/CUTROOM-1.2-Beta-20261019-hotfix1.zip) contains both platforms. Open **windows** or **mac** inside it before launching.
 
 ### Run from source
 

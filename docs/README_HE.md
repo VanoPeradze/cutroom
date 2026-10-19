@@ -6,7 +6,7 @@
 
 **בלי חשבון CUTROOM ובלי סימן מים.** מודלים מקומיים ושירותי AI בענן הם אפשרויות נפרדות; שירות חיצוני עשוי להיות מוגבל או בתשלום.
 
-[האתר](https://cutroom-studio.expo.app/) · [הורדה ל־Windows](https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261019/CUTROOM-1.2-Beta-Windows-20261019.zip) · [הורדה ל־Mac](https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261019/CUTROOM-1.2-Beta-Mac-20261019.zip) · [English](../README.md)
+[האתר](https://cutroom-studio.expo.app/) · [הורדה ל־Windows](https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261019-hotfix1/CUTROOM-1.2-Beta-Windows-20261019-hotfix1.zip) · [הורדה ל־Mac](https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261019-hotfix1/CUTROOM-1.2-Beta-Mac-20261019-hotfix1.zip) · [English](../README.md)
 
 [![עורך CUTROOM עם חומר הדגמה מקורי](images/readme/studio-edit-20261019.png)](images/readme/studio-edit-20261019.png)
 
@@ -41,7 +41,7 @@
 
 [מדריך הפלטפורמות](PLATFORMS.md) · [הערות הגרסה](https://github.com/VanoPeradze/cutroom/releases) · [הפעלה במחשב נוסף](TEST_ON_ANOTHER_PC.md)
 
-אפשר להוריד גם [חבילה משולבת ל־Windows ול־Mac](https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261019/CUTROOM-1.2-Beta-20261019.zip). בתוכה פותחים תחילה את **windows** או את **mac**. קובצי SHA-256 וקוד המקור המדויק מצורפים ל[גרסה המתוארכת](https://github.com/VanoPeradze/cutroom/releases/tag/v1.2-beta-20261019). [גרסת 18 באוקטובר](https://github.com/VanoPeradze/cutroom/releases/tag/v1.2-beta-20261018) נשמרת לחזרה לאחור.
+אפשר להוריד גם [חבילה משולבת ל־Windows ול־Mac](https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261019-hotfix1/CUTROOM-1.2-Beta-20261019-hotfix1.zip). בתוכה פותחים תחילה את **windows** או את **mac**. קובצי SHA-256 וקוד המקור המדויק מצורפים ל[גרסה המתוארכת](https://github.com/VanoPeradze/cutroom/releases/tag/v1.2-beta-20261019-hotfix1). [גרסת 18 באוקטובר](https://github.com/VanoPeradze/cutroom/releases/tag/v1.2-beta-20261018) נשמרת לחזרה לאחור.
 
 ## הרצה מקוד המקור
 
