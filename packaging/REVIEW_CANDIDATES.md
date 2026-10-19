@@ -38,9 +38,17 @@ export failed after setup selected FFmpeg 9.0.2. The hotfix checks graph-file/CF
 capabilities and uses working modern or legacy options. Local synthetic exports
 passed on FFmpeg 7.1.1 and 9.0.2; 346 relevant regressions passed without skips.
 These configured-host checks do not replace exact-package native qualification.
-The manual review workflow now selects this hotfix record and exactly its three
+That intermediate manual review selects this hotfix record and exactly its three
 private ZIPs. Fresh Windows Sandbox exports/restart and both native Mac jobs
 remain pending. Public downloads and historical validation pins are unchanged.
+
+The final hotfix record is [0c28168.json](review-candidates/0c28168.json), source
+`0c28168999f3500092d1954b9a17419400648684`. It also includes the English/Hebrew
+README links for the hotfix downloads; the renderer and compatibility helper are
+unchanged from the tested intermediate source. The manual workflow selects this
+final record and its three exact private ZIPs. Its own fresh Windows and native
+Mac qualification is required before publication; intermediate reports do not
+qualify this new archive identity.
 
 The command uses Python's standard library and local Git objects only. It never
 imports or executes application or builder code, installs dependencies, downloads
