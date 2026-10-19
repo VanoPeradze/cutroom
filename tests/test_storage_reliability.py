@@ -6,6 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from cutroom import render
+from cutroom.ffmpeg_compat import ExportCapabilities
 from cutroom.jobs import Job, JobContext
 
 
@@ -74,6 +75,7 @@ def test_render_removes_export_files_that_fall_out_of_retention(monkeypatch, tmp
     )
 
     monkeypatch.setattr(render, "_dimensions", lambda *_args: (320, 240))
+    monkeypatch.setattr(render, "export_capabilities", lambda executable: ExportCapabilities(executable, "-filter_complex_script", ("-vsync", "1")))
     monkeypatch.setattr(render, "choose_encoder", lambda *_args: ("libx264", ["-preset", "veryfast"]))
     monkeypatch.setattr(render, "build_filter_graph", lambda *_args: ("null", ["-map", "[vout]"], False))
     monkeypatch.setattr(
@@ -120,6 +122,7 @@ def test_failed_final_probe_does_not_leave_an_orphan_export(monkeypatch, tmp_pat
         render={"audio_bitrate": "128k"},
     )
     monkeypatch.setattr(render, "_dimensions", lambda *_args: (320, 240))
+    monkeypatch.setattr(render, "export_capabilities", lambda executable: ExportCapabilities(executable, "-filter_complex_script", ("-vsync", "1")))
     monkeypatch.setattr(render, "choose_encoder", lambda *_args: ("libx264", []))
     monkeypatch.setattr(render, "build_filter_graph", lambda *_args: ("null", ["-map", "[vout]"], False))
     monkeypatch.setattr(render, "probe_media", lambda *_args: (_ for _ in ()).throw(ValueError("bad output")))

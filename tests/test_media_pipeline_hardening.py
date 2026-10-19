@@ -14,6 +14,7 @@ from types import SimpleNamespace
 import pytest
 
 from cutroom import director, render
+from cutroom.ffmpeg_compat import ExportCapabilities, export_capabilities
 from cutroom.jobs import Job, JobContext
 
 
@@ -431,8 +432,8 @@ def test_real_ffmpeg_keeps_a_duration_with_shorter_offset_b(tmp_path: Path, offs
     subprocess.run(
         [
             ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-i", str(source_a), "-i", str(source_b),
-            "-filter_complex_script", str(graph_path), *maps,
-            "-c:v", "libx264", "-preset", "ultrafast", "-vsync", "1", "-r:v", "30",
+            *export_capabilities(ffmpeg).graph_file_args(graph_path), *maps,
+            "-c:v", "libx264", "-preset", "ultrafast", *export_capabilities(ffmpeg).cfr_args, "-r:v", "30",
             "-c:a", "aac", "-t", "2.0", str(output),
         ],
         check=True,
@@ -484,8 +485,8 @@ def test_real_ffmpeg_normalized_offset_audio_has_monotonic_full_timeline(tmp_pat
         [
             ffmpeg, "-hide_banner", "-loglevel", "warning", "-y",
             "-i", str(source_a), "-i", str(source_b),
-            "-filter_complex_script", str(graph_path), *maps,
-            "-c:v", "libx264", "-preset", "ultrafast", "-vsync", "1", "-r:v", "30",
+            *export_capabilities(ffmpeg).graph_file_args(graph_path), *maps,
+            "-c:v", "libx264", "-preset", "ultrafast", *export_capabilities(ffmpeg).cfr_args, "-r:v", "30",
             "-c:a", "aac", "-t", "2.0", str(output),
         ],
         check=True,
@@ -540,8 +541,8 @@ def test_many_short_ranges_keep_exact_frame_duration_and_last_segment(tmp_path: 
     subprocess.run(
         [
             ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-i", str(source),
-            "-filter_complex_script", str(graph_path), *maps,
-            "-c:v", "libx264", "-preset", "ultrafast", "-vsync", "1", "-r:v", "30",
+            *export_capabilities(ffmpeg).graph_file_args(graph_path), *maps,
+            "-c:v", "libx264", "-preset", "ultrafast", *export_capabilities(ffmpeg).cfr_args, "-r:v", "30",
             "-t", f"{148 / 30:.6f}", str(output),
         ],
         check=True,
@@ -660,7 +661,8 @@ class _MemoryStore:
         return copy.deepcopy(self.project)
 
 
-def _fake_render_fixture(tmp_path: Path, *, captions: bool = False) -> tuple[dict, _MemoryStore, SimpleNamespace]:
+def _fake_render_fixture(tmp_path: Path, monkeypatch, *, captions: bool = False) -> tuple[dict, _MemoryStore, SimpleNamespace]:
+    monkeypatch.setattr(render, "export_capabilities", lambda executable: ExportCapabilities(executable, "-filter_complex_script", ("-vsync", "1")))
     root = tmp_path / "project"
     exports = tmp_path / "exports"
     (root / "media").mkdir(parents=True)
@@ -733,7 +735,7 @@ def test_render_disk_guard_aggregates_same_volume_and_keeps_one_reserve(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ):
-    value, store, settings = _fake_render_fixture(tmp_path)
+    value, store, settings = _fake_render_fixture(tmp_path, monkeypatch)
     settings.render["min_free_mb"] = 32
     checks: list[Path] = []
 
@@ -755,7 +757,7 @@ def test_render_rejects_insufficient_disk_before_encoder_or_artifacts(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ):
-    value, store, settings = _fake_render_fixture(tmp_path)
+    value, store, settings = _fake_render_fixture(tmp_path, monkeypatch)
     monkeypatch.setattr(render, "_dimensions", lambda *_args: (320, 240))
     monkeypatch.setattr(
         render.shutil,
@@ -767,6 +769,7 @@ def test_render_rejects_insufficient_disk_before_encoder_or_artifacts(
         raise AssertionError("render work started before the disk-space guard")
 
     monkeypatch.setattr(render, "choose_encoder", must_not_start)
+    monkeypatch.setattr(render, "export_capabilities", must_not_start)
     monkeypatch.setattr(render, "new_id", must_not_start)
     context = JobContext(Job("job_no_space", "render", value["id"]), threading.Lock())
 
@@ -788,7 +791,7 @@ def test_render_rejects_insufficient_disk_before_encoder_or_artifacts(
 
 @pytest.mark.parametrize("fps", [30, 60])
 def test_hardware_failure_retries_cpu_without_mutating_global_settings(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, fps):
-    value, store, settings = _fake_render_fixture(tmp_path)
+    value, store, settings = _fake_render_fixture(tmp_path, monkeypatch)
     commands: list[list[str]] = []
     monkeypatch.setattr(render, "_dimensions", lambda *_args: (320, 240))
     monkeypatch.setattr(render, "choose_encoder", lambda *_args: ("h264_nvenc", ["-preset", "p4"]))
@@ -818,7 +821,7 @@ def test_loudness_normalization_runs_as_bounded_audio_only_second_pass(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ):
-    value, store, settings = _fake_render_fixture(tmp_path)
+    value, store, settings = _fake_render_fixture(tmp_path, monkeypatch)
     value["draft"]["audio_policy"] = {"normalize": True, "target_lufs": -16.0}
     store.project = copy.deepcopy(value)
     commands: list[list[str]] = []
@@ -865,7 +868,7 @@ def test_loudness_normalization_runs_as_bounded_audio_only_second_pass(
 
 
 def test_cpu_ffmpeg_failure_cleans_partial_output_and_reports_bounded_error(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
-    value, store, settings = _fake_render_fixture(tmp_path)
+    value, store, settings = _fake_render_fixture(tmp_path, monkeypatch)
     settings.raw["render"]["prefer_hardware"] = False
     settings.render["prefer_hardware"] = False
     monkeypatch.setattr(render, "_dimensions", lambda *_args: (320, 240))
@@ -887,7 +890,7 @@ def test_cpu_ffmpeg_failure_cleans_partial_output_and_reports_bounded_error(monk
 
 
 def test_empty_transcript_does_not_create_or_advertise_empty_sidecar(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
-    value, store, settings = _fake_render_fixture(tmp_path, captions=True)
+    value, store, settings = _fake_render_fixture(tmp_path, monkeypatch, captions=True)
     commands: list[list[str]] = []
     monkeypatch.setattr(render, "_dimensions", lambda *_args: (320, 240))
     monkeypatch.setattr(render, "choose_encoder", lambda *_args: ("libx264", []))
@@ -918,7 +921,7 @@ def test_late_cancellation_after_export_commit_keeps_success_authoritative(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ):
-    value, store, settings = _fake_render_fixture(tmp_path)
+    value, store, settings = _fake_render_fixture(tmp_path, monkeypatch)
     monkeypatch.setattr(render, "_dimensions", lambda *_args: (320, 240))
     monkeypatch.setattr(render, "choose_encoder", lambda *_args: ("libx264", []))
     monkeypatch.setattr(render, "build_filter_graph", lambda *_args: ("null", ["-map", "[vout]"], False))
@@ -952,7 +955,7 @@ def test_locked_stale_export_cleanup_cannot_fail_a_new_committed_export(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ):
-    value, store, settings = _fake_render_fixture(tmp_path)
+    value, store, settings = _fake_render_fixture(tmp_path, monkeypatch)
     value["exports"] = [{"name": f"old-{index}.mp4"} for index in range(19)] + [{"name": "locked.mp4"}]
     store.project = copy.deepcopy(value)
     (settings.exports_dir / "locked.mp4").mkdir()

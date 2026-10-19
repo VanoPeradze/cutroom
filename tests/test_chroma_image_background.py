@@ -12,6 +12,7 @@ import pytest
 
 from cutroom import composition, effects, render
 from cutroom.config import DEFAULTS, Settings
+from cutroom.ffmpeg_compat import export_capabilities
 from cutroom.jobs import Job, JobContext
 from cutroom.media_render import library_input_args
 from cutroom.projects import ProjectStore
@@ -71,7 +72,7 @@ def _image_render(value, media, project_dir, output_dir, name):
         ffmpeg, "-v", "error", "-y", "-threads", "1",
         "-filter_threads", "1", "-filter_complex_threads", "1",
         "-i", str(paths[0]), "-threads", "1", "-i", str(paths[1]), *args,
-        "-filter_complex_script", str(script), *maps,
+        *export_capabilities(ffmpeg).graph_file_args(script), *maps,
         "-c:v", "libx264", "-preset", "ultrafast", "-crf", "16",
         "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k",
         "-threads", "1", "-r", "30", "-t", "2", str(output),
@@ -265,7 +266,7 @@ def test_real_shared_image_nodes_generate_the_same_known_png_preview_pixels(imag
         "-filter_threads", "1", "-filter_complex_threads", "1",
         "-i", str(sources[0]), "-loop", "1", "-framerate", "30",
         "-threads", "1", "-i", str(background),
-        "-filter_complex_script", str(script), "-map", "[preview]", "-an",
+        *export_capabilities(ffmpeg).graph_file_args(script), "-map", "[preview]", "-an",
         "-frames:v", "1", "-c:v", "png", "-threads", "1", str(output),
     ], capture_output=True, timeout=15)
     assert result.returncode == 0, result.stderr.decode("utf-8", errors="replace")

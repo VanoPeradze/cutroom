@@ -548,6 +548,9 @@ try {
     ) -FailureMessage "CUTROOM Python validation failed."
     Invoke-External -FilePath $ffmpegPath -Arguments @("-version") -FailureMessage "FFmpeg verification failed."
     Invoke-External -FilePath $ffprobePath -Arguments @("-version") -FailureMessage "FFprobe verification failed."
+    Invoke-External -FilePath $venvPython -Arguments @(
+        "scripts/preflight.py"
+    ) -FailureMessage "CUTROOM rendering and runtime preflight failed."
 
     Set-Content -LiteralPath ".setup-complete" -Value "CUTROOM AI $($script:CutroomVersion) setup completed $(Get-Date -Format o)" -Encoding ASCII
     Write-Host "`nCUTROOM is ready. Run run_windows.bat." -ForegroundColor Green

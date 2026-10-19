@@ -11,6 +11,7 @@ from array import array
 import pytest
 
 from cutroom import composition, effects, render
+from cutroom.ffmpeg_compat import export_capabilities
 
 
 KEY = {
@@ -74,7 +75,7 @@ def _render(value, media, root, name):
         ffmpeg, "-v", "error", "-y", "-threads", "1",
         "-filter_threads", "1", "-filter_complex_threads", "1",
         "-i", str(paths[0]), "-i", str(paths[1]),
-        "-filter_complex_script", str(script), *maps,
+        *export_capabilities(ffmpeg).graph_file_args(script), *maps,
         "-c:v", "libx264", "-preset", "ultrafast", "-crf", "16",
         "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k",
         "-threads", "1", "-r", "30", "-t", "2", str(output),
