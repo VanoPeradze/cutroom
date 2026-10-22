@@ -2,24 +2,24 @@
   "version": "1.2-beta",
   "label": "1.2 Beta",
   "layout": "windows-mac-folders-v1",
-  "filename": "CUTROOM-1.2-Beta-20261019-hotfix1.zip",
-  "bytes": 5963122,
-  "sha256": "e1de01bfe636f456e81cbf5a08f09e190a2d00cb162b9d517d2ce715c64c2a95",
-  "build_id": "CUTROOM-1.2-beta-mac-20261019-122417",
+  "filename": "CUTROOM-1.2-Beta-20261022-maintenance1.zip",
+  "bytes": 5966487,
+  "sha256": "3497a455d90d65ea7a84ca3569b36ad332dbede392bf480cc34f7bf331662677",
+  "build_id": "CUTROOM-1.2-beta-mac-20261022-043959",
   "release_state": "beta",
   "public_beta_authorized": true,
   "full_release_qualified": false,
-  "source_commit": "0c28168999f3500092d1954b9a17419400648684",
+  "source_commit": "203d164d04ef9d610cc9aedf55fe640b99f19f85",
   "uncommitted_changes": false,
-  "mac_validation_url": "https://github.com/VanoPeradze/cutroom/actions/runs/39251933403",
-  "validated_pr_head": "f7925c9be4f05adcc2a88b2698a1971b71be0083",
+  "mac_validation_url": "https://github.com/VanoPeradze/cutroom/actions/runs/39723914568",
+  "validated_pr_head": "39d319c832a079dd55600df233bfa77e98bdc518",
   "native_mac_validation": "automated-passed",
-  "native_validation_app_source_commit": "0c28168999f3500092d1954b9a17419400648684",
+  "native_validation_app_source_commit": "203d164d04ef9d610cc9aedf55fe640b99f19f85",
   "native_mac_validation_scope": "Automated native combined Mac payload on arm64/x64; standalone Mac projection verified byte-for-byte. No physical desktop or transcription acceptance.",
   "native_validation": {
-    "run_id": 39251933403,
-    "head_commit": "f7925c9be4f05adcc2a88b2698a1971b71be0083",
-    "application_source_commit": "0c28168999f3500092d1954b9a17419400648684",
+    "run_id": 39723914568,
+    "head_commit": "39d319c832a079dd55600df233bfa77e98bdc518",
+    "application_source_commit": "203d164d04ef9d610cc9aedf55fe640b99f19f85",
     "transcription_run": false,
     "architectures": {
       "arm64": {
@@ -28,9 +28,9 @@
         "feature_tests_passed": 348,
         "required_cases_passed": 50,
         "skipped": 0,
-        "job_id": 118057759147,
-        "job_url": "https://github.com/VanoPeradze/cutroom/actions/runs/39251933403/job/118057759147",
-        "offline_log_sha256": "54741137f92b7cef06fd3c2d8ae74a055bae31b768e6601994f79e594e2841bd",
+        "job_id": 119643392003,
+        "job_url": "https://github.com/VanoPeradze/cutroom/actions/runs/39723914568/job/119643392003",
+        "offline_log_sha256": "729fdbf7f2594fcf4e09d06e286191a298a1fb6568d0edd8c9b548eb4b76afc9",
         "fresh_app_install": "passed",
         "missing_pip_recovery": "passed",
         "restart_persistence": "passed"
@@ -41,81 +41,81 @@
         "feature_tests_passed": 348,
         "required_cases_passed": 50,
         "skipped": 0,
-        "job_id": 118057759655,
-        "job_url": "https://github.com/VanoPeradze/cutroom/actions/runs/39251933403/job/118057759655",
-        "offline_log_sha256": "f05b2b7c9f84c8c3cba3cbe55bdc03c69c53ec4e53adf6f8b240e17a606d5eca",
+        "job_id": 119643392171,
+        "job_url": "https://github.com/VanoPeradze/cutroom/actions/runs/39723914568/job/119643392171",
+        "offline_log_sha256": "bd5451b2b1b614f591471e4a3922660d43d7bac84857244d01f3ffc751ca9860",
         "fresh_app_install": "passed",
         "missing_pip_recovery": "passed",
         "restart_persistence": "passed"
       }
     }
   },
-  "url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261019-hotfix1/CUTROOM-1.2-Beta-20261019-hotfix1.zip",
+  "url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261022-maintenance1/CUTROOM-1.2-Beta-20261022-maintenance1.zip",
   "mirrors": [
-    "https://cutroom-studio.expo.app/downloads/CUTROOM-1.2-Beta-20261019-hotfix1.zip"
+    "https://cutroom-studio.expo.app/downloads/CUTROOM-1.2-Beta-20261022-maintenance1.zip"
   ],
   "github_release": {
-    "tag": "v1.2-beta-20261019-hotfix1",
-    "url": "https://github.com/VanoPeradze/cutroom/releases/tag/v1.2-beta-20261019-hotfix1",
-    "tag_commit": "0c28168999f3500092d1954b9a17419400648684",
-    "publication_date": "2026-10-19",
+    "tag": "v1.2-beta-20261022-maintenance1",
+    "url": "https://github.com/VanoPeradze/cutroom/releases/tag/v1.2-beta-20261022-maintenance1",
+    "tag_commit": "203d164d04ef9d610cc9aedf55fe640b99f19f85",
+    "publication_date": "2026-10-22",
     "package_bytes_changed": false,
-    "package_bytes_basis": "Byte-identical renamed copies of the qualified review archives and verified standalone Mac projection.",
-    "previous_public_tag": "v1.2-beta-20261019"
+    "package_bytes_basis": "Byte-identical renamed copies of exact native-qualified archives and verified Mac projection.",
+    "previous_public_tag": "v1.2-beta-20261019-hotfix1"
   },
   "platforms": {
     "windows": {
-      "filename": "CUTROOM-1.2-Beta-Windows-20261019-hotfix1.zip",
-      "bytes": 2963939,
-      "sha256": "acde14ad365c8d0f12dd0816c33c5d690e7d3780afa28bbba464c7d371b35d1f",
-      "url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261019-hotfix1/CUTROOM-1.2-Beta-Windows-20261019-hotfix1.zip",
+      "filename": "CUTROOM-1.2-Beta-Windows-20261022-maintenance1.zip",
+      "bytes": 2965586,
+      "sha256": "9a6d20825ad9f66dd29859fa683519400f8756bc6c572f66a8c82962060433ee",
+      "url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261022-maintenance1/CUTROOM-1.2-Beta-Windows-20261022-maintenance1.zip",
       "mirrors": [
-        "https://cutroom-studio.expo.app/downloads/CUTROOM-1.2-Beta-Windows-20261019-hotfix1.zip"
+        "https://cutroom-studio.expo.app/downloads/CUTROOM-1.2-Beta-Windows-20261022-maintenance1.zip"
       ],
-      "build_id": "CUTROOM-1.2-beta-20261019-122416"
+      "build_id": "CUTROOM-1.2-beta-20261022-043959"
     },
     "mac": {
-      "filename": "CUTROOM-1.2-Beta-Mac-20261019-hotfix1.zip",
-      "bytes": 2975253,
-      "sha256": "a08abe5bb9f820484ec77a1e129d9523aeebec90f2dff1b66b5b0482460bbbae",
-      "url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261019-hotfix1/CUTROOM-1.2-Beta-Mac-20261019-hotfix1.zip",
+      "filename": "CUTROOM-1.2-Beta-Mac-20261022-maintenance1.zip",
+      "bytes": 2976890,
+      "sha256": "c2fbc2b2f8bcd071ebd37f6059266c6cea3ec4db4cd5a4525f0539b95ff5f9b2",
+      "url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261022-maintenance1/CUTROOM-1.2-Beta-Mac-20261022-maintenance1.zip",
       "mirrors": [
-        "https://cutroom-studio.expo.app/downloads/CUTROOM-1.2-Beta-Mac-20261019-hotfix1.zip"
+        "https://cutroom-studio.expo.app/downloads/CUTROOM-1.2-Beta-Mac-20261022-maintenance1.zip"
       ],
-      "build_id": "CUTROOM-1.2-beta-mac-20261019-122417",
+      "build_id": "CUTROOM-1.2-beta-mac-20261022-043959",
       "layout": "mac-app-folder-v1",
-      "combined_archive_sha256": "e1de01bfe636f456e81cbf5a08f09e190a2d00cb162b9d517d2ce715c64c2a95",
-      "native_validation_basis": "Byte-identical App/launcher projection of the tested combined Mac payload; projection manifest differs."
+      "combined_archive_sha256": "3497a455d90d65ea7a84ca3569b36ad332dbede392bf480cc34f7bf331662677",
+      "native_validation_basis": "Byte-identical App/launcher projection of native-tested combined Mac payload; projection manifest differs."
     }
   },
   "source_archive": {
-    "filename": "SOURCE-20261019-hotfix1.zip",
-    "bytes": 4958786,
-    "sha256": "18ab023e665524227dabcf296f14ae8bd464ed4abb21be4c551ae004c3660cd5",
-    "url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261019-hotfix1/SOURCE-20261019-hotfix1.zip",
+    "filename": "SOURCE-203d164.zip",
+    "bytes": 4966866,
+    "sha256": "2f7cb74c682b681ab185306123c349d869b5d0dc7568825ab94602f9d0a92785",
+    "url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261022-maintenance1/SOURCE-203d164.zip",
     "mirrors": [
-      "https://cutroom-studio.expo.app/downloads/SOURCE-20261019-hotfix1.zip"
+      "https://cutroom-studio.expo.app/downloads/SOURCE-203d164.zip"
     ]
   },
-  "update_date": "2026-10-19",
-  "release_summary": "FFmpeg 9 video export compatibility hotfix; exact-package Windows guest and native Mac checks recorded with remaining acceptance limits.",
+  "update_date": "2026-10-22",
+  "release_summary": "Browser preview maintenance: check the actual media container before direct playback; incompatible or mislabeled inputs use the existing proxy path.",
   "known_limitations": [
-    "Windows automation used a fresh Windows 10 Sandbox with separately provisioned WinGet and Microsoft Visual C++ x64 prerequisites; this does not qualify physical Windows 11, SmartScreen or browser-download quarantine.",
-    "Windows restart checks stopped and relaunched the owned application process and compared saved state/export bytes; no operating-system reboot or graceful human UI quit was tested.",
-    "Automated native checks used no transcription/model inference and do not establish AI or speech accuracy.",
-    "Physical Mac Finder/Gatekeeper/Safari and representative English/Hebrew editing/listening acceptance remain pending.",
-    "Actual A/B recording alignment is not established by camera detection or controlled export checks; confirm a matching timestamp pair.",
-    "This is an authorized beta, not a fully qualified production release."
+    "Windows automated tests used a fresh Windows 10 Sandbox with separately provisioned WinGet and Microsoft Visual C++ x64 prerequisites; physical Windows 11, SmartScreen and browser-download quarantine remain untested.",
+    "Windows restart coverage is an owned application-process restart preserving saved state and output hashes, not an operating-system reboot or human UI quit.",
+    "Native Mac ARM/Intel installation, restart and missing-pip recovery passed; physical Finder, Gatekeeper, Safari and human listening/editorial acceptance remain pending.",
+    "No transcription or model inference ran in this qualification. Hebrew ASR/negation and semantic quality remain unresolved; this maintenance update does not improve them.",
+    "Active-speaker framing and experimental AI/proposal UI changes are not included. Browser codec/container readiness is routing eligibility, not a guarantee for every browser.",
+    "This remains an authorized public beta, not a fully qualified production release."
   ],
   "accepted_limitations": [
-    "Windows automation used a fresh Windows 10 Sandbox with separately provisioned WinGet and Microsoft Visual C++ x64 prerequisites; this does not qualify physical Windows 11, SmartScreen or browser-download quarantine.",
-    "Windows restart checks stopped and relaunched the owned application process and compared saved state/export bytes; no operating-system reboot or graceful human UI quit was tested.",
-    "Automated native checks used no transcription/model inference and do not establish AI or speech accuracy.",
-    "Physical Mac Finder/Gatekeeper/Safari and representative English/Hebrew editing/listening acceptance remain pending.",
-    "Actual A/B recording alignment is not established by camera detection or controlled export checks; confirm a matching timestamp pair.",
-    "This is an authorized beta, not a fully qualified production release."
+    "Windows automated tests used a fresh Windows 10 Sandbox with separately provisioned WinGet and Microsoft Visual C++ x64 prerequisites; physical Windows 11, SmartScreen and browser-download quarantine remain untested.",
+    "Windows restart coverage is an owned application-process restart preserving saved state and output hashes, not an operating-system reboot or human UI quit.",
+    "Native Mac ARM/Intel installation, restart and missing-pip recovery passed; physical Finder, Gatekeeper, Safari and human listening/editorial acceptance remain pending.",
+    "No transcription or model inference ran in this qualification. Hebrew ASR/negation and semantic quality remain unresolved; this maintenance update does not improve them.",
+    "Active-speaker framing and experimental AI/proposal UI changes are not included. Browser codec/container readiness is routing eligibility, not a guarantee for every browser.",
+    "This remains an authorized public beta, not a fully qualified production release."
   ],
-  "source_tree": "867f922cd4acbe3aa2ad07f56d1c3f5d7e7c7f9e",
+  "source_tree": "4086ebf0479244a62f98fecfd9d96031affcf346",
   "historical_windows_validation": [
     {
       "windows_fresh_install_acceptance": "failed-native-dll-check",
@@ -236,10 +236,10 @@
   ],
   "windows_fresh_install_acceptance": "passed-scoped-windows-10-sandbox",
   "windows_fresh_install": {
-    "application_source_commit": "0c28168999f3500092d1954b9a17419400648684",
-    "source_tree": "867f922cd4acbe3aa2ad07f56d1c3f5d7e7c7f9e",
-    "archive_sha256": "acde14ad365c8d0f12dd0816c33c5d690e7d3780afa28bbba464c7d371b35d1f",
-    "manifest_sha256": "ee461fc08bb4331bf2715a03d1ea45e2a495e98ba08bd503ffe2934366952409",
+    "application_source_commit": "203d164d04ef9d610cc9aedf55fe640b99f19f85",
+    "source_tree": "4086ebf0479244a62f98fecfd9d96031affcf346",
+    "archive_sha256": "9a6d20825ad9f66dd29859fa683519400f8756bc6c572f66a8c82962060433ee",
+    "manifest_sha256": "1782ffd5ce91d5813d3e7ba93cdeae0877bf60751c6cd7f548517d8886077c82",
     "result": "passed_scoped_guest_install_exports_and_process_restart",
     "environment": "fresh isolated Windows Sandbox; WinGet and signed Microsoft VC++ x64 runtime provided separately before unchanged CUTROOM launcher",
     "os": {
@@ -285,16 +285,13 @@
         "major": 9
       }
     },
-    "completed_at": "2026-10-19T12:31:09.5902197Z",
-    "evidence_summary_sha256": "091d092de8ff4a678b1bb6e89c3d88e6ace86da80d7d0b245d86e0b58e16dc15",
+    "completed_at": "2026-10-22T04:47:41.6951055Z",
+    "evidence_summary_sha256": "72f3353100ffa6f19d3bffedf495e2d3b09c1b1d7f489ac052f0462dca9e5fe4",
     "scope": "Automated synthetic HTTP editing/export in Windows 10 Sandbox; no human UI/listening, physical Windows 11, OS reboot, SmartScreen, quarantine or model acceptance."
   },
-  "hotfix": {
-    "previous_public_tag": "v1.2-beta-20261019",
-    "observed_issue": "The previous beta installed FFmpeg 9.0.2 successfully but its first real portrait export failed because FFmpeg rejected filter_complex_script; landscape and restart checks were not reached.",
-    "related_source_risk": "The legacy vsync option was also present in the shared render command; it was not separately reached by the original failed guest export.",
-    "qualification": "The hotfix must pass two real encoded portrait/landscape exports and application-process restart on the exact new Windows package, plus both native Mac architectures.",
-    "prior_failed_source_commit": "7019b6423ce9d66531e933ee5cac42968f9e96e7",
-    "prior_failed_archive_sha256": "24fc4767c7c80547308f03484c043d58e81c2592dcfdce6288e96cd3a98ccb89"
+  "maintenance": {
+    "scope": "Actual FFprobe container must match suffix and allowed codecs for direct preview.",
+    "production_fix_commit": "203d164d04ef9d610cc9aedf55fe640b99f19f85",
+    "canonical_packaging_correction": "Rebuilt from exact unchanged Git archive; only test-file LF/CRLF payload differed from the prior local package."
   }
 }

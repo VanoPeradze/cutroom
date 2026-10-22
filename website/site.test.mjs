@@ -45,9 +45,9 @@ test('Windows and Mac have separate archives with an optional combined download 
     assert.match(mirror[0][2], /mirror/i);
     assert.ok(linksTo(html, `/downloads/${entry.filename}.sha256`).length >= 1);
   }
-  assert.equal(release.filename, 'CUTROOM-1.2-Beta-20261019-hotfix1.zip');
-  assert.equal(release.platforms.windows.filename, 'CUTROOM-1.2-Beta-Windows-20261019-hotfix1.zip');
-  assert.equal(release.platforms.mac.filename, 'CUTROOM-1.2-Beta-Mac-20261019-hotfix1.zip');
+  assert.equal(release.filename, 'CUTROOM-1.2-Beta-20261022-maintenance1.zip');
+  assert.equal(release.platforms.windows.filename, 'CUTROOM-1.2-Beta-Windows-20261022-maintenance1.zip');
+  assert.equal(release.platforms.mac.filename, 'CUTROOM-1.2-Beta-Mac-20261022-maintenance1.zip');
   assert.notEqual(release.platforms.mac.filename, release.filename);
   assert.ok(!release.platforms.mac.folder, 'The standalone Mac launcher is beside App, without a mac subfolder');
   assert.equal(linksTo(html, release.url).length, 1); // Optional combined ZIP help link, separate from the Mac button.
@@ -56,7 +56,7 @@ test('Windows and Mac have separate archives with an optional combined download 
   assert.match(html, /Mac has its own ZIP\. Extract it and run START CUTROOM\.command beside App\./);
   assert.match(region('details', 'install-help'), /The optional combined ZIP has exactly two folders: windows and mac/);
   const source = release.source_archive;
-  assert.equal(source.filename, 'SOURCE-20261019-hotfix1.zip');
+  assert.equal(source.filename, 'SOURCE-203d164.zip');
   for (const url of [source.url, `/downloads/${source.filename}`, `/downloads/${source.filename}.sha256`]) assert.equal(linksTo(html,url).length,1);
   assert.equal(downloadEntries(release).length,4);
   assert.doesNotMatch(html, /href="[^"]*Linux[^"\n]*\.zip/i);
@@ -65,8 +65,8 @@ test('Windows and Mac have separate archives with an optional combined download 
 
 test('download metadata pins a dated release and preserves Expo mirrors and provenance', () => {
   const release = JSON.parse(readFileSync(new URL('./release.json', import.meta.url), 'utf8'));
-  assert.equal(release.github_release.tag, 'v1.2-beta-20261019-hotfix1');
-  assert.equal(release.github_release.previous_public_tag, 'v1.2-beta-20261019');
+  assert.equal(release.github_release.tag, 'v1.2-beta-20261022-maintenance1');
+  assert.equal(release.github_release.previous_public_tag, 'v1.2-beta-20261019-hotfix1');
   assert.equal(release.github_release.tag_commit, release.source_commit);
   assert.equal(release.github_release.package_bytes_changed, false);
   assert.equal(release.github_release.url, `${repository}/releases/tag/${release.github_release.tag}`);
@@ -81,10 +81,10 @@ test('public beta retains exact automated native provenance and visible pending 
   assertPublishable(release);
   assert.equal(release.release_state,'beta');
   assert.equal(release.full_release_qualified,false);
-  assert.equal(release.source_commit,'0c28168999f3500092d1954b9a17419400648684');
-  assert.equal(release.github_release.tag,'v1.2-beta-20261019-hotfix1');
-  assert.equal(release.native_validation.run_id,39251933403);
-  assert.equal(release.validated_pr_head,'f7925c9be4f05adcc2a88b2698a1971b71be0083');
+  assert.equal(release.source_commit,'203d164d04ef9d610cc9aedf55fe640b99f19f85');
+  assert.equal(release.github_release.tag,'v1.2-beta-20261022-maintenance1');
+  assert.equal(release.native_validation.run_id,39723914568);
+  assert.equal(release.validated_pr_head,'39d319c832a079dd55600df233bfa77e98bdc518');
   assert.equal(release.native_validation.transcription_run,false);
   for (const architecture of ['arm64','x64']) {
     const checks = release.native_validation.architectures[architecture];
@@ -101,8 +101,8 @@ test('public beta retains exact automated native provenance and visible pending 
   assert.equal(release.windows_fresh_install.application_source_commit,release.source_commit);
   assert.equal(release.windows_fresh_install.source_tree,release.source_tree);
   assert.equal(release.windows_fresh_install.archive_sha256,release.platforms.windows.sha256);
-  assert.equal(release.windows_fresh_install.archive_sha256,'acde14ad365c8d0f12dd0816c33c5d690e7d3780afa28bbba464c7d371b35d1f');
-  assert.equal(release.windows_fresh_install.manifest_sha256,'ee461fc08bb4331bf2715a03d1ea45e2a495e98ba08bd503ffe2934366952409');
+  assert.equal(release.windows_fresh_install.archive_sha256,'9a6d20825ad9f66dd29859fa683519400f8756bc6c572f66a8c82962060433ee');
+  assert.equal(release.windows_fresh_install.manifest_sha256,'1782ffd5ce91d5813d3e7ba93cdeae0877bf60751c6cd7f548517d8886077c82');
   assert.equal(release.windows_fresh_install.prerequisite_installed_by_launcher,false);
   for(const field of ['fresh_install','portrait_encoded_export','landscape_encoded_export','full_decode',
     'process_restart_acceptance','saved_project_and_export_bytes','model_cache_audit']) assert.equal(release.windows_fresh_install[field],'passed');

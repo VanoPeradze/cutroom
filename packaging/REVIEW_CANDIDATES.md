@@ -201,12 +201,17 @@ separate evidence. Keep model downloads pending when they are not authorized.
 
 The browser-container maintenance candidate is anchored by
 [203d164.json](review-candidates/203d164.json), source
-`203d164d04ef9d610cc9aedf55fe640b99f19f85`. It rebuilds from the unchanged exact
-Git source archive and derives matching Windows/combined/Mac projections with a
-separate private Windows baseline. The prior equivalent-source Windows archive
-passed 365 extracted feature cases;
-the canonical-byte rebuild requires fresh extracted and native qualification.
-The manual review job now selects exactly this record and its three pinned ZIPs.
-Native installation checks remain pending until their exact-archive reports exist.
-No model/transcription run is enabled, public download pins remain unchanged, and
-no Hebrew understanding, active-speaker or experimental AI feature is included.
+`203d164d04ef9d610cc9aedf55fe640b99f19f85`. The unchanged Git archive was used
+for a canonical-byte rebuild: one test file previously differed only in LF/CRLF.
+Strict full source, payload, defaults and privacy qualification then passed.
+The exact Windows archive passed 365 extracted feature cases without skips.
+Native run [39723914568](https://github.com/VanoPeradze/cutroom/actions/runs/39723914568)
+passed on ARM and Intel at orchestration head
+`39d319c832a079dd55600df233bfa77e98bdc518`: each ran 69 offline checks, 348
+extracted feature cases (all 50 required, zero skips), fresh installation,
+restart persistence and missing-pip recovery. The exact Windows ZIP also passed
+fresh Windows 10 Sandbox setup with WinGet/VC++ prerequisites, two encoded
+exports and application-process restart preserving saved state/output hashes.
+No model or transcription was requested. Physical-device, human listening and
+Hebrew semantic/ASR acceptance remain pending. The record itself stays review
+only; public beta promotion is represented separately by release metadata.
