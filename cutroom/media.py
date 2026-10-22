@@ -152,6 +152,9 @@ def probe_media(path: Path, settings: Settings) -> dict[str, Any]:
     except (TypeError, ValueError):
         audio_duration = duration if audio else None
     browser_ready = video_codec in BROWSER_VIDEO_CODECS and (not audio_codec or audio_codec in BROWSER_AUDIO_CODECS)
+    suffix = path.suffix.lower()
+    container_ready = (suffix in {".mp4", ".mov", ".m4v"} and format_name == "mov,mp4,m4a,3gp,3g2,mj2"
+                       or suffix == ".webm" and format_name == "matroska,webm")
     return {
         "duration": round(duration, 3),
         "video_duration": round(video_duration, 3),
@@ -165,7 +168,7 @@ def probe_media(path: Path, settings: Settings) -> dict[str, Any]:
         "has_audio": bool(audio),
         "format": format_name,
         "size": path.stat().st_size,
-        "browser_ready": browser_ready and path.suffix.lower() in {".mp4", ".webm", ".mov", ".m4v"},
+        "browser_ready": browser_ready and container_ready,
         "mime": mimetypes.guess_type(path.name)[0] or "application/octet-stream",
     }
 

@@ -37,11 +37,11 @@ assert.equal(JSON.parse(readFileSync(resolve(root,'package.json'),'utf8')).versi
 assert.ok(html.includes('WINDOWS + MAC · 1.2 BETA'), 'The download must display both platforms and 1.2 Beta');
 assertPublishable(release);
 assert.equal(release.release_state, 'beta');
-assert.equal(release.source_commit, '0c28168999f3500092d1954b9a17419400648684');
-assert.equal(release.filename, 'CUTROOM-1.2-Beta-20261019-hotfix1.zip');
-assert.equal(release.platforms.windows.filename, 'CUTROOM-1.2-Beta-Windows-20261019-hotfix1.zip');
-assert.equal(release.platforms.mac.filename, 'CUTROOM-1.2-Beta-Mac-20261019-hotfix1.zip');
-assert.equal(release.source_archive.filename, 'SOURCE-20261019-hotfix1.zip');
+assert.equal(release.source_commit, '203d164d04ef9d610cc9aedf55fe640b99f19f85');
+assert.equal(release.filename, 'CUTROOM-1.2-Beta-20261022-maintenance1.zip');
+assert.equal(release.platforms.windows.filename, 'CUTROOM-1.2-Beta-Windows-20261022-maintenance1.zip');
+assert.equal(release.platforms.mac.filename, 'CUTROOM-1.2-Beta-Mac-20261022-maintenance1.zip');
+assert.equal(release.source_archive.filename, 'SOURCE-203d164.zip');
 assert.equal(downloadEntries(release).length,4,'Four distinct public archives must be prepared');
 assert.notEqual(release.platforms.mac.filename, release.filename);
 assert.ok(!release.platforms.mac.folder,'The standalone Mac launcher must not require a mac subfolder');
@@ -53,18 +53,19 @@ assert.ok(html.includes('/downloads/'+zip+'.sha256"'), 'The checksum link must m
 assert.ok(!html.includes('5.6.1'), 'Stale application version on the public page');
 assert.match(release.sha256, /^[a-f0-9]{64}$/);
 assert.ok(Number.isSafeInteger(release.bytes) && release.bytes > 0);
-assert.equal(release.github_release.tag, 'v1.2-beta-20261019-hotfix1');
-assert.equal(release.github_release.previous_public_tag, 'v1.2-beta-20261019');
+assert.equal(release.github_release.tag, 'v1.2-beta-20261022-maintenance1');
+assert.equal(release.github_release.previous_public_tag, 'v1.2-beta-20261019-hotfix1');
 assert.equal(release.github_release.tag_commit, release.source_commit);
 const releaseBase = `https://github.com/VanoPeradze/cutroom/releases/download/${release.github_release.tag}/`;
 const retained = JSON.parse(readFileSync(resolve(root,'retained-downloads.json'),'utf8'));
 const retainedTags = new Map([
+  ...['CUTROOM-1.2-Beta-20261019-hotfix1.zip','CUTROOM-1.2-Beta-Windows-20261019-hotfix1.zip','CUTROOM-1.2-Beta-Mac-20261019-hotfix1.zip','SOURCE-20261019-hotfix1.zip'].map(filename=>[filename,'v1.2-beta-20261019-hotfix1']),
   ...['CUTROOM-1.1-Beta.zip','CUTROOM-1.1-Beta-Windows.zip','CUTROOM-1.1-Beta-Mac.zip'].map(filename=>[filename,'v1.1-beta-20261011']),
   ...['CUTROOM-1.2-Beta.zip','CUTROOM-1.2-Beta-Windows.zip','CUTROOM-1.2-Beta-Mac.zip'].map(filename=>[filename,'v1.2-beta-20261015']),
   ...['CUTROOM-1.2-Beta-Windows-review-fe35453.zip','CUTROOM-1.2-Beta-combined-review-fe35453.zip','SOURCE-fe35453.zip'].map(filename=>[filename,'v1.2-beta-20261018']),
   ...['CUTROOM-1.2-Beta-20261019.zip','CUTROOM-1.2-Beta-Windows-20261019.zip','CUTROOM-1.2-Beta-Mac-20261019.zip','SOURCE-20261019.zip'].map(filename=>[filename,'v1.2-beta-20261019']),
 ]);
-assert.deepEqual(retained.map(entry=>entry.filename).sort(),[...retainedTags.keys()].sort(),'Preserve all 13 historical 1.1, October 15, October 18 and October 19 mirrors');
+assert.deepEqual(retained.map(entry=>entry.filename).sort(),[...retainedTags.keys()].sort(),'Preserve all 17 historical 1.1, October 15, October 18 and both October 19 release mirrors');
 uniqueDownloadEntries([...downloadEntries(release), ...retained]);
 for (const entry of downloadEntries(release)) {
   assert.equal(entry.url, releaseBase + entry.filename);
