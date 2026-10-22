@@ -198,3 +198,15 @@ Native Intel/Apple Silicon execution of the exact candidate, required setup and
 restart checks, `tiny.en` transcription, clean-machine Windows installation,
 Finder/Gatekeeper/Safari checks, and human editing/listening acceptance remain
 separate evidence. Keep model downloads pending when they are not authorized.
+
+The browser-container maintenance candidate is anchored by
+[203d164.json](review-candidates/203d164.json), source
+`203d164d04ef9d610cc9aedf55fe640b99f19f85`. It rebuilds from the unchanged exact
+Git source archive and derives matching Windows/combined/Mac projections with a
+separate private Windows baseline. The prior equivalent-source Windows archive
+passed 365 extracted feature cases;
+the canonical-byte rebuild requires fresh extracted and native qualification.
+The manual review job now selects exactly this record and its three pinned ZIPs.
+Native installation checks remain pending until their exact-archive reports exist.
+No model/transcription run is enabled, public download pins remain unchanged, and
+no Hebrew understanding, active-speaker or experimental AI feature is included.
