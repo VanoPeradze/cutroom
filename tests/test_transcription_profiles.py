@@ -698,6 +698,8 @@ def test_cancelling_isolated_transcription_terminates_native_worker(monkeypatch,
             self.terminated = True
             self.returncode = -9
 
+    from cutroom import owned_process
+    monkeypatch.setattr(owned_process, "OwnedProcessTree", lambda: SimpleNamespace(attach=lambda p: None, close=lambda: None))
     worker = HangingWorker()
     monkeypatch.setattr(transcription.subprocess, "Popen", lambda *_args, **_kwargs: worker)
     settings = SimpleNamespace(

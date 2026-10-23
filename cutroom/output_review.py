@@ -6,6 +6,7 @@ advice for the person: they never block, change or re-render the export.
 """
 from __future__ import annotations
 
+import math
 import re
 import subprocess
 import time
@@ -86,6 +87,30 @@ def _gap_check(gaps: list[tuple[float, float]]) -> dict[str, Any]:
     shown = ", ".join(f"{start:.1f}–{end:.1f} s" for start, end in long_gaps[:4])
     return _check("timeline_gaps", "warn", f"The timeline is empty at {shown}, so the video is black there. Close the gap or add footage.",
                   ranges=[{"start": start, "end": end} for start, end in long_gaps[:20]])
+
+
+def remaining_picture_gaps(gaps: list[tuple[float, float]], picture_ranges: list[tuple[float, float]]) -> list[tuple[float, float]]:
+    """Subtract scheduled library picture from otherwise empty source time.
+
+    This is temporal coverage, not proof of opacity or nonblack pixels. The
+    independent decoded-black check still inspects the finished composition.
+    Audio clips never contribute picture coverage.
+    """
+    remaining = list(gaps)
+    for left, right in picture_ranges:
+        if not math.isfinite(left) or not math.isfinite(right) or right <= left:
+            continue
+        next_gaps = []
+        for start, end in remaining:
+            if right <= start or left >= end:
+                next_gaps.append((start, end))
+            else:
+                if start < left:
+                    next_gaps.append((start, min(end, left)))
+                if right < end:
+                    next_gaps.append((max(start, right), end))
+        remaining = next_gaps
+    return remaining
 
 
 def _area(position: str | None, template: str | None = None) -> str:

@@ -10,6 +10,7 @@ from .source_tracks import (
     EPSILON, MAX_SEQUENCE_SECONDS, SourceTrackError, _duration, _finite, _new_id,
     _number, _validated, _shift_video_start, has_sequence, minimum_clip_seconds,
     source_track_clips, timeline_duration,
+    validate_sequence_version,
 )
 
 SEQUENCE_ACTION_FIELDS = {
@@ -27,6 +28,7 @@ SEQUENCE_ACTION_FIELDS = {
     "sequence_insert_linked": {"slot", "start", "source_start", "source_end"},
     "sequence_layout": {"start", "end", "layout"},
     "sequence_crop": {"slot", "start", "end", "x", "y", "zoom"},
+    "sequence_podcast_frame": {"slot", "start", "end", "focus", "panel_split", "source_generation", "confirmed_stacked_clean"},
     "sequence_speed": {"slot", "clip_id", "speed"},
     "sequence_source_restore": {"slot", "source_start", "source_end", "scope"},
     "sequence_source_remove": {"slot", "source_start", "source_end", "scope"},
@@ -68,6 +70,7 @@ def materialize_sequence(project: dict[str, Any]) -> tuple[dict[str, Any], float
     expected project revision protects them if the underlying draft changes.
     Physical source metadata, original draft ranges, and transcript stay intact.
     """
+    validate_sequence_version(project)
     if not isinstance(project.get("draft"), dict):
         raise SourceTrackError("Generate a draft before editing clips")
     value = copy.deepcopy(project)
@@ -544,6 +547,12 @@ def prepare_sequence_edit(project: dict[str, Any], payload: dict[str, Any]) -> d
         return manual
     value, duration = materialize_sequence(project)
     manual = value["manual"]
+    if action == "sequence_podcast_frame":
+        from .podcast_framing import podcast_crop
+        start, end = _validate_range(value, payload)
+        crop = podcast_crop(value, {**payload, "start": start, "end": end})
+        payload = {"action": "sequence_crop", "slot": "A", "start": start, "end": end, **crop}
+        action = "sequence_crop"
     initial_tracks = copy.deepcopy(manual["source_tracks"])
     if action == "sequence_trim_edge":
         return _trim_sequence_edge(value, payload)

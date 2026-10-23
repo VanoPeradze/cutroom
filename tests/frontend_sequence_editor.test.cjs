@@ -13,6 +13,7 @@ function app() {
     const nested = new Map();
     return {id,value:'',dataset:{},hidden:false,attrs:{},listeners:{},style:{setProperty(){}},
       classList:{add(){},remove(){},toggle(){}},
+      replaceChildren(...children){this.children=children;},
       setAttribute(key,value){this.attrs[key]=value;},removeAttribute(key){delete this.attrs[key];},
       addEventListener(key,fn){this.listeners[key]=fn;},
       querySelector(key){if(!nested.has(key))nested.set(key,element(key));return nested.get(key);},
@@ -57,6 +58,33 @@ function app() {
   `);
   return {run,nodes,context};
 }
+
+test('an appended project video keeps transport available after primary clips are removed',()=>{
+  const {run}=app();
+  run(`state.project.editor_sequence.source_tracks={A:[],B:[]};
+    state.mediaStudio={videoAt:()=>null};`);
+  assert.equal(run('hasTimelineFootage()'),false);
+  run(`state.mediaStudio.videoAt=()=>({id:'third-video',start:0,end:6});`);
+  assert.equal(run('hasTimelineFootage()'),true);
+  run(`state.mediaStudio.videoAt=()=>null;`);
+  assert.equal(run('hasTimelineFootage()'),false);
+});
+
+test('visible appended footage is labeled VIDEO while an uncovered edit interval remains GAP',()=>{
+  const {run,nodes}=app();
+  run(`state.project.editor_sequence.source_tracks={A:[],B:[]};
+    state.preview.mode='edit';
+    state.mediaStudio={videoAt:time=>time>=3&&time<6?{id:'third-video'}:null};
+    refreshEmbeddedCropControls=applyPreviewPipGeometry=applyCompositionCrop=syncIndependentMedia=updateMediaPreview=()=>{};
+    renderSourceBCoverage=()=>{};`);
+  run('syncSecondaryPreview(4)');
+  assert.equal(run('elements.cameraBadge.textContent'),'VIDEO');
+  assert.match(run('elements.cameraBadge.title'),/project video/i);
+  assert.equal(run('elements.previewA.hidden'),true);
+  assert.equal(run('elements.previewB.hidden'),true);
+  run('syncSecondaryPreview(2)');
+  assert.equal(run('elements.cameraBadge.textContent'),'GAP');
+});
 
 test('per-cut focus follows playback time and source instead of global framing', () => {
   const {run}=app();

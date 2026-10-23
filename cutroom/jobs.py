@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 import threading
 import time
 import traceback
@@ -17,6 +18,22 @@ from .utils import atomic_write_json, new_id, now_iso
 
 ACTIVE_STATUSES = frozenset({"queued", "running"})
 TERMINAL_STATUSES = frozenset({"completed", "failed", "cancelled", "interrupted"})
+STORY_FAILURE_OUTCOMES = frozenset({
+    "technical_error", "invalid_model_output", "constraint_conflict", "editorial_no_fit",
+})
+
+
+def _public_failure(value: Any) -> dict[str, Any] | None:
+    """Publish a bounded failure classification, never arbitrary diagnostics."""
+    if not isinstance(value, dict) or not isinstance(value.get("outcome"), str) or value["outcome"] not in STORY_FAILURE_OUTCOMES:
+        return None
+    if value.get("applied_to_timeline") is True:
+        return None
+    result: dict[str, Any] = {"outcome": value["outcome"], "applied_to_timeline": False}
+    reason = value.get("reason")
+    if isinstance(reason, str) and re.fullmatch(r"[a-z][a-z0-9_]{0,99}", reason):
+        result["reason"] = reason
+    return result
 
 
 class JobCancelled(RuntimeError):
@@ -48,9 +65,10 @@ class Job:
     started_at: str | None = None
     finished_at: str | None = None
     cancel_event: threading.Event = field(default_factory=threading.Event, repr=False)
+    failure: dict[str, Any] | None = None
 
     def public(self) -> dict[str, Any]:
-        return {
+        public = {
             "id": self.id,
             "kind": self.kind,
             "project_id": self.project_id,
@@ -70,11 +88,15 @@ class Job:
             # but let clients acknowledge a cancellation request immediately.
             "cancel_requested": self.cancel_event.is_set() or self.status == "cancelled",
         }
+        failure = _public_failure(self.failure) if self.status == "failed" else None
+        if failure is not None:
+            public["failure"] = failure
+        return public
 
     def persistence_record(self) -> dict[str, Any]:
         """Return the deliberately small, non-sensitive restart record."""
 
-        return {
+        record = {
             "id": self.id,
             "kind": self.kind,
             "project_id": self.project_id,
@@ -88,6 +110,10 @@ class Job:
             "started_at": self.started_at,
             "finished_at": self.finished_at,
         }
+        failure = _public_failure(self.failure) if self.status == "failed" else None
+        if failure is not None:
+            record["failure"] = failure
+        return record
 
     @classmethod
     def from_persistence_record(cls, record: dict[str, Any]) -> Job:
@@ -117,6 +143,7 @@ class Job:
             dedupe_key=str(record.get("dedupe_key") or "default"),
             started_at=str(record["started_at"]) if record.get("started_at") else None,
             finished_at=str(record["finished_at"]) if record.get("finished_at") else None,
+            failure=_public_failure(record.get("failure")),
         )
 
 
@@ -204,6 +231,7 @@ class JobContext:
 
 class JobManager:
     BACKGROUND_KINDS = {"prepare_source", "prepare_asset", "model_install"}
+    HEAVY_KINDS = frozenset({"director", "refine", "render", "caption_alternative", "prepare_source", "prepare_asset"})
 
     def __init__(
         self,
@@ -211,6 +239,7 @@ class JobManager:
         background_workers: int = 2,
         *,
         max_pending: int = 64,
+        heavy_workers: int | None = None,
         per_key_limit: int = 1,
         retention_seconds: float = 24 * 60 * 60,
         max_records: int = 512,
@@ -222,6 +251,7 @@ class JobManager:
             max_workers=max(1, int(background_workers)),
             thread_name_prefix="cutroom-background",
         )
+        self._heavy_slots = threading.BoundedSemaphore(max(1, int(heavy_workers))) if heavy_workers is not None else None
         self.max_pending = max(1, int(max_pending))
         self.per_key_limit = max(1, int(per_key_limit))
         self.retention_seconds = max(0.0, float(retention_seconds))
@@ -414,6 +444,23 @@ class JobManager:
             return job
 
     def _run(self, job: Job, function: Callable[..., Any], args: tuple[Any, ...], kwargs: dict[str, Any]) -> None:
+        slots = self._heavy_slots if job.kind in self.HEAVY_KINDS else None
+        acquired = False
+        try:
+            if slots is not None:
+                while not acquired:
+                    with self.lock:
+                        if job.cancel_event.is_set():
+                            self._mark_terminal_locked(job, "cancelled", "Cancelled before processing")
+                            return
+                        job.message = "Waiting for another media job to finish. You can cancel this waiting job."
+                    acquired = slots.acquire(timeout=.1)
+            self._run_admitted(job, function, args, kwargs)
+        finally:
+            if acquired:
+                slots.release()
+
+    def _run_admitted(self, job: Job, function: Callable[..., Any], args: tuple[Any, ...], kwargs: dict[str, Any]) -> None:
         context = JobContext(job, self.lock, self._job_changed_locked)
         with self.lock:
             if job.cancel_event.is_set():
@@ -441,6 +488,16 @@ class JobManager:
             with self.lock:
                 job.error = f"{type(exc).__name__}: {exc}"
                 job.result = {"traceback": traceback.format_exc(limit=8)}
+                # The Story planner classifies expected editorial/constraint
+                # rejection separately from malformed output and technical
+                # failures. Keep the rich context internal; only this small
+                # allowlisted projection belongs in polling/restart records.
+                diagnostic = getattr(exc, "diagnostic", None)
+                job.failure = (_public_failure(diagnostic)
+                               if isinstance(diagnostic, dict) and diagnostic.get("applied_to_timeline") is not True
+                               and not context.committed else None)
+                if isinstance(diagnostic, dict):
+                    job.result["diagnostic"] = diagnostic
                 self._mark_terminal_locked(job, "failed", "Failed")
 
     def get(self, job_id: str) -> Job | None:

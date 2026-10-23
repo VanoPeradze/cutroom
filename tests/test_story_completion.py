@@ -24,8 +24,9 @@ def test_short_beats_split_only_after_complete_source_sentences():
     short = intelligence.build_story_beats(segments, "en", target_seconds=20)
 
     assert len(default) == 1
-    assert [row["segment_ids"] for row in short] == [["s1", "s2"], ["s3", "s4"]]
-    assert [(row["start"], row["end"]) for row in short] == [(0, 15.3), (15.5, 24.6)]
+    # Every complete ASR boundary is now selectable, not just a half-target group.
+    assert [row["segment_ids"] for row in short] == [["s1", "s2"], ["s3"], ["s4"]]
+    assert [(row["start"], row["end"]) for row in short] == [(0, 15.3), (15.5, 17.3), (18.2, 24.6)]
     assert segments == original
 
 
@@ -45,7 +46,7 @@ def test_unbounded_unpunctuated_short_input_fails_before_any_model_call():
     assert len(intelligence.build_story_beats(segments, "en")) == 4
 
 
-@pytest.mark.parametrize("goal,expected_count", [("short", 2), ("podcast", 1)])
+@pytest.mark.parametrize("goal,expected_count", [("short", 4), ("podcast", 1)])
 def test_only_short_planning_uses_target_aware_sentence_choices(monkeypatch, goal, expected_count):
     segments = [{"id": f"s{i}", "start": i * 6, "end": i * 6 + 5,
                  "text": "A complete synthetic sentence."} for i in range(4)]
@@ -67,7 +68,8 @@ def test_coarse_beat_cache_identity_cannot_alias_target_aware_beat_ids(monkeypat
     assert current != previous
     coarse = intelligence.build_story_beats(segments, "en")
     short = intelligence.build_story_beats(segments, "en", target_seconds=20)
-    assert coarse[0]["id"] == short[0]["id"]
+    # Geometry-changing projections must not retain the coarse unit's identity.
+    assert coarse[0]["id"] != short[0]["id"]
     assert coarse[0]["end"] != short[0]["end"]
 
 
@@ -103,6 +105,8 @@ def test_budget_fit_retains_critic_context_and_reports_infeasible_whole_passages
 def test_critic_sees_actual_passage_durations_before_requesting_context(monkeypatch):
     selection, beats = context_selection()
     selection.pop("critic")
+    segments = [{"id": row["segment_ids"][0], **{key: row[key] for key in ("start", "end", "text")}}
+                for row in beats]
     captured = {}
 
     def reply(_settings, payload, *_args):
@@ -110,7 +114,8 @@ def test_critic_sees_actual_passage_durations_before_requesting_context(monkeypa
         return {"verdict": "pass", "add_beat_ids": [], "remove_beat_ids": [], "issues": [], "summary": ""}
 
     monkeypatch.setattr(intelligence, "_call_ollama_story_pass", reply)
-    intelligence._critic_story_selection(Settings(), selection, beats, {}, {}, {"target_duration": 20}, "fixture-model")
+    intelligence._critic_story_selection(Settings(), selection, beats, {}, {}, {"target_duration": 20}, "fixture-model",
+                                        segments=segments)
     assert [(row["id"], row["end"], row["duration"]) for row in captured["selected"]] == [
         ("context", 25, 25), ("result", 38, 8),
     ]

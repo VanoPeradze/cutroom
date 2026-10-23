@@ -132,11 +132,15 @@ function app() {
     querySelector(selector) { return this.querySelectorAll(selector)[0] || null; },
     createElement: node, addEventListener() {},
   };
-  const context = vm.createContext({ document, console, dictionaries: { en: {} }, setTimeout, clearTimeout, window: {addEventListener() {}}, requestAnimationFrame: (callback) => callback() });
+  const context = vm.createContext({ document, console, dictionaries: { en: {} }, setTimeout, clearTimeout, window: {addEventListener() {}}, requestAnimationFrame: (callback) => callback(),
+    // These workflow tests simulate explicit request-review confirmation. The
+    // actual review dialog/check/cancel contract has its own dedicated suite.
+    reviewEditingRequest: async ({settings}) => settings });
   const run = (code) => vm.runInContext(code, context);
   run(fs.readFileSync(path.join(__dirname, "../web/keyboard.js"), "utf8").replace(/^export /gm, ""));
   run(fs.readFileSync(path.join(__dirname, "../web/source-tracks.js"), "utf8").replace(/^export /gm, ""));
   run(fs.readFileSync(path.join(__dirname, "../web/timeline.js"), "utf8").replace(/^export /gm, ""));
+  run(fs.readFileSync(path.join(__dirname, "../web/caption-alternatives.js"), "utf8").replace(/^export /gm, ""));
   run(source);
   run(`cacheElements();
     state.project = { id: "p", sources: { A: { duration: 100 } }, settings: { goal: "short" }, draft: { goal: "short", keep_ranges: [{ start: 0, end: 10 }] } };
@@ -510,7 +514,10 @@ test("generation reads the current brief after saving and preflights that same g
   const { context, run } = settingsApp();
   run(`
     renderReadiness = renderReelCandidates = pauseAllMedia = showAnalysis = () => {};
-    flushProjectSaves = () => new Promise((resolve) => { globalThis.finishSave = resolve; });
+    // The real queue can be flushed again after review; only its first pending
+    // save is deferred. Later flushes reuse that completed operation.
+    const pendingSave = new Promise((resolve) => { globalThis.finishSave = resolve; });
+    flushProjectSaves = () => pendingSave;
     ensureStoryAIReady = async (goal) => { globalThis.preparedGoal = goal; };
     api = async (_url, options) => { globalThis.submittedBrief = JSON.parse(options.body); return {job:{id:"new"}}; };
     pollJob = async () => {};

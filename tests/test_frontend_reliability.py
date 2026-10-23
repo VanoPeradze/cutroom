@@ -321,10 +321,14 @@ def test_director_failure_stays_on_an_actionable_error_screen():
     assert "rememberProjectRevision(state.project)" in reconcile
     assert "if (state.project?.draft)" in reconcile
     assert "hydrateProject()" in reconcile
-    assert "showAnalysisError(message)" in reconcile
+    # Preserve structured outcome/instruction evidence for the error view.
+    assert "showAnalysisError(error)" in reconcile
 
     error_view = function_block(APP, "showAnalysisError", "showResult")
-    assert "showAnalysis()" in error_view
+    # Re-entering the loader would reset the last observed stage/progress.
+    assert "showAnalysis()" not in error_view
+    assert "setStep(2)" in error_view
+    assert "elements.analysisPanel.hidden = false" in error_view
     assert 'elements.analysisPanel.classList.add("failed")' in error_view
     assert "elements.analysisError.hidden = false" in error_view
     assert "elements.cancelJobButton.hidden = true" in error_view

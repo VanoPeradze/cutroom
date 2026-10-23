@@ -157,7 +157,7 @@
               <div class="source-meta"><strong></strong><small></small></div>
               <button class="icon-button remove-source" type="button" aria-label="Remove">×</button>
             </div>
-            <div class="source-upload" hidden role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span></span><b>0%</b><button id="cancelUploadA" class="source-upload-cancel" type="button" data-i18n="stopProcess">Stop process</button></div>
+            <div class="source-upload" hidden role="progressbar" aria-label="Source A import" aria-valuemin="0" aria-valuemax="100"><span></span><b>Checking storage</b><button id="cancelUploadA" class="source-upload-cancel" type="button" data-i18n="stopProcess">Stop process</button></div>
           </article>
 
           <div class="source-link" aria-hidden="true"><span></span><b data-i18n="autoSync">Automatic sync</b><span></span></div>
@@ -176,10 +176,11 @@
               <div class="source-meta"><strong></strong><small></small></div>
               <button class="icon-button remove-source" type="button" aria-label="Remove">×</button>
             </div>
-            <div class="source-upload" hidden role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span></span><b>0%</b><button id="cancelUploadB" class="source-upload-cancel" type="button" data-i18n="stopProcess">Stop process</button></div>
+            <div class="source-upload" hidden role="progressbar" aria-label="Source B import" aria-valuemin="0" aria-valuemax="100"><span></span><b>Checking storage</b><button id="cancelUploadB" class="source-upload-cancel" type="button" data-i18n="stopProcess">Stop process</button></div>
           </article>
         </div>
 
+        <p id="uploadStorageInfo" class="upload-storage-info" role="status" dir="auto" hidden></p>
         <div class="setup-source-mixer-dock" id="setupSourceMixerDock" hidden></div>
         </div><div class="preparation-brief">
 
@@ -229,7 +230,8 @@
 
           <label class="brief-group instruction-group">
             <span data-i18n="directionNote">Director instruction <small>Optional</small></span>
-            <textarea id="directorInstruction" dir="auto" rows="3" data-i18n-placeholder="instructionPlaceholder" placeholder="Example: keep the pricing explanation and open with the result."></textarea>
+            <textarea id="directorInstruction" dir="auto" rows="3" maxlength="8000" aria-describedby="directorInstructionCounter" placeholder="Example: keep the pricing explanation and the qualification that follows it."></textarea>
+            <small id="directorInstructionCounter" class="instruction-counter" dir="auto" aria-live="polite" aria-atomic="true">0 / 8,000 characters</small>
           </label>
 
           <label class="brief-group burn-caption-choice">
@@ -310,6 +312,7 @@
       </section>
 
       <section class="result-panel" id="resultPanel" hidden>
+        <p id="directorOutcomeNotice" class="ai-draft-notice" role="status" dir="auto" hidden></p>
         <div id="durationReview" class="ai-draft-notice duration-review" role="status" hidden><p></p><button type="button" class="button ghost compact" id="reviewDurationSettings" data-i18n="reviewDurationSettings">Review style &amp; length</button></div>
         <div id="aiDraftNotice" class="ai-draft-notice" role="status" hidden><p data-i18n="aiDraftKept">New draft ready; your manual timeline was kept.</p><button id="applyAiDraftButton" type="button" class="button ghost compact" data-i18n="aiDraftApply">Apply new AI draft</button></div>
         <div id="streamerLayoutTip" class="ai-draft-notice streamer-layout-tip" role="status" hidden><p>Your facecam was found in this recording. The streamer layout puts your camera on top and the game below, the usual look for gaming Shorts.</p><span class="streamer-layout-actions"><button type="button" class="button primary compact" id="streamerLayoutReview">Preview streamer layout</button><button type="button" class="button ghost compact" id="streamerLayoutDismiss">Not now</button></span></div>
@@ -330,7 +333,7 @@
               <div class="preview-pane" id="previewPaneB" hidden><video id="previewB" playsinline preload="metadata" hidden></video></div>
               <div class="safe-lines" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
               <div class="preview-badge" id="cameraBadge">A</div>
-              <div class="preview-caption" id="previewCaption" hidden></div>
+              <div class="preview-caption" id="previewCaption" dir="auto" hidden></div>
               <button class="preview-play" id="previewPlay" aria-label="Play"><span>▶</span></button>
             </div>
             <div class="preview-controls">
@@ -344,6 +347,11 @@
           </div>
 
           <aside class="verdict-column" id="verdictColumn">
+              <details id="instructionResults" class="instruction-results" hidden>
+                <summary id="instructionResultsTitle">Director instruction check</summary>
+                <p id="instructionResultsSummary"></p>
+                <ul id="instructionResultsList"></ul>
+              </details>
             <div class="verdict-block draft-warning" id="draftWarning" role="status" hidden>
               <p id="draftWarningText"></p>
               <button class="button ghost compact" id="reviewSpeechSettings" type="button" data-i18n="reviewSpeechSettings">Review speech settings</button>
@@ -453,12 +461,22 @@
             <details class="framing-layout framing-disclosure layout-disclosure" open>
               <summary>Clip framing</summary>
               <p id="cropScopeStatus" role="status">Select a clip to frame it independently.</p>
+              <section id="podcastFraming" class="podcast-framing" aria-labelledby="podcastFramingTitle">
+                <h4 id="podcastFramingTitle">Manual podcast framing</h4>
+                <p id="podcastFramingHelp">Choose a participant for the selected range. This does not detect who is speaking.</p>
+                <label><span id="podcastPanelSplitLabel">Upper panel ends at</span><input id="podcastPanelSplit" type="range" min="34" max="66" step="0.1" value="50"><output id="podcastPanelSplitValue">50.0%</output></label>
+                <label><input id="podcastStackedClean" type="checkbox"><span id="podcastStackedCleanLabel">I confirm the stacked panels, marked divider and absence of burned-in captions.</span></label>
+                <div role="group" aria-label="Manual participant focus"><button type="button" data-podcast-focus="both">Both</button><button type="button" data-podcast-focus="top">Top participant</button><button type="button" data-podcast-focus="bottom">Bottom participant</button></div>
+                <p id="podcastFramingStatus" role="status">Select a range in the edited timeline.</p>
+                <p id="podcastFramingCuesHelp"></p>
+                <div id="podcastFramingCues" class="podcast-framing-cues" role="group" aria-label="Saved manual framing ranges" hidden></div>
+              </section>
               <details class="framing-source-preview"><summary>Original source preview</summary><div class="crop-preview" id="cropPreview"><video id="cropVideo" muted playsinline></video><div class="crop-thirds"><i></i><i></i><i></i><i></i></div></div></details>
               <div class="framing-controls">
                 <label><span>Frame source</span><select id="cropSourceSelect"><option value="A">A</option><option value="B">B</option></select></label>
                 <label><span data-i18n="horizontalFocus">Horizontal focus</span><input id="cropX" type="range" min="0" max="100" value="50"></label>
                 <label><span data-i18n="verticalFocus">Vertical focus</span><input id="cropY" type="range" min="0" max="100" value="50"></label>
-                <label><span data-i18n="zoom">Zoom</span><input id="cropZoom" type="range" min="100" max="220" value="100"></label>
+                <label><span data-i18n="zoom">Zoom</span><input id="cropZoom" type="range" min="100" max="300" value="100"></label>
                 <button class="button ghost" id="resetCrop" data-i18n="resetFraming">Reset framing</button>
                 <details class="layout-default-disclosure"><summary>Next Director build default</summary><label><span>Default layout <small class="rebuild-chip" data-rebuild-chip>Draft rebuild</small></span><select id="layoutSelect"><option value="auto" data-i18n="auto">Automatic</option><option value="A">A only</option><option value="B">B only</option><option value="stacked" data-i18n="stacked">Stacked</option><option value="side_by_side" data-i18n="sideBySide">Side by side</option><option value="pip">Picture in Picture</option><option value="embedded_stack" data-i18n="embeddedCamera">Screen + embedded camera</option></select></label></details>
                 <p class="embedded-crop-help" id="embeddedCropHelp" hidden>Camera + screen layout is active here. Use the camera area and Main screen focus controls above; changes save automatically. General source crop controls do not affect this composition.</p>
@@ -551,6 +569,17 @@
                   <button hidden class="button ghost" id="applyLayoutAll" type="button">Apply to entire edit</button>
                   <span id="sourceMixerRange">Select a Timeline range to change only part of the video.</span>
                 </div>
+                <form id="creatorLayoutForm" class="creator-layout-form">
+                  <h4>Gaming &amp; YouTube framing</h4>
+                  <p>Choose Screen / Camera sources under Advanced below. These controls affect the whole edit; choose Picture in picture above to show the inset.</p>
+                  <label>Gameplay / screen framing<select id="creatorScreenFit"><option value="auto">Keep existing framing</option><option value="contain">Fit entire gameplay (keep edges / HUD)</option><option value="cover">Fill output (crop edges)</option></select></label>
+                  <label>Inset width (% of output)<input id="creatorPipScale" type="number" min="15" max="55" step="1" value="34"></label>
+                  <label>Inset horizontal position (%)<input id="creatorPipX" type="number" min="0" max="100" step="1" value="100"></label>
+                  <label>Inset vertical position (%)<input id="creatorPipY" type="number" min="0" max="100" step="1" value="100"></label>
+                  <small>0% = left / top; 100% = right / bottom. Inset keeps its source aspect ratio and is capped to fit. It can still cover the HUD; choose its placement.</small>
+                  <button class="button ghost compact" type="submit">Apply framing settings · whole edit</button>
+                  <p id="creatorLayoutStatus" role="status"></p>
+                </form>
                 <details class="source-setup-disclosure" id="sourceSetupDisclosure">
                   <summary>Advanced <small>Sources, fit &amp; sync</small></summary>
                   <button class="creator-frame-preset" id="creatorFramePreset" type="button"><i aria-hidden="true"><span>CAM</span><span>SCREEN</span></i><span><b>Restore 30/70 stack</b><small>Camera on top · screen below · fill without stretching. Resets order and fit for the whole edit.</small></span></button>
@@ -625,6 +654,7 @@
               <div class="caption-item-actions"><button type="button" id="captionItemHide">Hide caption</button><button type="button" id="captionItemReset">Reset caption</button><button type="submit" class="button primary compact" id="captionItemSave">Save caption</button></div>
               <div class="caption-item-footer"><span id="captionItemStatus" role="status"></span><button type="button" id="captionItemPrevious">&larr; Previous</button><button type="button" id="captionItemNext">Next &rarr;</button></div>
             </form>
+            <section id="captionAlternatives" class="caption-versions" aria-label="Saved caption versions" hidden></section>
             <section id="textStudio" class="text-studio" aria-label="Custom text and captions"></section>
             <details class="caption-settings-disclosure inspector-section"><summary>AI subtitle style &amp; speech language</summary>
             <section class="caption-control-panel" aria-labelledby="captionControlTitle">
@@ -810,6 +840,7 @@
       <p class="eyebrow" data-i18n="export">Export</p>
       <h2 id="exportTitle" data-i18n="readyToExport">Ready to export?</h2>
       <p id="exportDescription" data-i18n="exportHelp">Export uses the original full-quality files, not a proxy.</p>
+      <p id="exportStorageInfo" class="export-storage-info" role="status" dir="auto" hidden></p>
       <ul id="exportReview" class="export-review" aria-label="Checks of the finished video" hidden></ul>
       <div class="export-summary" id="exportSummary"></div>
       <label class="export-fps-field" id="exportFrameRateField"><span id="exportFpsLabel">Frame rate</span><select id="exportFpsSelect" aria-labelledby="exportFpsLabel" aria-describedby="exportFpsHelp"><option value="24">24 FPS</option><option value="25">25 FPS</option><option value="30" selected>30 FPS</option><option value="50">50 FPS</option><option value="60">60 FPS</option></select><small id="exportFpsHelp">30 FPS balances smooth playback and render time.</small></label>

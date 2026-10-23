@@ -239,7 +239,7 @@ def _definitely_before(left: dict[str, Any], right: dict[str, Any]) -> bool:
 def validate_story_evidence(
     slot_map: Any, candidates: list[dict[str, Any]], segments: list[dict[str, Any]], *,
     selected_beat_ids: Any, required_roles: Any = None, rejected_beat_ids: Any = None,
-    keep_ranges: Any = None,
+    keep_ranges: Any = None, required_role_orders: Any = None,
 ) -> dict[str, Any]:
     """Resolve only canonical quotations and reject unsupported source ordering.
 
@@ -295,8 +295,23 @@ def validate_story_evidence(
     clean.sort(key=lambda row: row["slot_index"])
     if indexes != set(range(len(clean))):
         raise ValueError("Story evidence slot indexes must be contiguous.")
-    if roles is not None and [row["purpose"] for row in clean] != roles:
-        raise ValueError("Story evidence must preserve every configured role in order.")
+    purposes = [row["purpose"] for row in clean]
+    if roles is not None:
+        if required_role_orders is None and purposes != roles:
+            raise ValueError("Story evidence must preserve every configured role in order.")
+        if not set(roles) <= set(purposes):
+            raise ValueError("Story evidence must preserve every configured role.")
+    if required_role_orders is not None:
+        if not isinstance(required_role_orders, list) or len(required_role_orders) > 64:
+            raise ValueError("Invalid required story order groups.")
+        for group in required_role_orders:
+            if (not isinstance(group, list) or not 2 <= len(group) <= 64
+                    or any(not isinstance(role, str) or role not in (roles or []) for role in group)
+                    or len(group) != len(set(group))):
+                raise ValueError("Invalid required story order group.")
+            positions = [purposes.index(role) for role in group]
+            if positions != sorted(positions):
+                raise ValueError("Story evidence contradicts the explicit required role order.")
     if len({row["purpose"] for row in clean}) != len(clean):
         raise ValueError("Each story purpose must have one explicit evidence slot.")
     witnesses = [by_id[row["temporal_witness_id"]] for row in clean]

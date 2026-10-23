@@ -112,10 +112,10 @@ def test_ass_layout_ranges_follow_source_time_across_cuts_and_split_boundaries(t
     dialogue = [line for line in target.read_text(encoding="utf-8-sig").splitlines() if line.startswith("Dialogue:")]
 
     assert dialogue == [
-        "Dialogue: 0,0:00:00.00,0:00:01.00,Default,,0,0,0,,כתובית רציפה",
-        r"Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,{\an8\pos(540,653)}כתובית רציפה",
-        r"Dialogue: 0,0:00:02.00,0:00:03.00,Default,,0,0,0,,{\an8\pos(540,653)}כתובית רציפה",
-        r"Dialogue: 0,0:00:03.00,0:00:06.00,Default,,0,0,0,,{\an8\pos(540,1421)}כתובית רציפה",
+        "Dialogue: 0,0:00:00.00,0:00:01.00,Default,,0,0,0,,\u200fכתובית רציפה\u200f",
+        r"Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,{\an8\pos(540,653)}" + "\u200fכתובית רציפה\u200f",
+        r"Dialogue: 0,0:00:02.00,0:00:03.00,Default,,0,0,0,,{\an8\pos(540,653)}" + "\u200fכתובית רציפה\u200f",
+        r"Dialogue: 0,0:00:03.00,0:00:06.00,Default,,0,0,0,,{\an8\pos(540,1421)}" + "\u200fכתובית רציפה\u200f",
     ]
 
 
@@ -286,7 +286,7 @@ def test_highlight_style_keeps_hebrew_as_plain_short_phrases(tmp_path):
                        caption_style="highlight")
     dialogues = [line for line in target.read_text(encoding="utf-8-sig").splitlines() if line.startswith("Dialogue: 0,")]
     texts = [line.rsplit(",,", 1)[1].split("}", 1)[-1] for line in dialogues]
-    assert texts == ["תשמור על המסכה עכשיו", "בבקשה"]
+    assert texts == ["\u200fתשמור על המסכה עכשיו\u200f", "\u200fבבקשה\u200f"]
     assert all("&H4DE1FF&" not in line for line in dialogues)
 
 

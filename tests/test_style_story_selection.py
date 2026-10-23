@@ -193,7 +193,7 @@ def test_final_review_accepts_an_intact_connected_planned_story():
 
 
 @pytest.mark.parametrize("style_id", ["competitive_clutch", "stream_commentary", "funny_moments"])
-def test_ai_story_producer_uses_the_selected_style_structure(monkeypatch, style_id):
+def test_ai_story_producer_keeps_the_selected_style_structure_advisory(monkeypatch, style_id):
     class Settings:
         ai = {}
 
@@ -201,22 +201,28 @@ def test_ai_story_producer_uses_the_selected_style_structure(monkeypatch, style_
 
     def respond(_settings, payload, *_args):
         captured.update(payload)
-        required_roles = json.loads(payload["messages"][1]["content"])["brief"]["style_profile"]["selection_policy"]["story_structure"]
         return {"narrative": "Complete moment", "slots": [
-            {"purpose": role, "chapter_ids": ["chapter"], "desired_seconds": 30}
-            for role in required_roles
+            {"purpose": "explanation", "chapter_ids": ["chapter"], "desired_seconds": 30}
         ]}
 
     monkeypatch.setattr(intelligence, "_call_ollama_story_pass", respond)
     brief = enrich_brief_with_style({"edit_style": style_id, "target_duration": 60})
-    intelligence._build_story_plan(Settings(), [{"id": "chapter"}], {}, brief, "fixture")
+    result = intelligence._build_story_plan(Settings(), [{"id": "chapter"}], {}, brief, "fixture")
 
     system = captured["messages"][0]["content"]
     selected_policy = policy(style_id)
-    assert " -> ".join(selected_policy["story_structure"]) in system
-    assert f"at most {selected_policy['max_moments']} distinct complete moment(s)" in system
+    assert "Preferred style structure is advisory" in system
+    assert [row["purpose"] for row in result["slots"]] == ["explanation"]
+    assert "enum" not in captured["format"]["properties"]["slots"]["items"]["properties"]["purpose"]
+    assert "Select at most" not in system
     passed_brief = json.loads(captured["messages"][1]["content"])["brief"]
-    assert "Do not invent missing action" in passed_brief["style_profile"]["guidance"]
+    passed_policy = passed_brief["style_profile"]["selection_policy"]
+    assert passed_policy["preferred_structure"] == selected_policy["story_structure"]
+    assert passed_policy["preferred_max_moments"] == selected_policy["max_moments"]
+    assert passed_policy["max_moments"] is None
+    assert passed_policy["required_story_roles"] == []
+    assert "story_structure" not in passed_policy
+    assert "inventing action, dialogue, jokes or outcomes" in passed_brief["style_profile"]["guidance"]
 
 
 def test_single_moment_prefers_sustained_action_over_louder_three_second_spike():
@@ -240,7 +246,7 @@ def test_single_moment_sparse_evidence_keeps_short_event_without_padding():
 
 
 @pytest.mark.parametrize("style,source,selected,reason", [
-    ("competitive_clutch",360,12,"style_moment_limit"),
+    ("competitive_clutch",360,12,"limited_selection"),
     ("smart",360,12,"limited_selection"),
     ("smart",73.833,73.833,"source_shorter"),
     ("competitive_clutch",360,90,"near_target"),
@@ -301,7 +307,8 @@ def test_duration_intent_survives_style_changes_and_keeps_old_projects_explicit(
     other=enrich_brief_with_style({**target,"edit_style":"stream_highlights"})
     assert other["duration_mode"]=="target" and other["target_duration"]==90
     old=enrich_brief_with_style({"edit_style":"competitive_clutch","target_duration":90})
-    assert old["style_profile"]["selection_policy"]["max_moments"]==1
+    assert old["style_profile"]["selection_policy"]["max_moments"] is None
+    assert old["style_profile"]["selection_policy"]["preferred_max_moments"] == 1
     review=director._duration_review(target,360,12,nonverbal=True)
     assert review["duration_is_ceiling"] is False and review["reason"]=="limited_selection"
 

@@ -22,7 +22,7 @@ import webbrowser
 from pathlib import Path
 from typing import Any
 
-from flask import Flask, Response, jsonify, request, send_file, send_from_directory
+from flask import Flask, Response, g, jsonify, request, send_file, send_from_directory
 from werkzeug.exceptions import BadRequest, HTTPException, RequestEntityTooLarge
 
 from cutroom import __version__, __version_label__
@@ -30,10 +30,16 @@ from cutroom.config import ROOT, Settings, load_settings
 from cutroom.ai_runtime import AIRuntime, ollama_environment, resolve_ollama_executable, open_ollama, read_ollama_json
 from cutroom.director import analyze_project, refine_project
 from cutroom.edit_styles import UnknownEditStyle, get_edit_style, public_edit_styles
-from cutroom.editing import ManualEditError, apply_manual_edit, strip_private_edit_history
+from cutroom.editing import ManualEditError, apply_manual_edit, apply_source_review_edit, strip_private_edit_history
+from cutroom.reel_proposals import reel_proposal
+from cutroom.review_candidates import media_identity as source_review_media_identity, checked_source_candidate
 from cutroom.sequence import SEQUENCE_ACTION_FIELDS, editor_sequence_snapshot
-from cutroom.source_tracks import SourceTrackError
+from cutroom.source_tracks import SourceTrackError, TimelineVersionError, validate_sequence_version
+from cutroom.timeline_bindings import (
+    ID_ACTIONS, PUBLIC_BINDING_ERROR, TimelineBindingError, build_timeline_bindings, primary_track_binding,
+)
 from cutroom.caption_items import CAPTION_ACTION_FIELDS, apply_corrections, corrections
+from cutroom.caption_alternatives import register as register_caption_alternative, review as review_caption_alternative, status as caption_alternative_status
 from cutroom.composition import CHROMA_KEY_ACTION_FIELDS, chroma_background_asset, chroma_source, chroma_video_source, source_chroma_key
 from cutroom.effects import build_chroma_key_nodes, chroma_key_capability
 from cutroom.stabilization import StabilizationError, stabilization_capability
@@ -64,6 +70,9 @@ from cutroom.projects import ProjectStateError, ProjectStore, apply_automatic_na
 from cutroom.text_clips import MAX_CAPTION_IMPORT_BYTES, TEXT_ACTION_FIELDS
 from cutroom.render import InsufficientStorageError, available_encoders, ensure_render_storage, project_caption_items, render_project
 from cutroom.utils import sanitize_filename
+from cutroom.upload_storage import CHUNK_BYTES, UploadStorage, UploadStorageError, is_storage_full
+from cutroom.upload_transport import LEGACY_ASSET_UPLOAD_BYTES, MULTIPART_ALLOWANCE_BYTES
+from cutroom.native_paths import native_io_path
 from cutroom.vision import VISION_ANALYSIS_VERSION, analyze_faces_and_embedded_camera, normalized_vision_sample_count
 
 
@@ -83,6 +92,9 @@ JSON_BODY_ENDPOINTS = {
     "create_project",
     "patch_project",
     "manual_edit",
+    "review_reel_candidate",
+    "import_caption_alternative",
+    "generate_caption_alternative",
     "run_director",
     "refine",
     "render",
@@ -90,9 +102,10 @@ JSON_BODY_ENDPOINTS = {
     "install_model",
     "prepare_ai_runtime",
     "stabilize_source",
+    "preflight_upload",
 }
 UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
-FOREGROUND_JOB_KINDS = {"director", "refine", "render"}
+FOREGROUND_JOB_KINDS = {"director", "refine", "render", "caption_alternative"}
 INSTANCE_PROTOCOL_VERSION = 1
 INSTANCE_RESPONSE_LIMIT = 4 * 1024
 LEGACY_SYSTEM_RESPONSE_LIMIT = 256 * 1024
@@ -122,6 +135,8 @@ SETTINGS_FIELDS = {
     "visual_ai",
     "audio_cleanup",
     "instruction",
+    "output_count",
+    "source_continuity",
     "allow_extractive_rough_cut",
 }
 AUDIO_CLEANUP_FIELDS = {
@@ -174,11 +189,12 @@ AUDIO_CLEANUP_RANGES = {
 
 
 class APIInputError(ValueError):
-    def __init__(self, code: str, message: str, status: int = 400):
+    def __init__(self, code: str, message: str, status: int = 400, **details: Any):
         super().__init__(message)
         self.code = code
         self.message = message
         self.status = status
+        self.details = details
 
 
 def _host_name(value: str) -> str | None:
@@ -314,6 +330,10 @@ def _validate_finite_number(
 
 def _validate_settings_payload(payload: dict[str, Any]) -> None:
     _reject_unknown_fields(payload, SETTINGS_FIELDS)
+    if "output_count" in payload and (type(payload["output_count"]) is not int or not 1 <= payload["output_count"] <= 10):
+        raise APIInputError("invalid_field", "output_count must be an integer between 1 and 10; this generation currently supports one output.")
+    if "source_continuity" in payload and payload["source_continuity"] not in ("unspecified", "required", "cuts_allowed"):
+        raise APIInputError("invalid_field", "source_continuity must be unspecified, required or cuts_allowed.")
     if "fps" in payload:
         try:
             validate_export_fps(payload["fps"])
@@ -569,6 +589,8 @@ def _preserved_source_mixer(project: dict[str, Any], previous: dict[str, Any]) -
         mixer["default_layout"] = default_layout
     if previous.get("stack_fit") in {"cover", "contain"}:
         mixer["stack_fit"] = previous["stack_fit"]
+    from cutroom.creator_layout import controls
+    mixer.update(controls(previous))
     return mixer
 
 
@@ -657,6 +679,7 @@ def create_app(settings: Settings | None = None) -> Flask:
         int(settings.raw.get("background_workers", 2)),
         persistence_path=settings.cache_dir / "jobs.json",
         max_pending=int(settings.raw.get("max_pending_jobs", 32)),
+        heavy_workers=max(1, min(4, int(settings.raw.get("heavy_job_workers", 1)))),
         retention_seconds=float(settings.raw.get("job_retention_seconds", 24 * 60 * 60)),
     )
     app = Flask(__name__, static_folder=str(ROOT / "web"), static_url_path="/assets")
@@ -677,6 +700,11 @@ def create_app(settings: Settings | None = None) -> Flask:
     project_job_gate = threading.RLock()
     active_uploads: dict[str, int] = {}
     upload_transactions: dict[tuple[str, str, str], dict[str, Any]] = {}
+    upload_storage = UploadStorage(settings.data_dir, projects_dir=settings.projects_dir)
+    app.extensions["cutroom_upload_storage"] = upload_storage
+
+    def project_import_active(project_id: str, *, exclude_token: str = "") -> bool:
+        return bool(active_uploads.get(project_id, 0) or upload_storage.active_for_project(project_id, exclude_token=exclude_token))
 
     def discard_upload_rollback(state: dict[str, Any]) -> None:
         expiration = state.pop("expiration", None)
@@ -749,7 +777,7 @@ def create_app(settings: Settings | None = None) -> Flask:
         **kwargs,
     ):
         with project_job_gate:
-            if active_uploads.get(project_id, 0) or jobs.active(project_id=project_id, kind="prepare_asset"):
+            if project_import_active(project_id) or jobs.active(project_id=project_id, kind="prepare_asset"):
                 raise APIInputError("project_busy", "Wait for media import to finish before processing this project.", 409)
             downloading = jobs.active(kind="model_install", limit=1)
             if downloading and kind in FOREGROUND_JOB_KINDS:
@@ -758,6 +786,7 @@ def create_app(settings: Settings | None = None) -> Flask:
                     code="job_conflict", active_job_id=downloading[0].id,
                 )
             latest_project = store.load(project_id)
+            validate_sequence_version(latest_project)
             if validate_project is not None:
                 validate_project(latest_project)
             identity = json.dumps(
@@ -797,10 +826,54 @@ def create_app(settings: Settings | None = None) -> Flask:
             origin = request.headers.get("Origin")
             if origin and not _origin_matches_request(origin):
                 raise APIInputError("invalid_origin", "The request origin does not match this CUTROOM instance.", 403)
+        if request.endpoint in {"upload_source", "upload_asset"}:
+            args = request.view_args or {}
+            project_id = args.get("project_id", "")
+            # Validate the namespace before allocating or parsing multipart files.
+            validate_sequence_version(store.load(project_id))
+            if request.headers.get("X-Cutroom-Upload-Transport") == "chunked-v1":
+                request.max_content_length = JSON_BODY_LIMIT
+                if (request.content_length or 0) > JSON_BODY_LIMIT:
+                    raise RequestEntityTooLarge()
+                purpose = "source" if request.endpoint == "upload_source" else "asset"
+                slot = str(args.get("slot", "")).upper() if purpose == "source" else None
+                token = str(request.headers.get("X-Cutroom-Upload-Token") or "")
+                g.upload_ticket = upload_storage.begin_finalize(project_id, token, purpose, slot)
+            else:
+                size = request.content_length
+                if size is None:
+                    raise APIInputError("upload_length_required", "This upload requires a Content-Length header.", 411)
+                if size > max_upload_bytes + MULTIPART_ALLOWANCE_BYTES:
+                    raise RequestEntityTooLarge()
+                if request.endpoint == "upload_asset" and size > LEGACY_ASSET_UPLOAD_BYTES + MULTIPART_ALLOWANCE_BYTES:
+                    raise APIInputError("chunked_upload_required", "Use chunked import for a media-library file larger than 2 GiB.", 413,
+                                        transport="chunked-v1", max_multipart_bytes=LEGACY_ASSET_UPLOAD_BYTES)
+                limit = max_upload_bytes if request.endpoint == "upload_source" else min(max_upload_bytes, LEGACY_ASSET_UPLOAD_BYTES)
+                request.max_content_length = limit + MULTIPART_ALLOWANCE_BYTES
+                lease = request.environ.get("cutroom.upload.storage_lease", "")
+                if lease in upload_storage.legacy:
+                    upload_storage.require(size, "multipart", legacy_id=lease, data_path=store.project_dir(project_id) / "media")
+                    g.upload_legacy_lease = lease
+                else:
+                    # Under an unmodified WSGI server its full request may already
+                    # occupy TEMP. Budget the two remaining allocations here.
+                    g.upload_legacy_lease = upload_storage.admit_legacy(size, data_path=store.project_dir(project_id) / "media")
         return None
+
+    @app.teardown_request
+    def release_upload_storage(_error):
+        ticket = getattr(g, "upload_ticket", None)
+        if ticket is not None:
+            upload_storage.finish(ticket)
+        lease = getattr(g, "upload_legacy_lease", None)
+        if lease:
+            upload_storage.release_legacy(lease)
 
     @app.after_request
     def headers(response: Response) -> Response:
+        release_transport = request.environ.get("cutroom.upload.release_transport")
+        if release_transport is not None:
+            release_transport()
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"
         response.headers["X-Frame-Options"] = "DENY"
@@ -816,11 +889,19 @@ def create_app(settings: Settings | None = None) -> Flask:
 
     @app.errorhandler(APIInputError)
     def handle_api_input(error: APIInputError):
-        return jsonify({"error": error.code, "message": error.message}), error.status
+        return jsonify({"error": error.code, "message": error.message, **error.details}), error.status
+
+    @app.errorhandler(UploadStorageError)
+    def handle_upload_storage(error: UploadStorageError):
+        return jsonify(error.public()), error.status
 
     @app.errorhandler(TrackLockedError)
     def handle_track_locked(error: TrackLockedError):
         return jsonify({"error": "track_locked", "message": str(error)}), 409
+
+    @app.errorhandler(TimelineVersionError)
+    def handle_timeline_version(error: TimelineVersionError):
+        return jsonify({"error": "timeline_version_unsupported", "message": str(error)}), 409
 
     @app.errorhandler(CloudAIError)
     def handle_cloud_error(error):
@@ -854,6 +935,9 @@ def create_app(settings: Settings | None = None) -> Flask:
 
     @app.errorhandler(Exception)
     def handle_error(error: Exception):
+        if is_storage_full(error) and request.endpoint in {"upload_source", "upload_asset", "append_upload", "preflight_upload"}:
+            storage_error = upload_storage.storage_error(getattr(g, "upload_ticket", None), transport="chunked-v1" if getattr(g, "upload_ticket", None) else "multipart")
+            return jsonify(storage_error.public()), 507
         # RequestEntityTooLarge is an HTTPException subclass, so it must be checked first.
         if isinstance(error, RequestEntityTooLarge):
             if request.endpoint in JSON_BODY_ENDPOINTS:
@@ -1046,14 +1130,122 @@ def create_app(settings: Settings | None = None) -> Flask:
             raise APIInputError("invalid_field", "expected_revision must be a positive integer.")
         return jsonify({"project": _public_project(store.patch(project_id, payload, expected_revision=expected_revision))})
 
+    def reviewed_reel_proposal(project, candidate_id):
+        if isinstance(candidate_id,str) and candidate_id.startswith("review_"):
+            try:
+                return reel_proposal(project,candidate_id,source_review_media_identity(project,store.project_dir(project["id"])))
+            except ValueError as error:
+                raise ManualEditError(str(error)) from error
+        source = (project.get("sources") or {}).get("A") or {}
+        identity = {}
+        for key in ("relative_path", "preview_relative_path"):
+            relative = source.get(key)
+            if not relative and key == "preview_relative_path":
+                continue
+            path = _safe_project_child(store.project_dir(project["id"]), relative)
+            if path is None or not path.is_file():
+                raise APIInputError("source_missing", "The reviewed source is unavailable. Refresh the project.", 409)
+            stat = path.stat()
+            identity[key] = [str(path), stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns]
+        return reel_proposal(project, candidate_id, identity)
+
+    @app.post("/api/projects/<project_id>/reel-proposal")
+    def review_reel_candidate(project_id: str):
+        payload = _json_object()
+        _reject_unknown_fields(payload, {"candidate_id", "expected_revision"})
+        candidate_id = payload.get("candidate_id")
+        revision = payload.get("expected_revision")
+        if not isinstance(candidate_id, str) or not 1 <= len(candidate_id) <= 128:
+            raise APIInputError("invalid_field", "Select a Reel alternative.")
+        if isinstance(revision, bool) or not isinstance(revision, int) or revision < 1:
+            raise APIInputError("invalid_field", "Review requires the displayed project's expected_revision.")
+        try:
+            with project_job_gate:
+                if project_import_active(project_id) or jobs.active(project_id=project_id):
+                    raise APIInputError("project_busy", "Wait for processing or import before reviewing an alternative.", 409)
+                current = store.load(project_id)
+                if current["revision"] != revision:
+                    raise RuntimeError("revision_conflict")
+                proposal = reviewed_reel_proposal(current, candidate_id)
+        except ManualEditError as error:
+            raise APIInputError("invalid_reel_proposal", str(error), 409) from error
+        return jsonify({"proposal": proposal})
+
+    @app.get("/api/projects/<project_id>/caption-generation")
+    def caption_generation_status(project_id: str):
+        from cutroom.caption_generation import readiness
+        try:
+            selection=None
+            if "start" in request.args or "end" in request.args:
+                selection={"start":float(request.args.get("start","nan")),"end":float(request.args.get("end","nan"))}
+            state = readiness(store.load(project_id), settings, request.args.get("language", "he"),selection)
+        except ValueError as error:
+            return jsonify({"ready":False,"message":str(error)})
+        return jsonify(state)
+
+    @app.post("/api/projects/<project_id>/caption-generation")
+    def generate_caption_alternative(project_id: str):
+        from cutroom.caption_generation import generate, readiness
+        payload = _json_object()
+        _reject_unknown_fields(payload, {"language", "expected_revision", "selection"})
+        revision = payload.get("expected_revision")
+        if isinstance(revision, bool) or not isinstance(revision, int) or revision < 1:
+            raise APIInputError("invalid_field", "Generating requires the displayed project revision.")
+        def validate(current):
+            if current["revision"] != revision: raise RuntimeError("revision_conflict")
+            try:
+                state = readiness(current, settings, payload.get("language"),payload.get("selection"))
+                if not state["ready"]: raise ValueError(state["message"])
+            except ValueError as error:
+                raise APIInputError("caption_generation_unavailable", str(error), 409) from error
+        job = submit_project_job("caption_alternative", project_id, generate, project_id, store, settings,
+            payload.get("language"), revision, payload.get("selection"), validate_project=validate, job_identity=payload)
+        return jsonify({"job":job.public()}), 202
+
+    @app.post("/api/projects/<project_id>/caption-alternatives")
+    def import_caption_alternative(project_id: str):
+        payload = _json_object()
+        _reject_unknown_fields(payload, {"alternative", "expected_revision"})
+        revision = payload.get("expected_revision")
+        if isinstance(revision, bool) or not isinstance(revision, int) or revision < 1:
+            raise APIInputError("invalid_field", "Loading an alternative requires the displayed project revision.")
+        try:
+            with project_job_gate:
+                if project_import_active(project_id) or jobs.active(project_id=project_id):
+                    raise APIInputError("project_busy", "Wait for processing before loading saved captions.", 409)
+                def import_saved(current):
+                    register_caption_alternative(current, payload.get("alternative"))
+                project = store.update(project_id, import_saved, expected_revision=revision)
+        except ValueError as error:
+            raise APIInputError("invalid_caption_alternative", str(error)) from error
+        return jsonify({"project": _public_project(project)})
+
+    @app.get("/api/projects/<project_id>/caption-alternatives/<alternative_id>")
+    def get_caption_alternative_review(project_id: str, alternative_id: str):
+        try:
+            proposal = review_caption_alternative(store.load(project_id), alternative_id)
+        except ValueError as error:
+            raise APIInputError("invalid_caption_alternative", str(error), 409) from error
+        return jsonify({"proposal": proposal})
+
     @app.post("/api/projects/<project_id>/manual/edit")
     def manual_edit(project_id: str):
         payload = _json_object(caption_import=True)
         action = str(payload.get("action") or "").strip().lower()
         track_fields = {"slot", "locked"} if action == "set_track_lock" else SEQUENCE_ACTION_FIELDS.get(action, SOURCE_TRACK_EDIT_FIELDS.get(action, CHROMA_KEY_ACTION_FIELDS.get(action)))
+        timeline_alias = action in ID_ACTIONS and bool({"track_id", "source_ref"} & payload.keys())
+        if timeline_alias:
+            track_fields = {*track_fields, "track_id", "source_ref"}
+            for field in ("track_id", "source_ref"):
+                if not isinstance(payload.get(field), str) or not payload[field].strip() or len(payload[field]) > 256:
+                    raise APIInputError("invalid_field", "Timeline identity fields must be paired nonempty strings of at most 256 characters.")
         media_fields = MEDIA_ACTION_FIELDS.get(action)
         text_fields = TEXT_ACTION_FIELDS.get(action)
         caption_fields = CAPTION_ACTION_FIELDS.get(action)
+        if action == "caption_alternative":
+            text_fields = {"alternative_id", "review_fingerprint"}
+            _require_optional_string(payload, "alternative_id", max_length=64)
+            _require_optional_string(payload, "review_fingerprint", max_length=64)
         if action == "visual_override":
             # A screen-type correction for the next AI draft.
             text_fields = {"start", "end", "screen"}
@@ -1078,14 +1270,16 @@ def create_app(settings: Settings | None = None) -> Flask:
             payload,
             {"action", "expected_revision", *text_fields} if text_fields is not None else {"action", "expected_revision", *media_fields} if media_fields is not None else {"action", "expected_revision", *track_fields} if track_fields is not None else {
                 "action", "start", "end", "new_start", "new_end", "time", "segment_id", "text", "layout",
-                "screen_slot", "camera_slot", "primary_role", "audio_slot", "first_slot", "sync_offset", "default_layout", "stack_fit",
+                "screen_slot", "camera_slot", "primary_role", "audio_slot", "first_slot", "sync_offset", "default_layout", "stack_fit", "screen_fit", "pip_scale", "pip_x", "pip_y",
                 "enabled", "x", "y", "w", "h", "content_x", "content_y",
-                "candidate_id",
+                "candidate_id", "proposal_id",
                 "expected_revision",
             },
         )
         if track_fields is not None:
             optional = {"mode", "slot"} if action in {"sequence_move_range", "sequence_close_gaps", "sequence_trim_edge"} else {"mode"}
+            if timeline_alias:
+                optional.add("slot")
             if action == "set_chroma_key":
                 optional.update({"background_asset_id", "background_mode"})
             missing = sorted(track_fields - optional - payload.keys())
@@ -1095,6 +1289,14 @@ def create_app(settings: Settings | None = None) -> Flask:
             _require_optional_string(payload, "clip_id", max_length=128)
             _require_optional_string(payload, "mode", max_length=16)
         expected_revision = payload.pop("expected_revision", None)
+        proposal_id = payload.pop("proposal_id", None)
+        if action == "apply_review_candidate" and proposal_id is None:
+            raise APIInputError("invalid_field", "Preview the source proposal before applying it.")
+        if proposal_id is not None and (
+            action not in {"apply_reel_candidate", "apply_review_candidate"} or not isinstance(proposal_id, str)
+            or not re.fullmatch(r"[0-9a-f]{64}", proposal_id) or expected_revision is None
+        ):
+            raise APIInputError("invalid_field", "A reviewed Reel requires its proposal id and displayed project revision.")
         if (action in SEQUENCE_ACTION_FIELDS or media_fields is not None or text_fields is not None or action in {"set_track_lock", "set_chroma_key", "reset_chroma_key"}) and expected_revision is None:
             raise APIInputError("invalid_field", "Timeline edits require the displayed project's expected_revision.")
         if expected_revision is not None and (
@@ -1105,19 +1307,52 @@ def create_app(settings: Settings | None = None) -> Flask:
             raise APIInputError("invalid_field", "expected_revision must be a positive integer.")
         try:
             with project_job_gate:
+                if (proposal_id is not None or action == "caption_alternative") and (project_import_active(project_id) or jobs.active(project_id=project_id)):
+                    raise APIInputError("project_busy", "Wait for processing or import before applying a reviewed alternative.", 409)
                 if action == "set_track_lock" and (
-                    active_uploads.get(project_id, 0)
+                    project_import_active(project_id)
                     or any(job.kind in {"director", "refine"} for job in jobs.active(project_id=project_id))
                 ):
                     raise APIInputError("project_busy", "Wait for active editing or source import to finish before changing track locks.", 409)
                 if action in {"set_chroma_key", "reset_chroma_key"}:
-                    if active_uploads.get(project_id, 0) or jobs.active(project_id=project_id):
+                    if project_import_active(project_id) or jobs.active(project_id=project_id):
                         raise APIInputError("project_busy", "Wait for active processing or source import to finish before changing Chroma Key.", 409)
                     if action == "set_chroma_key" and payload.get("enabled") is True and not chroma_key_capability(settings)["available"]:
                         raise APIInputError("chroma_unavailable", "The installed FFmpeg does not support Chroma Key. Your footage and edits are unchanged.", 409)
-                if (media_fields is not None or text_fields is not None) and (active_uploads.get(project_id, 0) or jobs.active(project_id=project_id)):
+                if (media_fields is not None or text_fields is not None) and (project_import_active(project_id) or jobs.active(project_id=project_id)):
                     raise APIInputError("project_busy", "Wait for active processing or media import to finish before editing media or text.", 409)
                 def apply_requested_edit(current):
+                    validate_sequence_version(current)
+                    if proposal_id is not None:
+                        checked = reviewed_reel_proposal(current, payload.get("candidate_id"))
+                        if checked["proposal_id"] != proposal_id:
+                            raise APIInputError("stale_reel_proposal", "The source or edit changed. Review the alternative again before applying it.", 409)
+                        source_proposal = checked.get("kind") == "unverified_source_candidate"
+                        if source_proposal != (action == "apply_review_candidate"):
+                            raise APIInputError("invalid_field", "Use the reviewed proposal's matching apply action.")
+                        if source_proposal:
+                            try:
+                                candidate,review_request=checked_source_candidate(current,payload.get("candidate_id"),
+                                    source_review_media_identity(current,store.project_dir(project_id)))
+                                return apply_source_review_edit(current,candidate,review_request)
+                            except ValueError as error:
+                                raise ManualEditError(str(error)) from error
+                    canonical_payload = payload
+                    if timeline_alias:
+                        slot = next((slot for slot in ("A", "B")
+                                     if payload["track_id"] == f"track:{current['id']}:{slot}"), None)
+                        if slot is None or ("slot" in payload and payload["slot"] != slot):
+                            raise APIInputError("invalid_timeline_binding", "Select an available primary track in this project.")
+                        if not re.fullmatch(rf"primary:{slot}:[A-Za-z0-9_-]{{1,128}}", payload["source_ref"]):
+                            raise APIInputError("invalid_timeline_binding", "Select an available primary source for this track.")
+                        try:
+                            binding = primary_track_binding(current, slot)
+                        except TimelineBindingError as error:
+                            raise APIInputError("invalid_timeline_binding", "Select an available primary track in this project.") from error
+                        if not binding["can_edit_by_id"] or binding["source_ref"] != payload["source_ref"]:
+                            raise APIInputError("source_binding_conflict", "The source changed. Refresh and select the clip again.", 409)
+                        canonical_payload = {key: value for key, value in payload.items() if key not in {"track_id", "source_ref"}}
+                        canonical_payload["slot"] = slot
                     # A stale ready library record must not enable keying on a
                     # missing file. Reset/disable remains available for recovery.
                     if (action == "set_chroma_key" and payload.get("enabled") is True
@@ -1127,7 +1362,18 @@ def create_app(settings: Settings | None = None) -> Flask:
                             selected_path = _safe_project_child(store.project_dir(project_id), selected.get("relative_path"))
                             if selected_path is None or not selected_path.is_file():
                                 raise APIInputError("source_missing", "The selected project video file is unavailable. Import it again or disable its key.", 409)
-                    return apply_manual_edit(current, payload)
+                    if action in {"media_append","media_insert"}:
+                        asset_id = payload.get("asset_id")
+                        selected = (current.get("assets") or {}).get(asset_id) if isinstance(asset_id, str) else None
+                        if isinstance(selected, dict) and selected.get("kind") == "video" and selected.get("status") == "ready":
+                            try:
+                                original = safe_asset_path(store.project_dir(project_id), selected.get("path"))
+                                preview = safe_asset_path(store.project_dir(project_id), selected.get("preview_path") or selected.get("path"))
+                                if not original.is_file() or not preview.is_file():
+                                    raise FileNotFoundError()
+                            except (FileNotFoundError, ValueError, TypeError) as error:
+                                raise APIInputError("asset_unavailable", "This project video is unavailable. Retry its import before appending it.", 409) from error
+                    return apply_manual_edit(current, canonical_payload)
                 project = store.update(
                     project_id,
                     apply_requested_edit,
@@ -1224,13 +1470,95 @@ def create_app(settings: Settings | None = None) -> Flask:
         response.headers["X-Cutroom-Project-Revision"] = str(project["revision"])
         return response
 
+    @app.post("/api/projects/<project_id>/uploads/preflight")
+    def preflight_upload(project_id: str):
+        payload = _json_object()
+        purpose = payload.get("purpose")
+        if not isinstance(purpose, str) or purpose not in {"source", "asset"}:
+            raise APIInputError("invalid_upload_target", "Choose a source or media-library import.")
+        size = payload.get("size_bytes")
+        if type(size) is not int or size <= 0:
+            raise APIInputError("invalid_upload_size", "The selected file must have a positive integer byte size.")
+        if not isinstance(payload.get("filename"), str) or not payload["filename"].strip():
+            raise APIInputError("missing_file", "Choose a file to import.")
+        filename = sanitize_filename(payload["filename"])
+        slot = str(payload.get("slot") or "").upper() if purpose == "source" else None
+        if purpose == "source":
+            if slot not in {"A", "B"}:
+                raise APIInputError("invalid_slot", "Slot must be A or B.")
+            if Path(filename).suffix.lower() not in VIDEO_EXTENSIONS:
+                raise APIInputError("unsupported_format", "Choose a supported video file.", 415)
+            limit = max_upload_bytes
+        else:
+            try:
+                limit = asset_size_limit(asset_kind(filename), max_upload_bytes)
+            except MediaLibraryError as error:
+                raise APIInputError("invalid_media", str(error)) from error
+        if size > limit:
+            raise APIInputError("file_too_large", "The file is larger than the import limit.", 413, max_upload_bytes=limit)
+        token = payload.get("upload_token")
+        if token is not None and not isinstance(token, str):
+            raise APIInputError("invalid_upload_token", "The upload token must be a string.")
+        with project_job_gate:
+            current = store.load(project_id)
+            validate_sequence_version(current)
+            if purpose == "source":
+                require_tracks_unlocked(current)
+                prune_upload_transactions(time.monotonic())
+                old = upload_transactions.get((project_id, slot, token))
+                if old is not None:
+                    raise APIInputError("upload_cancelled" if old.get("cancelled") else "upload_token_reused", "This upload attempt has ended. Choose the file again.", 409)
+            elif jobs.active(project_id=project_id) or project_import_active(project_id):
+                raise APIInputError("project_busy", "Wait for active processing or import to finish before adding media.", 409)
+            if active_uploads.get(project_id, 0):
+                raise APIInputError("project_busy", "Wait for the current media import to finish.", 409)
+            if purpose == "asset" and len(current.get("assets") or {}) >= MAX_ASSETS:
+                raise APIInputError("asset_limit", f"A project can contain at most {MAX_ASSETS} media assets.")
+            ticket, facts = upload_storage.admit(project_id, purpose, slot, filename, size, store.project_dir(project_id), token)
+        prefix = f"/api/projects/{project_id}/uploads/{ticket.token}"
+        return jsonify({"upload_token": ticket.token, "chunk_size_bytes": CHUNK_BYTES,
+                        "received_bytes": 0, "size_bytes": size, "expires_in_seconds": upload_storage.ttl,
+                        "upload_url": prefix, "cancel_url": prefix + "/cancel", **facts}), 201
+
+    @app.put("/api/projects/<project_id>/uploads/<upload_token>")
+    def append_upload(project_id: str, upload_token: str):
+        request.max_content_length = CHUNK_BYTES
+        length = request.content_length
+        if length is None:
+            raise APIInputError("upload_length_required", "Upload chunks require a Content-Length header.", 411)
+        offset = request.headers.get("X-Cutroom-Upload-Offset", "")
+        if not offset.isascii() or not offset.isdigit() or len(offset) > 16:
+            raise APIInputError("invalid_upload_offset", "An integer upload offset is required.")
+        if request.mimetype != "application/octet-stream":
+            raise APIInputError("invalid_upload_chunk", "Upload chunks must use application/octet-stream.", 415)
+        received = upload_storage.append(project_id, upload_token, int(offset), length, request.stream,
+                                         transport_lease=request.environ.get("cutroom.upload.transport_lease", ""))
+        return jsonify({"upload_token": upload_token, "received_bytes": received})
+
+    @app.post("/api/projects/<project_id>/uploads/<upload_token>/cancel")
+    def cancel_upload(project_id: str, upload_token: str):
+        with project_job_gate:
+            store.load(project_id)
+            # A source's cancellation contract includes its post-commit rollback.
+            # Preserve it for clients using the preflight's generic cancel URL.
+            ticket = upload_storage.tickets.get((project_id, upload_token))
+            source_slot = ticket.slot if ticket is not None and ticket.purpose == "source" else None
+            if source_slot is None:
+                source_slot = next((key[1] for key in upload_transactions if key[0] == project_id and key[2] == upload_token), None)
+            if source_slot is not None:
+                return cancel_source_upload(project_id, source_slot, upload_token)
+            known = upload_storage.cancel(project_id, upload_token)
+        return jsonify({"ok": True, "cancelled": True, "known_upload": known})
+
     @app.post("/api/projects/<project_id>/assets")
     def upload_asset(project_id: str):
         project_root = store.project_dir(project_id)
-        request.max_content_length = min(max_upload_bytes, 2 * 1024**3) + 1024**2
+        ticket = getattr(g, "upload_ticket", None)
+        request.max_content_length = (JSON_BODY_LIMIT if ticket is not None
+                                      else min(max_upload_bytes, LEGACY_ASSET_UPLOAD_BYTES) + MULTIPART_ALLOWANCE_BYTES)
         with project_job_gate:
             current = store.load(project_id)
-            if active_uploads.get(project_id, 0) or jobs.active(project_id=project_id):
+            if project_import_active(project_id, exclude_token=ticket.token if ticket else "") or jobs.active(project_id=project_id):
                 raise APIInputError("project_busy", "Wait for active processing or import to finish before adding media.", 409)
             if len(current.get("assets") or {}) >= MAX_ASSETS:
                 raise APIInputError("asset_limit", f"A project can contain at most {MAX_ASSETS} media assets.")
@@ -1238,24 +1566,34 @@ def create_app(settings: Settings | None = None) -> Flask:
         folder = None
         durable = False
         try:
-            uploaded = request.files.get("file")
+            uploaded = ticket if ticket is not None else request.files.get("file")
             if not uploaded or not uploaded.filename:
                 raise APIInputError("missing_file", "Choose a media file to import.")
             filename = sanitize_filename(uploaded.filename)
             kind = asset_kind(filename)
             limit = asset_size_limit(kind, max_upload_bytes)
-            if request.content_length and request.content_length > limit + 1024**2:
-                raise APIInputError("file_too_large", f"This {kind} exceeds the {limit // 1024**2} MB import limit.", 413)
-            if shutil.disk_usage(settings.data_dir).free < int(request.content_length or limit) + 1024**3:
-                raise APIInputError("insufficient_storage", "There is not enough free space to import this media.", 507)
+            # A finalized chunked request contains metadata only; its durable
+            # ticket owns the original byte count and must obey the same file
+            # kind/configured limit as preflight. Never confuse body with file.
+            file_size = ticket.size if ticket is not None else None
+            if (file_size is not None and file_size > limit
+                    or ticket is None and request.content_length and request.content_length > limit + MULTIPART_ALLOWANCE_BYTES):
+                raise APIInputError("file_too_large", f"This {kind} exceeds the {limit // 1024**2} MB import limit.", 413,
+                                    max_upload_bytes=limit)
             asset_id = "asset_" + uuid.uuid4().hex
             path = safe_asset_path(project_root, f"media/assets/{asset_id}/original{Path(filename).suffix.lower()}")
             folder = path.parent
             folder.mkdir(parents=True)
-            copy_upload(uploaded, path, limit)
-            metadata = probe_asset(path, kind, settings)
+            if ticket is None:
+                copy_upload(uploaded, path, limit)
+            # Keep a chunked original journal-owned until validation finishes.
+            metadata = probe_asset(ticket.path if ticket is not None else path, kind, settings)
             asset = {"id": asset_id, "name": filename, **metadata, "path": path.relative_to(project_root).as_posix(), "status": "preparing", "waveform": []}
             with project_job_gate:
+                if ticket is not None and ticket.cancelled:
+                    raise UploadStorageError("upload_cancelled", "The upload was cancelled.")
+                if ticket is not None:
+                    ticket.path.replace(path)
                 current = store.update(project_id, lambda value: value.setdefault("assets", {}).update({asset_id: asset}))
                 durable = True
                 try:
@@ -1315,7 +1653,7 @@ def create_app(settings: Settings | None = None) -> Flask:
                 current = store.load(project_id)
                 if current["revision"] != revision:
                     raise RuntimeError("revision_conflict")
-                if active_uploads.get(project_id, 0) or jobs.active(project_id=project_id):
+                if project_import_active(project_id) or jobs.active(project_id=project_id):
                     raise APIInputError("project_busy", "Wait for active processing or import to finish before stabilizing a source.", 409)
                 if len(current.get("assets") or {}) >= MAX_ASSETS:
                     raise APIInputError("asset_limit", f"A project can contain at most {MAX_ASSETS} media assets.")
@@ -1391,7 +1729,7 @@ def create_app(settings: Settings | None = None) -> Flask:
             asset = (current.get("assets") or {}).get(asset_id)
             if not ASSET_ID_RE.fullmatch(asset_id) or not asset:
                 raise FileNotFoundError(asset_id)
-            if active_uploads.get(project_id, 0) or jobs.active(project_id=project_id):
+            if project_import_active(project_id) or jobs.active(project_id=project_id):
                 raise APIInputError("project_busy", "Wait for active processing or import to finish before retrying.", 409)
             if asset.get("status") == "ready":
                 return jsonify({"project": _public_project(current)})
@@ -1424,7 +1762,7 @@ def create_app(settings: Settings | None = None) -> Flask:
         asset = (store.load(project_id).get("assets") or {}).get(asset_id)
         if not asset or asset.get("status") != "ready":
             raise FileNotFoundError(asset_id)
-        path = safe_asset_path(store.project_dir(project_id), asset.get("thumbnail_path" if thumbnail else "preview_path"))
+        path = native_io_path(safe_asset_path(store.project_dir(project_id), asset.get("thumbnail_path" if thumbnail else "preview_path")))
         if not path.is_file():
             raise FileNotFoundError(asset_id)
         return send_file(path, conditional=True)
@@ -1433,7 +1771,7 @@ def create_app(settings: Settings | None = None) -> Flask:
     def delete_project(project_id: str):
         with project_job_gate:
             store.load(project_id)
-            if active_uploads.get(project_id, 0):
+            if project_import_active(project_id):
                 raise APIInputError(
                     "project_busy",
                     "A source upload is still in progress. Cancel it or wait before deleting the project.",
@@ -1472,14 +1810,6 @@ def create_app(settings: Settings | None = None) -> Flask:
                 "message": "The selected video is larger than the configured upload limit.",
                 "max_upload_bytes": max_upload_bytes,
             }), 413
-        disk = shutil.disk_usage(settings.data_dir)
-        # Keep 1 GiB free so a successful upload does not completely fill the drive.
-        if content_length and disk.free < content_length + 1024**3:
-            return jsonify({
-                "error": "insufficient_storage",
-                "message": "There is not enough free disk space to import this video.",
-                "disk_free_bytes": int(disk.free),
-            }), 507
         supplied_token = str(request.headers.get("X-Cutroom-Upload-Token") or "").strip()
         if supplied_token and not UPLOAD_TOKEN_PATTERN.fullmatch(supplied_token):
             raise APIInputError(
@@ -1498,8 +1828,11 @@ def create_app(settings: Settings | None = None) -> Flask:
         previous_media_path: Path | None = None
         installed_destination = False
         previous_source: dict[str, Any] | None = None
+        ticket = getattr(g, "upload_ticket", None)
         with project_job_gate:
-            require_tracks_unlocked(store.load(project_id))
+            current_project = store.load(project_id)
+            validate_sequence_version(current_project)
+            require_tracks_unlocked(current_project)
             now = time.monotonic()
             prune_upload_transactions(now)
             existing_transaction = upload_transactions.get(transaction_key)
@@ -1529,7 +1862,7 @@ def create_app(settings: Settings | None = None) -> Flask:
             }
             active_uploads[project_id] = active_uploads.get(project_id, 0) + 1
         try:
-            uploaded = request.files.get("file")
+            uploaded = ticket if ticket is not None else request.files.get("file")
             if not uploaded or not uploaded.filename:
                 return jsonify({"error": "missing_file", "message": "Choose a video file."}), 400
             filename = sanitize_filename(uploaded.filename)
@@ -1537,7 +1870,7 @@ def create_app(settings: Settings | None = None) -> Flask:
             if extension not in VIDEO_EXTENSIONS:
                 return jsonify({"error": "unsupported_format", "message": f"Unsupported video format: {extension or 'unknown'}"}), 415
             destination = media_dir / f"source-{slot}{extension}"
-            staging = media_dir / f".upload-{slot}-{transaction_id}{extension}"
+            staging = ticket.path if ticket is not None else media_dir / f".upload-{slot}-{transaction_id}{extension}"
             backup = media_dir / f".{destination.name}.{transaction_id}.backup"
             if upload_cancel_requested(transaction_key, transaction_id):
                 return jsonify({
@@ -1546,7 +1879,8 @@ def create_app(settings: Settings | None = None) -> Flask:
                     "upload_token": upload_token,
                 }), 409
             try:
-                copy_upload(uploaded, staging, max_upload_bytes)
+                if ticket is None:
+                    copy_upload(uploaded, staging, max_upload_bytes)
             except UploadTooLargeError:
                 return jsonify({
                     "error": "file_too_large",
@@ -1560,7 +1894,8 @@ def create_app(settings: Settings | None = None) -> Flask:
                     "upload_token": upload_token,
                 }), 409
             try:
-                metadata = probe_media(staging, settings)
+                metadata = (probe_media(staging, settings, original_filename=filename)
+                            if ticket is not None else probe_media(staging, settings))
             except (ValueError, subprocess.SubprocessError):
                 return jsonify({
                     "error": "invalid_media",
@@ -1585,6 +1920,7 @@ def create_app(settings: Settings | None = None) -> Flask:
 
             def commit_upload(project: dict[str, Any]) -> None:
                 nonlocal installed_destination, previous_source, previous_media_path, rollback_path
+                validate_sequence_version(project)
                 # Source replacement clears the shared draft, so every locked
                 # lane must be checked before any physical file is moved.
                 require_tracks_unlocked(project)
@@ -1663,14 +1999,19 @@ def create_app(settings: Settings | None = None) -> Flask:
                     # The import is already durable. Report success and leave a
                     # retryable state instead of returning an error that falsely
                     # implies the user's footage was lost.
-                    _mark_source_preparation(
-                        store,
-                        project_id,
-                        slot,
-                        transaction_id,
-                        "failed",
-                        f"Preparation queue unavailable: {exc}",
-                    )
+                    try:
+                        _mark_source_preparation(
+                            store,
+                            project_id,
+                            slot,
+                            transaction_id,
+                            "failed",
+                            f"Preparation queue unavailable: {exc}",
+                        )
+                    except OSError as error:
+                        # The original is committed. Failure to persist the
+                        # retryable preparation status must not report a lost import.
+                        app.logger.warning("Source imported; could not save deferred preparation status: %s", error)
                     project = store.load(project_id)
                     job = None
         finally:
@@ -1722,6 +2063,7 @@ def create_app(settings: Settings | None = None) -> Flask:
         rollback_available = True
         with project_job_gate:
             project = store.load(project_id)
+            upload_storage.cancel(project_id, upload_token)
             now = time.monotonic()
             prune_upload_transactions(now)
             transaction = upload_transactions.get(transaction_key)
@@ -1760,6 +2102,7 @@ def create_app(settings: Settings | None = None) -> Flask:
                         isinstance(rollback_path, Path) and rollback_path.is_file()
                     )
                     if rollback_available:
+                        validate_sequence_version(project)
                         require_tracks_unlocked(project)
                         for active_job in jobs.active(project_id=project_id, kind="prepare_source"):
                             if str(active_job.dedupe_key) == f"{slot}:{generation}":
@@ -1893,7 +2236,9 @@ def create_app(settings: Settings | None = None) -> Flask:
             _reset_manual_after_source_change(project, slot)
 
         with project_job_gate:
-            require_tracks_unlocked(store.load(project_id))
+            current_project = store.load(project_id)
+            validate_sequence_version(current_project)
+            require_tracks_unlocked(current_project)
             for active_job in jobs.active(project_id=project_id, kind="prepare_source"):
                 if str(active_job.dedupe_key).split(":", 1)[0] == slot:
                     jobs.cancel(active_job.id)
@@ -1975,13 +2320,29 @@ def create_app(settings: Settings | None = None) -> Flask:
         if isinstance(revision, bool) or not isinstance(revision, int) or revision < 1:
             raise APIInputError("invalid_revision", "Refresh the project before starting your timeline.")
         with project_job_gate:
-            if jobs.active(project_id=project_id) or active_uploads.get(project_id, 0):
+            if jobs.active(project_id=project_id) or project_import_active(project_id):
                 raise APIInputError("project_busy", "Wait for your recordings to finish preparing.", 409)
             try:
                 project = store.update(project_id, start_manual_draft, expected_revision=revision)
             except ManualEditError as error:
                 raise APIInputError("invalid_manual_edit", str(error)) from error
         return jsonify({"project": _public_project(project)})
+
+    @app.post("/api/projects/<project_id>/director/request-review")
+    def review_director_request(project_id: str):
+        from cutroom.instruction_contract import build_instruction_contract, effective_duration_bounds
+        payload = _json_object()
+        _validate_settings_payload(payload)
+        project = store.load(project_id)
+        effective = {**project.get("settings", {}), **payload}
+        contract = build_instruction_contract(effective)
+        source_duration = (project.get("sources", {}).get("A") or {}).get("duration")
+        bounds = effective_duration_bounds(effective, source_duration) if not contract["issues"] and effective.get("goal", "short") == "short" else None
+        return jsonify({"project_id": project_id, "revision": project["revision"],
+                        "contract": contract, "duration_bounds": bounds,
+                        "source_duration": source_duration,
+                        "ready": not bool(contract["issues"]),
+                        "scope": "deterministic_request_check_only_not_semantic_approval"})
 
     @app.post("/api/projects/<project_id>/director")
     def run_director(project_id: str):
@@ -1993,6 +2354,12 @@ def create_app(settings: Settings | None = None) -> Flask:
             return jsonify({"error": "source_required", "message": "Add source A before generating an edit."}), 400
         effective = dict(project.get("settings", {}))
         effective.update(payload)
+        from cutroom.instruction_contract import assert_instruction_contract
+        from cutroom.story_budget import StoryBudgetError
+        try:
+            assert_instruction_contract(effective)
+        except StoryBudgetError as error:
+            raise APIInputError("instruction_contract", str(error), **error.diagnostic) from error
         goal = str(effective.get("goal") or "short")
         selected_settings = connections.job_settings(settings)
         if cloud_enabled(selected_settings):
@@ -2084,11 +2451,13 @@ def create_app(settings: Settings | None = None) -> Flask:
         project = store.load(project_id)
         if not project.get("draft"):
             return jsonify({"error": "draft_required", "message": "Generate or create a draft before rendering."}), 400
+        validate_sequence_version(project)
         try:
-            ensure_render_storage(project, settings, store.project_dir(project_id), payload)
+            storage_estimate = ensure_render_storage(project, settings, store.project_dir(project_id), payload)
         except InsufficientStorageError as error:
             return jsonify(error.as_dict()), error.status_code
         def require_renderable(latest: dict[str, Any]) -> None:
+            validate_sequence_version(latest)
             if not latest.get("sources", {}).get("A") or not latest.get("draft"):
                 raise APIInputError("draft_required", "Generate or create a draft before rendering.")
 
@@ -2103,7 +2472,7 @@ def create_app(settings: Settings | None = None) -> Flask:
             validate_project=require_renderable,
             job_identity=payload,
         )
-        return jsonify({"job": job.public()}), 202
+        return jsonify({"job": job.public(), "storage_estimate": storage_estimate}), 202
 
     @app.get("/api/jobs/<job_id>")
     def get_job(job_id: str):
@@ -2577,6 +2946,17 @@ def _prepare_source_impl(
     if path is None or not path.is_file():
         raise RuntimeError("Source media path is missing or outside the project")
 
+    # Originals were transferred atomically already. Admit only NEW derived
+    # files on their real project-cache volume, before audio scans/transcoding.
+    from cutroom.working_storage import preparation_bytes, require_working_space
+    preview_cache = _safe_project_child(store.project_dir(project_id), source.get("preview_relative_path"))
+    needs_proxy = not source.get("browser_ready") and not (preview_cache is not None and preview_cache.is_file())
+    preparation_metadata = {**source, "kind": "video"}
+    working_bytes = preparation_bytes(preparation_metadata, transcode=needs_proxy,
+        height=int(settings.raw.get("proxy_height", 720)), crf=int(settings.raw.get("proxy_crf", 27)))
+    require_working_space([("source preview / thumbnails", store.project_dir(project_id) / "cache", working_bytes)],
+                          operation="source preparation")
+
     # Embedded-camera discovery samples only a handful of frames and is much
     # cheaper than scanning a multi-hour audio track. Run it first for source A so
     # the user can confirm a baked-in camera within seconds while the rest of the
@@ -2679,6 +3059,8 @@ def _prepare_source_impl(
         else:
             preview = store.project_dir(project_id) / "cache" / f"proxy-{slot}.mp4"
             try:
+                require_working_space([("source preview / thumbnails", preview.parent, working_bytes)],
+                                      operation="source preview")
                 create_proxy(
                     path,
                     preview,
@@ -2757,6 +3139,7 @@ def _public_captions(project: dict[str, Any], public: dict[str, Any]) -> None:
     corrections refer to); the editor sees the transcript with corrections applied.
     """
     try:
+        validate_sequence_version(project)
         items = project_caption_items(project, aligned=False)
     except (ValueError, TypeError, KeyError):
         items = []
@@ -2775,6 +3158,8 @@ def _public_captions(project: dict[str, Any], public: dict[str, Any]) -> None:
         for item in items
     ]
     analysis = public.get("analysis")
+    if caption_alternative_status(project)["active_id"] != "original":
+        return  # The recorded-speech list remains the original, not alternate caption text.
     fixes = corrections(project)
     if not isinstance(analysis, dict) or not fixes:
         return
@@ -2807,15 +3192,27 @@ def _strip_private_caption_provenance(public: dict[str, Any]) -> None:
 
 def _public_project(project: dict[str, Any]) -> dict[str, Any]:
     public = json.loads(json.dumps(project))
+    registry = public.pop("caption_alternatives", {}) or {}
+    public["caption_alternatives"] = [{"id": key, "label": value.get("label", "Saved alternative"),
+                                        "source_interval": value.get("source_interval"), "unverified": True}
+                                       for key, value in registry.items() if isinstance(value, dict)]
+    public["caption_alternative_status"] = caption_alternative_status(project)
     public["display_name"] = display_name(public)
     _strip_private_caption_provenance(public)
     strip_private_edit_history(public)
     try:
+        validate_sequence_version(public)
         public["editor_sequence"] = editor_sequence_snapshot(public)
     except SourceTrackError:
         # A malformed old draft must remain openable; report the editor issue
         # without silently replacing its footage with a different sequence.
         public["editor_sequence"] = {"error": "The saved timeline is invalid. Review your clips or restore an earlier edit."}
+    try:
+        if isinstance(public["editor_sequence"], dict) and "error" in public["editor_sequence"]:
+            raise TimelineBindingError("The editor timeline is unavailable")
+        public["timeline_bindings"] = build_timeline_bindings(public, editor_sequence=public["editor_sequence"])
+    except TimelineBindingError:
+        public["timeline_bindings"] = {"error": PUBLIC_BINDING_ERROR, "id_actions": []}
     _public_captions(project, public)
     project_id = public["id"]
     asset_fields = {"id", "name", "kind", "duration", "width", "height", "has_audio", "status", "waveform", "stabilized"}
@@ -2891,11 +3288,13 @@ def main() -> None:
             threading.Timer(1.2, lambda: webbrowser.open(url)).start()
         try:
             from waitress import serve
+            from cutroom.upload_transport import create_upload_server
             request_body_limit = int(app.config.get("MAX_CONTENT_LENGTH") or (float(settings.raw.get("max_upload_gb", 40)) * 1024**3 + 32 * 1024**2))
             print(f"CUTROOM AI {__version_label__} — {url}")
             print(f"Upload transport limit: {request_body_limit / 1024**3:.1f} GiB")
             serve(
                 app,
+                _server=create_upload_server,
                 sockets=reserved_sockets,
                 threads=8,
                 channel_timeout=3600,
@@ -2909,6 +3308,10 @@ def main() -> None:
     finally:
         for candidate in reserved_sockets:
             candidate.close()
+        if app is not None:
+            storage = app.extensions.get("cutroom_upload_storage")
+            if storage is not None:
+                storage.close()
         if jobs is not None:
             jobs.shutdown(wait=False, cancel_pending=True)
 
