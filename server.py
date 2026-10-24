@@ -884,7 +884,15 @@ def create_app(settings: Settings | None = None) -> Flask:
         )
         response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
         response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
-        response.headers["Cache-Control"] = "no-store" if request.path.startswith("/api/") else "public, max-age=300"
+        if request.path.startswith("/api/"):
+            response.headers["Cache-Control"] = "no-store"
+        elif request.path == "/":
+            # Entry HTML must discover new asset keys after an upgrade. Keep its
+            # ETag/304 support; only versioned assets may stay fresh in cache.
+            # Previously cached old HTML still needs reload or expiry once.
+            response.headers["Cache-Control"] = "no-cache"
+        else:
+            response.headers["Cache-Control"] = "public, max-age=300"
         return response
 
     @app.errorhandler(APIInputError)
