@@ -285,13 +285,20 @@ jobs:
             --combined-zip "$RUNNER_TEMP/review-inputs/CUTROOM-1.2-Beta-combined-review-ad3259b.zip" \
             --source-archive "$RUNNER_TEMP/review-inputs/SOURCE-ad3259b.zip" \
             --output-dir "$RUNNER_TEMP/review-reports" --native "${extra[@]}"
-      - name: Retain private-review JSON evidence
+      - name: Preserve exact review JSON in standard job logs without artifact storage
         if: ${{ always() }}
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: CUTROOM-unpublished-review-${{ matrix.architecture }}
-          path: |
-            ${{ runner.temp }}/review-preflight/*.json
-            ${{ runner.temp }}/review-reports/*.json
-          if-no-files-found: warn
-          retention-days: 7
+        shell: bash
+        run: |
+          python - <<'PY'
+          import base64, hashlib, os
+          from pathlib import Path
+          root = Path(os.environ['RUNNER_TEMP'])
+          for folder in ('review-preflight', 'review-reports'):
+              for path in sorted((root / folder).glob('*.json')):
+                  data = path.read_bytes()
+                  encoded = base64.b64encode(data).decode('ascii')
+                  print('REVIEW_JSON_BEGIN', path.relative_to(root).as_posix(), len(data), hashlib.sha256(data).hexdigest())
+                  for offset in range(0, len(encoded), 3000):
+                      print('REVIEW_JSON_DATA', encoded[offset:offset + 3000])
+                  print('REVIEW_JSON_END')
+          PY
