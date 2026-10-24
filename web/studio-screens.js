@@ -229,45 +229,11 @@
 
   // ---------- Layout ----------
   function initLayout() {
-    const shelf = $("#studioShelfLayout"), choices = $("#sourceLayoutChoices");
-    if (!shelf || !choices || shelf.dataset.studioScreens) return;
-    shelf.dataset.studioScreens = "true";
-    const section = make("section", "composition-tiles");
-    section.append(make("h3", "shelf-title", "Composition"));
-    const grid = make("div", "composition-grid");
-    grid.setAttribute("role", "radiogroup");
-    grid.setAttribute("aria-label", "Composition");
-    const names = { stacked: "Stacked", screen: "Screen only", camera: "Camera only", side_by_side: "Side by side", pip: "Picture in picture", auto: "Style default" };
-    const tiles = Object.entries(names).map(([layout, title]) => {
-      const tile = make("button", "composition-tile");
-      tile.type = "button";
-      tile.setAttribute("role", "radio");
-      tile.dataset.layout = layout;
-      tile.append(make("span", "composition-shape"), make("b", "", title));
-      tile.addEventListener("click", () => { $(`[data-layout="${layout}"]`, choices)?.click(); sync(); });
-      grid.append(tile);
-      return tile;
-    });
-    const note = make("p", "composition-note", "Add a second recording to combine camera and screen.");
-    const sync = () => {
-      const available = !$("#sourceMixerBody")?.hidden && !$("#sourceMixerBody")?.closest("[hidden]");
-      section.classList.toggle("unavailable", !available);
-      note.hidden = available;
-      for (const tile of tiles) {
-        const original = $(`[data-layout="${tile.dataset.layout}"]`, choices);
-        tile.setAttribute("aria-checked", String(Boolean(original?.classList.contains("active") || original?.getAttribute("aria-pressed") === "true")));
-        tile.disabled = !available || !original || original.disabled;
-      }
-    };
-    section.append(grid, note);
-    shelf.prepend(section);
-    observe(choices, sync);
-    syncers.add(sync);
-    observe($("#sourceMixer"), sync, { attributes: true, subtree: true, attributeFilter: ["hidden", "class", "disabled"] });
-    sync();
-
-    // The framing tools are the panel itself, not a collapsible section.
     const framing = $("#studioPanelFraming .framing-layout");
+    if (!framing || framing.dataset.studioScreens) return;
+    framing.dataset.studioScreens = "true";
+    // Keep one set of layout choices in the inspector, alongside source
+    // timing and range scope. The left shelf remains the media library.
     const keepFramingOpen = () => { if (framing && !framing.open) framing.open = true; };
     syncers.add(keepFramingOpen); keepFramingOpen();
     // Framing sliders read as label · slider · value rows.

@@ -951,6 +951,19 @@ function bindEvents() {
   elements.sourceInsertForm.addEventListener("submit", insertSourceFootage);
   elements.emptyTimelineAdd.addEventListener("click", openSourceReview);
   document.getElementById("reviewSourceButton").addEventListener("click", openSourceReview);
+  for (const id of ["reviewLayoutCoverage", "reviewExportLayout"]) {
+    document.getElementById(id)?.addEventListener("click", reviewSourceTiming);
+  }
+  document.getElementById("reviewSharedSourceTiming")?.addEventListener("click", () => {
+    if (sourceMixerControlBusy()) return;
+    openStudioTab("framing");
+    const details = document.getElementById("sharedSourceTimingDetails"); if (details) details.open = true;
+    elements.sourceSyncOffset?.scrollIntoView({block:"center"});
+  });
+  document.getElementById("reviewIndependentSourceTiming")?.addEventListener("click", () => {
+    if (sourceMixerControlBusy()) return;
+    setEditTarget("B"); openSourceReview();
+  });
   document.getElementById("closeTimelineGaps").addEventListener("click", () => {
     const slot = activeEditTarget();
     applyManualEdit("sequence_close_gaps", slot === "edit" ? {} : {slot});
@@ -3794,8 +3807,10 @@ function renderCreatorLayout(mixer,busy,hasTwoSources) {
     form.addEventListener("input",()=>form.dataset.dirty="true");
     form.addEventListener("submit",event=>{
       event.preventDefault();if(sourceMixerControlBusy())return;
-      const values={screen_fit:document.getElementById("creatorScreenFit").value,pip_scale:Number(document.getElementById("creatorPipScale").value)/100,
-        pip_x:Number(document.getElementById("creatorPipX").value)/100,pip_y:Number(document.getElementById("creatorPipY").value)/100};
+      const values={screen_fit:document.getElementById("creatorScreenFit").value};
+      if (!document.getElementById("creatorInsetControls")?.hidden) Object.assign(values, {
+        pip_scale:Number(document.getElementById("creatorPipScale").value)/100,
+        pip_x:Number(document.getElementById("creatorPipX").value)/100,pip_y:Number(document.getElementById("creatorPipY").value)/100});
       if(!form.reportValidity())return;
       const projectId=state.project?.id;
       void saveSourceMixer(values).then(saved=>{if(saved&&state.project?.id===projectId){form.dataset.dirty="";renderSourceMixer();}})
@@ -3808,6 +3823,11 @@ function renderCreatorLayout(mixer,busy,hasTwoSources) {
     for(const[id,value]of [["creatorScreenFit",mixer.screenFit],["creatorPipScale",mixer.pipScale*100],["creatorPipX",mixer.pipX*100],["creatorPipY",mixer.pipY*100]])document.getElementById(id).value=value;
   }
   form.querySelectorAll("input,select,button").forEach(node=>node.disabled=busy);
+  const inset = document.getElementById("creatorInsetControls");
+  if (inset) {
+    inset.hidden = (state.sourceMixerPreviewLayout || state.sourceMixerLayout) !== "pip";
+    inset.querySelectorAll?.("input").forEach(node=>node.disabled=busy || inset.hidden);
+  }
   document.getElementById("creatorLayoutStatus").textContent=mixer.screenFit==="contain"?uiCopy("תמונת המסך נשמרת בשלמותה; זום שמור אינו מוחל עליה.","Full gameplay frame preserved; stored screen zoom is ignored."):uiCopy("מסגור ידני · ניתן לביטול", "Manual framing · Undo available");
 }
 
@@ -4095,7 +4115,7 @@ function sourceSyncDescription(mixer = sourceMixerSettings()) {
 function sourceBEditCoverage(project, mixer, selection = null) {
   const limit = Number(project?.sources?.B?.video_duration) > 0
     ? Number(project.sources.B.video_duration) : Math.max(0, Number(project?.sources?.B?.duration) || 0);
-  const ranges = selection ? [selection] : project?.draft?.keep_ranges || [{ start: 0, end: Number(project?.sources?.A?.duration) || 0 }];
+  const ranges = Array.isArray(selection) ? selection : selection ? [selection] : project?.draft?.keep_ranges || [{ start: 0, end: Number(project?.sources?.A?.duration) || 0 }];
   const union = values => {
     const merged = [];
     for (const range of values.filter(item => Number.isFinite(item.start) && Number.isFinite(item.end) && item.end > item.start).sort((a, b) => a.start - b.start)) {
@@ -4120,9 +4140,18 @@ function sourceBEditCoverage(project, mixer, selection = null) {
   return { duration, covered, full: duration > 0 && covered >= duration - .001, clips: clips.length };
 }
 
+function reviewSourceTiming() {
+  if (sourceMixerControlBusy()) return;
+  if (elements.exportDialog?.open) elements.exportDialog.close();
+  openStudioTab("framing");
+  document.getElementById("sourceTimingStep")?.scrollIntoView({block:"center"});
+}
+
 function renderSourceBCoverage(mixer = sourceMixerSettings(), preview = null) {
   const target = elements.sourceBCoverage;
   if (!target) return;
+  const layoutAlert = document.getElementById?.("layoutCoverageAlert");
+  if (layoutAlert) layoutAlert.hidden = true;
   if (!state.project?.sources?.B) {
     target.textContent = "";
     for (const id of ["sourceBCoverageNotice", "sourceBReviewPlacement"]) {
@@ -4150,6 +4179,29 @@ function renderSourceBCoverage(mixer = sourceMixerSettings(), preview = null) {
   }
   if (preview?.requiresB && !preview.available) text = `B has no mapped frame at the playhead; preview uses ${preview.fallback === "gap" ? "an empty frame" : "source A"}. ${text}`;
   const warning = hasEdit ? !coverage.full : !original.full;
+  // Only require B during ranges whose saved layout actually uses it. A gap
+  // during an intentional screen-only section is not a failed split layout.
+  const needsB = camera => ["B", "stacked", "side_by_side", "pip"].includes(camera)
+    || (camera === "camera" && mixer.cameraSlot === "B") || (camera === "screen" && mixer.screenSlot === "B");
+  // The preview alert describes export readiness for the whole edit, even
+  // when the timing tools below are inspecting a fully covered selection.
+  const scopeRanges = project?.draft?.keep_ranges || [];
+  const requestedRanges = (project?.draft?.camera_plan || []).filter(row => needsB(row.camera)).flatMap(row => scopeRanges
+    .map(range => ({start:Math.max(Number(row.start), Number(range.start)), end:Math.min(Number(row.end), Number(range.end))}))
+    .filter(range => range.end > range.start));
+  const layoutCoverage = sourceBEditCoverage(project, mixer, requestedRanges);
+  if (layoutAlert && hasEdit && layoutCoverage.duration > 0 && !layoutCoverage.full) {
+    layoutAlert.hidden = false;
+    const message = document.getElementById("layoutCoverageAlertText");
+    if (message) message.textContent = `Requested layout needs B, but only ${layoutCoverage.covered.toFixed(2)} of ${layoutCoverage.duration.toFixed(2)} required edit seconds have mapped B footage. The A-only fallback does not fulfil the requested layout. Review source timing before export.`;
+  }
+  const busy = sourceMixerControlBusy();
+  const shared = document.getElementById("reviewSharedSourceTiming"); if (shared) shared.disabled = busy;
+  const independent = document.getElementById("reviewIndependentSourceTiming"); if (independent) independent.disabled = busy || !hasEdit;
+  const readiness = document.getElementById("sourceTimingReadiness");
+  if (readiness) readiness.textContent = hasEdit
+    ? "For independent narration, choose its range and position on the edit timeline; select its audio in step 1. Nothing is looped or frozen."
+    : "Independent footage is placed after a draft or manual edit exists. Choosing a layout does not synchronize unrelated recordings.";
   if (target.textContent !== text) target.textContent = text;
   target.dataset.warning = String(warning || Boolean(preview?.requiresB && !preview.available));
   let notice = document.getElementById?.("sourceBCoverageNotice");
@@ -4161,7 +4213,7 @@ function renderSourceBCoverage(mixer = sourceMixerSettings(), preview = null) {
   if (notice) {
     const syncText = sourceSyncDescription(mixer);
     const unconfirmed = syncText.startsWith("Sync unconfirmed:");
-    notice.hidden = !warning && !unconfirmed;
+    notice.hidden = Boolean(layoutAlert && !layoutAlert.hidden) || (!warning && !unconfirmed);
     notice.textContent = `${warning ? text : ""}${warning && unconfirmed ? " " : ""}${unconfirmed ? syncText : ""}`;
   }
   let review = document.getElementById?.("sourceBReviewPlacement");
@@ -4173,7 +4225,7 @@ function renderSourceBCoverage(mixer = sourceMixerSettings(), preview = null) {
     (notice || target).after(review);
   }
   if (review) {
-    review.hidden = !state.project.editor_sequence || coverage.full || !hasEdit;
+    review.hidden = Boolean(independent) || !state.project.editor_sequence || coverage.full || !hasEdit;
     review.disabled = sourceMixerControlBusy();
   }
 }
@@ -4456,11 +4508,11 @@ async function applyCreatorFrame() {
   pauseAllMedia();
   const projectId = state.project.id;
   const mixer = sourceMixerSettings();
-  const saved = await saveSourceMixer({ primary_role: "screen", first_slot: mixer.cameraSlot, stack_fit: "cover", default_layout: "stacked" }, { silent: true });
+  const saved = await saveSourceMixer({ primary_role: "screen", first_slot: mixer.cameraSlot, stack_fit: "cover", screen_fit: "cover", default_layout: "stacked" }, { silent: true });
   if (!saved || state.project?.id !== projectId) return;
   state.sourceMixerLayout = "stacked";
   applyFramingPreview();
-  if (state.project.draft) await applySourceLayout(state.manualSelection ? "selection" : "all", { immediate: true });
+  if (state.project.draft) await applySourceLayout("all", { immediate: true });
   else renderSourceMixer();
 }
 
@@ -6165,9 +6217,20 @@ function renderPodcastFramingCues(panel) {
   host.hidden = !cues.length;
 }
 
+function podcastFramingSourceSupported(project) {
+  const source = project?.sources?.A;
+  const ratio = Number(source?.width) / Number(source?.height);
+  return Boolean(source?.generation && !project.sources?.B && Number.isFinite(ratio)
+    && ratio > 0 && ratio < 1 && Number(source.rotation || 0) === 0);
+}
+
 function renderPodcastFraming() {
   const panel = document.getElementById("podcastFraming");
   if (!panel) return;
+  // This tool only crops an already stacked portrait recording. Separate
+  // screen/camera feeds use source timing and layout, not participant crops.
+  panel.hidden = !podcastFramingSourceSupported(state.project);
+  if (panel.hidden) return;
   const confirm = document.getElementById("podcastStackedClean");
   if (!panel.dataset.bound) {
     panel.dataset.bound = "true";
@@ -7961,6 +8024,7 @@ async function startExport() {
   if (state.draftDirtyReasons.size) { toast(t("rebuildBeforeRefine")); return; }
   pauseAllMedia();
   const projectId = state.project.id;
+  const reviewLayout = document.getElementById("reviewExportLayout"); if (reviewLayout) reviewLayout.hidden = true;
   if (liveEmbeddedCameraRequest() && (!(await flushEmbeddedCameraSave(projectId)) || state.project?.id !== projectId)) return;
   const lock = acquireJobStartLock("render", projectId);
   if (!lock) { toast(uiCopy("כבר מתבצעת עבודה", "Another job is already running")); return; }
@@ -7985,6 +8049,7 @@ async function startExport() {
     await completeExportJob(job, projectId);
   } catch (error) {
     if (state.project?.id === projectId) {
+      if (reviewLayout) reviewLayout.hidden = error.payload?.error !== "layout_coverage_incomplete";
       if(storageInfo){storageInfo.textContent=storagePlanText(error.payload?.storage_plan);storageInfo.hidden=!storageInfo.textContent;}
       elements.exportActions.hidden = false;
       elements.exportProgress.hidden = true;

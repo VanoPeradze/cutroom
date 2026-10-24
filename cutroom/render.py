@@ -124,7 +124,7 @@ def _clean_ranges(rows: Any, duration: float) -> list[dict[str, float]]:
     return output
 
 
-def _render_plan(project: dict[str, Any]) -> list[dict[str, Any]]:
+def _render_plan(project: dict[str, Any], *, layout_coverage: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
     """Build a bounded, gap-free camera plan inside the authoritative keep ranges.
 
     Manual editing normally writes a perfect partition. This defensive pass keeps
@@ -246,6 +246,15 @@ def _render_plan(project: dict[str, Any]) -> list[dict[str, Any]]:
                 ),
                 "A",
             )
+            # Record the requested composition before the legacy safe fallback
+            # replaces it. Export must not mistake a playable A-only picture for
+            # fulfilment of an explicit two-source layout.
+            present = ({slot for slot in ("A", "B") if available(slot, midpoint)} if independent
+                       else {"A"} | ({"B"} if b_has_video and b_start <= midpoint < b_end else set()))
+            if layout_coverage is not None and needs_b(camera):
+                required = {"A", "B"} if camera in {"stacked", "side_by_side", "pip"} else {"B"}
+                layout_coverage.append({"start": start, "end": end, "camera": camera,
+                                        "missing_slots": sorted(required - present)})
             # A shorter/offset B must not turn part of a camera-only shot black
             # or freeze its last frame. Match the preview by showing A wherever
             # B has no real video; preserve the requested layout inside B.
@@ -290,6 +299,52 @@ def _render_plan(project: dict[str, Any]) -> list[dict[str, Any]]:
     if len(compact) > (2000 if has_sequence(project) else 500):
         raise ValueError("The edit contains too many fragments. Merge cuts before rendering.")
     return compact
+
+
+class LayoutCoverageError(ValueError):
+    def __init__(self, coverage: dict[str, Any]):
+        self.coverage = coverage
+        short_source = coverage["source_B_video_duration"] < coverage["requested_seconds"]
+        duration_help = (f" Source B contains {coverage['source_B_video_duration']:.2f} seconds of video. "
+                         "Add suitable footage, explicitly shorten the edit, or choose a different layout for the uncovered section."
+                         if short_source else "")
+        super().__init__(
+            f"The requested layout is missing footage for {coverage['missing_seconds']:.2f} "
+            f"of {coverage['requested_seconds']:.2f} seconds. Export would silently replace that layout. "
+            "For synchronized recordings, review source alignment; for independently recorded camera/narration, "
+            "explicitly place the needed source range on the edit timeline. Missing footage is not looped or frozen."
+            + duration_help
+        )
+
+    def public(self) -> dict[str, Any]:
+        return {"error": "layout_coverage_incomplete", "message": str(self), "layout_coverage": self.coverage}
+
+
+def composition_layout_coverage(project: dict[str, Any]) -> dict[str, Any]:
+    """Read-only layout feasibility on the same clocks/boundaries as export."""
+    rows: list[dict[str, Any]] = []
+    _render_plan(project, layout_coverage=rows)
+    missing = [row for row in rows if row["missing_slots"]]
+    manual = project.get("manual") or {}
+    multi = {"B", "screen", "camera", "stacked", "side_by_side", "pip"}
+    explicit = ((manual.get("source_mixer") or {}).get("default_layout") in multi
+                or (project.get("settings") or {}).get("layout") in multi
+                or bool(manual.get("sequence"))
+                or any(row.get("layout") in multi for row in manual.get("camera_overrides") or []))
+    return {"requested_seconds": round(sum(row["end"] - row["start"] for row in rows), 6),
+            "missing_seconds": round(sum(row["end"] - row["start"] for row in missing), 6),
+            "missing_ranges": missing[:32], "missing_range_count": len(missing),
+            "explicit_layout": bool(explicit), "clock": "edit" if has_sequence(project) else "source_A",
+            "source_B_video_duration": _source_video_duration((project.get("sources") or {}).get("B") or {}),
+            "export_blocked": bool(explicit and missing)}
+
+
+def require_layout_coverage(project: dict[str, Any], options: dict[str, Any] | None = None) -> None:
+    if options:
+        project = with_export_options(project, options)
+    coverage = composition_layout_coverage(project)
+    if coverage["export_blocked"]:
+        raise LayoutCoverageError(coverage)
 
 
 def _frame_aligned_plan(project: dict[str, Any]) -> list[dict[str, Any]]:
@@ -1582,6 +1637,8 @@ def render_project(context: JobContext, project_id: str, store: ProjectStore, se
     validate_sequence_version(project)
     saved_input_fingerprint = _render_input_fingerprint(project)
     project = with_export_options(project, options)
+    if options.get("_require_layout_coverage"):
+        require_layout_coverage(project)
     render_input_fingerprint = _render_input_fingerprint(project)
     fps = project_export_fps(project)
     if not project.get("sources", {}).get("A"):

@@ -57,7 +57,8 @@ test("creator frame applies the camera role on top without changing YouTube outp
   const { run } = app();
   run(`
     state.project.sources.B = { duration: 20, has_audio: true };
-    state.project.manual = { source_mixer: { screen_slot: "B", camera_slot: "A" } };
+    state.project.manual = { source_mixer: { screen_slot: "B", camera_slot: "A", screen_fit: "contain" } };
+    state.manualSelection = { start: 3, end: 8 };
     state.project.draft = { keep_ranges: [{ start: 0, end: 20 }] };
     state.project.settings = { goal: "youtube", aspect: "16:9", target_duration: 120 };
     elements.aspectSelect.value = "16:9";
@@ -71,6 +72,7 @@ test("creator frame applies the camera role on top without changing YouTube outp
   await run("applyCreatorFrame()");
   assert.equal(run("savedFrame.first_slot"), "A");
   assert.equal(run("savedFrame.stack_fit"), "cover");
+  assert.equal(run("savedFrame.screen_fit"), "cover");
   assert.equal(run("savedFrame.primary_role"), "screen");
   assert.equal(run("elements.aspectSelect.value"), "16:9");
   assert.equal(run("state.project.settings.goal"), "youtube");
@@ -390,6 +392,18 @@ test("export submits the selected frame rate after saving", async () => {
   await run('startExport()');
   assert.equal(run("renderBody.fps"), 60);
 });
+
+for (const code of ["layout_coverage_incomplete", "other_export_problem"]) {
+  test(`export recovery shows source timing action only for ${code}`, async () => {
+    const {run,nodes}=settingsApp();
+    run(`pauseAllMedia=()=>{};flushProjectSaves=async()=>{};
+      api=async()=>{const error=new Error('Camera coverage needs review');error.payload={error:${JSON.stringify(code)}};throw error;};`);
+    await run('startExport()');
+    assert.equal(nodes.get('reviewExportLayout').hidden,code!=='layout_coverage_incomplete');
+    assert.equal(run('elements.exportProgress.hidden'),true);
+    assert.equal(run('state.jobStartLocks.size'),0);
+  });
+}
 
 test("style radios support arrow and boundary keys without consuming modified shortcuts", () => {
   const { run, nodes } = app();

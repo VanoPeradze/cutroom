@@ -68,7 +68,7 @@ from cutroom.media_library import (
 )
 from cutroom.projects import ProjectStateError, ProjectStore, apply_automatic_name, display_name, name_from_source
 from cutroom.text_clips import MAX_CAPTION_IMPORT_BYTES, TEXT_ACTION_FIELDS
-from cutroom.render import InsufficientStorageError, available_encoders, ensure_render_storage, project_caption_items, render_project
+from cutroom.render import InsufficientStorageError, LayoutCoverageError, available_encoders, ensure_render_storage, project_caption_items, render_project, require_layout_coverage
 from cutroom.utils import sanitize_filename
 from cutroom.upload_storage import CHUNK_BYTES, UploadStorage, UploadStorageError, is_storage_full
 from cutroom.upload_transport import LEGACY_ASSET_UPLOAD_BYTES, MULTIPART_ALLOWANCE_BYTES
@@ -2453,6 +2453,10 @@ def create_app(settings: Settings | None = None) -> Flask:
             return jsonify({"error": "draft_required", "message": "Generate or create a draft before rendering."}), 400
         validate_sequence_version(project)
         try:
+            require_layout_coverage(project, payload)
+        except LayoutCoverageError as error:
+            return jsonify(error.public()), 409
+        try:
             storage_estimate = ensure_render_storage(project, settings, store.project_dir(project_id), payload)
         except InsufficientStorageError as error:
             return jsonify(error.as_dict()), error.status_code
@@ -2460,6 +2464,10 @@ def create_app(settings: Settings | None = None) -> Flask:
             validate_sequence_version(latest)
             if not latest.get("sources", {}).get("A") or not latest.get("draft"):
                 raise APIInputError("draft_required", "Generate or create a draft before rendering.")
+            try:
+                require_layout_coverage(latest, payload)
+            except LayoutCoverageError as error:
+                raise APIInputError("layout_coverage_incomplete", str(error), 409, layout_coverage=error.coverage) from error
 
         job = submit_project_job(
             "render",
@@ -2468,7 +2476,7 @@ def create_app(settings: Settings | None = None) -> Flask:
             project_id,
             store,
             settings,
-            payload,
+            {**payload, "_require_layout_coverage": True},
             validate_project=require_renderable,
             job_identity=payload,
         )
