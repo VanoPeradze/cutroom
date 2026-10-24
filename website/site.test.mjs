@@ -39,36 +39,36 @@ test('Windows and Mac have separate archives with an optional combined download 
     assert.match(links[0][1], /\bdownload-link\b/);
     assert.doesNotMatch(links[0][1], /\sdownload(?:\s|=|$)/, 'Cross-origin downloads rely on GitHub attachment headers');
     assertLocalized(links[0]);
-    const mirror = linksTo(region('details', 'install-help'), `/downloads/${entry.filename}`);
+    const mirror = linksTo(region('details', 'install-help'), `/downloads/${entry.filename}`).filter(link => link[2].includes(platform === 'mac' ? 'Mac mirror' : 'Windows mirror'));
     assert.equal(mirror.length, 1);
     assertLocalized(mirror[0]);
     assert.match(mirror[0][2], /mirror/i);
     assert.ok(linksTo(html, `/downloads/${entry.filename}.sha256`).length >= 1);
   }
-  assert.equal(release.filename, 'CUTROOM-1.2-Beta-20261022-maintenance1.zip');
-  assert.equal(release.platforms.windows.filename, 'CUTROOM-1.2-Beta-Windows-20261022-maintenance1.zip');
-  assert.equal(release.platforms.mac.filename, 'CUTROOM-1.2-Beta-Mac-20261022-maintenance1.zip');
-  assert.notEqual(release.platforms.mac.filename, release.filename);
-  assert.ok(!release.platforms.mac.folder, 'The standalone Mac launcher is beside App, without a mac subfolder');
-  assert.equal(linksTo(html, release.url).length, 1); // Optional combined ZIP help link, separate from the Mac button.
-  assert.equal(linksTo(html, `/downloads/${release.filename}`).length, 1);
-  assert.equal(linksTo(html, `/downloads/${release.filename}.sha256`).length, 1);
-  assert.match(html, /Mac has its own ZIP\. Extract it and run START CUTROOM\.command beside App\./);
+  assert.equal(release.filename, 'CUTROOM-1.2-Beta-combined-review-ad3259b.zip');
+  assert.equal(release.platforms.windows.filename, 'CUTROOM-1.2-Beta-Windows-review-ad3259b.zip');
+  assert.equal(release.platforms.mac.filename, 'CUTROOM-1.2-Beta-combined-review-ad3259b.zip');
+  assert.equal(release.platforms.mac.filename, release.filename);
+  assert.equal(release.platforms.mac.folder,'mac', 'The standalone Mac launcher is beside App, without a mac subfolder');
+  assert.equal(linksTo(html, release.url).length, 2); // Optional combined ZIP help link, separate from the Mac button.
+  assert.equal(linksTo(html, `/downloads/${release.filename}`).length, 2);
+  assert.equal(linksTo(html, `/downloads/${release.filename}.sha256`).length, 2);
+  assert.match(html, /Mac uses the combined ZIP\. Extract it, open mac, then run START CUTROOM\.command beside App\./);
   assert.match(region('details', 'install-help'), /The optional combined ZIP has exactly two folders: windows and mac/);
   const source = release.source_archive;
-  assert.equal(source.filename, 'SOURCE-203d164.zip');
+  assert.equal(source.filename, 'SOURCE-ad3259b.zip');
   for (const url of [source.url, `/downloads/${source.filename}`, `/downloads/${source.filename}.sha256`]) assert.equal(linksTo(html,url).length,1);
-  assert.equal(downloadEntries(release).length,4);
+  assert.equal(downloadEntries(release).length,3);
   assert.doesNotMatch(html, /href="[^"]*Linux[^"\n]*\.zip/i);
   assert.ok(linksTo(html, `${repository}/blob/master/docs/PLATFORMS.md#linux-source-based-development-path`).length);
 });
 
 test('download metadata pins a dated release and preserves Expo mirrors and provenance', () => {
   const release = JSON.parse(readFileSync(new URL('./release.json', import.meta.url), 'utf8'));
-  assert.equal(release.github_release.tag, 'v1.2-beta-20261022-maintenance1');
-  assert.equal(release.github_release.previous_public_tag, 'v1.2-beta-20261019-hotfix1');
+  assert.equal(release.github_release.tag, 'v1.2-beta-20261024-update1');
+  assert.equal(release.github_release.previous_public_tag, 'v1.2-beta-20261022-maintenance1');
   assert.equal(release.github_release.tag_commit, release.source_commit);
-  assert.equal(release.github_release.package_bytes_changed, false);
+  assert.equal(release.github_release.package_bytes_changed, true);
   assert.equal(release.github_release.url, `${repository}/releases/tag/${release.github_release.tag}`);
   for (const entry of downloadEntries(release)) {
     assert.equal(entry.url, `${repository}/releases/download/${release.github_release.tag}/${entry.filename}`);
@@ -81,45 +81,30 @@ test('public beta retains exact automated native provenance and visible pending 
   assertPublishable(release);
   assert.equal(release.release_state,'beta');
   assert.equal(release.full_release_qualified,false);
-  assert.equal(release.source_commit,'203d164d04ef9d610cc9aedf55fe640b99f19f85');
-  assert.equal(release.github_release.tag,'v1.2-beta-20261022-maintenance1');
-  assert.equal(release.native_validation.run_id,39723914568);
-  assert.equal(release.validated_pr_head,'39d319c832a079dd55600df233bfa77e98bdc518');
+  assert.equal(release.source_commit,'ad3259bd19abc5fa1bab3e063fe62caeb1ecf93c');
+  assert.equal(release.github_release.tag,'v1.2-beta-20261024-update1');
+  assert.equal(release.native_validation.run_id,40064653092);
+  assert.equal(release.validated_pr_head,'c718be7f1af9a0b5fb61b2102f3b14a681578c67');
   assert.equal(release.native_validation.transcription_run,false);
   for (const architecture of ['arm64','x64']) {
     const checks = release.native_validation.architectures[architecture];
     assert.equal(checks.offline_checks_passed,69);
-    assert.equal(checks.feature_tests_passed,348);
+    assert.equal(checks.feature_tests_passed,350);
     assert.equal(checks.required_cases_passed,50);
     assert.equal(checks.skipped,0);
   }
   assert.match(html,/Public beta\./);
   assert.match(html,/Windows requires WinGet and Microsoft Visual C\+\+ x64 runtime first\./);
   assert.match(html,/The required Visual C\+\+ runtime is not installed by the launcher\./);
-  assert.equal(release.windows_fresh_install_acceptance,'passed-scoped-windows-10-sandbox');
-  assert.equal(release.windows_fresh_install.result,'passed_scoped_guest_install_exports_and_process_restart');
+  assert.equal(release.windows_fresh_install_acceptance,'not-completed-user-accepted-beta-gap');
+  assert.equal(release.windows_fresh_install.result,'not_completed_sandbox_startup_timeout');
+  assert.equal(release.windows_fresh_install.status,'unverified');
+  assert.equal(release.windows_fresh_install.guest_report_received,false);
+  assert.equal(release.windows_fresh_install.beta_gate_waiver,'explicitly-accepted-not-passed');
   assert.equal(release.windows_fresh_install.application_source_commit,release.source_commit);
-  assert.equal(release.windows_fresh_install.source_tree,release.source_tree);
   assert.equal(release.windows_fresh_install.archive_sha256,release.platforms.windows.sha256);
-  assert.equal(release.windows_fresh_install.archive_sha256,'9a6d20825ad9f66dd29859fa683519400f8756bc6c572f66a8c82962060433ee');
-  assert.equal(release.windows_fresh_install.manifest_sha256,'1782ffd5ce91d5813d3e7ba93cdeae0877bf60751c6cd7f548517d8886077c82');
-  assert.equal(release.windows_fresh_install.prerequisite_installed_by_launcher,false);
-  for(const field of ['fresh_install','portrait_encoded_export','landscape_encoded_export','full_decode',
-    'process_restart_acceptance','saved_project_and_export_bytes','model_cache_audit']) assert.equal(release.windows_fresh_install[field],'passed');
-  assert.equal(release.windows_fresh_install.encoded_export_count,2);
-  assert.equal(release.windows_fresh_install.configuration_unchanged,true);
-  assert.equal(release.windows_fresh_install.restart_acceptance,'application-process-only');
-  assert.equal(release.windows_fresh_install.os_reboot_acceptance,'not_performed');
-  assert.equal(release.windows_fresh_install.model_inference,'not_run');
-  for(const field of ['physical_device_acceptance','physical_windows11_acceptance','ui_acceptance']) assert.equal(release.windows_fresh_install[field],'pending');
-  for(const binary of ['ffmpeg','ffprobe']) {
-    const runtime=release.windows_fresh_install.runtime[binary];
-    assert.equal(runtime.major,9);
-    assert.match(runtime.version_first_line,new RegExp(`^${binary} version 9\\.0\\.2-`));
-    assert.match(runtime.sha256,/^[a-f0-9]{64}$/);
-  }
-  assert.match(release.windows_fresh_install.scope,/Windows 10 Sandbox/);
-  assert.match(release.windows_fresh_install.scope,/no human UI\/listening, physical Windows 11, OS reboot, SmartScreen, quarantine or model acceptance/);
+  assert.match(html,/Windows clean-install qualification for this ZIP is incomplete/);
+  assert.match(html,/Hebrew accuracy and automatic speaker framing remain unfinished/);
   assert.equal(release.windows_conditional_setup,undefined,'Previous Windows results must not qualify the new downloads');
   const previous = release.historical_windows_validation.find(entry=>entry.release_tag==='v1.2-beta-20261018');
   assert.ok(previous,'Preserve the previous Windows validation as history');
