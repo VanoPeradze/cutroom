@@ -7,6 +7,12 @@ This folder is the maintained website source inside the public [CUTROOM reposito
 It does not run the editor, receive footage, process video, or handle user API keys.
 The previous separate website checkout is not needed for future updates.
 
+## Current beta — 24 October 2026
+
+The exact product source is `ad3259bd19abc5fa1bab3e063fe62caeb1ecf93c`; release [v1.2-beta-20261024-update1](https://github.com/VanoPeradze/cutroom/releases/tag/v1.2-beta-20261024-update1). Windows uses its own frozen ZIP; Mac uses the exact tested combined ZIP and its `mac/` folder. There is no newly rebuilt standalone Mac package.
+
+Mac ARM64 and Intel automated checks passed in [run40064653092](https://github.com/VanoPeradze/cutroom/actions/runs/40064653092). The exact Windows clean-install gate did not complete because the Sandbox produced no guest report; the user explicitly accepted that gap for this beta. It is **not passed**. Hebrew accuracy and automatic speaker-linked framing remain unfinished. Previous downloads and mirrors are retained.
+
 ## What belongs here
 
 - `public/`: the English/Hebrew page, styling, scripts and generated copies of the real product screenshots and user guides.
