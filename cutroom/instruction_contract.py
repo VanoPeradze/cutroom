@@ -16,7 +16,7 @@ from .cache_keys import stable_fingerprint
 from .story_budget import StoryBudgetError
 
 
-INSTRUCTION_CONTRACT_VERSION = "instruction-contract-2026-10-23-v7.request-review"
+INSTRUCTION_CONTRACT_VERSION = "instruction-contract-2026-10-24-v8.bilingual-explicit-controls"
 MAX_INSTRUCTION_CHARACTERS = 8000
 MAX_REQUIREMENT_ROWS = 64
 MAX_EVIDENCE_REFERENCES = 8
@@ -32,11 +32,11 @@ _NUMBER = r"(?P<seconds>\d+(?:\.\d+)?)\s*[-–]?\s*"
 _DURATION_PREFIXES = (
     r"(?:please\s+)?(?:make|create|produce|deliver|edit|cut)\s+(?:me\s+)?(?:an?\s+)?(?:it\s+)?(?:exactly\s+)?",
     r"(?:the\s+)?(?:target(?:\s+duration)?|duration)\s*(?:(?:is|of)\s+|[:=]\s*)?(?:exactly\s+)?",
-    r"(?:please\s+)?(?:make|create|edit|cut)\s+(?:an?\s+)?(?:short|video|clip|podcast)\s+(?:of|for|lasting|that is)\s+",
-    r"(?:i\s+(?:want|need))\s+(?:an?\s+)?",
-    r"(?:נא\s+)?(?:צור|צרי|תיצור|תיצרי|עשה|עשי|תעשה|ערוך|ערכי|תערוך|הכן|הכיני)\s+(?:לי\s+)?(?:(?:סרטון|קליפ|שורט|פודקאסט)\s+)?(?:(?:של|באורך)\s+)?",
-    r"(?:אני רוצה|אני צריך|אני צריכה)\s+(?:(?:סרטון|קליפ|שורט|פודקאסט)\s+)?(?:(?:של|באורך)\s+)?",
-    r"(?:משך|אורך|אורך היעד|משך היעד)\s*[:=]?\s*",
+    r"(?:please\s+)?(?:make|create|edit|cut)\s+(?:an?\s+)?(?:short|video|clip|podcast)\s+(?:of|for|lasting|that is)\s+(?:exactly\s+)?",
+    r"(?:i\s+(?:want|need))\s+(?:an?\s+)?(?:exactly\s+)?",
+    r"(?:נא\s+)?(?:צור|צרי|תיצור|תיצרי|עשה|עשי|תעשה|ערוך|ערכי|תערוך|הכן|הכיני)\s+(?:לי\s+)?(?:(?:סרטון|קליפ|שורט|פודקאסט)\s+)?(?:(?:של|באורך)\s+)?(?:בדיוק\s+)?",
+    r"(?:אני רוצה|אני צריך|אני צריכה)\s+(?:(?:סרטון|קליפ|שורט|פודקאסט)\s+)?(?:(?:של|באורך)\s+)?(?:בדיוק\s+)?",
+    r"(?:משך|אורך|אורך היעד|משך היעד)\s*[:=]?\s*(?:בדיוק\s+)?",
 )
 _DURATIONS = [re.compile(r"^" + prefix + _NUMBER + _UNIT, re.I) for prefix in _DURATION_PREFIXES]
 # A bounded imperative grammar: numbers in dialogue, negations, alternatives,
@@ -576,7 +576,7 @@ def build_instruction_contract(brief: dict[str, Any]) -> dict[str, Any]:
             r"(?:סרטון|קליפ|שורט)\s+(?:אחד\s+רציף|רציף\s+אחד)[.!?]?", text, re.I)
         if ambiguous_continuity and policy == "unspecified" and not explicit_source_continuity_requested(brief):
             issue("ambiguous_source_continuity", "Continuous output can mean one finished video or uncut source footage. Choose continuous source or cuts allowed explicitly before generation.")
-        multiple = re.match(r"^(?:please\s+)?(?:make|create|produce|deliver|edit)\s+(?:me\s+)?(?:two|three|four|five|several|multiple|[2-9]\d*|1\d+)\s+(?:videos|shorts|clips|outputs)\b|^(?:בבקשה\s+)?(?:צור|תיצור|הכן|ערוך|תעשה)\s+(?:לי\s+)?(?:שני|שתי|שלושה|שלוש|כמה|[2-9]\d*|1\d+)\s+(?:סרטונים|קליפים|שורטים|תוצרים)\b", text, re.I)
+        multiple = re.match(r"^(?:please\s+)?(?:make|create|produce|deliver|edit)\s+(?:me\s+)?(?:two|three|four|five|six|seven|eight|nine|ten|several|multiple|[2-9]\d*|1\d+)\s+(?:videos|shorts|clips|outputs)\b|^(?:בבקשה\s+)?(?:צור|תיצור|הכן|ערוך|תעשה)\s+(?:לי\s+)?(?:שני|שתי|שלושה|שלוש|ארבעה|ארבע|חמישה|חמש|שישה|שש|שבעה|שבע|שמונה|תשעה|תשע|עשרה|עשר|כמה|[2-9]\d*|1\d+)\s+(?:סרטונים|קליפים|שורטים|תוצרים)\b", text, re.I)
         if multiple:
             issue("unsupported_output_count", "The written request asks for multiple outputs; this generation supports one main edit. Edit the request before proceeding.")
         aspect = re.fullmatch(r"(?:use\s+(?:an?\s+)?(?:aspect\s+ratio\s+)?|aspect\s+ratio\s*[:=]?\s*|יחס\s+(?:תמונה\s+)?[:=]?\s*)(9:16|16:9|1:1|4:5)[.!?]?", text, re.I)

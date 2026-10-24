@@ -342,6 +342,11 @@ def _close_sequence_gaps(value: dict[str, Any], slot: str | None = None) -> dict
     """Close only empty time in the requested scope, in one undoable action."""
     manual, duration = value["manual"], timeline_duration(value)
     clips = manual["source_tracks"][slot] if slot else [clip for rows in manual["source_tracks"].values() for clip in rows]
+    attached = [*(manual.get("media_clips") or []), *(manual.get("text_clips") or [])]
+    if not slot:
+        # Independent shots/audio/titles occupy edit time too. In particular,
+        # a library insert deliberately leaves A/B empty beneath its footage.
+        clips = [*clips, *attached]
     gaps, cursor = [], 0.0
     for clip in sorted(clips, key=lambda row: row["start"]):
         if clip["start"] > cursor + EPSILON:
@@ -351,6 +356,10 @@ def _close_sequence_gaps(value: dict[str, Any], slot: str | None = None) -> dict
         gaps.append((cursor, duration))
     if not gaps:
         return None
+    if not slot and any(row["end"] > start + EPSILON for row in attached for start, _end in gaps):
+        # This source-track operation cannot ripple independent layer clocks.
+        # Reject before mutation instead of leaving those layers misaligned.
+        raise SourceTrackError("Closing these gaps would shift added media or text. Move or remove those layers before closing gaps across the whole edit.")
     before = copy.deepcopy(manual)
     for start, end in reversed(gaps):
         if slot:

@@ -5289,6 +5289,116 @@ def hierarchical_story_edit(
     return decision, hierarchy
 
 
+def _early_extractive_rough_cut(segments, brief, failure, cancel_check=None):
+    """Recover a ranked source option, never a model-approved story or new search.
+
+    The user must opt in to the existing rough-cut authority. Only the current
+    bounded native receipt supplies candidates; all source/clock checks remain
+    application-owned and Director revalidates the returned proof before apply.
+    """
+    diagnostic = failure.diagnostic
+    allowed = {"passage_verification_unfinished", "model_temporal_refusal_unverified",
+               "invalid_passage_option_output", "invalid_passage_rationale",
+               "unattributed_passage_refusal", "semantic_candidates_rejected"}
+    if (brief.get("allow_extractive_rough_cut") is not True or brief.get("goal", "short") != "short"
+            or type(brief.get("output_count", 1)) is not int or brief.get("output_count", 1) != 1
+            or diagnostic.get("reason") not in allowed or diagnostic.get("source_wide_no_fit_proven") is True
+            or diagnostic.get("outcome") not in {"technical_error", "invalid_model_output", "editorial_no_fit"}
+            or _configured_story_roles(brief) or required_story_role_orders(brief)):
+        return None
+    receipt = diagnostic.get("passage_options") or {}
+    if not isinstance(receipt, dict):
+        return None
+    rows = receipt.get("review_candidates")
+    # A stale transcript or a caller-supplied/manual candidate is not recovery.
+    if (receipt.get("source_segments") != source_identity_rows(segments)
+            or not isinstance(rows, list) or not 1 <= len(rows) <= 8
+            or brief.get("source_candidate_segment_ids") is not None):
+        return None
+    if (any(not isinstance(row, dict) or not isinstance(row.get("id"), str) or not row["id"] for row in rows)
+            or len({row["id"] for row in rows}) != len(rows)):
+        return None
+    inventory = receipt.get("candidate_inventory", [])
+    if not isinstance(inventory, list) or any(not isinstance(row, dict) for row in inventory):
+        return None
+    from .review_candidates import validate_ranges
+    duration = max((float(row["end"]) for row in segments), default=0.)
+    source_project = {"sources": {"A": {"duration": duration}}, "manual": {},
+                      "analysis": {"transcript": {"segments": segments}}}
+    for rank, option in enumerate(rows, 1):
+        _check_cancelled(cancel_check)
+        try:
+            if not isinstance(option, dict) or not isinstance(option.get("id"), str) or not option["id"]:
+                continue
+            ranges, seconds, selected = validate_ranges(source_project, brief,
+                option["playback_ranges"], option["segment_ids"])
+            bounds = effective_duration_bounds(brief, duration)
+            cost = story_duration_cost(ranges, segments, duration, target=bounds["maximum_seconds"],
+                                       protect_action_span=True, fps=brief.get("fps") or 30)
+            if (not cost["fits_target"] or seconds + .05 < bounds["minimum_seconds"]
+                    or seconds > bounds["maximum_seconds"] + .05):
+                continue
+            units = []
+            for span in ranges:
+                members = [r for r in selected if r["start"] >= span["start"] and r["end"] <= span["end"]]
+                identifier = "rough_" + stable_fingerprint("early-extractive-source-v1",
+                    {"range": span, "source": source_identity_rows(members)})[:24]
+                units.append({"id": identifier, **span, "segment_ids": [r["id"] for r in members],
+                              "text": " ".join(r["text"] for r in members)})
+                # A native ASR entry can expose an unfinished prefix and its
+                # following complete row as two playback ranges. Keep their
+                # original ownership; a storage boundary is not a sentence end.
+                # Match exact current source, never infer a new continuation or
+                # add speech/gaps not present in the selected playback ranges.
+                matches = [r for r in inventory if r.get("start") == span["start"]
+                           and r.get("end") == span["end"] and r.get("segment_ids") == units[-1]["segment_ids"]]
+                if len(matches) > 1:
+                    raise ValueError("Recovery source-unit ownership is ambiguous.")
+                if matches and matches[0].get("entry_owner_id"):
+                    native = matches[0]
+                    from .story_candidates import ENTRY_POLICY_VERSION
+                    if (native.get("text") != units[-1]["text"]
+                            or native.get("entry_policy") != ENTRY_POLICY_VERSION
+                            or not isinstance(native["entry_owner_id"], str)
+                            or native.get("candidate_policy") != CANDIDATE_POLICY_VERSION
+                            or native.get("candidate_source_fingerprint") != stable_fingerprint(
+                                CANDIDATE_POLICY_VERSION, source_identity_rows(segments))):
+                        raise ValueError("Recovery entry ownership does not match the current canonical source.")
+                    units[-1].update({key:native[key] for key in ("entry_policy", "entry_owner_id")})
+            fixed = [r["id"] for r in units]
+            proof = build_source_span_constraints(units, segments, selected_beat_ids=fixed)
+        except (ValueError, TypeError, KeyError, StoryBudgetError):
+            continue
+        source_ids = set(option["segment_ids"])
+        failure_summary = {k:copy.deepcopy(diagnostic[k]) for k in
+                           ("reason", "outcome", "search_status", "semantic_result_verified") if k in diagnostic}
+        requirements = {"fixed_beat_ids": fixed, "critic_requested_beat_ids": [],
+            "source_span_policy_version": SOURCE_SPAN_POLICY_VERSION, "source_span_constraints": proof,
+            "duration_mode": str(brief.get("duration_mode") or "target"), "cost": cost,
+            "failed_generation_diagnostic": failure_summary, "original_critic": {"verdict": "not_run"},
+            "semantic_review_status": "not_model_reviewed", "review_required": True,
+            "instruction_coverage": "unverified" if str(brief.get("instruction") or "").strip() else "not_requested",
+            "required_context_beat_ids": [], "required_context_segment_ids": [],
+            "recovery": {"mode": "automatic_ranked_source_recovery", "candidate_id": option["id"],
+                         "rank": rank, "source_fingerprint": proof["source_fingerprint"]}}
+        decision = {"editorial_authority": EXTRACTIVE_ROUGH_CUT_AUTHORITY,
+            "semantic_review_status": "not_model_reviewed", "generative_approved": False, "review_required": True,
+            "title": "EXTRACTIVE ROUGH CUT", "summary": whole_utterance_story_summary(proof),
+            "summary_source": SOURCE_SPAN_SUMMARY_SOURCE,
+            "keep_ids": [r["id"] for r in segments if r["id"] in source_ids],
+            "remove_ids": [r["id"] for r in segments if r["id"] not in source_ids], "highlight_ids": [],
+            "opening_id": selected[0]["id"], "closing_id": selected[-1]["id"],
+            "story_beat_ids": fixed, "story_ranges": [{**r,"beat_id":r["id"]} for r in units],
+            "rejected_beat_ids": [], "rejected_segment_ids": [], "rejected_story_ranges": [],
+            "extractive_requirements": requirements}
+        hierarchy = {"editorial_authority": EXTRACTIVE_ROUGH_CUT_AUTHORITY,
+            "extractive_requirements": copy.deepcopy(requirements), "failed_generation_diagnostic": failure_summary,
+            "selection": {"mode": "automatic_ranked_source_recovery", "semantic_mapping_verified": False,
+                          "semantic_review_status": "not_model_reviewed"}}
+        return decision, hierarchy
+    return None
+
+
 def _ollama_chat(settings: Settings, segments: list[dict[str, Any]], brief: dict[str, Any], cancel_check: Callable[[], None] | None = None,
                  *, model_status: dict[str, Any] | None = None) -> dict[str, Any] | None:
     if not settings.ai.get("enabled", True):
@@ -5482,16 +5592,20 @@ def plan_edit(
         # identity. Without notes the identity is unchanged from earlier versions.
         visual_key = str((visual_moments or {}).get("cache_key") or "")
         noted = bool(visual_key) and any(beat.get("on_screen") for beat in beats)
-        decision, hierarchy = hierarchical_story_edit(
-            beats,
-            enriched,
-            settings,
-            brief,
-            progress,
-            story_cache,
-            cancel_check,
-            **({"visual_key": visual_key} if noted else {}),
-        )
+        try:
+            decision, hierarchy = hierarchical_story_edit(
+                beats, enriched, settings, brief, progress, story_cache, cancel_check,
+                **({"visual_key": visual_key} if noted else {}),
+            )
+        except StoryPlanningError as failure:
+            _check_cancelled(cancel_check)
+            recovered = None if visual_moments is not None else _early_extractive_rough_cut(
+                enriched, brief, failure, cancel_check)
+            if recovered is None:
+                raise
+            decision, hierarchy = recovered
+            if progress:
+                progress(1., "Automatic extractive rough cut created; review content and captions")
         return reported({
             "segments": enriched,
             "decision": decision,

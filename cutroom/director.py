@@ -3448,9 +3448,19 @@ def analyze_project(
     selection_variant: int = 0,
     source_mixer_patch: dict[str, Any] | None = None,
     experimental_plan_validation: dict[str, Any] | None = None,
+    expected_project_revision: int | None = None,
 ) -> dict[str, Any]:
     context.checkpoint()
     project = store.load(project_id)
+    if expected_project_revision is not None:
+        if type(expected_project_revision) is not int or expected_project_revision < 1:
+            raise ValueError("Reviewed project revision must be a positive integer.")
+        if project.get("revision") != expected_project_revision:
+            raise StoryBudgetError(
+                "The project changed after request review. Review again; the current edit was kept.",
+                {"kind": "instruction_review", "reason": "request_review_stale", "outcome": "stale_project",
+                 "phase": "before_analysis", "applied_to_timeline": False, "completed_edit": False},
+            )
     if experimental_plan_validation is not None:
         # Explicit internal validation-only entry, before settings, preprocessing
         # or cache commits. There is no UI/server caller or apply permission.
@@ -3511,6 +3521,8 @@ def analyze_project(
         context.checkpoint()
         project.setdefault("settings", {}).update(staged_brief)
     manual_input_fingerprint = stable_fingerprint("director-manual-input", project.get("manual") or {})
+    initial_source_generations = {slot:(project.get("sources", {}).get(slot) or {}).get("generation")
+                                  for slot in ("A", "B")}
     if source_mixer_patch:
         project.setdefault("manual", {}).setdefault("source_mixer", {}).update(source_mixer_patch)
 
@@ -4632,6 +4644,11 @@ def analyze_project(
     context.checkpoint()
 
     def commit_analysis(latest: dict[str, Any]) -> None:
+        recovery = (decision.get("extractive_requirements") or {}).get("recovery") or {}
+        if recovery.get("mode") == "automatic_ranked_source_recovery" and {
+            slot:(latest.get("sources", {}).get(slot) or {}).get("generation") for slot in ("A", "B")
+        } != initial_source_generations:
+            raise RuntimeError("project_changed_during_analysis")
         proposed = proposed_inputs(latest)
         latest_brief = _effective_brief(proposed)
         latest_paths: dict[str, Path | None] = {}

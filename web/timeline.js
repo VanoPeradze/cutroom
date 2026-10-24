@@ -85,6 +85,7 @@ export function sequenceBlocks(project, getTrackClips) {
 
 export function sequenceGaps(project, getTrackClips, slot = null) {
   const clips = (slot ? getTrackClips(project, slot) : ["A", "B"].flatMap(s => project?.sources?.[s] ? getTrackClips(project,s) : []))
+    .concat(slot ? [] : [...(project?.manual?.media_clips || []), ...(project?.manual?.text_clips || [])])
     .slice().sort((a,b)=>a.start-b.start);
   const gaps = []; let cursor = 0;
   for (const clip of clips) {
@@ -93,6 +94,13 @@ export function sequenceGaps(project, getTrackClips, slot = null) {
   }
   if (timelineDuration(project) > cursor + 1e-6) gaps.push({start:cursor,end:timelineDuration(project)});
   return gaps;
+}
+
+export function sequenceGapClosureIssue(project, gaps, slot = null) {
+  const layers = [...(project?.manual?.media_clips || []), ...(project?.manual?.text_clips || [])];
+  return !slot && layers.some(row => gaps.some(gap => row.end > gap.start + 1e-6))
+    ? "Closing these gaps would shift added media or text. Move or remove those layers before closing gaps across the whole edit."
+    : "";
 }
 
 export function rippleMoveStart(project, start, end, at, slot = null, getTrackClips = null) {

@@ -1,10 +1,10 @@
 import { applyTranslations, dictionaries } from "./i18n.js?v=1.2-beta";
-import { TimelineView, formatTime, editableClips, timelineDuration, sequenceBlocks, sequenceGaps, rippleMoveStart } from "./timeline.js?v=1.2-beta-20261019";
-import { MediaStudio } from "./media-studio.js?v=1.2-beta-20261024-cache1";
+import { TimelineView, formatTime, editableClips, timelineDuration, sequenceBlocks, sequenceGaps, sequenceGapClosureIssue, rippleMoveStart } from "./timeline.js?v=1.2-beta-20261024-insertgaps1";
+import { MediaStudio } from "./media-studio.js?v=1.2-beta-20261019";
 import { StabilizationStudio } from "./stabilization-studio.js?v=1.2-beta";
 import { ChromaStudio } from "./chroma-studio.js?v=1.2-beta";
 import { ChromaPreview } from "./chroma-preview.js?v=1.2-beta";
-import { SourceReview } from "./source-review.js?v=1.2-beta-20261019";
+import { SourceReview } from "./source-review.js?v=1.2-beta-20261024-insertgaps1";
 import { initWorkspace } from "./workspace.js?v=1.2-beta-20261019";
 import { KEYBOARD_PROFILES, resolveEditorShortcut, isEditorTransportSpace, shortcutRows } from "./keyboard.js?v=1.2-beta";
 import { AudioThresholdView } from "./audio-meter.js?v=1.2-beta";
@@ -2558,7 +2558,10 @@ async function generateDraft() {
     assertJobStartNotCancelled();
     if (state.project?.id !== projectId || state.projectViewToken !== viewToken) throw new Error("Cancelled");
     if(state.project.revision!==reviewedRevision)throw new Error("The project changed after request review. Review again; the current edit was kept.");
-    const payload = await api(`/api/projects/${encodeURIComponent(projectId)}/director`, { method: "POST", body: JSON.stringify(settings) });
+    const payload = await api(`/api/projects/${encodeURIComponent(projectId)}/director`, {
+      method: "POST", headers: {"X-Cutroom-Reviewed-Revision": String(reviewedRevision)},
+      body: JSON.stringify(settings),
+    });
     await pollJob(payload.job.id, { director: true, projectId });
   } catch (error) {
     if (state.project?.id === projectId) {
@@ -7134,10 +7137,11 @@ function renderManualControls() {
   const gapButton = document.getElementById("closeTimelineGaps");
   if (gapButton) {
     const gaps = sequence ? sequenceGaps(editorProject(),trackClips,target === "edit" ? null : target) : [];
+    const gapIssue = sequenceGapClosureIssue(editorProject(),gaps,target === "edit" ? null : target);
     gapButton.hidden = !gaps.length;
-    gapButton.disabled = !available || busy;
+    gapButton.disabled = !available || busy || Boolean(gapIssue);
     gapButton.textContent = `Close gaps (${gaps.length})`;
-    gapButton.title = target === "edit" ? "Remove only time where both A and B are empty. Both tracks and their layout stay synchronized. Undo available." : `Close empty spaces on ${target} only. The other track stays still. Undo available.`;
+    gapButton.title = gapIssue || (target === "edit" ? "Remove only time with no source footage or added media/text. Downstream timing stays protected. Undo available." : `Close empty spaces on ${target} only. The other track stays still. Undo available.`);
   }
   elements.manualDelete.textContent = target === "edit" ? "Remove from video" : `Remove from ${target}`;
   elements.manualSplit.textContent = uiCopy("פצל", "Split");

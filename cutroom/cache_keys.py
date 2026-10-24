@@ -11,7 +11,7 @@ from .vision import VISION_ANALYSIS_VERSION
 # Changing the semantics of transcript/scenes/vision/story analysis must change
 # this value. It is intentionally independent of the product marketing version.
 ANALYSIS_CACHE_PIPELINE = "director-analysis-2026-08-30.1"
-STORY_INPUT_POLICY = "bounded-whole-index-canonical-domain-retrieval-v20.candidate-local-context"
+STORY_INPUT_POLICY = "bounded-whole-index-canonical-domain-retrieval-v23.recovery-entry-ownership"
 
 _SOURCE_METADATA_KEYS = (
     "relative_path",

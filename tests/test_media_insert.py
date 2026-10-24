@@ -88,3 +88,66 @@ def test_downstream_manual_caption_text_and_anchor_follow_source(unlocked):
     result=insert(unlocked);assert result.status_code==200,result.get_json()
     row=next(x for x in project_caption_items(store.load(pid),aligned=False) if x['text']=='Later manual wording')
     assert (row['start'],row['end'])==(9.25,10.25)
+
+
+def close_gaps(api, **extra):
+    _,client,store,pid=api
+    return client.post(f"/api/projects/{pid}/manual/edit",json={
+        'action':'sequence_close_gaps','expected_revision':store.load(pid)['revision'],**extra})
+
+
+def test_close_gaps_never_erases_time_occupied_by_an_inserted_shot(unlocked):
+    _,_,store,pid=unlocked
+    assert insert(unlocked).status_code==200
+    before=store.load(pid)
+    result=close_gaps(unlocked)
+    assert result.status_code==200,result.get_json()
+    after=store.load(pid)
+    assert after['manual']==before['manual']
+    assert after['sources']==before['sources'] and after['analysis']==before['analysis']
+    assert after['manual']['sequence']['duration']==16.25
+    assert after['manual']['media_clips'][0]['start']==5.
+
+
+def test_real_gap_before_independent_layers_rejects_atomically_instead_of_desynchronizing(unlocked):
+    _,_,store,pid=unlocked
+    assert insert(unlocked).status_code==200
+    def add_gap(p):
+        from cutroom.sequence import _slice_rows
+        for slot,rows in p['manual']['source_tracks'].items():
+            p['manual']['source_tracks'][slot]=[
+                *_slice_rows(rows,0.,1.,slot=slot),*_slice_rows(rows,2.,16.25,at=2.,slot=slot)]
+    store.update(pid,add_gap)
+    before=store.state_path(pid).read_bytes()
+    result=close_gaps(unlocked)
+    assert result.status_code==400,result.get_json()
+    assert 'shift added media or text' in str(result.get_json())
+    assert store.state_path(pid).read_bytes()==before
+
+
+def test_empty_tail_after_independent_layers_can_still_close(unlocked):
+    _,_,store,pid=unlocked
+    assert insert(unlocked).status_code==200
+    def add_tail(p):
+        p['manual']['sequence']['duration']=17.25
+        p['manual']['sequence']['camera_plan'][-1]['end']=17.25
+    store.update(pid,add_tail)
+    before=store.load(pid)
+    result=close_gaps(unlocked)
+    assert result.status_code==200,result.get_json()
+    after=store.load(pid)
+    assert after['manual']['sequence']['duration']==16.25
+    assert after['manual']['media_clips']==before['manual']['media_clips']
+    assert after['manual']['source_tracks']==before['manual']['source_tracks']
+
+
+def test_track_only_close_keeps_other_track_and_independent_layer_clocks(unlocked):
+    _,_,store,pid=unlocked
+    assert insert(unlocked).status_code==200
+    before=store.load(pid)
+    result=close_gaps(unlocked,slot='A')
+    assert result.status_code==200,result.get_json()
+    after=store.load(pid)
+    assert after['manual']['source_tracks']['B']==before['manual']['source_tracks']['B']
+    assert after['manual']['media_clips']==before['manual']['media_clips']
+    assert after['manual']['sequence']['duration']==16.25

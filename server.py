@@ -2356,7 +2356,19 @@ def create_app(settings: Settings | None = None) -> Flask:
     def run_director(project_id: str):
         payload = _json_object()
         _validate_settings_payload(payload)
+        reviewed_header = request.headers.get("X-Cutroom-Reviewed-Revision")
+        reviewed_revision = None
+        if reviewed_header is not None:
+            if not re.fullmatch(r"[1-9][0-9]{0,15}", reviewed_header) or int(reviewed_header) > 9_007_199_254_740_991:
+                raise APIInputError("invalid_field", "Reviewed revision must be a positive safe integer.")
+            reviewed_revision = int(reviewed_header)
+
+        def require_reviewed_revision(current: dict[str, Any]) -> None:
+            if reviewed_revision is not None and current.get("revision") != reviewed_revision:
+                raise APIInputError("request_review_stale", "The project changed after request review. Review again; the current edit was kept.", 409)
+
         project = store.load(project_id)
+        require_reviewed_revision(project)
         require_tracks_unlocked(project)
         if not project.get("sources", {}).get("A"):
             return jsonify({"error": "source_required", "message": "Add source A before generating an edit."}), 400
@@ -2389,6 +2401,7 @@ def create_app(settings: Settings | None = None) -> Flask:
                     "recommended_model": status["recommended_model"],
                 }), 409
         def require_source(latest: dict[str, Any]) -> None:
+            require_reviewed_revision(latest)
             require_tracks_unlocked(latest)
             if not latest.get("sources", {}).get("A"):
                 raise APIInputError("source_required", "Add source A before generating an edit.")
@@ -2403,6 +2416,7 @@ def create_app(settings: Settings | None = None) -> Flask:
             payload,
             validate_project=require_source,
             job_identity=payload,
+            **({"expected_project_revision": reviewed_revision} if reviewed_revision is not None else {}),
         )
         return jsonify({"job": job.public()}), 202
 

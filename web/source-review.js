@@ -1,4 +1,4 @@
-import { TimelineView, formatTime } from "./timeline.js?v=1.2-beta-20261019";
+import { TimelineView, formatTime } from "./timeline.js?v=1.2-beta-20261024-insertgaps1";
 
 // Project current edit clips onto the original recording, including copies.
 // The original draft's keep mask is intentionally not authoritative anymore.

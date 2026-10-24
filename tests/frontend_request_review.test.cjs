@@ -54,9 +54,9 @@ test('actual generateDraft sends the reviewed snapshot, never original UI defaul
     currentSettings:()=>({instruction:'Old defaults.',goal:'short'}),reviewEditingRequest:async()=>reviewed,
     acquireJobStartLock:()=>({}),releaseJobStartLock:()=>{},pauseAllMedia(){},showAnalysis(){},assertJobStartNotCancelled(){},
     ensureStoryAIReady:async()=>calls.push('ready'),pollJob:async()=>calls.push('polled'),
-    api:async(url,opts)=>{calls.push({url,body:JSON.parse(opts.body)});return{job:{id:'j'}};},
+    api:async(url,opts)=>{calls.push({url,body:JSON.parse(opts.body),headers:JSON.parse(JSON.stringify(opts.headers))});return{job:{id:'j'}};},
     toast:msg=>assert.fail(msg),t:x=>x,reconcileDirectorOutcome:async(_id,e)=>assert.fail(e.message)});
   vm.runInContext(code,c);await vm.runInContext('generateDraft()',c);
-  assert.deepEqual(calls,['ready',{url:'/api/projects/p/director',body:reviewed},'polled']);
+  assert.deepEqual(calls,['ready',{url:'/api/projects/p/director',body:reviewed,headers:{'X-Cutroom-Reviewed-Revision':'4'}},'polled']);
   assert.equal(state.project.revision,4);
 });
