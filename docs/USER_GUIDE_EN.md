@@ -182,7 +182,9 @@ Open **More editing tools → Keys / Shortcuts** and choose a preset. The list s
 
 ### Add media and mix sound
 
-In **Media & audio**, choose **Add media** to import video, an image or audio into this project's library. Wait for preparation, place the playhead and select **+ Add**. Drag the new clip or its edges in the waveform/timeline lanes; use its inspector for exact start/end, source in, volume and fades. Images can stay still, slowly zoom or pan. **Use clip audio** enables sound from an added video; check its **Audio group**.
+In **Media**, choose **Add media** to import video, an image or audio into this project's library. Wait for preparation, place the playhead and select **+ Overlay**. **Append video** adds footage and sound at the end of the edit instead. Drag the new clip or its edges in the waveform/timeline lanes; use its inspector for exact start/end, source in, volume and fades. Images can stay still, slowly zoom or pan.
+
+New video overlays include detected source sound by default. Select a clip to check **Include source sound**, **Mute this clip**, volume and **Audio group**; these choices affect preview and export. Existing silent overlays keep their saved choice: enable source sound to hear them, and check clip/group mute. Videos without an audio stream say so. Picture speed changes only the image; source sound stays at normal speed from **Source in**.
 
 The timeline waveform shows measured audio from the selected original A/B source, including manual edits without AI. Imported audio has its own waveform. A silent section, missing audio and a pending/unavailable measurement are different states.
 
@@ -198,7 +200,9 @@ For a selected main A/B clip, **Picture speed** changes only the picture, from 0
 
 Select **where** a layout applies: a timeline range, exact From/To times or **Entire edit**. Then choose **Screen only**, **Camera only**, **Stacked**, **Side by side** or **Picture in picture**. The choice saves immediately. **AI choice** returns that scope to the proposed composition.
 
-New two-source Reels default to **Stacked**: camera top 30%, screen bottom 70%, filling both panels without stretching. Saved manual choices stay intact. To restore this composition in an existing project, open **Advanced → Restore 30/70 stack**; it resets order and fit for the whole edit. **First in layout**, **Primary source**, **Swap top / bottom**, audio and sync are also under **Advanced**.
+New two-source Reels default to **Stacked**: camera top 30%, screen bottom 70%, filling both panels without stretching. Saved manual choices stay intact. To restore this composition in an existing project, open **Advanced → Restore 30/70 stack**; it resets order and fit for the whole edit. **First in layout**, stack fit and **Swap top / bottom** remain under **Advanced**.
+
+Use the one source workflow in **Layout**: **Sources & narration** chooses screen/camera roles, main content and audio; **Timing & coverage** reviews alignment or opens independent footage placement; **Layout & preview** changes the current composition and range. Layout does not synchronize recordings. For independent camera/narration, review source B and use **Insert a copy by time…** to choose its source In/Out and edit position. Missing footage is not looped or frozen: resolve the warning before export by supplying footage, explicitly shortening the edit or choosing a different layout for the uncovered section. **Next AI draft preference** is a separate rebuild preference, not a control for the current edit.
 
 **Fill frame** crops edges to fill the panel. **Fit entire source** keeps the full picture with bars when needed; it does not squeeze the image. In **Clip framing**, choose A/B and adjust horizontal focus, vertical focus and zoom. Check the scope label: changes affect the selected clip/range, or the clip at the playhead—not automatically every cut. Crops follow clips when moved/copied. Full source browsing does not enable per-cut framing edits.
 

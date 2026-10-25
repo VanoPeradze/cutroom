@@ -60,7 +60,8 @@ function app({count = 1, flagged = [{segment_id:'weak', reasons:['low_word_confi
   const state = {project:{id:'project',analysis:{transcript:{segments},
     transcript_quality:{review_segments:flagged,review_segment_count:count}}},
     transcriptBuffers:new Map(),transcriptSaving:false,manualEditBusy:false};
-  const scope = vm.createContext({state,elements, document:{createElement:tag => new Element(tag)},
+  // This isolated transcript-confidence fixture has no alternative-review panel.
+  const scope = vm.createContext({state,elements, document:{createElement:tag => new Element(tag),getElementById:()=>null},
     selectedTranscriptSegment:() => state.project.analysis.transcript.segments[0],
     transcriptBufferKey:id => id, foregroundBusy:() => false,
     transcriptMappingLabel:segment => `Source ${segment.start}–${segment.end}`,

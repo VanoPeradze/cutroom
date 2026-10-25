@@ -27,3 +27,23 @@ test('output radios follow reading direction for horizontal keys only',()=>{
   const h=harness('rtl');h.key('ArrowRight',0);assert.equal(h.buttons[4].clicked,true);
   const vertical=harness('rtl');vertical.key('ArrowDown',0);assert.equal(vertical.buttons[1].clicked,true);
 });
+
+test('Layout decorates the real framing controls once without creating duplicate composition buttons',()=>{
+  const framing={dataset:{},open:false};
+  const inputs=new Map(['cropX','cropY','cropZoom'].map(id=>[id,{id}]));
+  const decorated=[];const syncers=new Set();
+  const context=vm.createContext({
+    $:selector=>selector==='#studioPanelFraming .framing-layout'?framing:inputs.get(selector.slice(1)),
+    syncers,rangeValue:(input,format)=>decorated.push({input,format}),
+  });
+  const start=source.indexOf('  function initLayout()');
+  const end=source.indexOf('  // ---------- Captions ----------',start);
+  vm.runInContext(source.slice(start,end)+'\ninitLayout();initLayout();',context);
+  assert.equal(framing.open,true);
+  assert.deepEqual(decorated.map(row=>row.input.id),['cropX','cropY','cropZoom']);
+  assert.equal(decorated[0].format(42),'42%');
+  assert.equal(decorated[2].format(1.5,{max:3}),'150%');
+  assert.equal(decorated[2].format(150,{max:300}),'150%');
+  assert.equal(syncers.size,1);
+  framing.open=false;for(const sync of syncers)sync();assert.equal(framing.open,true);
+});

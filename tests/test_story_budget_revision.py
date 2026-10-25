@@ -498,7 +498,8 @@ def test_revision_preserves_full_multisegment_source_evidence(monkeypatch):
                     calls, target_duration=40, duration_mode="style")
     payload = json.loads(calls[0]["messages"][1]["content"])
     unit = next(row for row in payload["source_units"] if row["id"] == "b2")
-    assert set(unit) == {"id", "start", "end", "segment_ids", "segments"}
+    assert set(unit) == {"id", "start", "end", "segment_ids", "segments", "selected_in_proposal"}
+    assert unit["selected_in_proposal"] is True
     assert unit["segments"] == [{key: row[key] for key in ("id", "start", "end", "text")}
                                 for row in (fixture[2][1], fixture[2][-1])]
     assert result["semantic_mapping_verified"] is True
@@ -522,7 +523,7 @@ def test_tiny_but_coherent_selection_cannot_satisfy_target_by_underfilling(monke
     assert len(calls) == 1
 
 
-def test_planner_and_critic_receive_the_exact_pause_policy_costs(monkeypatch):
+def test_planner_keeps_pause_costs_while_critic_receives_actual_playback(monkeypatch):
     selection, beats, segments, chapters, plan = en_fixture()
     calls = []
     def respond(_settings, payload, *_args):
@@ -535,8 +536,16 @@ def test_planner_and_critic_receive_the_exact_pause_policy_costs(monkeypatch):
     intelligence._build_story_plan(Settings(), [{"id": "c1"}], {}, brief, "fixture-model", segments=segments, chapters=chapters)
     intelligence._critic_story_selection(Settings(), selection, beats, {}, plan, brief, "fixture-model", segments=segments)
     assert calls[0]["source_beat_costs"][1]["duration_cost"]["minimum_safe_seconds"] == pytest.approx(9.66)
-    assert calls[1]["current_cost"]["minimum_safe_seconds"] == pytest.approx(21.46)
-    assert calls[1]["candidates"][2]["duration_cost"]["minimum_safe_seconds"] == pytest.approx(7.54)
+    # The numerical policy remains unchanged, but its UNUSED pause fits are
+    # not presented to semantic review as if those cuts had actually happened.
+    assert intelligence._story_selection_cost(selection["keep_beat_ids"], beats, segments, brief)["minimum_safe_seconds"] == pytest.approx(21.46)
+    assert intelligence._story_selection_cost(["b3"], beats, segments, brief)["minimum_safe_seconds"] == pytest.approx(7.54)
+    assert "current_cost" not in calls[1]
+    assert all("duration_cost" not in row for row in calls[1]["candidates"])
+    actual = calls[1]["actual_playback"]
+    assert actual["playback_seconds"] == pytest.approx(28.73)
+    assert [(r["start"], r["end"]) for r in actual["actual_source_omissions"]] == [(2.93, 8.41), (19.64, 20.34), (29.5, 35.31)]
+    assert actual["semantic_verified"] is False
 
 
 def test_real_hierarchy_reviews_critic_addition_before_any_required_beat_pruning(monkeypatch):
@@ -556,8 +565,16 @@ def test_real_hierarchy_reviews_critic_addition_before_any_required_beat_pruning
     def respond(_settings, payload, *_args):
         calls.append(payload)
         if "continuity critic" in payload["messages"][0]["content"]:
-            return {"verdict": "revise", "add_beat_ids": ["b3"], "remove_beat_ids": [], "issues": ["needs premise context"], "summary": ""}
-        return proposal(plan, beats=beats, segments=segments)
+            return {"verdict": "revise", "add_beat_ids": ["b3"], "remove_beat_ids": [],
+                    "issues": ["needs premise context"], "summary": "",
+                    "action_evidence": [{"action": "add", "beat_id": "b3", "defect_kind": "missing_context",
+                        "source_evidence_ids": evidence_ids(beats, segments, ["b3"]),
+                        "instruction_quote": "", "explanation": "The cited source supplies the proposed premise context."}]}
+        final = proposal(plan, beats=beats, segments=segments)
+        final["critic_action_decisions"] = [{"action": "add", "beat_id": "b3", "decision": "accept",
+            "source_evidence_ids": evidence_ids(beats, segments, ["b3"]),
+            "reason": "The original source supplies the required context for the revised story."}]
+        return final
     monkeypatch.setattr(intelligence, "_call_ollama_story_pass", respond)
     decision, hierarchy = intelligence.hierarchical_story_edit(beats, segments, Settings(),
         {"goal": "short", "duration_mode": "target", "target_duration": 20})
@@ -754,8 +771,40 @@ def test_planner_no_fit_does_not_claim_a_fitting_current_selection_is_infeasible
 
     assert len(calls) == 1
     assert caught.value.diagnostic["reason"] == "planner_no_fit"
+    assert caught.value.diagnostic["outcome"] == "editorial_no_fit"
     assert caught.value.diagnostic["required_policy_minimum_seconds"] < 20
     assert "needs at least" not in str(caught.value)
+
+
+@pytest.mark.parametrize("reply,outcome", [
+    ({}, "invalid_model_output"),
+    (intelligence.StoryPlanningError("Invalid structured JSON."), "invalid_model_output"),
+    (TimeoutError("synthetic timeout"), "technical_error"),
+    (intelligence.StoryAIUnavailableError("synthetic unavailable transport"), "technical_error"),
+    (intelligence.StoryPlanningError("Source exceeds the context budget."), "technical_error"),
+])
+def test_review_failure_outcomes_are_separate_from_editorial_no_fit(monkeypatch, reply, outcome):
+    fixture, _ = critic_removed_ending_fixture()
+    original = copy.deepcopy(fixture)
+    calls = []
+    with pytest.raises(intelligence.StoryBudgetError) as caught:
+        review(monkeypatch, fixture, reply, calls)
+    assert len(calls) == 1
+    assert caught.value.diagnostic["outcome"] == outcome
+    assert caught.value.diagnostic["applied_to_timeline"] is False
+    assert fixture == original
+
+
+@pytest.mark.parametrize("instruction", [
+    "Keep the qualified result; exclude participation.",
+    "\u05e9\u05de\u05d5\u05e8 \u05e2\u05dc \u05d4\u05e1\u05ea\u05d9\u05d9\u05d2\u05d5\u05ea; \u05d0\u05dc \u05ea\u05db\u05dc\u05d5\u05dc \u05d4\u05e9\u05ea\u05ea\u05e4\u05d5\u05ea.",
+])
+def test_target_review_receives_exact_bilingual_instruction(monkeypatch, instruction):
+    fixture = en_fixture()
+    calls = []
+    review(monkeypatch, fixture, proposal(fixture[-1]), calls, instruction=instruction)
+    assert len(calls) == 1
+    assert json.loads(calls[0]["messages"][1]["content"])["brief"]["instruction"] == instruction
 
 
 def test_incomplete_sticky_context_fails_before_any_semantic_call(monkeypatch):
@@ -925,6 +974,7 @@ def test_final_output_limit_is_typed_separately_from_source_duration_or_no_fit(m
     assert len(calls) == 1
     diagnostic = caught.value.diagnostic
     assert diagnostic["reason"] == "semantic_revision_output_limit"
+    assert diagnostic["outcome"] == "technical_error"
     assert diagnostic["applied_to_timeline"] is False
     assert diagnostic["required_policy_minimum_seconds"] < 20
     assert diagnostic["constraint_feasibility"]["status"] == "duration_fit_but_semantics_unverified"
@@ -1184,7 +1234,7 @@ def test_final_source_units_preserve_every_asr_segment_character_without_joining
     assert len(calls) == 1
     payload = json.loads(calls[0]["messages"][1]["content"])
     unit = next(row for row in payload["source_units"] if row["id"] == "b2")
-    assert unit == {"id": "b2", "start": 8.41, "end": 19.64, "segment_ids": ["s2", "s2b"],
+    assert unit == {"id": "b2", "start": 8.41, "end": 19.64, "segment_ids": ["s2", "s2b"], "selected_in_proposal": True,
                     "segments": [{"id": "s2", "start": 8.41, "end": 14.0, "text": first_text},
                                  {"id": "s2b", "start": 14.0, "end": 19.64, "text": second_text}]}
     assert fixture == original

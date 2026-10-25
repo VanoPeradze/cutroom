@@ -107,7 +107,13 @@ def run_command(
         _stop_process(process)
 
 
-def probe_media(path: Path, settings: Settings) -> dict[str, Any]:
+def probe_media(path: Path, settings: Settings, *, original_filename: str | None = None) -> dict[str, Any]:
+    # Journal-owned staging paths may have no media suffix. Use their logical name
+    # without renaming them or using the client name as a filesystem path.
+    if original_filename is not None and (not isinstance(original_filename, str) or not original_filename.strip()):
+        raise ValueError("A media filename must be a nonempty string")
+    logical_name = original_filename if original_filename is not None else path.name
+    suffix = Path(logical_name).suffix.lower()
     command = [
         settings.ffprobe, "-v", "error", "-show_streams", "-show_format", "-of", "json", str(path)
     ]
@@ -152,7 +158,6 @@ def probe_media(path: Path, settings: Settings) -> dict[str, Any]:
     except (TypeError, ValueError):
         audio_duration = duration if audio else None
     browser_ready = video_codec in BROWSER_VIDEO_CODECS and (not audio_codec or audio_codec in BROWSER_AUDIO_CODECS)
-    suffix = path.suffix.lower()
     container_ready = (suffix in {".mp4", ".mov", ".m4v"} and format_name == "mov,mp4,m4a,3gp,3g2,mj2"
                        or suffix == ".webm" and format_name == "matroska,webm")
     return {
@@ -169,7 +174,7 @@ def probe_media(path: Path, settings: Settings) -> dict[str, Any]:
         "format": format_name,
         "size": path.stat().st_size,
         "browser_ready": browser_ready and container_ready,
-        "mime": mimetypes.guess_type(path.name)[0] or "application/octet-stream",
+        "mime": mimetypes.guess_type(logical_name)[0] or "application/octet-stream",
     }
 
 
@@ -349,6 +354,8 @@ def copy_upload(file_storage: Any, destination: Path, max_bytes: int) -> int:
                 if total > max_bytes:
                     raise UploadTooLargeError("File exceeds the configured upload limit")
                 handle.write(chunk)
+            handle.flush()
+            os.fsync(handle.fileno())
         temp.replace(destination)
         return total
     except BaseException:

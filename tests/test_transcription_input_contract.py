@@ -104,6 +104,8 @@ def test_worker_failure_diagnostics_survive_ipc_cleanup(tmp_path, monkeypatch, w
         kwargs["stderr"].write("specific native failure")
         return SimpleNamespace(returncode=42, poll=lambda: 42)
 
+    from cutroom import owned_process
+    monkeypatch.setattr(owned_process, "OwnedProcessTree", lambda: SimpleNamespace(attach=lambda p: None, close=lambda: None))
     monkeypatch.setattr(transcription.subprocess, "Popen", failed_worker)
     expected = transcription.TranscriptionIncomplete if with_coverage else RuntimeError
     with pytest.raises(expected) as failure:

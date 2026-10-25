@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import os
 import re
 import subprocess
@@ -104,7 +105,7 @@ def test_windows_launcher_checks_setup_marker_environment_and_real_parser():
     verifier = (ROOT / "scripts/verify_windows_installer.ps1").read_text(encoding="ascii")
     preflight = (ROOT / "scripts" / "preflight.py").read_text(encoding="utf-8")
     assert 'if not exist ".setup-complete"' in launcher
-    assert 'CUTROOM AI 1.2 Beta setup completed' in launcher
+    assert 'CUTROOM AI 1.3 Beta setup completed' in launcher
     assert 'if not exist ".venv\\Scripts\\python.exe"' in launcher
     assert r'scripts\verify_windows_installer.ps1' in launcher
     assert '"scripts\\preflight.py"' in launcher
@@ -307,11 +308,14 @@ def test_director_loader_is_simple_and_animated():
 
 def test_server_returns_explicit_upload_limit_and_disk_errors():
     server = (ROOT / "server.py").read_text(encoding="utf-8")
+    storage = (ROOT / "cutroom/upload_storage.py").read_text(encoding="utf-8")
     assert "RequestEntityTooLarge" in server
     assert server.index("if isinstance(error, RequestEntityTooLarge)") < server.index("if isinstance(error, HTTPException)")
     assert '"error": "file_too_large"' in server
-    assert '"error": "insufficient_storage"' in server
-    assert 'disk_free_bytes' in server
+    # Disk admission now owns the structured error and free-space details.
+    assert "return jsonify(storage_error.public()), 507" in server
+    assert 'UploadStorageError("insufficient_storage",' in storage
+    assert 'disk_free_bytes' in storage
 
 
 def test_waitress_transport_limit_matches_cutroom_upload_limit():
@@ -339,7 +343,10 @@ def test_story_model_is_required_before_semantic_director_runs():
     intelligence = (ROOT / "cutroom/intelligence.py").read_text(encoding="utf-8")
     generate = app_js.split("async function generateDraft()", 1)[1].split("async function ensureStoryAIReady", 1)[0]
     assert "await ensureStoryAIReady(settings.goal);" in generate
-    assert generate.index("await flushProjectSaves(projectId)") < generate.index("const settings = currentSettings()")
+    # User-reviewed settings now replace a fresh unreviewed UI snapshot.
+    assert generate.index("await flushProjectSaves(projectId)") < generate.index("reviewed=await reviewEditingRequest")
+    assert generate.index("reviewed=await reviewEditingRequest") < generate.index("const settings = reviewed;")
+    assert generate.index("const settings = reviewed;") < generate.index("await ensureStoryAIReady(settings.goal);")
     assert '"story_ai_required"' in server
     assert "def story_ai_status" in intelligence
     assert "StoryAIUnavailableError" in intelligence
@@ -386,7 +393,17 @@ def test_audio_first_release_contract():
     assert '"editor_model": "qwen3.5:4b"' in config
     assert '"job_workers": 1' in config
     assert '"ffmpeg_threads": 4' in config
-    assert director.index("analyze_audio(") < director.index("plan_edit(")
+    functions = {node.name: node for node in ast.parse(director).body if isinstance(node, ast.FunctionDef)}
+    calls = [node for node in ast.walk(functions["analyze_project"])
+             if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)]
+    audio_calls = [node.lineno for node in calls if node.func.id == "analyze_audio"]
+    planner_calls = [node.lineno for node in calls if node.func.id == "_plan_edit_with_cancel"]
+    assert audio_calls and planner_calls
+    assert max(audio_calls) < min(planner_calls)
+    # A helper may be defined earlier in the file without running before audio.
+    assert any(isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+               and node.func.id == "plan_edit"
+               for node in ast.walk(functions["_plan_edit_with_cancel"]))
     assert "audio_policy" in director and "audio_plan" in director
     assert 'id="audioPresetChoices"' in html
     assert 'id="spokenLanguageSelect"' in html

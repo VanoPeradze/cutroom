@@ -1,4 +1,4 @@
 """CUTROOM AI local editing engine."""
 
-__version__ = "1.2-beta"
-__version_label__ = "1.2 Beta"
+__version__ = "1.3-beta"
+__version_label__ = "1.3 Beta"

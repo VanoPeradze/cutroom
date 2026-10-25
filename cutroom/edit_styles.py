@@ -1,11 +1,173 @@
 from __future__ import annotations
 
 import copy
+import re
 from typing import Any, Mapping
+
+from .story_budget import StoryPlanningError
+from .instruction_contract import single_source_passage_requested, explicit_source_continuity_requested
 
 
 class UnknownEditStyle(ValueError):
     pass
+
+
+STORY_INTENT_VERSION = "explicit-story-intent-2026-10-20-v2"
+_STRUCTURE_DIRECTIVE = re.compile(
+    r"^(?:please\s+)?(?:(?:use|follow|require)\s+(?:this\s+|the\s+)?(?:story\s+|narrative\s+)?(?:structure|progression|roles)"
+    r"|(?:required\s+)?(?:story\s+|narrative\s+)?(?:structure|roles))\s*:\s*(?P<roles>.+?)\s*[.!]?\s*$"
+    r"|^(?:השתמש|השתמשי)\s+במבנה(?:\s+הבא)?\s*:\s*(?P<he_roles>.+?)\s*[.!]?\s*$"
+    r"|^(?:מבנה(?:\s+נדרש)?|תפקידי\s+סיפור\s+נדרשים)\s*:\s*(?P<he_label_roles>.+?)\s*[.!]?\s*$", re.I,
+)
+_SINGLE_ROLE_DIRECTIVE = re.compile(
+    r"^(?:please\s+)?(?:require|include|keep|must include)\s+(?:an?\s+|the\s+)?"
+    r"(?P<role>punchline|setup|premise|context|evidence|explanation|payoff|result|reaction|conclusion)\s*[.!]?\s*$"
+    r"|^(?:כלול|כללי|שמור|שמרי)\s+(?:את\s+)?(?P<he_role>פאנץ[׳']?|פואנטה|הקשר|הסבר|תוצאה|תגובה|מסקנה)\s*[.!]?\s*$", re.I,
+)
+_UNCERTAIN_ROLE_SCOPE = re.compile(
+    r"\b(?:no|not|never|don't|exclude|omit|if|unless|when|or|would|could|might|hypothetical|hypothetically|example|imagine|suppose|without|optional|optionally|prefer|preferred|preferably|maybe)\b"
+    r"|\b(?:אל|לא|אם|או|בלי|ללא|למשל|דוגמה|נניח|אולי|אפשר)\b", re.I,
+)
+_ROLE_HINT = re.compile(
+    r"\b(?:structure|story roles|narrative|punchline|setup|premise|context|evidence|explanation|payoff|result|reaction|conclusion)\b"
+    r"|מבנה|פאנץ|פואנטה|הקשר|הסבר|תוצאה|תגובה|מסקנה", re.I)
+_SHARED_ROLE_SCOPE = re.compile(
+    r"(?im)^\s*(?:optional|optionally|example|hypothetical|suppose|if|unless|when|prefer|אולי|למשל|דוגמה|נניח|אם)\b[^\n.!?]*[:;\n]"
+)
+_POSTFIX_ROLE_SCOPE = re.compile(r"^\s*;?\s*(?:(?:this|that|it)\s+is|(?:these|both|all)\s+are)\s+optional\b", re.I)
+_EXPLICIT_ROLE_LABELS = {
+    "hook", "setup", "premise", "context", "evidence", "explanation", "payoff", "result", "reaction",
+    "conclusion", "punchline", "development", "answer", "ending", "essential setup",
+    "development and evidence", "actual result", "punchline and full reaction",
+    "\u05e4\u05d0\u05e0\u05e5", "\u05e4\u05d0\u05e0\u05e5\u05f3", "\u05e4\u05d0\u05e0\u05e5'",
+    "\u05e4\u05d5\u05d0\u05e0\u05d8\u05d4", "\u05d4\u05e7\u05e9\u05e8", "\u05d4\u05e1\u05d1\u05e8",
+    "\u05ea\u05d5\u05e6\u05d0\u05d4", "\u05ea\u05d2\u05d5\u05d1\u05d4", "\u05de\u05e1\u05e7\u05e0\u05d4",
+}
+
+
+def _explicit_story_intent(instruction: Any) -> dict[str, Any]:
+    """Recognize a small explicit role grammar; never infer roles from a style.
+
+    The original request remains authoritative. Unrecognized, negated, quoted or
+    hypothetical structure requests stay visible and unverified, not positive
+    role requirements. This does not verify arbitrary instruction semantics.
+    """
+    intent: dict[str, Any] = {"version": STORY_INTENT_VERSION, "required_roles": [], "ordered_role_groups": [],
+                              "role_requirements": [], "order_requirements": [], "unverified_structure_requests": []}
+    if not isinstance(instruction, str) or not instruction.strip() or len(instruction) > 8000:
+        return intent
+    # Mask quoted dialogue across lines before considering individual clauses.
+    masked = re.sub(r'''"[^"]*"|“[^”]*”|‘[^’]*’|(?<!\w)'[\s\S]*?'(?!\w)''',
+                    lambda match: " " * len(match[0]), instruction)
+    unmatched_quote = (instruction.count('"') % 2 == 1 or instruction.count('“') != instruction.count('”')
+                       or bool(re.search(r"(?<!\w)'", masked))
+                       or '‘' in masked)
+    scope_starts = [match.start() for match in _SHARED_ROLE_SCOPE.finditer(masked)
+                    if not re.match(r"\s*(?:optional|optionally|prefer)\s+\S", match[0], re.I)
+                    or _ROLE_HINT.search(match[0])]
+    for match in re.finditer(r":\s*(?:\n|;)", masked):
+        prefix = masked[masked.rfind("\n", 0, match.start()) + 1:match.start()]
+        if _ROLE_HINT.search(prefix):
+            scope_starts.append(match.start())
+    # Only a bounded single-line directive is understood mechanically. Split
+    # trailing prose into its own clause instead of swallowing it as a role.
+    whole_structure = _STRUCTURE_DIRECTIVE.fullmatch(masked.strip())
+    if whole_structure and re.search(r"[;\n]|[.!?]\s+", masked.strip().rstrip('.!?')):
+        whole_structure = None
+    spans = [(0, len(instruction))] if whole_structure else [match.span() for match in re.finditer(r"[^\n;]+", instruction)]
+    for start, end in spans:
+        clauses = [(start, end)] if whole_structure else [
+            (start + clause.start(), start + clause.end())
+            for clause in re.finditer(r".+?(?:[.!?](?=\s+[A-Za-zא-ת]|$)|$)", instruction[start:end])]
+        for left, right in clauses:
+            text = instruction[left:right].strip()
+            control = masked[left:right].strip()
+            uncertain = (unmatched_quote or (any(position <= left for position in scope_starts) and not whole_structure)
+                         or control.endswith('?') or bool(_UNCERTAIN_ROLE_SCOPE.search(control))
+                         or bool(_POSTFIX_ROLE_SCOPE.match(masked[right:])))
+            structure = _STRUCTURE_DIRECTIVE.fullmatch(control) if not uncertain else None
+            single = _SINGLE_ROLE_DIRECTIVE.fullmatch(control) if not uncertain else None
+            role_text = next((value for value in structure.groupdict().values() if value is not None), "") if structure else ""
+            roles = re.split(r"\s*(?:->|→|,)\s*", role_text) if structure else [next(value for value in single.groupdict().values() if value is not None)] if single else []
+            roles = [role.strip().rstrip(".!?") for role in roles]
+            if roles and (any(role.casefold() not in _EXPLICIT_ROLE_LABELS for role in roles)
+                          or len(roles) != len({role.casefold() for role in roles}) or len(roles) > 64):
+                roles = []
+                uncertain = True
+            if len(set(intent["required_roles"]) | set(roles)) > 64:
+                roles = []
+                uncertain = True
+            if not roles:
+                if _ROLE_HINT.search(text):
+                    intent["unverified_structure_requests"].append({"text": text, "instruction_start": left,
+                        "instruction_end": right, "status": "unverified",
+                        "reason": "Narrative structure scope or wording is outside the supported explicit grammar; the original request still requires review."})
+                continue
+            for role in roles:
+                if role.casefold() in {existing.casefold() for existing in intent["required_roles"]}:
+                    continue
+                intent["required_roles"].append(role)
+                intent["role_requirements"].append({"purpose": role, "origin": "user", "authority": "required",
+                    "instruction_start": left, "instruction_end": right, "instruction_text": instruction[left:right]})
+            if structure and len(roles) > 1 and re.search(r"->|\u2192|\b(?:structure|progression)\s*:|\u05de\u05d1\u05e0\u05d4", control, re.I):
+                canonical = {role.casefold(): role for role in intent["required_roles"]}
+                group = [canonical[role.casefold()] for role in roles]
+                if group not in intent["ordered_role_groups"]:
+                    intent["ordered_role_groups"].append(group)
+                    intent["order_requirements"].append({"roles": group, "origin": "user", "authority": "required",
+                        "instruction_start": left, "instruction_end": right, "instruction_text": instruction[left:right]})
+    _validate_story_role_orders(intent["required_roles"], intent["ordered_role_groups"])
+    return intent
+
+
+def required_story_roles(brief: Mapping[str, Any]) -> list[str]:
+    """Only explicit user instruction can add required narrative template roles."""
+    return _explicit_story_intent(brief.get("instruction"))["required_roles"]
+
+
+def required_story_role_orders(brief: Mapping[str, Any]) -> list[list[str]]:
+    return _explicit_story_intent(brief.get("instruction"))["ordered_role_groups"]
+
+
+def _validate_story_role_orders(roles: list[str], groups: Any) -> list[list[str]]:
+    if (not isinstance(groups, list) or len(groups) > 64 or any(
+            not isinstance(group, list) or not 2 <= len(group) <= 64
+            or any(not isinstance(role, str) or role not in roles for role in group)
+            or len(group) != len(set(group)) for group in groups)):
+        raise StoryPlanningError("The explicit story order is invalid; the existing edit was kept.",
+            {"outcome": "constraint_conflict", "reason": "invalid_story_intent_contract", "applied_to_timeline": False})
+    pending = {role: set() for role in roles}
+    for group in groups:
+        for before, after in zip(group, group[1:]):
+            pending[after].add(before)
+    while pending:
+        ready = {role for role, predecessors in pending.items() if not predecessors}
+        if not ready:
+            raise StoryPlanningError("The requested story orders contradict each other; the existing edit was kept.",
+                {"outcome": "constraint_conflict", "reason": "contradictory_story_role_order", "applied_to_timeline": False})
+        pending = {role: predecessors - ready for role, predecessors in pending.items() if role not in ready}
+    return copy.deepcopy(groups)
+
+
+def required_story_role_orders_from_policy(policy: Mapping[str, Any]) -> list[list[str]]:
+    return _validate_story_role_orders(required_story_roles_from_policy(policy), policy.get("required_story_role_orders", []))
+
+
+def required_story_roles_from_policy(policy: Mapping[str, Any]) -> list[str]:
+    """A versioned enriched policy carries explicit roles into Director guards."""
+    if not any(key in policy for key in ("required_story_roles", "required_role_origin", "story_intent_version")):
+        # Old style metadata is advisory, including saved unversioned briefs.
+        return []
+    roles = policy.get("required_story_roles")
+    if (policy.get("story_intent_version") != STORY_INTENT_VERSION or policy.get("required_role_origin") != "user"
+            or "required_story_role_orders" not in policy
+            or not isinstance(roles, list) or len(roles) > 64
+            or any(not isinstance(role, str) or not role.strip() or len(role) > 80 for role in roles)
+            or len(roles) != len({role.casefold() for role in roles})):
+        raise StoryPlanningError("The explicit story-role contract is invalid; the existing edit was kept.",
+                                 {"outcome": "constraint_conflict", "reason": "invalid_story_intent_contract", "applied_to_timeline": False})
+    _validate_story_role_orders(roles, policy["required_story_role_orders"])
+    return list(roles)
 
 
 _BASE_AUDIO = {
@@ -572,31 +734,51 @@ def enrich_brief_with_style(brief: Mapping[str, Any]) -> dict[str, Any]:
     # Missing intent belongs to an older project: preserve its preset contract.
     target_mode = output.get("duration_mode") == "target" and output.get("goal", "short") == "short"
     policy = copy.deepcopy(style["selection_policy"])
+    preferred_structure = policy.pop("story_structure", [])
+    story_intent = _explicit_story_intent(output.get("instruction"))
+    policy.update(preferred_structure=list(preferred_structure),
+                  required_story_roles=list(story_intent["required_roles"]),
+                  required_story_role_orders=copy.deepcopy(story_intent["ordered_role_groups"]),
+                  required_role_origin="user", story_intent_version=STORY_INTENT_VERSION)
     policy["duration_mode"] = "target" if target_mode else "style"
-    if target_mode:
-        policy["max_moments"] = None
+    policy["preferred_max_moments"] = policy.get("max_moments")
+    policy["max_moments"] = None
+    policy["preserve_source_continuity"] = explicit_source_continuity_requested(output)
     guidance = style["guidance"]
-    structure = style["selection_policy"].get("story_structure") or []
-    if structure:
-        guidance += " Required progression: " + " -> ".join(structure) + "."
+    if preferred_structure:
+        guidance += " Optional presentation progression, only when supported by source: " + " -> ".join(preferred_structure) + "."
         guidance += (
-            " Select complete source passages with the required context. A shorter complete moment is better "
-            "than filling the duration with unrelated clips. Do not invent missing action, dialogue or outcomes."
+            " This style preference is not a required narrative role. Omit unsupported template roles rather than "
+            "inventing action, dialogue, jokes or outcomes. Preserve complete source passages and their context."
         )
-    if target_mode:
+    if target_mode and single_source_passage_requested(output):
+        guidance += (
+            " The user requests one coherent self-contained idea near the target duration. "
+            "Preserve complete source utterances and their context. Meaning-preserving cuts among related utterances are allowed unless explicitly forbidden. "
+            "Do not assemble independent moments to fill time or invent template roles. Explicit user roles and their order still apply."
+        )
+    elif target_mode and not policy["preserve_source_continuity"]:
         guidance += (
             " Duration intent overrides the preset's single-moment count: assemble distinct relevant complete "
             "passages toward the requested approximate length, in source chronology. Preserve each passage's "
             "setup and payoff. Do not repeat footage or add irrelevant material to fill time; explain a shortfall."
         )
-    max_moments = policy.get("max_moments")
+    max_moments = policy.get("preferred_max_moments")
+    if policy["preserve_source_continuity"]:
+        guidance += (" The original instruction explicitly requires continuous source footage without internal cuts. "
+                     "Keep intervening source time and pauses; report duration conflicts instead of overriding this instruction.")
     if max_moments:
-        guidance += f" Keep at most {max_moments} distinct complete moment(s); the duration is a ceiling, not a quota."
+        guidance += (f" The style favors {max_moments} complete moment(s) as a presentation preference, not a maximum. "
+                     "User instructions and source-supported complete passages take precedence; never discard required context to match the preset count.")
     output["style_profile"] = {
         "id": style["id"],
         "features": list(style["features"]),
         "selection_policy": policy,
         "framing_policy": copy.deepcopy(style["framing_policy"]),
         "guidance": guidance,
+        "preferred_structure": list(preferred_structure),
     }
+    output["story_contract"] = {**story_intent, "preferred_structure": [
+        {"purpose": purpose, "origin": "style", "style_id": style["id"], "authority": "preference"}
+        for purpose in preferred_structure]}
     return output

@@ -60,3 +60,6 @@
 .custom-text-cue[data-template=callout] .custom-text-main { display:inline; }
 .custom-text-cue[data-template=highlight] { color:#ffe14d; }
 @keyframes custom-text-fade { from { opacity:0; } to { opacity:1; } }
+
+.studio-workspace .text-search:not([hidden]) { display:grid; gap:6px; min-width:0; }
+.studio-workspace .text-search > input { width:100%; min-width:0; }

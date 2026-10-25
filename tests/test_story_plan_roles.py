@@ -17,6 +17,7 @@ class Settings:
 def brief(*, with_structure=True):
     value = {"goal": "short", "duration_mode": "target", "target_duration": 20}
     if with_structure:
+        value["instruction"] = "Structure: " + " -> ".join(ROLES)
         value["style_profile"] = {"selection_policy": {"story_structure": list(ROLES)}}
     return value
 
@@ -96,11 +97,12 @@ def test_initial_plan_schema_exposes_the_complete_configured_role_contract(monke
     assert len(calls) == 1
     slots = calls[0]["format"]["properties"]["slots"]
     assert slots["minItems"] >= len(ROLES)
-    assert set(slots["items"]["properties"]["purpose"]["enum"]) == set(ROLES)
+    # Required roles are minimum coverage; extra grounded context is permitted.
+    assert "enum" not in slots["items"]["properties"]["purpose"]
     assert intelligence.STORY_PLAN_SCHEMA == base_schema
 
 
-def test_review_rejects_an_incomplete_legacy_style_plan_before_a_model_call(monkeypatch):
+def test_review_rejects_an_incomplete_explicit_user_plan_before_a_model_call(monkeypatch):
     segment = {"id": "s1", "start": 0.0, "end": 20.0, "text": "A complete premise."}
     beat = {"id": "b1", "start": 0.0, "end": 20.0, "duration": 20.0,
             "segment_ids": ["s1"], "text": segment["text"]}

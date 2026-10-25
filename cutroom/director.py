@@ -9,7 +9,7 @@ from typing import Any, Callable
 from .cache_keys import build_analysis_cache_fingerprints, cache_fingerprints_match, stable_fingerprint
 from .composition import default_reels_stack, select_embedded_candidate
 from .config import Settings
-from .edit_styles import enrich_brief_with_style
+from .edit_styles import enrich_brief_with_style, required_story_roles_from_policy, required_story_role_orders_from_policy
 from .frame_rates import project_export_fps
 from .caption_items import apply_corrections, corrections as caption_corrections
 from .editing import SOURCE_MIXER_DEFAULT_LAYOUTS, apply_camera_overrides, apply_timeline_overrides
@@ -34,6 +34,13 @@ from .story_spans import (
     whole_utterance_story_summary,
 )
 from .track_locks import require_tracks_unlocked
+from .instruction_contract import (
+    assert_instruction_contract, effective_duration_bounds, evaluate_instruction_contract,
+    explicit_source_continuity_requested,
+)
+from .source_continuity import validate_explicit_source_continuity, continuous_source_playback
+from .story_search_identity import story_search_source_context
+from .review_candidates import publish_failed_review
 from .sync import MIN_AUTOMATIC_SYNC_CONFIDENCE, synchronize_sources
 from .transcription import cuda_available, transcribe, transcript_quality_report
 from .cloud_ai import CloudAIError, enabled as cloud_enabled
@@ -528,14 +535,16 @@ def _assert_transcript_complete(quality: dict[str, Any]) -> None:
             "Transcription did not finish processing all of the audio. No story was built from partial speech. "
             "Your original footage is safe. Retry transcription with the exact spoken language; "
             "Quality mode keeps the requested model even when it needs to run on CPU."
-            + _transcription_range_hint(quality, incomplete=True)
+            + _transcription_range_hint(quality, incomplete=True),
+            {"outcome": "technical_error", "reason": "incomplete_transcription", "applied_to_timeline": False},
         )
     if "uncovered_detected_speech" in reasons:
         raise StoryPlanningError(
             "Speech was detected in sections that produced very little transcript. "
             "Choose the exact spoken language and Quality mode, then retry before building the story. "
             "The speech detector is an estimate; background voices or game audio can also need review."
-            + _transcription_range_hint(quality, incomplete=False)
+            + _transcription_range_hint(quality, incomplete=False),
+            {"outcome": "technical_error", "reason": "uncovered_detected_speech", "applied_to_timeline": False},
         )
 
 
@@ -835,7 +844,7 @@ def _short_cleanup_cuts_with_floor(
     manual_cuts: list[dict[str, Any]],
     duration: float,
     target_duration: float,
-    *, preserve_fragments: bool = False,
+    *, preserve_fragments: bool = False, duration_bounds: dict[str, Any] | None = None,
 ) -> tuple[list[dict[str, float]], dict[str, int]]:
     """Apply cleanup inside a selected Short without making it needlessly short.
 
@@ -847,6 +856,8 @@ def _short_cleanup_cuts_with_floor(
     target = max(8.0, min(float(duration), float(target_duration)))
     floor_ratio = 0.92 if target <= 90.0 else 0.94 if target <= 210.0 else 0.95
     target_floor = target * floor_ratio
+    if duration_bounds and duration_bounds.get("explicit") is True:
+        target_floor = float(duration_bounds["minimum_seconds"])
     selected: list[dict[str, Any]] = [*story_cuts]
     counts: dict[str, int] = {}
     for manual in manual_cuts:
@@ -1195,7 +1206,7 @@ def _select_audio_highlight_ranges(
         return (energy * 0.55 + action * 1.35 * 0.45) * (1.0 - 0.75 * dead)
 
     style_limit = (selection_policy or {}).get("max_moments")
-    if style_limit or target_mode:
+    if style_limit or target_mode or (selection_policy or {}).get("preferred_max_moments"):
         before = max(0.0, _finite_number(selection_policy.get("pre_roll_seconds")))
         after = max(0.0, _finite_number(selection_policy.get("post_roll_seconds")))
         threshold = max(0.35, max(frame_energy(row) for row in waveform) * 0.55)
@@ -1245,7 +1256,7 @@ def _select_audio_highlight_ranges(
             if range_duration(candidate) > target + 0.05:
                 continue
             event_keep = candidate
-            if not target_mode and len(event_keep) >= max(1, int(style_limit)):
+            if not target_mode and style_limit and len(event_keep) >= max(1, int(style_limit)):
                 break
         if target_mode:
             # Fit a remaining audio-backed window only within an unused event.
@@ -1268,6 +1279,8 @@ def _select_audio_highlight_ranges(
             return event_keep
         if event_keep:
             return event_keep
+        if (selection_policy or {}).get("preferred_max_moments"):
+            return []  # No measured event authorizes filler merely to satisfy a preset.
 
     clip_count = _highlight_clip_count(target)
     if pace == "dynamic":
@@ -1576,7 +1589,7 @@ def _select_gameplay_moments(
     shortest, longest = GAMEPLAY_MOMENT_SECONDS.get(pace, GAMEPLAY_MOMENT_SECONDS["balanced"])
     typical = (shortest + longest) / 2.0
     style_limit = int(_finite_number(policy.get("max_moments")))
-    if style_limit == 1:
+    if style_limit == 1 or policy.get("preferred_max_moments") == 1:
         # One complete engagement or reaction may fill the whole Short.
         longest = max(longest, target)
     before = max(0.0, _finite_number(policy.get("pre_roll_seconds"), 2.0))
@@ -1772,6 +1785,94 @@ def _semantic_mapping_is_verified(decision: dict[str, Any]) -> bool:
     return required == mapped | sticky
 
 
+def _is_experimental_window_result(editorial: Any, engine: str) -> bool:
+    """A preview cannot become a decision by adding old draft/approval fields."""
+    return (str(engine).startswith("source_window_") or isinstance(editorial, dict) and any(
+        key in editorial for key in ("ranked_compositions", "semantic_evaluation", "canonical_ownership",
+                                    "canonical_evidence_fingerprint", "source_descriptor")))
+
+
+def validate_experimental_plan_result(
+    context: JobContext, editorial: Any, engine: str, *,
+    transcript_segments: list[dict[str, Any]] | None = None,
+    settings: Settings | None = None, brief: dict[str, Any] | None = None,
+    request: Any = None, read_current: Callable[[], Any] | None = None, fps: int = 30,
+) -> None:
+    """Director's read-only experimental boundary. ALL previews remain blocked.
+
+    Optional trusted context rederives the automatic composition through the
+    actual non-model planner, for mechanical qualification only. There is no
+    positive approval receipt in this protocol; flags from a model/dict cannot
+    authorize application. Ordinary editing retains its existing validators.
+    """
+    context.check_cancelled()
+    if request is None and not _is_experimental_window_result(editorial, engine):
+        return
+    diagnostic = {"kind": "experimental_window_boundary", "outcome": "unapproved_experimental_plan",
+                  "reason": "experimental_preview_has_no_apply_authority", "applied_to_timeline": False,
+                  "completed_edit": False, "mechanical_mapping_validated": False,
+                  "semantic_approval": False, "validation_scope": "read_only_no_project_write"}
+    if isinstance(editorial, dict):
+        evaluation = editorial.get("semantic_evaluation")
+        assessments = evaluation.get("assessments") if isinstance(evaluation, dict) else None
+        diagnostic["assessment_statuses"] = [
+            a.get("status", "malformed") if isinstance(a, dict) else "malformed"
+            for a in assessments[:2]] if isinstance(assessments, list) else ["no_valid_semantic_envelope"]
+    if request is not None:
+        from . import intelligence
+        from .window_semantics import WindowSemanticRequest
+        from .window_composition import WindowCompositionRequest
+        from .edit_windows import EditWindowError
+        import json
+        composition = request.composition if isinstance(request, WindowSemanticRequest) else request
+        if isinstance(composition,WindowCompositionRequest) and composition.search is not None:
+            diagnostic.update(reason="resumable_discovery_has_no_director_validation_or_apply_authority",
+                              qualification="not_reexecuted_no_search_resume_or_ACK")
+            raise StoryBudgetError("Resumable discovery cannot be applied; the existing edit was kept.",diagnostic)
+        try:
+            if (not isinstance(composition, WindowCompositionRequest) or transcript_segments is None
+                    or settings is None or not isinstance(brief, dict) or not callable(read_current)
+                    or not isinstance(editorial, dict)):
+                raise EditWindowError("Trusted source/request/current-state context is required")
+            # Always the automatic non-model path; never repeat semantic calls.
+            expected, expected_engine = intelligence.plan_edit(
+                transcript_segments, settings, brief, cancel_check=context.check_cancelled,
+                source_window_request=composition, source_window_state=read_current)
+            if expected_engine != "source_window_composition_preview":
+                raise EditWindowError("Unexpected mechanical planner result")
+            keys = ("source_fingerprint", "source_descriptor", "project_source_state",
+                    "canonical_evidence_fingerprint", "canonical_ownership", "canonical_evidence",
+                    "views", "original_request", "instruction_contract", "composition",
+                    "ranked_compositions", "candidate_index", "cache_key", "selection", "selected_evidence")
+            # JSON preserves bool vs number and survives detached tuple/list serialization.
+            def exact(value):
+                return json.dumps(value, ensure_ascii=False, sort_keys=True, allow_nan=False, separators=(",", ":"))
+            if any(key not in editorial or exact(editorial[key]) != exact(expected[key]) for key in keys):
+                raise EditWindowError("Experimental result differs from current canonical source/evidence/request/mapping")
+            bounds = expected["composition"]["bounds"]
+            mapped = []
+            for proposal in expected["ranked_compositions"]:
+                ranges = [{"start": c["source_start"], "end": c["source_end"]} for c in proposal["clip_map"]]
+                seconds = framed_story_duration(ranges, fps)
+                if (seconds < bounds["minimum_seconds"] - BUDGET_TOLERANCE_SECONDS - 1e-9
+                        or seconds > bounds["maximum_seconds"] + BUDGET_TOLERANCE_SECONDS + 1e-9):
+                    raise EditWindowError("Frame-mapped duration violates the authoritative request")
+                mapped.append({"candidate_id": proposal["candidate_id"], "clip_map": copy.deepcopy(proposal["clip_map"]),
+                               "exact_evidence_ids": list(proposal["candidate_evidence_ids"]),
+                               "raw_seconds": proposal["raw_seconds"], "framed_seconds": seconds})
+            from .window_evidence import check_source_state
+            check_source_state(composition.state, read_current, context.check_cancelled)
+            diagnostic.update(mechanical_mapping_validated=bool(mapped), canonical_source_validated=True,
+                              canonical_source=composition.source.fingerprint,
+                              project_revision=composition.state.revision, mapped_proposals=mapped,
+                              qualification="source_geometry_only_not_editorial_approval")
+        except (ValueError, TypeError, KeyError) as exc:
+            diagnostic.update(outcome="invalid_experimental_plan", reason="invalid_or_stale_experimental_source_mapping",
+                              validation_error=str(exc))
+    context.check_cancelled()
+    raise StoryBudgetError("The experimental plan has no approved editing authority; the existing edit was kept.", diagnostic)
+
+
 def _exact_story_complement(ranges: list[dict[str, Any]], duration: float) -> list[dict[str, float]]:
     """Complement semantic intervals without discarding brief source words."""
     cursor = 0.0
@@ -1830,7 +1931,9 @@ def _source_story_candidates(
             raise ValueError("A story passage does not match complete canonical source segments.")
         candidates.append({"id": identifier, "start": start, "end": end,
                            "segment_ids": [str(row["id"]) for row in rows],
-                           "text": " ".join(str(row.get("text") or "") for row in rows)})
+                           "text": " ".join(str(row.get("text") or "") for row in rows),
+                           **({key:passage[key] for key in ("entry_policy","entry_owner_id")}
+                              if passage.get("entry_owner_id") else {})})
         seen.add(identifier)
     return sorted(candidates, key=lambda row: (row["start"], row["end"], row["id"]))
 
@@ -1848,7 +1951,8 @@ def _verified_source_story_evidence(
     derived = validate_story_evidence(
         requirements.get("slot_map"), candidates, source_segments,
         selected_beat_ids=[row["id"] for row in candidates],
-        required_roles=selection_policy.get("story_structure") or None,
+        required_roles=required_story_roles_from_policy(selection_policy) or None,
+        required_role_orders=required_story_role_orders_from_policy(selection_policy),
         rejected_beat_ids=decision.get("rejected_beat_ids") or [], keep_ranges=keep_ranges,
     )
     if derived != proof or derived["slot_map"] != requirements.get("slot_map"):
@@ -1862,9 +1966,24 @@ def _cached_source_story_evidence_is_verified(
     try:
         _verified_source_story_evidence(decision, source_segments, selection_policy)
         _verified_source_span_constraints(decision, source_segments)
+        _verified_continuous_source_playback(decision, source_segments, selection_policy)
     except (ValueError, TypeError, KeyError):
         return False
     return True
+
+
+def _verified_continuous_source_playback(decision, source_segments, selection_policy):
+    """Rebuild optional continuous playback from current canonical ownership."""
+    binding = (decision.get("story_requirements") or {}).get("continuous_source_playback")
+    if binding is None:
+        return None
+    if not selection_policy.get("preserve_source_continuity"):
+        raise ValueError("Continuous source playback needs an explicit current continuity request.")
+    candidates = _source_story_candidates(decision, source_segments)
+    actual = continuous_source_playback(candidates, source_segments, [r["id"] for r in candidates])
+    if binding != actual:
+        raise ValueError("Continuous source playback no longer matches the exact selected source.")
+    return actual
 
 
 def _verified_source_span_constraints(
@@ -1889,6 +2008,27 @@ def _verified_source_span_constraints(
     return proof
 
 
+def _selection_duration_bounds(
+    policy: dict[str, Any], target: float, duration: float, *, duration_mode: str = "target",
+) -> dict[str, Any]:
+    """Read caller-owned bounds, never a planner's decision or requirements."""
+    bounds = policy.get("duration_bounds")
+    if bounds is None:
+        return effective_duration_bounds(
+            {"target_duration": target, "duration_mode": duration_mode}, duration,
+        )
+    if (not isinstance(bounds, dict) or type(bounds.get("explicit")) is not bool
+            or bounds.get("origin") not in {"explicit_user_range", "explicit_user_exact", "derived_target",
+                                          "configured_max", "configured_style"}
+            or any(type(bounds.get(key)) not in (int, float)
+                   or not math.isfinite(bounds[key]) or bounds[key] < 0
+                   for key in ("minimum_seconds", "maximum_seconds"))):
+        raise StoryBudgetError("The authoritative duration bounds are invalid; the existing edit was kept.",
+                               {"kind": "story_budget", "reason": "invalid_duration_bounds",
+                                "outcome": "constraint_conflict", "applied_to_timeline": False})
+    return copy.deepcopy(bounds)
+
+
 def _validate_extractive_selection(
     decision: dict[str, Any], source_segments: list[dict[str, Any]], duration: float, target: float, *,
     selection_policy: dict[str, Any] | None = None, keep_ranges: list[dict[str, float]] | None = None,
@@ -1897,6 +2037,9 @@ def _validate_extractive_selection(
     """Validate a labelled rough cut without granting generative story authority."""
     policy = selection_policy or {}
     requirements = decision.get("extractive_requirements") or {}
+    duration_mode = policy.get("duration_mode") or requirements.get("duration_mode") or "target"
+    bounds = _selection_duration_bounds(policy, target, duration, duration_mode=str(duration_mode))
+    target = float(bounds["maximum_seconds"])
     reasons, source_error = [], None
     if (decision.get("editorial_authority") != EXTRACTIVE_ROUGH_CUT_AUTHORITY or decision.get("story_requirements")
             or decision.get("semantic_review_status") != "not_model_reviewed"
@@ -1924,9 +2067,8 @@ def _validate_extractive_selection(
         reasons.append("invalid_source_span_constraints")
         proof = {}
     cost = story_duration_cost(approved, source_segments, duration, target=target,
-                              protect_action_span=bool(policy.get("protect_action_span")), fps=fps)
-    duration_mode = policy.get("duration_mode") or requirements.get("duration_mode") or "target"
-    minimum_target = .9 * min(target, duration) if duration_mode == "target" else 0.0
+                              protect_action_span=bool(policy.get("protect_action_span") or policy.get("preserve_source_continuity")), fps=fps)
+    minimum_target = float(bounds["minimum_seconds"])
     if not cost["fits_target"]:
         reasons.append("insufficient_safe_pause_budget")
     if cost["approved_seconds"] + .05 + 1e-9 < minimum_target:
@@ -1951,17 +2093,26 @@ def _validate_extractive_selection(
             reasons.append("selected_material_under_target")
         if fps is not None:
             try:
-                if framed_story_duration(keep_ranges, fps) > target + BUDGET_TOLERANCE_SECONDS + 1e-9:
+                framed = framed_story_duration(keep_ranges, fps)
+                if framed > target + BUDGET_TOLERANCE_SECONDS + 1e-9:
                     reasons.append("frame_grid_over_target")
+                if bounds["explicit"] and framed + BUDGET_TOLERANCE_SECONDS + 1e-9 < minimum_target:
+                    reasons.append("frame_grid_under_target")
             except ValueError:
                 reasons.append("unencodable_frame_fragment")
     diagnostic = {"kind": "story_budget", "scope": "current_fixed_source_selection", "reasons": reasons,
         "editorial_authority": EXTRACTIVE_ROUGH_CUT_AUTHORITY, "semantic_review_status": "not_model_reviewed",
         "cost": cost, "required_policy_minimum_seconds": cost["minimum_safe_seconds"],
-        "target_seconds": target, "minimum_target_seconds": round(minimum_target, 3), "fps": fps,
+        "target_seconds": target, "minimum_target_seconds": round(minimum_target, 3), "duration_bounds": bounds, "fps": fps,
         "current_source_target_interval": _source_selection_target_interval(cost, duration, str(duration_mode)),
         "source_span_error": source_error, "applied_to_timeline": False}
     if reasons:
+        budget_only = set(reasons) <= {
+            "allowed_source_below_target_minimum", "selected_material_over_target",
+            "selected_material_under_target", "frame_grid_over_target", "frame_grid_under_target", "insufficient_safe_pause_budget",
+        }
+        diagnostic.update(outcome="constraint_conflict" if budget_only else "invalid_model_output",
+                          reason="fixed_source_budget_conflict" if budget_only else "invalid_extractive_selection")
         raise StoryBudgetError("An extractive rough cut could not preserve the fixed source safely. "
                                + ", ".join(reasons) + ". No new draft was applied; the existing edit was kept.", diagnostic)
     return diagnostic
@@ -1980,15 +2131,28 @@ def _validate_required_story_selection(
     if not requirements:
         return None
     policy = selection_policy or {}
+    bounds = _selection_duration_bounds(policy, target, duration, duration_mode=str(policy.get("duration_mode") or "target"))
+    target = float(bounds["maximum_seconds"])
+    minimum_target = float(bounds["minimum_seconds"])
     canonical_segments = source_segments if source_segments is not None else segments
     approved = decision.get("story_ranges") or []
     required = {str(value) for value in requirements.get("required_beat_ids") or []}
     passages = {str(row.get("beat_id") or row.get("id") or ""): row
                 for row in approved if isinstance(row, dict)}
+    continuous_error = None
+    continuous = None
+    try:
+        continuous = _verified_continuous_source_playback(decision, canonical_segments, policy)
+        if continuous is not None:
+            approved = continuous["playback_ranges"]
+    except (ValueError, TypeError, KeyError) as exc:
+        continuous_error = str(exc)
     cost = story_duration_cost(approved, canonical_segments, duration, target=target,
-                               protect_action_span=bool(policy.get("protect_action_span")), fps=fps)
+                               protect_action_span=bool(policy.get("protect_action_span") or policy.get("preserve_source_continuity")), fps=fps)
     missing = required - passages.keys()
     reasons = []
+    if continuous_error:
+        reasons.append("invalid_continuous_source_playback")
     if not _semantic_mapping_is_verified(decision):
         reasons.append("unverified_semantic_mapping")
     mapped = {str(identifier) for row in requirements.get("slot_map") or [] if isinstance(row, dict)
@@ -1996,7 +2160,7 @@ def _validate_required_story_selection(
     sticky = {str(identifier) for identifier in requirements.get("critic_requested_beat_ids") or []}
     if set(passages) != required or required != mapped | sticky:
         reasons.append("inconsistent_story_selection")
-    required_roles = list(dict.fromkeys(policy.get("story_structure") or []))
+    required_roles = required_story_roles_from_policy(policy)
     mapped_roles = {row.get("purpose") for row in requirements.get("slot_map") or []
                     if isinstance(row, dict) and isinstance(row.get("purpose"), str)}
     missing_roles = [purpose for purpose in required_roles if purpose not in mapped_roles]
@@ -2034,10 +2198,14 @@ def _validate_required_story_selection(
         reasons.append("unapplied_critic_actions")
     if not cost["fits_target"]:
         reasons.append("insufficient_safe_pause_budget")
+    if bounds["explicit"] and cost["approved_seconds"] + BUDGET_TOLERANCE_SECONDS + 1e-9 < minimum_target:
+        reasons.append("allowed_source_below_target_minimum")
     rejected_overlap = []
     unapproved_ranges = []
     framed_seconds = None
     if keep_ranges is not None:
+        if continuous is not None and keep_ranges != continuous["playback_ranges"]:
+            reasons.append("continuous_source_playback_changed")
         previous_end = -math.inf
         for row in keep_ranges:
             start, end = _finite_number(row.get("start"), math.nan), _finite_number(row.get("end"), math.nan)
@@ -2049,7 +2217,7 @@ def _validate_required_story_selection(
         kept = merge_ranges(keep_ranges, gap=0.0)
         policy_minimum_ranges = compact_story_pauses_to_target(
             approved, canonical_segments, duration, cost["minimum_safe_seconds"],
-            protect_action_span=bool(policy.get("protect_action_span")),
+            protect_action_span=bool(policy.get("protect_action_span") or policy.get("preserve_source_continuity")),
         ) or approved
         restored = merge_ranges(restored_ranges or [], gap=0.0)
         admissible = merge_ranges([*approved, *restored], gap=0.0)
@@ -2076,6 +2244,8 @@ def _validate_required_story_selection(
             reasons.append("rejected_story_material_included")
         if range_duration(kept) > target + BUDGET_TOLERANCE_SECONDS + 1e-9:
             reasons.append("selected_material_over_target")
+        if bounds["explicit"] and range_duration(kept) + BUDGET_TOLERANCE_SECONDS + 1e-9 < minimum_target:
+            reasons.append("selected_material_under_target")
         if fps is not None:
             try:
                 framed_seconds = framed_story_duration(kept, fps)
@@ -2084,6 +2254,8 @@ def _validate_required_story_selection(
             else:
                 if framed_seconds > target + BUDGET_TOLERANCE_SECONDS + 1e-9:
                     reasons.append("frame_grid_over_target")
+                if bounds["explicit"] and framed_seconds + BUDGET_TOLERANCE_SECONDS + 1e-9 < minimum_target:
+                    reasons.append("frame_grid_under_target")
     if missing:
         reasons.append("required_story_material_omitted")
     diagnostic = {
@@ -2091,8 +2263,10 @@ def _validate_required_story_selection(
         "policy_version": cost["policy_version"], "cost": cost,
         "required_policy_minimum_seconds": cost["minimum_safe_seconds"],
         "required_framed_minimum_seconds": cost.get("minimum_framed_seconds"),
-        "target_seconds": target, "selected_seconds": range_duration(keep_ranges) if keep_ranges is not None else None,
+        "target_seconds": target, "minimum_target_seconds": minimum_target, "duration_bounds": bounds,
+        "selected_seconds": range_duration(keep_ranges) if keep_ranges is not None else None,
         "selected_framed_seconds": framed_seconds, "fps": fps,
+        "continuous_source_playback_error": continuous_error,
         "required_beat_ids": sorted(required), "missing_required_beat_ids": sorted(missing),
         "approved_beat_ids": sorted(passages), "mapped_beat_ids": sorted(mapped),
         "required_story_roles": required_roles, "mapped_story_roles": sorted(mapped_roles),
@@ -2108,6 +2282,10 @@ def _validate_required_story_selection(
         "applied_to_timeline": False,
     }
     if reasons:
+        budget_only = set(reasons) <= {"insufficient_safe_pause_budget", "selected_material_over_target", "frame_grid_over_target",
+                                      "allowed_source_below_target_minimum", "selected_material_under_target", "frame_grid_under_target"}
+        diagnostic.update(outcome="constraint_conflict" if budget_only else "invalid_model_output",
+                          reason="required_story_budget_conflict" if budget_only else "invalid_required_story_selection")
         minimum = max(cost["minimum_safe_seconds"], cost.get("minimum_framed_seconds") or 0.0)
         detail = (f"The current required story needs at least {minimum:.2f}s under the safe speech policy "
                   f"for a {target:.2f}s target. " if not cost["fits_target"] else "")
@@ -2249,7 +2427,7 @@ def _select_style_story_ranges(
     """
     target_mode = selection_policy.get("duration_mode") == "target"
     moment_limit = (max(1, len(segments), len(decision.get("story_ranges") or []))
-                    if target_mode else selection_policy.get("max_moments"))
+                    if target_mode or selection_policy.get("preferred_max_moments") else selection_policy.get("max_moments"))
     if not moment_limit:
         return None
     moment_limit = max(1, int(moment_limit))
@@ -2330,7 +2508,12 @@ def _style_cleanup_candidates(
     selection_policy: dict[str, Any],
 ) -> list[dict[str, Any]]:
     """Keep automatic cleanup from breaking the selected action or story setup."""
-    if not selection_policy.get("story_structure"):
+    # Presentation preferences may protect a selected passage from destructive
+    # cleanup, but they never add required narrative roles to source validation.
+    if not (required_story_roles_from_policy(selection_policy)
+            or selection_policy.get("preferred_structure")
+            or selection_policy.get("story_structure")
+            or selection_policy.get("protect_action_span")):
         return candidates
     protect_action = bool(selection_policy.get("protect_action_span"))
     return [
@@ -2367,9 +2550,15 @@ def _select_short_story_ranges(
     def finish(ranges: list[dict[str, float]]) -> list[dict[str, float]]:
         return _exclude_rejected_story_ranges(ranges, decision, segments, duration)
 
+    continuous = _verified_continuous_source_playback(decision, segments, selection_policy or {})
+    if continuous is not None:
+        # Keep source-unit ranges for attribution, but play their one exact
+        # envelope. No concatenation, pause trimming or source expansion occurs.
+        return copy.deepcopy(continuous["playback_ranges"])
+
     if decision.get("editorial_authority") == EXTRACTIVE_ROUGH_CUT_AUTHORITY:
         approved = merge_ranges(decision.get("story_ranges") or [], gap=0.0)
-        if not (selection_policy or {}).get("protect_action_span"):
+        if not ((selection_policy or {}).get("protect_action_span") or (selection_policy or {}).get("preserve_source_continuity")):
             fitted = _compact_story_pauses_to_target(approved, segments, duration, target, fps=fps)
             if fitted is not None:
                 return fitted
@@ -2392,7 +2581,7 @@ def _select_short_story_ranges(
             frame_fit_needed = True
     if (((selection_policy or {}).get("duration_mode") == "target" or decision.get("story_requirements")) and approved
             and (range_duration(approved) > target + .05 or frame_fit_needed)
-            and not (selection_policy or {}).get("protect_action_span")):
+            and not ((selection_policy or {}).get("protect_action_span") or (selection_policy or {}).get("preserve_source_continuity"))):
         fitted = _compact_story_pauses_to_target(approved, segments, duration, target, fps=fps)
         decision["_target_fit_review"] = {
             "fitted": fitted is not None,
@@ -3105,14 +3294,20 @@ def _duration_review(brief: dict[str, Any], source_duration: float, output_durat
     if brief.get("goal", "short") != "short":
         return None
     requested = max(8.0, _finite_number(brief.get("target_duration"), 60.0))
-    effective = min(requested, source_duration)
+    bounds = effective_duration_bounds(brief, source_duration)
+    effective = min(float(bounds["maximum_seconds"]), source_duration)
+    minimum = float(bounds["minimum_seconds"])
     limit = ((brief.get("style_profile") or {}).get("selection_policy") or {}).get("max_moments")
-    shortfall = output_duration + .05 < effective * .9
+    # Keep the historical ceiling/style advisory, while explicit requests and
+    # target intent use the same numeric contract as planning and validation.
+    shortfall_floor = minimum if bounds["explicit"] or brief.get("duration_mode") == "target" else effective * .9
+    shortfall = output_duration + BUDGET_TOLERANCE_SECONDS < shortfall_floor
     exceeds_target = output_duration > effective + .05
+    required_source = minimum if bounds["explicit"] else requested
     reason = ("over_target" if exceeds_target else
               "style_moment_limit" if shortfall and limit else
               "limited_selection" if shortfall else
-              "source_shorter" if source_duration + .05 < requested else "near_target")
+              "source_shorter" if source_duration + .05 < required_source else "near_target")
     extractive = (decision or {}).get("editorial_authority") == EXTRACTIVE_ROUGH_CUT_AUTHORITY
     requirements = (decision or {}).get("extractive_requirements" if extractive else "story_requirements") or {}
     critic = {} if extractive else (hierarchy or {}).get("critic") or {}
@@ -3146,9 +3341,9 @@ def _duration_review(brief: dict[str, Any], source_duration: float, output_durat
         missing_additions = missing_required & {str(value) for value in requirements.get("critic_requested_beat_ids") or []}
         unapplied = max(unapplied, len(missing_additions))
     reasons = []
-    if brief.get("duration_mode") == "target" and shortfall:
+    if (brief.get("duration_mode") == "target" or bounds["explicit"]) and shortfall:
         reasons.append("selected_material_under_target")
-    if brief.get("duration_mode") == "target" and source_duration + .05 < requested:
+    if (brief.get("duration_mode") == "target" or bounds["explicit"]) and source_duration + .05 < required_source:
         reasons.append("source_shorter_than_requested")
     if exceeds_target:
         reasons.append("selected_material_over_target")
@@ -3171,7 +3366,8 @@ def _duration_review(brief: dict[str, Any], source_duration: float, output_durat
             "editorial_authority": EXTRACTIVE_ROUGH_CUT_AUTHORITY if extractive else (decision or {}).get("editorial_authority"),
             "generative_review_status": "failed" if extractive else None,
             "effective_target_seconds": round(effective, 3), "selected_seconds": round(output_duration, 3),
-            "duration_is_ceiling": brief.get("duration_mode") != "target", "duration_mode": brief.get("duration_mode", "style"),
+            "minimum_target_seconds": minimum, "maximum_target_seconds": float(bounds["maximum_seconds"]), "duration_bounds": bounds,
+            "duration_is_ceiling": brief.get("duration_mode") != "target" and not bounds["explicit"], "duration_mode": brief.get("duration_mode", "style"),
             "shortfall": shortfall, "exceeds_target": exceeds_target, "reason": reason,
             "style_moment_limit": int(limit) if limit else None,
             "nonverbal": nonverbal, "can_try_more_moments": bool(shortfall and limit),
@@ -3184,7 +3380,7 @@ def _target_completion_message(review: dict[str, Any] | None) -> str | None:
     if not review or (review.get("target_feasibility") or {}).get("status") != "limited":
         return None
     selected, requested = float(review["selected_seconds"]), float(review["requested_seconds"])
-    if (review.get("duration_mode") == "target"
+    if ((review.get("duration_mode") == "target" or (review.get("duration_bounds") or {}).get("explicit"))
             and (review.get("shortfall") or "source_shorter_than_requested" in
                  (review.get("target_feasibility") or {}).get("reasons", []))):
         return (f"Draft needs review: the current selection supports {selected:.1f}s of the requested {requested:.1f}s. "
@@ -3251,9 +3447,71 @@ def analyze_project(
     *,
     selection_variant: int = 0,
     source_mixer_patch: dict[str, Any] | None = None,
+    experimental_plan_validation: dict[str, Any] | None = None,
+    expected_project_revision: int | None = None,
 ) -> dict[str, Any]:
     context.checkpoint()
     project = store.load(project_id)
+    if expected_project_revision is not None:
+        if type(expected_project_revision) is not int or expected_project_revision < 1:
+            raise ValueError("Reviewed project revision must be a positive integer.")
+        if project.get("revision") != expected_project_revision:
+            raise StoryBudgetError(
+                "The project changed after request review. Review again; the current edit was kept.",
+                {"kind": "instruction_review", "reason": "request_review_stale", "outcome": "stale_project",
+                 "phase": "before_analysis", "applied_to_timeline": False, "completed_edit": False},
+            )
+    if experimental_plan_validation is not None:
+        # Explicit internal validation-only entry, before settings, preprocessing
+        # or cache commits. There is no UI/server caller or apply permission.
+        if brief_patch or source_mixer_patch or selection_variant != 0:
+            raise StoryBudgetError("Validation cannot be combined with editing changes; the existing edit was kept.",
+                {"kind": "experimental_window_boundary", "outcome": "invalid_experimental_plan",
+                 "reason": "mixed_validation_and_edit_request", "applied_to_timeline": False, "completed_edit": False})
+        from .window_semantics import WindowSemanticRequest
+        from .window_composition import WindowCompositionRequest
+        from .window_evidence import WindowSourceState
+        from .edit_windows import build_canonical_source
+        payload = experimental_plan_validation
+        if not isinstance(payload, dict) or set(payload) != {"editorial", "engine", "request", "brief"}:
+            raise StoryBudgetError("Malformed experimental validation request; the existing edit was kept.",
+                {"kind": "experimental_window_boundary", "outcome": "invalid_experimental_plan",
+                 "reason": "malformed_validation_request", "applied_to_timeline": False, "completed_edit": False})
+        request = payload["request"]
+        composition = request.composition if isinstance(request, WindowSemanticRequest) else request
+        if not isinstance(composition, WindowCompositionRequest):
+            raise StoryBudgetError("Missing canonical validation context; the existing edit was kept.",
+                {"kind": "experimental_window_boundary", "outcome": "invalid_experimental_plan",
+                 "reason": "missing_canonical_validation_context", "applied_to_timeline": False, "completed_edit": False})
+        expected = composition.state
+        def current_window_state():
+            context.check_cancelled()
+            current = store.load(project_id)
+            source = (current.get("sources") or {}).get("A") or {}
+            analysis = current.get("analysis") or {}
+            transcript = (analysis.get("transcript") or {}).get("segments")
+            audio_offset = analysis.get("audio_timeline_offset")
+            descriptor = expected.descriptor
+            if (current.get("id") != expected.project_id or current.get("revision") != expected.revision
+                    or descriptor.asset_id != "primary:A" or descriptor.asr_origin_seconds != 0.
+                    or source.get("generation") != descriptor.asset_version
+                    or source.get("duration") != descriptor.asset_duration or not isinstance(transcript, list)
+                    or analysis.get("audio_source") != "A" or type(audio_offset) not in (int, float)
+                    or not math.isfinite(audio_offset) or audio_offset != 0.
+                    or build_canonical_source(transcript, descriptor).fingerprint != composition.source.fingerprint):
+                raise ValueError("Current primary source/project/transcript differs from experimental snapshot")
+            return WindowSourceState(current["id"], current["revision"], descriptor)
+        # A live, unchanged cached transcript is mandatory; no ASR/media probe to
+        # make this validation pass. Unsupported origins/assets remain blocked.
+        current_rows = (((project.get("analysis") or {}).get("transcript") or {}).get("segments"))
+        validate_experimental_plan_result(context, payload["editorial"], payload["engine"],
+            transcript_segments=current_rows, settings=settings, brief=payload["brief"], request=request,
+            read_current=current_window_state, fps=project_export_fps(project))
+    prior_analysis = project.get("analysis")
+    if isinstance(prior_analysis, dict):
+        prior_engine = str(prior_analysis.get("engine") or "")
+        validate_experimental_plan_result(context, prior_analysis, prior_engine)
+        validate_experimental_plan_result(context, prior_analysis.get("editorial_cache"), prior_engine)
     require_tracks_unlocked(project)
     # Commit the requested settings together with the completed draft. A failed
     # refinement must not change the settings used by the existing edit/export.
@@ -3263,6 +3521,8 @@ def analyze_project(
         context.checkpoint()
         project.setdefault("settings", {}).update(staged_brief)
     manual_input_fingerprint = stable_fingerprint("director-manual-input", project.get("manual") or {})
+    initial_source_generations = {slot:(project.get("sources", {}).get(slot) or {}).get("generation")
+                                  for slot in ("A", "B")}
     if source_mixer_patch:
         project.setdefault("manual", {}).setdefault("source_mixer", {}).update(source_mixer_patch)
 
@@ -3287,10 +3547,19 @@ def analyze_project(
     analysis_source_duration = max(0.0, _finite_number(analysis_source_info.get("duration"), duration))
     transcription_duration = _transcription_duration(analysis_source_info, analysis_source_duration)
     brief = _effective_brief(project)
+    # Reject only provable request conflicts before ASR/vision/model work. The
+    # request stays verbatim, and an unsuccessful refinement does not alter the
+    # settings or edit that the user already has.
+    instruction_contract = assert_instruction_contract(brief)
+    preserve_source_continuity = explicit_source_continuity_requested(brief)
     explicit_source_layout = _explicit_source_layout(project)
     pace = str(brief.get("pace", "balanced"))
     goal = str(brief.get("goal", "short"))
     target_duration = clamp(float(brief.get("target_duration", 60)), 8.0, max(8.0, duration))
+    duration_bounds = effective_duration_bounds(brief, duration) if goal == "short" else None
+    if duration_bounds:
+        upper = float(duration_bounds["maximum_seconds"])
+        target_duration = min(upper, duration) if duration_bounds["explicit"] else clamp(upper, 8.0, max(8.0, duration))
 
     performance_mode = str(brief.get("performance_mode") or settings.ai.get("performance_mode", "auto"))
     spoken_language = str(brief.get("spoken_language") or project.get("language") or "auto")
@@ -3650,7 +3919,8 @@ def analyze_project(
             detail = f" ({', '.join(reasons)})"
             raise StoryPlanningError(
                 "This edit style needs reliable speech before CUTROOM can select a conversation without guessing"
-                f"{detail}. Choose the exact spoken language and Quality mode, then retry."
+                f"{detail}. Choose the exact spoken language and Quality mode, then retry.",
+                {"outcome": "technical_error", "reason": "unreliable_transcription", "applied_to_timeline": False},
             )
 
         detected_language = str(transcript.get("detected_language") or transcript.get("language") or "unknown")
@@ -3848,7 +4118,8 @@ def analyze_project(
     )
     if goal in {"short", "podcast"} and not transcript.get("segments") and not nonverbal_highlights:
         detail = f" ({transcription_warning})" if transcription_warning else ""
-        raise StoryPlanningError("Story AI needs a usable transcript before it can understand and edit the recording." + detail)
+        raise StoryPlanningError("Story AI needs a usable transcript before it can understand and edit the recording." + detail,
+                                 {"outcome": "technical_error", "reason": "unusable_transcription", "applied_to_timeline": False})
     if nonverbal_highlights:
         segments = []
         decision = {
@@ -3914,15 +4185,36 @@ def analyze_project(
         planner_warnings = copy.deepcopy(cached_analysis.get("planner_warnings") or [])
         engine = str(cached_analysis.get("engine") or "deterministic")
     else:
-        editorial, engine = _plan_edit_with_cancel(
-            context,
-            normalized_editorial_transcript["segments"],
-            settings,
-            brief,
-            progress=lambda value, message: context.update(story_start + value * max(0.005, 0.76 - story_start), message),
-            story_cache=(cached_analysis.get("story_hierarchy") if reusable_story and cached_analysis else None),
-            visual_moments=visual_moments if visual_timeline else None,
-        )
+        source_search_binding = {
+            "fingerprints": {key: cache_fingerprints.get(key) for key in ("pipeline", "source", "transcript", "scenes", "vision")},
+            "generations": {slot: (project.get("sources", {}).get(slot) or {}).get("generation") for slot in ("A", "B")},
+        }
+        try:
+            with story_search_source_context(source_search_binding):
+                editorial, engine = _plan_edit_with_cancel(
+                    context,
+                    normalized_editorial_transcript["segments"],
+                    settings,
+                    brief,
+                    progress=lambda value, message: context.update(story_start + value * max(0.005, 0.76 - story_start), message),
+                    story_cache=(cached_analysis.get("story_hierarchy") if reusable_story and cached_analysis else None),
+                    visual_moments=visual_moments if visual_timeline else None,
+                )
+        except StoryPlanningError as error:
+            options=error.diagnostic.get("passage_options") or {}
+            if options.get("review_candidates"):
+                context.checkpoint()
+                try:
+                    prepared=publish_failed_review(store,project_id,brief,options,source_search_binding["generations"]["A"])
+                    error.diagnostic["review_candidate_count"]=len(prepared["analysis"]["review_candidates"]["items"])
+                    error.diagnostic["review_available"]=True
+                except (ValueError,KeyError,TypeError,OSError,RuntimeError):
+                    # Failure to prepare a proposal cannot change the edit or
+                    # turn an uncertain selection into an accepted draft.
+                    error.diagnostic["review_available"]=False
+            raise
+        # Also guard legacy/plugin hooks that replace the cancellable wrapper.
+        validate_experimental_plan_result(context, editorial, engine)
         model_selection = copy.deepcopy(editorial.get("model_selection") or (editorial.get("story_hierarchy") or {}).get("model_selection"))
         planner_warnings = copy.deepcopy(editorial.get("warnings") or [])
         segments = editorial["segments"]
@@ -3930,17 +4222,20 @@ def analyze_project(
         story_beats = editorial.get("story_beats", [])
         story_hierarchy = editorial.get("story_hierarchy")
 
-    selection_policy = ((brief.get("style_profile") or {}).get("selection_policy") or {})
+    selection_policy = {**((brief.get("style_profile") or {}).get("selection_policy") or {}),
+                        **({"duration_bounds": copy.deepcopy(duration_bounds)} if duration_bounds else {})}
     required_story = goal == "short" and bool(decision.get("story_requirements"))
     required_extractive = goal == "short" and decision.get("editorial_authority") == EXTRACTIVE_ROUGH_CUT_AUTHORITY
     protected_selection = required_story or required_extractive
     if (decision.get("extractive_requirements") and not required_extractive
             or required_extractive and (engine != EXTRACTIVE_ROUGH_CUT_ENGINE or brief.get("allow_extractive_rough_cut") is not True)):
         raise StoryBudgetError("The rough-cut authority is inconsistent; the existing edit was kept.", {
+            "outcome": "invalid_model_output", "reason": "invalid_extractive_authority",
             "kind": "story_budget", "scope": "current_fixed_source_selection", "reasons": ["invalid_extractive_authority"],
             "applied_to_timeline": False})
     if (goal == "short" and engine.endswith("_hierarchical_story") and not required_story):
         raise StoryBudgetError("Story AI did not verify the required primary and context passages; the existing edit was kept.", {
+            "outcome": "invalid_model_output", "reason": "unverified_semantic_mapping",
             "kind": "story_budget", "scope": "current_required_selection", "target_seconds": target_duration,
             "reasons": ["unverified_semantic_mapping"], "applied_to_timeline": False,
         })
@@ -4008,7 +4303,8 @@ def analyze_project(
     duration_chain: list[dict[str, Any]] = [{"stage": "requested", "seconds": round(float(target_duration), 3)}]
     gameplay_review: list[dict[str, Any]] = []
     if goal == "short" and (duration > target_duration or brief.get("duration_mode") == "target" or protected_selection):
-        selection_policy = ((brief.get("style_profile") or {}).get("selection_policy") or {})
+        selection_policy = {**((brief.get("style_profile") or {}).get("selection_policy") or {}),
+                            **({"duration_bounds": copy.deepcopy(duration_bounds)} if duration_bounds else {})}
         selection_segments = _with_visual_evidence(
             normalized_editorial_transcript["segments"] if protected_selection else segments, visual_timeline,
         )
@@ -4063,7 +4359,7 @@ def analyze_project(
                 len(story_keep), notes, language,
                 cutscenes=gameplay_route["share"].get("cutscene", 0.0) >= 0.05,
             )
-        story_cuts = (_exact_story_complement(story_keep, duration) if protected_selection
+        story_cuts = (_exact_story_complement(story_keep, duration) if protected_selection or preserve_source_continuity
                       else invert_ranges(story_keep, duration))
         duration_chain.extend(decision.pop("_selection_trace", None) or [])
         duration_chain.append({"stage": "extractive_rough_cut" if required_extractive else "gameplay_moments" if gameplay_route else
@@ -4071,7 +4367,7 @@ def analyze_project(
                                "seconds": range_duration(story_keep), "passages": len(story_keep)})
         if not story_keep and brief.get("duration_mode") == "target":
             raise ValueError("No reliable highlight passages were found. Select a manual range or review the footage; no arbitrary filler was added.")
-        cuts, counts = (story_cuts, {}) if required_extractive else _short_cleanup_cuts_with_floor(
+        cuts, counts = (story_cuts, {}) if required_extractive or preserve_source_continuity else _short_cleanup_cuts_with_floor(
             story_cuts,
             # Gameplay moments are continuous action: trimming a pause inside a
             # fight only adds a jump cut. Dead screens are still removed below.
@@ -4080,18 +4376,20 @@ def analyze_project(
             duration,
             target_duration,
             preserve_fragments=protected_selection,
+            **({"duration_bounds": duration_bounds} if duration_bounds else {}),
         )
         counts["extractive_rough_cut" if required_extractive else "gameplay_moments" if gameplay_route else "story_selection"] = len(story_keep)
         duration_chain.append({"stage": "pause_cleanup", "seconds": _kept_seconds(cuts, duration)})
-        cuts, dead_screen_count = (cuts, 0) if required_extractive else _cut_dead_screens(cuts, visual_timeline, segments, duration)
+        cuts, dead_screen_count = (cuts, 0) if required_extractive or preserve_source_continuity else _cut_dead_screens(cuts, visual_timeline, segments, duration)
         if dead_screen_count:
             counts["dead_screen"] = dead_screen_count
             duration_chain.append({"stage": "dead_screens", "seconds": _kept_seconds(cuts, duration), "count": dead_screen_count})
-        cuts, target_trim_count = _enforce_short_target(cuts, selection_segments, decision, duration, target_duration)
+        cuts, target_trim_count = ((cuts, 0) if preserve_source_continuity else
+                                   _enforce_short_target(cuts, selection_segments, decision, duration, target_duration))
         if target_trim_count:
             counts["target_trim"] = target_trim_count
             duration_chain.append({"stage": "target_trim", "seconds": _kept_seconds(cuts, duration), "count": target_trim_count})
-        cuts, micro_count = (cuts, 0) if required_extractive else _drop_isolated_micro_keeps(
+        cuts, micro_count = (cuts, 0) if required_extractive or preserve_source_continuity else _drop_isolated_micro_keeps(
             cuts, duration,
             protected_ranges=([span for row in (normalized_editorial_transcript["segments"] if protected_selection else segments)
                                for span in _segment_speech_ranges(row)]
@@ -4112,20 +4410,20 @@ def analyze_project(
 
     # Explicit restores/deletes are the final authority, including after the
     # target-duration pass. Rebuilding must not silently undo a user's restore.
-    cuts = (_apply_story_timeline_overrides(cuts, project.get("manual")) if protected_selection
+    cuts = (_apply_story_timeline_overrides(cuts, project.get("manual")) if protected_selection or preserve_source_continuity
             else apply_timeline_overrides(cuts, project.get("manual")))
     for reason in ("quiet_audio", "loud_audio", "clipping"):
         count = int(audio_counts.get(reason, 0))
         if count:
             counts[reason] = counts.get(reason, 0) + count
-    keep_ranges = (_exact_story_complement(cuts, duration) if protected_selection
+    keep_ranges = (_exact_story_complement(cuts, duration) if protected_selection or preserve_source_continuity
                    else invert_ranges(cuts, duration))
     if protected_selection:
         try:
             frame_over = framed_story_duration(keep_ranges, project_export_fps(project)) > target_duration + BUDGET_TOLERANCE_SECONDS + 1e-9
         except ValueError:
             frame_over = True
-        if frame_over and not selection_policy.get("protect_action_span"):
+        if frame_over and not (selection_policy.get("protect_action_span") or preserve_source_continuity):
             fitted = _compact_story_pauses_to_target(
                 keep_ranges, normalized_editorial_transcript["segments"], duration, target_duration,
                 fps=project_export_fps(project),
@@ -4150,7 +4448,8 @@ def analyze_project(
         if goal == "short":
             raise StoryPlanningError(
                 "No usable passages remain within the requested length. "
-                "Choose a longer duration or a manual range; the existing edit was kept."
+                "Choose a longer duration or a manual range; the existing edit was kept.",
+                {"outcome": "editorial_no_fit", "reason": "no_usable_passages", "applied_to_timeline": False},
             )
         keep_ranges = [{"start": 0.0, "end": duration}]
         cuts = []
@@ -4206,6 +4505,25 @@ def analyze_project(
         decisions.insert(0, {"type": "visual_ai", "count": len(visual_timeline.windows)})
     if any(str(item.get("camera")) == "embedded_stack" for item in camera_plan):
         decisions.append({"type": "smart_layout", "count": 1})
+    continuity_proof = validate_explicit_source_continuity(brief, keep_ranges, duration)
+    instruction_contract = evaluate_instruction_contract(
+        instruction_contract, segments, decision,
+        semantic_verified=required_story,
+        output_duration=output_duration,
+        source_ranges=keep_ranges,
+    )
+    instruction_contract["verification_scope"] = "proposed_director_draft"
+    instruction_contract["source_continuity_proof"] = continuity_proof
+    instruction_warnings = []
+    if instruction_contract.get("requirements") and any(
+        item.get("status") != "fulfilled" for item in instruction_contract["requirements"]
+    ):
+        instruction_warnings.append({
+            "type": "instruction_coverage",
+            "message": "Custom instruction coverage is not fully verified. Review the request checklist before exporting.",
+        })
+        quality_review["warnings"].extend(instruction_warnings)
+        quality_review["needs_review"] = True
     draft = {
         "engine": engine,
         "editorial_authority": decision.get("editorial_authority"),
@@ -4240,7 +4558,7 @@ def analyze_project(
         "audio_source": analysis_audio_slot,
         "audio_profile": sound_profile.get("summary", {}),
         "model_selection": model_selection,
-        "status": "requires_review" if required_extractive else "ready",
+        "status": "requires_review" if required_extractive or instruction_warnings else "ready",
         "partial_ai": bool(transcription_warning or nonverbal_highlights or transcript_fallback or quality_review["needs_review"]),
         "quality_review": quality_review,
         "edit_style": brief.get("edit_style", "smart"),
@@ -4248,6 +4566,7 @@ def analyze_project(
         "selection_variant": normalized_selection_variant,
         "selection_seed": selection_seed,
         "visual_ai": visual_summary(visual_moments, visual_plan),
+        "instruction_contract": copy.deepcopy(instruction_contract),
     }
     reel_candidates = _build_reel_candidates(
         project,
@@ -4268,6 +4587,7 @@ def analyze_project(
     waveform = None
     context.update(0.95, "Saving the edit")
     analysis = {
+        "instruction_contract": copy.deepcopy(instruction_contract),
         "cache_fingerprints": cache_fingerprints,
         "audio_source": analysis_audio_slot,
         "audio_timeline_offset": round(analysis_timeline_offset, 3),
@@ -4324,6 +4644,11 @@ def analyze_project(
     context.checkpoint()
 
     def commit_analysis(latest: dict[str, Any]) -> None:
+        recovery = (decision.get("extractive_requirements") or {}).get("recovery") or {}
+        if recovery.get("mode") == "automatic_ranked_source_recovery" and {
+            slot:(latest.get("sources", {}).get(slot) or {}).get("generation") for slot in ("A", "B")
+        } != initial_source_generations:
+            raise RuntimeError("project_changed_during_analysis")
         proposed = proposed_inputs(latest)
         latest_brief = _effective_brief(proposed)
         latest_paths: dict[str, Path | None] = {}
@@ -4348,9 +4673,12 @@ def analyze_project(
         ):
             raise RuntimeError("project_changed_during_analysis")
         unchanged_variation = normalized_selection_variant > 0 and not variation_changed
+        latest_selection_policy = {**((latest_brief.get("style_profile") or {}).get("selection_policy") or {}),
+                                   **({"duration_bounds": effective_duration_bounds(latest_brief, duration)}
+                                      if goal == "short" else {})}
         if required_story:
             _validate_required_story_selection(
-                decision, segments, duration, target_duration, selection_policy=selection_policy,
+                decision, segments, duration, target_duration, selection_policy=latest_selection_policy,
                 keep_ranges=keep_ranges, hierarchy=story_hierarchy, fps=project_export_fps(proposed),
                 restored_ranges=(proposed.get("manual") or {}).get("keeps"),
                 source_segments=normalized_editorial_transcript["segments"],
@@ -4358,11 +4686,12 @@ def analyze_project(
         if required_extractive:
             _validate_extractive_selection(
                 decision, normalized_editorial_transcript["segments"], duration, target_duration,
-                selection_policy={**selection_policy, "duration_mode": brief.get("duration_mode")},
+                selection_policy={**latest_selection_policy, "duration_mode": latest_brief.get("duration_mode")},
                 keep_ranges=keep_ranges, fps=project_export_fps(proposed))
         if not unchanged_variation:
             validate_media_bounds({**proposed, "draft": draft})
             validate_text_bounds({**proposed, "draft": draft})
+        validate_explicit_source_continuity(latest_brief, keep_ranges, duration)
         context.commit()
         latest.setdefault("settings", {}).update(staged_brief or {})
         if source_mixer_patch:
@@ -4415,12 +4744,15 @@ def analyze_project(
         message = (message + " " + target_completion_message
                    if required_extractive or timeline_preserved or normalized_selection_variant > 0 and not variation_changed
                    else target_completion_message)
+    if instruction_warnings:
+        message += " Custom instruction coverage remains unverified; review the request checklist."
     context.update(1.0, message)
     result = {"project_id": project_id, "draft": saved_project["draft"], "engine": engine,
               "editorial_authority": decision.get("editorial_authority"),
               "applied_to_timeline": not timeline_preserved, "timeline_preserved": timeline_preserved,
               "message": message, "model_selection": saved_project["draft"].get("model_selection"),
-              "warnings": planner_warnings}
+              "instruction_contract": copy.deepcopy(instruction_contract),
+              "warnings": [*planner_warnings, *instruction_warnings]}
     if normalized_selection_variant > 0:
         result["variation_changed"] = variation_changed
     return result
@@ -4568,7 +4900,7 @@ def _plan_edit_with_cancel(
 
     extra = {"visual_moments": visual_moments} if visual_moments else {}
     try:
-        return plan_edit(
+        result = plan_edit(
             transcript_segments,
             settings,
             brief,
@@ -4580,13 +4912,15 @@ def _plan_edit_with_cancel(
     except TypeError as exc:
         if "cancel_check" not in str(exc):
             raise
-        return plan_edit(
+        result = plan_edit(
             transcript_segments,
             settings,
             brief,
             progress=progress,
             story_cache=story_cache,
         )
+    validate_experimental_plan_result(context, result[0], result[1])
+    return result
 
 
 def refine_project(context: JobContext, project_id: str, store: ProjectStore, settings: Settings, command: str) -> dict[str, Any]:

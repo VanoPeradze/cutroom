@@ -7,7 +7,7 @@ const test = require('node:test');
 function load(globals = {}) {
   const source = fs.readFileSync(path.join(__dirname, '../web/media-studio.js'), 'utf8').replace(/^export /gm, '');
   const context = vm.createContext({window: {}, document: {}, FormData: class {append() {}}, performance: {now: () => 1000}, setTimeout: () => 1, clearTimeout() {}, ...globals});
-  vm.runInContext(source + '\nglobalThis.api = {MediaStudio, clipEnvelope, mediaGain};', context);
+  vm.runInContext(source + '\nglobalThis.api = {MediaStudio, clipEnvelope, mediaGain, libraryVideoAt};', context);
   return context.api;
 }
 
@@ -28,6 +28,207 @@ function studioHarness(edit, globals) {
   });
   return {studio, activate(next) {project = next;}};
 }
+
+function appendProject(overrides = {}) {
+  return {id:'one', draft:{engine:'manual'}, assets:{video:{id:'video',kind:'video',status:'ready',duration:3}},
+    manual:{media_clips:[]}, ...overrides};
+}
+
+test('append waits for saves, uses the native append action and selects the returned occurrence', async () => {
+  const gate = deferred(), calls = [];
+  let saved = appendProject();
+  const {studio,activate} = studioHarness(async(action,payload)=>{
+    calls.push({action,payload});
+    saved = {...saved,manual:{media_clips:[...saved.manual.media_clips,{id:`occurrence-${calls.length}`,asset_id:'video'}]}};
+    activate(saved);return saved;
+  });
+  activate(saved);
+  let paused = 0, rendered = 0;
+  studio.options.pause = ()=>paused++;
+  studio.render = ()=>rendered++;
+  studio.flush = ()=>gate.promise;
+  const first = studio.append('video');
+  assert.equal(paused,1);assert.equal(calls.length,0,'saving must finish before the append request');
+  gate.resolve(true);await first;
+  assert.deepEqual(JSON.parse(JSON.stringify(calls)),[{action:'media_append',payload:{asset_id:'video'}}]);
+  assert.equal(studio.selected,'occurrence-1');assert.equal(rendered,1);
+  await studio.append('video');
+  assert.equal(calls.length,2);assert.equal(studio.selected,'occurrence-2');
+  assert.equal(saved.manual.media_clips[0].asset_id,saved.manual.media_clips[1].asset_id);
+  assert.notEqual(saved.manual.media_clips[0].id,saved.manual.media_clips[1].id,'repeated Append selects independent backend occurrences');
+});
+
+test('append refuses busy imports, missing drafts and assets that are not ready videos', async () => {
+  for (const state of ['busy','uploading','no-draft','missing','audio','preparing','failed']) {
+    let edits = 0, paused = 0, saves = 0;
+    const {studio,activate} = studioHarness(async()=>{edits++;});
+    const project = appendProject();
+    if (state === 'no-draft') project.draft = null;
+    if (state === 'missing') project.assets = {};
+    if (state === 'audio') project.assets.video.kind = 'audio';
+    if (['preparing','failed'].includes(state)) project.assets.video.status = state;
+    activate(project);
+    studio.uploading = state === 'uploading';
+    studio.options.busy = ()=>state === 'busy';
+    studio.options.pause = ()=>paused++;
+    studio.flush = async()=>{saves++;return true;};
+    await studio.append('video');
+    assert.equal(edits,0,state);assert.equal(saves,0,state);assert.equal(paused,0,state);
+  }
+});
+
+test('append rechecks project, readiness and busy state after pending saves', async () => {
+  for (const changed of ['save-failed','project','asset-removed','not-ready','not-video','no-draft','busy']) {
+    const gate = deferred();let edits = 0,busy = false;
+    const {studio,activate} = studioHarness(async()=>{edits++;});
+    const project = appendProject();activate(project);
+    studio.options.busy = ()=>busy;studio.flush = ()=>gate.promise;
+    const appending = studio.append('video');
+    if (changed === 'project') activate(appendProject({id:'two'}));
+    if (changed === 'asset-removed') project.assets = {};
+    if (changed === 'not-ready') project.assets.video.status = 'preparing';
+    if (changed === 'not-video') project.assets.video.kind = 'image';
+    if (changed === 'no-draft') project.draft = null;
+    if (changed === 'busy') busy = true;
+    gate.resolve(changed !== 'save-failed');await appending;
+    assert.equal(edits,0,changed);assert.equal(studio.selected,null,changed);
+  }
+});
+
+test('late append results and errors cannot select or report into another project', async () => {
+  for (const fails of [false,true]) {
+    const gate = deferred(), entered = deferred();
+    const {studio,activate} = studioHarness(()=>{entered.resolve();return gate.promise;});
+    activate(appendProject());studio.flush = async()=>true;
+    const appending = studio.append('video');await entered.promise;
+    activate(appendProject({id:'two'}));studio.selected = 'new-project-clip';studio.status.textContent = 'new project';
+    if (fails) gate.reject(new Error('old append failed'));
+    else gate.resolve({id:'one',manual:{media_clips:[{id:'old-project-clip'}]}});
+    await appending;
+    assert.equal(studio.selected,'new-project-clip');assert.equal(studio.status.textContent,'new project');
+  }
+});
+
+test('append failure stays visible in the owning project without claiming a selected clip', async () => {
+  for (const result of ['busy','error','wrong-project']) {
+    const {studio,activate} = studioHarness(async()=>{
+      if (result === 'error') throw new Error('revision conflict');
+      return result === 'busy' ? null : {id:'two',manual:{media_clips:[{id:'wrong'}]}};
+    });
+    activate(appendProject());studio.flush = async()=>true;
+    await studio.append('video');
+    assert.equal(studio.selected,null);
+    if (result === 'busy') assert.match(studio.status.textContent,/busy.*appending/i);
+    if (result === 'error') assert.match(studio.status.textContent,/revision conflict/);
+  }
+});
+
+function mediaControlNode() {
+  return {dataset:{},children:[],listeners:new Map(),style:{setProperty(){}},classList:{toggle(){}},
+    setAttribute(){},hasAttribute(){return false;},
+    append(...children){this.children.push(...children);},replaceChildren(){this.children=[];},
+    addEventListener(event,callback){this.listeners.set(event,callback);},
+    querySelector(selector){this.controls ??= new Map();if(!this.controls.has(selector))this.controls.set(selector,mediaControlNode());return this.controls.get(selector);},
+    querySelectorAll(){return [];}};
+}
+
+test('video cards expose a separately gated append control and preserve Add overlay', () => {
+  const document = {createElement:()=>mediaControlNode()};
+  for (const state of ['ready','preparing','no-draft','busy','audio']) {
+    const {studio,activate} = studioHarness(async()=>null,{document});
+    const project = appendProject();
+    if(state === 'preparing')project.assets.video.status='preparing';
+    if(state === 'no-draft')project.draft=null;
+    if(state === 'audio')project.assets.video.kind='audio';
+    activate(project);studio.projectId=project.id;studio.root=mediaControlNode();studio.library=mediaControlNode();
+    studio.options.busy=()=>state==='busy';
+    Object.getPrototypeOf(studio).render.call(studio);
+    const card=studio.library.children[0];
+    const overlay=card.children.find(node=>node.dataset.asset);
+    assert.equal(overlay.dataset.asset,'video');
+    if(state === 'ready')assert.equal(overlay.textContent,'+ Overlay');
+    const append=card.children.find(node=>node.dataset.append);
+    if(state === 'audio')assert.equal(append,undefined);
+    else {assert.equal(append.dataset.append,'video');assert.equal(append.textContent,'Append video');assert.equal(Boolean(append.disabled),state!=='ready');}
+  }
+});
+
+test('Append video click dispatches append without triggering Add overlay or importing', () => {
+  const {MediaStudio}=load({document:{createElement:()=>mediaControlNode()}});
+  const root=mediaControlNode(), calls=[];
+  const studio=new MediaStudio(root,mediaControlNode(),{project:()=>appendProject(),busy:()=>false});
+  studio.append=id=>calls.push(['append',id]);studio.add=id=>calls.push(['add',id]);studio.upload=()=>calls.push(['upload']);
+  root.listeners.get('click')({target:{closest:()=>({dataset:{append:'video'},hasAttribute:()=>false})}});
+  assert.deepEqual(calls,[['append','video']]);
+});
+
+test('selected video exposes saved audio state, mute recovery and absent-stream state without changing choices', () => {
+  for (const state of ['on','off','muted','group-muted','no-stream']) {
+    const {studio,activate} = studioHarness(async()=>null,{document:{createElement:()=>mediaControlNode()}});
+    const clip={id:'overlay',asset_id:'video',start:1,end:3,source_start:0,speed:2,role:'voice',audio_enabled:state!=='off',muted:state==='muted',volume_db:-6};
+    const project=appendProject({manual:{media_clips:[clip],audio_mixer:{voice_muted:state==='group-muted'}}});
+    project.assets.video.has_audio=state!=='no-stream';
+    const inputs=['audio_enabled','muted','volume_db','role','source_start'].map(key=>({dataset:{media:key},type:['audio_enabled','muted'].includes(key)?'checkbox':'number'}));
+    activate(project);studio.projectId=project.id;studio.selected='overlay';studio.root=mediaControlNode();studio.library=mediaControlNode();
+    studio.root.querySelectorAll=selector=>selector==='[data-media]'?inputs:[];
+    const before=JSON.stringify(project);Object.getPrototypeOf(studio).render.call(studio);
+    const status=studio.root.querySelector('.media-audio-status').textContent;
+    assert.match(status,state==='no-stream'?/no audio stream/:state==='off'?/sound is off/:state==='muted'?/clip is muted/:state==='group-muted'?/group is muted/:/sound is on.*-6 dB/);
+    assert.equal(inputs[0].checked,clip.audio_enabled);assert.equal(inputs[0].disabled,state==='no-stream');
+    assert.equal(inputs[1].checked,clip.muted);assert.equal(inputs[1].disabled,['off','no-stream'].includes(state));
+    assert.equal(inputs.at(-1).disabled,undefined,'audio availability never disables Source in');
+    assert.equal(JSON.stringify(project),before,'opening the inspector preserves saved silent overlays');
+    if(state==='on') { studio.mixerOverride={voice_muted:true};studio.renderClipAudio();assert.match(studio.root.querySelector('.media-audio-status').textContent,/group is muted/); }
+  }
+});
+
+test('enabling a previously silent overlay persists only that explicit choice and preserves trim, mute and speed', async () => {
+  let saved=appendProject({manual:{media_clips:[{id:'overlay',asset_id:'video',start:2,end:4,source_start:.5,video_source_start:1,speed:2,audio_enabled:false,muted:true,volume_db:-9,role:'voice'}]}});
+  saved.assets.video.has_audio=true;
+  const calls=[],{studio,activate}=studioHarness(async(action,payload)=>{calls.push([action,payload]);saved={...saved,manual:{...saved.manual,media_clips:saved.manual.media_clips.map(clip=>clip.id===payload.clip_id?{...clip,...payload}:clip)}};activate(saved);return saved;});
+  activate(saved);studio.selected='overlay';
+  studio.change({dataset:{media:'audio_enabled'},type:'checkbox',checked:true,value:'on',hasAttribute:()=>false,checkValidity:()=>true});
+  await studio.flush();
+  assert.equal(calls.length,1);assert.equal(calls[0][0],'media_update');assert.equal(calls[0][1].audio_enabled,true);
+  const clip=saved.manual.media_clips[0];assert.equal(clip.muted,true);assert.equal(clip.source_start,.5);assert.equal(clip.video_source_start,1);assert.equal(clip.speed,2);assert.equal(clip.volume_db,-9);
+  assert.equal(studio.clips()[0].audio_enabled,true,'reopened saved state retains explicit inclusion');
+});
+
+test('library video presence follows independent repeated occurrences and half-open timeline bounds', () => {
+  const {libraryVideoAt}=load();
+  const first={id:'first',asset_id:'video',start:4,end:7}, repeated={id:'repeat',asset_id:'video',start:6,end:9};
+  const project=appendProject({manual:{media_clips:[first,repeated]}});
+  assert.equal(libraryVideoAt(project),repeated);
+  assert.equal(libraryVideoAt(project,0),null);
+  assert.equal(libraryVideoAt(project,4),first);
+  assert.equal(libraryVideoAt(project,6),repeated,'later rendered occurrences win while they overlap');
+  assert.equal(libraryVideoAt(project,7),repeated);
+  assert.equal(libraryVideoAt(project,9),null,'an ended occurrence must not hide the base gap');
+  assert.equal(libraryVideoAt(project,-1),null);
+  assert.equal(libraryVideoAt(project,NaN),null);
+  assert.equal(libraryVideoAt(project,Infinity),null);
+  const {studio,activate}=studioHarness(async()=>null);activate(project);
+  assert.equal(studio.videoAt(),repeated);assert.equal(studio.videoAt(4),first);assert.equal(studio.videoAt(9),null);
+});
+
+test('library video presence excludes missing or unfinished assets, images, and malformed clip timing', () => {
+  const {libraryVideoAt}=load();
+  for (const reason of ['missing','cancelled','preparing','failed','image','negative','empty','reversed','nan','infinite']) {
+    const clip={id:'bad',asset_id:'video',start:0,end:3}, project=appendProject({manual:{media_clips:[clip]}});
+    if(reason==='missing')project.assets={};
+    if(['cancelled','preparing','failed'].includes(reason))project.assets.video.status=reason;
+    if(reason==='image')project.assets.video.kind='image';
+    if(reason==='negative')clip.start=-1;
+    if(reason==='empty')clip.end=0;
+    if(reason==='reversed')clip.end=-1;
+    if(reason==='nan')clip.start=NaN;
+    if(reason==='infinite')clip.end=Infinity;
+    assert.equal(libraryVideoAt(project),null,reason);
+    assert.equal(libraryVideoAt(project,1),null,reason);
+  }
+  assert.equal(libraryVideoAt(null),null);
+  assert.equal(libraryVideoAt({manual:{media_clips:{}}}),null);
+});
 
 test('media envelopes honor clip edges, fades, mute and bus gain', () => {
   const {clipEnvelope, mediaGain} = load();
@@ -192,7 +393,7 @@ test('upload completion and failure both release busy controls', async () => {
     activate({id:'one',draft:{},manual:{media_clips:[]}});
     const states=[];
     Object.assign(studio.options, {
-      flushSettings:async()=>{}, api:async()=>({asset_id:'new'}),
+      flushSettings:async()=>{}, uploadFile:async()=>({asset_id:'new'}),
       acceptUpload:async()=>{if(fails)throw new Error('Cancelled');},
       busyChanged:()=>states.push(studio.uploading),
     });
@@ -201,6 +402,37 @@ test('upload completion and failure both release busy controls', async () => {
     assert.equal(studio.uploading,false);
     assert.match(studio.status.textContent,fails ? /Cancelled/ : /Ready/);
   }
+});
+
+test('media import reports sending and checking before preparation can become Ready', async () => {
+  const {studio,activate}=studioHarness(async()=>({id:'one'}));
+  activate({id:'one',draft:{},manual:{media_clips:[]}});
+  const imported=deferred(), prepared=deferred(), sending=deferred(), storage={};
+  studio.root={querySelector:()=>storage};
+  Object.assign(studio.options,{
+    flushSettings:async()=>{},
+    uploadFile:async(_file,projectId,status)=>{
+      assert.equal(projectId,'one');
+      status('Sending 100%','Project data (D:): 26 GB free.');
+      assert.match(studio.status.textContent,/Sending 100%/);
+      status('Checking / importing','Project data (D:): 26 GB free.');
+      sending.resolve();
+      return imported.promise;
+    },
+    acceptUpload:async()=>prepared.promise,
+  });
+  const operation=studio.upload({name:'test.wav'});
+  await sending.promise;
+  assert.match(studio.status.textContent,/Checking \/ importing/);
+  assert.doesNotMatch(studio.status.textContent,/Ready/);
+  assert.match(storage.textContent,/D:.*26 GB free/);
+  imported.resolve({asset_id:'new'});
+  for(let index=0;index<10;index++)await Promise.resolve();
+  assert.match(studio.status.textContent,/Preparing preview/);
+  assert.equal(studio.uploading,true);
+  prepared.resolve();await operation;
+  assert.match(studio.status.textContent,/Ready/);
+  assert.equal(studio.uploading,false);
 });
 
 test('inactive media releases decoder and audio graph resources', () => {

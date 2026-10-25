@@ -406,7 +406,8 @@ body .home-hub .recent-list .recent-project, body .home-hub .recent-list .recent
 #studioPanelTranscript .caption-control-panel > .caption-option-grid { order:1; margin-bottom:10px; }
 #studioPanelTranscript .caption-control-panel > .caption-switch-grid { order:2; margin-bottom:0; }
 #studioPanelTranscript .caption-option-grid > .caption-language-control { order:9; }
-#studioPanelTranscript .caption-toggle-card small { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+#studioPanelTranscript .caption-switch-grid > .caption-toggle-card { display:flex; }
+#studioPanelTranscript .caption-toggle-card small { display:block; -webkit-line-clamp:unset; overflow:visible; }
 #studioPanelTranscript .caption-option-grid { grid-template-columns:1fr; }
 #studioPanelTranscript .caption-option-grid > label { display:flex; flex-direction:column; align-items:stretch; gap:8px; }
 #studioPanelTranscript .caption-option-grid > label > span { min-height:0; }

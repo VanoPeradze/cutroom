@@ -5,8 +5,9 @@ from typing import Any
 
 from .caption_items import (CAPTION_ACTION_FIELDS, CaptionError, anchor_caption_change, correct_segment_text,
                             prepare_caption_edit, remap_caption_overrides)
+from .caption_alternatives import prepare_selection as prepare_caption_selection, status as caption_alternative_status, geometry as caption_geometry
 from .composition import CHROMA_KEY_ACTION_FIELDS, build_manual_embedded_candidate, prepare_chroma_key_edit
-from .source_tracks import TRACK_ACTIONS, SourceTrackError, prepare_source_track_edit, source_track_clips, validate_source_track_sync
+from .source_tracks import TRACK_ACTIONS, SourceTrackError, prepare_source_track_edit, source_track_clips, validate_source_track_sync, validate_sequence_version
 from .sequence import SEQUENCE_ACTIONS, prepare_sequence_edit
 from .media_library import MEDIA_ACTION_FIELDS, MediaLibraryError, prepare_media_edit, validate_media_bounds
 from .render import caption_context, project_caption_items
@@ -285,6 +286,8 @@ def _timeline_snapshot(project: dict[str, Any]) -> dict[str, Any]:
         "removed_duration": draft.get("removed_duration"),
         "active_reel_candidate": draft.get("active_reel_candidate"),
         "reel_candidates": copy.deepcopy(draft.get("reel_candidates")) if isinstance(draft.get("reel_candidates"), list) else None,
+        "draft_status_present": "status" in draft,
+        "draft_status": copy.deepcopy(draft.get("status")),
         "manual_cuts": copy.deepcopy(manual.get("cuts") or []),
         "manual_keeps": copy.deepcopy(manual.get("keeps") or []),
         "manual_camera_overrides": copy.deepcopy(manual.get("camera_overrides") or []),
@@ -318,6 +321,11 @@ def _timeline_snapshot(project: dict[str, Any]) -> dict[str, Any]:
 
 def _restore_timeline(project: dict[str, Any], snapshot: dict[str, Any]) -> None:
     draft = project.setdefault("draft", {})
+    if "draft_status_present" in snapshot:
+        if snapshot["draft_status_present"]:
+            draft["status"] = copy.deepcopy(snapshot["draft_status"])
+        else:
+            draft.pop("status", None)
     for key in ("cuts", "keep_ranges", "camera_plan", "edit_points", "output_duration", "removed_duration", "active_reel_candidate"):
         draft[key] = copy.deepcopy(snapshot.get(key))
     manual = project.setdefault("manual", {})
@@ -751,6 +759,11 @@ def _set_source_mixer(project: dict[str, Any], payload: dict[str, Any]) -> None:
         if stack_fit not in {"cover", "contain"}:
             raise ManualEditError("Stack framing must be cover or contain")
         source_mixer["stack_fit"] = stack_fit
+    from .creator_layout import controls
+    try:
+        source_mixer.update(controls({**previous_mixer,**payload},strict=True))
+    except ValueError as error:
+        raise ManualEditError(str(error)) from error
     # Absence means the user has not made an explicit framing choice yet. Once
     # present, even ``auto`` is intentional and must survive style changes.
     if "default_layout" in previous_mixer:
@@ -899,7 +912,7 @@ def _set_embedded_camera(project: dict[str, Any], payload: dict[str, Any]) -> No
     draft["status"] = "ready"
 
 
-CAPTION_LAYERS = ("caption_corrections", "caption_overrides", "caption_override_anchors", "caption_dormant_overrides")
+CAPTION_LAYERS = ("caption_corrections", "caption_overrides", "caption_override_anchors", "caption_dormant_overrides", "caption_alternative")
 VISUAL_SCREENS = frozenset({"gameplay", "cutscene", "menu_or_map", "loading_or_black", "webcam_only", "other"})
 
 
@@ -937,7 +950,18 @@ def _restore_captions(project: dict[str, Any], snapshot: dict[str, Any]) -> None
 def _prepare_caption_change(project: dict[str, Any], payload: dict[str, Any], action: str) -> dict[str, Any] | None:
     """New caption layers for one caption action, or None when nothing changes."""
     try:
+        if action == "caption_alternative":
+            try:
+                selection = prepare_caption_selection(project, str(payload.get("alternative_id") or ""), str(payload.get("review_fingerprint") or ""))
+            except ValueError as exc:
+                raise ManualEditError(str(exc)) from exc
+            if selection is None:
+                return None
+            return {**_caption_snapshot(project), "caption_corrections": (project.get("manual") or {}).get("caption_corrections") or {},
+                    "caption_alternative": selection}
         if action == "transcript_text":
+            if caption_alternative_status(project)["active_id"] != "original":
+                raise ManualEditError("Alternative captions are active. Edit their caption items, or switch back before correcting the original transcript.")
             new_text = str(payload.get("text") or "").strip()[:4000]
             if not new_text:
                 raise ManualEditError("Transcript text cannot be empty")
@@ -950,12 +974,20 @@ def _prepare_caption_change(project: dict[str, Any], payload: dict[str, Any], ac
         context = caption_context(project, aligned=False)
         items = project_caption_items(project, aligned=False)
         change = prepare_caption_edit(project, {**payload, "action": action}, items, float(context["duration"] or 0.0))
-        return anchor_caption_change(project, change, items, payload.get("caption_id")) if change is not None else None
+        return {**_caption_snapshot(project), **anchor_caption_change(project, change, items, payload.get("caption_id"))} if change is not None else None
     except CaptionError as exc:
         raise ManualEditError(str(exc)) from exc
 
 
 def _apply_history_entry(project: dict[str, Any], entry: dict[str, Any], side: str) -> None:
+    if entry.get("kind") == "source_review":
+        snapshot=entry[side]
+        history=_history(project)
+        project["draft"]=copy.deepcopy(snapshot["draft"])
+        project["settings"]=copy.deepcopy(snapshot["settings"])
+        project["manual"]=copy.deepcopy(snapshot["manual"])
+        project["manual"]["_history"]=history
+        return
     if entry.get("kind") == "visual":
         manual = project.setdefault("manual", {})
         if entry[side]:
@@ -990,10 +1022,62 @@ def _apply_history_entry(project: dict[str, Any], entry: dict[str, Any], side: s
     raise ManualEditError("Edit history is invalid")
 
 
+def _source_review_snapshot(project):
+    manual=copy.deepcopy(project.get("manual") or {})
+    manual.pop("_history",None);manual.pop("history",None)
+    return {"draft":copy.deepcopy(project.get("draft")),"settings":copy.deepcopy(project.get("settings") or {}),"manual":manual}
+
+
+def apply_source_review_edit(project, candidate, request):
+    """Explicit user action using the existing history, never an AI approval."""
+    from .review_candidates import require_supported, validate_ranges
+    staged=copy.deepcopy(project)
+    try:
+        require_supported(staged)
+        if locked_tracks(staged):raise ValueError("Unlock the source track before applying a proposal.")
+        validate_ranges(staged,request,candidate["ranges"],candidate["segment_ids"])
+        before=_source_review_snapshot(staged)
+        duration=_duration(staged)
+        # Exact complement, preserving even short gaps in a continuous source.
+        cuts=[];cursor=0.
+        for row in candidate["ranges"]:
+            if row["start"]>cursor:cuts.append({"start":cursor,"end":row["start"]})
+            cursor=row["end"]
+        if cursor<duration:cuts.append({"start":cursor,"end":duration})
+        staged.setdefault("settings",{}).update(copy.deepcopy(request))
+        # Reuse the normal manual-start Draft defaults on a detached copy; its
+        # setup cleanup must never clear this project's ASR, history or captions.
+        from .manual_start import start_manual_draft
+        baseline=copy.deepcopy(staged);baseline["draft"]=None
+        start_manual_draft(baseline)
+        staged["draft"]=baseline["draft"]
+        staged["draft"].update({"created_at":now_iso(),"edited_at":now_iso(),"goal":"short",
+            "title":"Review selection", "summary":"User-applied source proposal. Content and transcription remain unverified.",
+            "status":"requires_review","review_required":True,"generative_approved":False,
+            "semantic_approval":False,"semantic_review_status":"not_model_reviewed",
+            "editorial_authority":"user_selected_unverified_source","engine":"manual_source_review",
+            "source_duration":duration,"duration":duration,"language":((staged.get("analysis") or {}).get("transcript") or {}).get("language","auto"),
+            "layout":request.get("layout","A"),"aspect":request.get("aspect","9:16"),
+            "ai_camera_plan":[{**row,"camera":"A"} for row in candidate["ranges"]],
+            "active_reel_candidate":candidate["id"],"source_review_notice":"Unverified source proposal explicitly applied; content/transcription still need review."})
+        _rebuild_timeline(staged,apply_timeline_overrides(cuts,staged.get("manual")))
+        staged["draft"].update(status="requires_review",review_required=True,generative_approved=False,semantic_approval=False)
+        validate_ranges(staged,request,staged["draft"]["keep_ranges"],candidate["segment_ids"])
+        history=_history(staged)
+        history["undo"].append({"kind":"source_review","before":before,"after":_source_review_snapshot(staged)})
+        history["undo"]=history["undo"][-HISTORY_LIMIT:];history["redo"]=[]
+        _set_history_counts(staged,history)
+    except (ValueError,KeyError,TypeError) as exc:
+        raise ManualEditError(str(exc)) from exc
+    project.clear();project.update(staged)
+    return project
+
+
 def apply_manual_edit(project: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
     """Stage protected edits so rejection cannot consume history or alter state."""
+    validate_sequence_version(project)
     action = str(payload.get("action") or "").strip().lower() if isinstance(payload, dict) else ""
-    guarded = SEQUENCE_ACTIONS | {"delete_range", "trim_clip", "apply_reel_candidate"}
+    guarded = SEQUENCE_ACTIONS | {"delete_range", "trim_clip", "apply_reel_candidate", "media_append", "media_insert"}
     protected = bool(locked_tracks(project))
     manual = project.get("manual") or {}
     if protected or action in guarded and (manual.get("media_clips") or manual.get("text_clips")):
@@ -1035,10 +1119,12 @@ def _apply_manual_edit(project: dict[str, Any], payload: dict[str, Any]) -> dict
     # the project. Failed edits and genuine no-ops must preserve the whole state.
     caption_edits = bool((project.get("manual") or {}).get("caption_overrides") or
                          (project.get("manual") or {}).get("caption_dormant_overrides"))
+    preserve_caption_selection = action in {"sequence_crop", "sequence_podcast_frame"} and caption_alternative_status(project)["active_id"] != "original"
     try:
         sequence_edit = prepare_sequence_edit(project, payload) if action in SEQUENCE_ACTIONS else None
         tracks = prepare_source_track_edit(project, payload) if action in TRACK_ACTIONS else None
-        if caption_edits and (sequence_edit is not None or tracks is not None):
+        media_edit = prepare_media_edit(project, {**payload, "action": action}) if action in MEDIA_ACTION_FIELDS else None
+        if caption_edits and (sequence_edit is not None or tracks is not None or action in {"media_append","media_insert"}):
             # Annotate only accepted changes on a detached preparation copy.
             # Invalid edits and no-ops cannot add provenance or consume history.
             preparation_project = copy.deepcopy(project)
@@ -1057,7 +1143,8 @@ def _apply_manual_edit(project: dict[str, Any], payload: dict[str, Any]) -> dict
                 sequence_edit = prepare_sequence_edit(preparation_project, payload)
             if tracks is not None:
                 tracks = prepare_source_track_edit(preparation_project, payload)
-        media_edit = prepare_media_edit(project, {**payload, "action": action}) if action in MEDIA_ACTION_FIELDS else None
+            if action in {"media_append","media_insert"}:
+                media_edit = prepare_media_edit(preparation_project, {**payload, "action": action})
         text_edit = prepare_text_edit(project, {**payload, "action": action}) if action in TEXT_ACTION_FIELDS else None
         if action == "set_source_mixer":
             validate_source_track_sync(project, payload)
@@ -1089,7 +1176,7 @@ def _apply_manual_edit(project: dict[str, Any], payload: dict[str, Any]) -> dict
         if visual_change is None:
             return project
     caption_change = None
-    if action in CAPTION_ACTION_FIELDS or action == "transcript_text":
+    if action in CAPTION_ACTION_FIELDS or action in {"transcript_text", "caption_alternative"}:
         caption_change = _prepare_caption_change(project, payload, action)
         if caption_change is None:
             return project
@@ -1234,7 +1321,11 @@ def _apply_manual_edit(project: dict[str, Any], payload: dict[str, Any]) -> dict
             candidate_plan = candidate.get("ai_camera_plan")
             if not isinstance(candidate_cuts, list) or not isinstance(candidate_plan, list):
                 raise ManualEditError("Reel alternative is invalid")
+            prior_status = project["draft"].get("status")
             _rebuild_timeline(project, apply_timeline_overrides(candidate_cuts, project.get("manual")))
+            # Choosing an alternative is a manual decision, not a new AI review.
+            if prior_status is not None:
+                project["draft"]["status"] = prior_status
             project["draft"]["ai_camera_plan"] = copy.deepcopy(candidate_plan)
             _rebuild_camera_plan(project)
             project["draft"]["active_reel_candidate"] = candidate_id
@@ -1244,6 +1335,8 @@ def _apply_manual_edit(project: dict[str, Any], payload: dict[str, Any]) -> dict
             project["draft"]["edited_at"] = now_iso()
         else:
             _set_embedded_camera(project, payload)
+        if preserve_caption_selection:
+            project["manual"]["caption_alternative"]["geometry"] = caption_geometry(project)
         if caption_edits:
             remap_caption_overrides(project, before_captions, project_caption_items(project, aligned=False))
         entry = {"kind": "timeline", "before": before, "after": _timeline_snapshot(project)}

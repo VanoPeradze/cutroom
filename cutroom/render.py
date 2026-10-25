@@ -15,19 +15,19 @@ from typing import Any
 from .config import Settings
 from .caption_items import caption_items, caption_lines
 from .captions import build_ass, build_srt, normalize_caption_settings
-from .composition import chroma_background_asset, chroma_source, chroma_video_targets, select_embedded_candidate, source_chroma_key
+from .composition import chroma_video_targets, select_embedded_candidate, source_chroma_key
 from .effects import build_chroma_key_nodes, chroma_key_capability, compile_automatic_effects
 from .frame_rates import project_export_fps, with_export_options
 from .ffmpeg_compat import export_capabilities
 from .cache_keys import stable_fingerprint
 from .jobs import JobCancelled, JobContext
 from .media import probe_media
-from .media_library import safe_asset_path
 from .media_render import append_media_graph, library_input_args, library_clips, library_has_audio, master_gain_db
-from .output_review import review_export
+from .render_inventory import RenderInputInventory, chroma_background_slots, compile_render_inputs
+from .output_review import remaining_picture_gaps, review_export
 from .projects import ProjectStore
 from .sequence import editor_keep_ranges
-from .source_tracks import has_sequence, has_source_tracks, source_track_clips, timeline_duration
+from .source_tracks import has_sequence, has_source_tracks, source_track_clips, timeline_duration, validate_sequence_version
 from .text_clips import validated_text_clips
 from .utils import new_id, now_iso, sanitize_filename
 
@@ -48,13 +48,17 @@ class InsufficientStorageError(RuntimeError):
     status_code = 507
     status = 507
 
-    def __init__(self, *, required_bytes: int, free_bytes: int, location: Path):
+    def __init__(self, *, required_bytes: int, free_bytes: int, location: Path, storage_plan: dict[str, Any] | None = None):
+        from .working_storage import readable_bytes
         self.required_bytes = max(0, int(required_bytes))
         self.free_bytes = max(0, int(free_bytes))
         self.location = str(location)
+        self.storage_plan = storage_plan
         self.message = (
-            "There is not enough free disk space to render this edit "
-            f"(need about {self.required_bytes} bytes, {self.free_bytes} bytes available)."
+            f"Not enough working space to render at {self.location}: approximately "
+            f"{readable_bytes(self.required_bytes)} required including safety reserve, "
+            f"{readable_bytes(self.free_bytes)} free. Free space on this drive and retry. "
+            "Your originals and edit are preserved."
         )
         super().__init__(self.message)
 
@@ -67,6 +71,7 @@ class InsufficientStorageError(RuntimeError):
             "disk_free_bytes": self.free_bytes,
             "shortfall_bytes": max(0, self.required_bytes - self.free_bytes),
             "location": self.location,
+            "storage_plan": self.storage_plan,
         }
 
 
@@ -119,7 +124,7 @@ def _clean_ranges(rows: Any, duration: float) -> list[dict[str, float]]:
     return output
 
 
-def _render_plan(project: dict[str, Any]) -> list[dict[str, Any]]:
+def _render_plan(project: dict[str, Any], *, layout_coverage: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
     """Build a bounded, gap-free camera plan inside the authoritative keep ranges.
 
     Manual editing normally writes a perfect partition. This defensive pass keeps
@@ -241,6 +246,15 @@ def _render_plan(project: dict[str, Any]) -> list[dict[str, Any]]:
                 ),
                 "A",
             )
+            # Record the requested composition before the legacy safe fallback
+            # replaces it. Export must not mistake a playable A-only picture for
+            # fulfilment of an explicit two-source layout.
+            present = ({slot for slot in ("A", "B") if available(slot, midpoint)} if independent
+                       else {"A"} | ({"B"} if b_has_video and b_start <= midpoint < b_end else set()))
+            if layout_coverage is not None and needs_b(camera):
+                required = {"A", "B"} if camera in {"stacked", "side_by_side", "pip"} else {"B"}
+                layout_coverage.append({"start": start, "end": end, "camera": camera,
+                                        "missing_slots": sorted(required - present)})
             # A shorter/offset B must not turn part of a camera-only shot black
             # or freeze its last frame. Match the preview by showing A wherever
             # B has no real video; preserve the requested layout inside B.
@@ -285,6 +299,52 @@ def _render_plan(project: dict[str, Any]) -> list[dict[str, Any]]:
     if len(compact) > (2000 if has_sequence(project) else 500):
         raise ValueError("The edit contains too many fragments. Merge cuts before rendering.")
     return compact
+
+
+class LayoutCoverageError(ValueError):
+    def __init__(self, coverage: dict[str, Any]):
+        self.coverage = coverage
+        short_source = coverage["source_B_video_duration"] < coverage["requested_seconds"]
+        duration_help = (f" Source B contains {coverage['source_B_video_duration']:.2f} seconds of video. "
+                         "Add suitable footage, explicitly shorten the edit, or choose a different layout for the uncovered section."
+                         if short_source else "")
+        super().__init__(
+            f"The requested layout is missing footage for {coverage['missing_seconds']:.2f} "
+            f"of {coverage['requested_seconds']:.2f} seconds. Export would silently replace that layout. "
+            "For synchronized recordings, review source alignment; for independently recorded camera/narration, "
+            "explicitly place the needed source range on the edit timeline. Missing footage is not looped or frozen."
+            + duration_help
+        )
+
+    def public(self) -> dict[str, Any]:
+        return {"error": "layout_coverage_incomplete", "message": str(self), "layout_coverage": self.coverage}
+
+
+def composition_layout_coverage(project: dict[str, Any]) -> dict[str, Any]:
+    """Read-only layout feasibility on the same clocks/boundaries as export."""
+    rows: list[dict[str, Any]] = []
+    _render_plan(project, layout_coverage=rows)
+    missing = [row for row in rows if row["missing_slots"]]
+    manual = project.get("manual") or {}
+    multi = {"B", "screen", "camera", "stacked", "side_by_side", "pip"}
+    explicit = ((manual.get("source_mixer") or {}).get("default_layout") in multi
+                or (project.get("settings") or {}).get("layout") in multi
+                or bool(manual.get("sequence"))
+                or any(row.get("layout") in multi for row in manual.get("camera_overrides") or []))
+    return {"requested_seconds": round(sum(row["end"] - row["start"] for row in rows), 6),
+            "missing_seconds": round(sum(row["end"] - row["start"] for row in missing), 6),
+            "missing_ranges": missing[:32], "missing_range_count": len(missing),
+            "explicit_layout": bool(explicit), "clock": "edit" if has_sequence(project) else "source_A",
+            "source_B_video_duration": _source_video_duration((project.get("sources") or {}).get("B") or {}),
+            "export_blocked": bool(explicit and missing)}
+
+
+def require_layout_coverage(project: dict[str, Any], options: dict[str, Any] | None = None) -> None:
+    if options:
+        project = with_export_options(project, options)
+    coverage = composition_layout_coverage(project)
+    if coverage["export_blocked"]:
+        raise LayoutCoverageError(coverage)
 
 
 def _frame_aligned_plan(project: dict[str, Any]) -> list[dict[str, Any]]:
@@ -437,6 +497,7 @@ def _clear_region_crop_filter(region: dict[str, float]) -> str:
 
 
 def _source_mixer(project: dict[str, Any]) -> dict[str, str]:
+    from .creator_layout import controls
     raw = project.get("manual", {}).get("source_mixer") or {}
     screen_slot = str(raw.get("screen_slot") or "A").upper()
     camera_slot = str(raw.get("camera_slot") or ("B" if screen_slot == "A" else "A")).upper()
@@ -464,7 +525,13 @@ def _source_mixer(project: dict[str, Any]) -> dict[str, str]:
         "audio_slot": audio_slot,
         "first_slot": first_slot,
         "stack_fit": stack_fit,
+        **(controls(raw) if sources.get("B") else {}),
     }
+
+
+def _creator_filter(mixer,slot,width,height,existing,focus):
+    mode=mixer.get("screen_fit","auto") if slot==mixer["screen_slot"] else "auto"
+    return _fit_filter(width,height) if mode=="contain" else _cover_filter(width,height,focus) if mode=="cover" else existing
 
 
 def _slot_input(slot: str, index: int) -> str:
@@ -608,6 +675,7 @@ def _segment_nodes(
                 face_filter = _cover_filter(width, face_h, face_focus) if mixer["stack_fit"] == "cover" or face_slot in item.get("crop", {}) else _fit_filter(width, face_h)
                 screen_filter = _cover_filter(width, screen_h, screen_focus) if mixer["stack_fit"] == "cover" or screen_slot in item.get("crop", {}) else _fit_filter(width, screen_h)
                 filters.append(f"[{face_input}]{frame_trim},setpts=PTS-STARTPTS,{face_filter}[face{index}]")
+                screen_filter = _creator_filter(mixer,screen_slot,width,screen_h,screen_filter,screen_focus)
                 filters.append(f"[{screen_input}]{frame_trim},setpts=PTS-STARTPTS,{screen_filter}[screen{index}]")
                 first_label, second_label = (
                     (f"face{index}", f"screen{index}")
@@ -623,6 +691,7 @@ def _segment_nodes(
                 face_w = right_w if first_is_screen else left_w
                 screen_filter = _cover_filter(screen_w, height, a_focus if screen_slot == "A" else b_focus) if screen_slot in item.get("crop", {}) else _fit_filter(screen_w, height)
                 face_filter = _cover_filter(face_w, height, a_focus if face_slot == "A" else b_focus) if face_slot in item.get("crop", {}) else _fit_filter(face_w, height)
+                screen_filter = _creator_filter(mixer,screen_slot,screen_w,height,screen_filter,a_focus if screen_slot=="A" else b_focus)
                 filters.append(f"[{screen_input}]{frame_trim},setpts=PTS-STARTPTS,{screen_filter}[screen{index}]")
                 filters.append(f"[{face_input}]{frame_trim},setpts=PTS-STARTPTS,{face_filter}[face{index}]")
                 first_label, second_label = (
@@ -632,22 +701,23 @@ def _segment_nodes(
                 )
                 filters.append(f"[{first_label}][{second_label}]hstack=inputs=2,format=yuv420p[{output}]")
             else:
-                pip_w = max(160, int(width * 0.34) // 2 * 2)
-                pip_h = max(90, int(height * 0.28) // 2 * 2)
+                from .creator_layout import pip_geometry
+                pip_w,pip_h,pip_x,pip_y = pip_geometry(project,width,height,mixer)
                 primary_role = mixer["primary_role"]
                 base_slot = mixer[f"{primary_role}_slot"]
                 inset_slot = mixer["camera_slot" if primary_role == "screen" else "screen_slot"]
                 base_input = _slot_input(base_slot, index)
                 inset_input = _slot_input(inset_slot, index)
                 base_focus = a_focus if base_slot == "A" else b_focus
-                filters.append(f"[{base_input}]{frame_trim},setpts=PTS-STARTPTS,{_cover_filter(width, height, base_focus)}[base{index}]")
+                filters.append(f"[{base_input}]{frame_trim},setpts=PTS-STARTPTS,{_creator_filter(mixer,base_slot,width,height,_cover_filter(width,height,base_focus),base_focus)}[base{index}]")
                 inset_filter = _cover_filter(pip_w, pip_h, a_focus if inset_slot == "A" else b_focus) if inset_slot in item.get("crop", {}) else _fit_filter(pip_w, pip_h)
+                inset_filter = _creator_filter(mixer,inset_slot,pip_w,pip_h,inset_filter,a_focus if inset_slot=="A" else b_focus)
                 filters.append(f"[{inset_input}]{frame_trim},setpts=PTS-STARTPTS,{inset_filter}[inset{index}]")
-                filters.append(f"[base{index}][inset{index}]overlay=W-w-32:H-h-32:shortest=1,format=yuv420p[{output}]")
+                filters.append(f"[base{index}][inset{index}]overlay={pip_x}:{pip_y}:shortest=1,format=yuv420p[{output}]")
     if camera == "A":
-        filters.append(f"[av{index}]{frame_trim},setpts=PTS-STARTPTS,{_cover_filter(width, height, a_focus)},format=yuv420p[{output}]")
+        filters.append(f"[av{index}]{frame_trim},setpts=PTS-STARTPTS,{_creator_filter(mixer,"A",width,height,_cover_filter(width,height,a_focus),a_focus)},format=yuv420p[{output}]")
     elif camera == "B":
-        filters.append(f"[bv{index}]{frame_trim},setpts=PTS-STARTPTS,{_cover_filter(width, height, b_focus)},format=yuv420p[{output}]")
+        filters.append(f"[bv{index}]{frame_trim},setpts=PTS-STARTPTS,{_creator_filter(mixer,"B",width,height,_cover_filter(width,height,b_focus),b_focus)},format=yuv420p[{output}]")
     return filters, output
 
 
@@ -924,25 +994,22 @@ def _render_effects_payload(project: dict[str, Any]) -> dict[str, Any]:
     return compile_automatic_effects(project)
 
 def _chroma_background_slots(project: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
-    return [(slot, asset) for slot in chroma_video_targets(project, used_only=True)
-            if (asset := chroma_background_asset(project, slot)) is not None]
+    return chroma_background_slots(project)
 
 
-def chroma_background_input_args(project: dict[str, Any], project_dir: Path) -> list[str]:
+def chroma_background_input_args(project: dict[str, Any], project_dir: Path,
+                                 input_inventory: RenderInputInventory | None = None) -> list[str]:
     """Append guarded ready-image inputs after the existing library inventory."""
-    result = []
-    fps = project_export_fps(project)
-    for slot, asset in _chroma_background_slots(project):
-        path = safe_asset_path(project_dir, asset["path"])
-        if not path.is_file():
-            raise FileNotFoundError("The chosen Chroma Key background image is missing. Choose another image or reset Chroma Key.")
-        duration = _source_video_duration(chroma_source(project, slot) or {}) + 2 / fps
-        result.extend(["-loop", "1", "-framerate", str(fps), "-t", f"{duration:.9f}",
-                       "-protocol_whitelist", "file,pipe", "-i", str(path)])
-    return result
+    inventory = input_inventory or compile_render_inputs(project, include_library=False)
+    inventory.validate(project, require_library=False)
+    return inventory.input_args(project_dir, category="chroma_background")
 
 
-def build_filter_graph(project: dict[str, Any], width: int, height: int, caption_ass: Path | None = None) -> tuple[str, list[str], bool]:
+def build_filter_graph(project: dict[str, Any], width: int, height: int, caption_ass: Path | None = None,
+                       input_inventory: RenderInputInventory | None = None) -> tuple[str, list[str], bool]:
+    validate_sequence_version(project)
+    inventory = input_inventory or compile_render_inputs(project)
+    inventory.validate(project)
     fps = project_export_fps(project)
     draft = project.get("draft") or {}
     plan = _frame_aligned_plan(project)
@@ -993,10 +1060,8 @@ def build_filter_graph(project: dict[str, Any], width: int, height: int, caption
         f"fps={fps},trim=end_frame={output_frames},setpts=N/{fps}/TB"
     )
     filters: list[str] = []
-    video_inputs = {"A": "[0:v]", "B": "[1:v]"}
-    background_base = (2 if source_b else 1) + len(library_clips(project))
-    image_inputs = {slot: f"[{background_base + index}:v]"
-                    for index, (slot, _) in enumerate(_chroma_background_slots(project))}
+    video_inputs = {entry.target: entry.label("v") for entry in inventory.inputs("source")}
+    image_inputs = inventory.background_labels()
     # Key genuine decoded media once, before independent clip trims or generated
     # black gaps. All framing/layout/effects then consume the same opaque picture
     # used by the current-frame Chroma Key preview. Audio inputs stay untouched.
@@ -1142,6 +1207,7 @@ def build_filter_graph(project: dict[str, Any], width: int, height: int, caption
     media_filters, video_map, audio_map = append_media_graph(
         project, width, height, output_frames / fps, video_map, "[aout]" if has_audio else None,
         chroma_background_labels=image_inputs,
+        input_inventory=inventory,
     )
     filters.extend(media_filters)
     has_audio = audio_map is not None
@@ -1335,14 +1401,10 @@ def _existing_storage_location(path: Path) -> Path:
 
 
 def _storage_volume_key(location: Path) -> tuple[Any, ...]:
-    resolved = location.resolve(strict=False)
-    try:
-        device = int(resolved.stat().st_dev)
-    except OSError:
-        device = -1
-    # st_dev distinguishes POSIX mount points; the anchor also prevents Windows
-    # runtimes that report a generic device id from merging separate drives.
-    return device, os.path.normcase(resolved.anchor or str(resolved))
+    # Reuse import admission's mount/Windows-volume-GUID identity, including
+    # drives mounted below another drive's directory rather than a drive letter.
+    from .upload_storage import filesystem_id
+    return (filesystem_id(location),)
 
 
 def _ensure_render_storage(
@@ -1358,14 +1420,16 @@ def _ensure_render_storage(
     estimate = _estimate_render_storage(project, width, height, quality, settings)
     volumes: dict[tuple[Any, ...], dict[str, Any]] = {}
     allocations = (
-        (Path(settings.exports_dir), int(estimate["export_work_bytes"])),
-        (Path(project_dir), int(estimate["project_work_bytes"])),
+        ("export and normalization stage", Path(settings.exports_dir), int(estimate["export_work_bytes"])),
+        ("project scratch / captions", Path(project_dir), int(estimate["project_work_bytes"])),
     )
-    for requested_location, working_bytes in allocations:
+    for role, requested_location, working_bytes in allocations:
         location = _existing_storage_location(requested_location)
         key = _storage_volume_key(location)
-        item = volumes.setdefault(key, {"location": location, "working_bytes": 0})
+        item = volumes.setdefault(key, {"location": location, "working_bytes": 0, "roles": [], "locations": []})
         item["working_bytes"] += max(0, working_bytes)
+        item["roles"].append(role)
+        item["locations"].append(str(requested_location.resolve(strict=False)))
 
     volume_details: list[dict[str, Any]] = []
     for item in volumes.values():
@@ -1374,6 +1438,7 @@ def _ensure_render_storage(
         required_bytes = int(item["working_bytes"]) + int(estimate["reserve_bytes"])
         detail = {
             "location": str(location),
+            "roles": item["roles"], "locations": item["locations"],
             "working_bytes": int(item["working_bytes"]),
             "reserve_bytes": int(estimate["reserve_bytes"]),
             "required_bytes": required_bytes,
@@ -1385,6 +1450,10 @@ def _ensure_render_storage(
                 required_bytes=required_bytes,
                 free_bytes=free_bytes,
                 location=location,
+                storage_plan={"operation": "render", "reserve_bytes": int(estimate["reserve_bytes"]),
+                    "filesystems": [{**detail, "required_bytes": detail["working_bytes"],
+                        "disk_free_bytes": free_bytes, "reserved_bytes": 0,
+                        "available_bytes": max(0, free_bytes-int(estimate["reserve_bytes"]))}]},
             )
     estimate["volumes"] = volume_details
     return estimate
@@ -1565,8 +1634,11 @@ class _ScaledProgressContext:
 def render_project(context: JobContext, project_id: str, store: ProjectStore, settings: Settings, options: dict[str, Any] | None = None) -> dict[str, Any]:
     options = options or {}
     project = store.load(project_id)
+    validate_sequence_version(project)
     saved_input_fingerprint = _render_input_fingerprint(project)
     project = with_export_options(project, options)
+    if options.get("_require_layout_coverage"):
+        require_layout_coverage(project)
     render_input_fingerprint = _render_input_fingerprint(project)
     fps = project_export_fps(project)
     if not project.get("sources", {}).get("A"):
@@ -1580,8 +1652,10 @@ def render_project(context: JobContext, project_id: str, store: ProjectStore, se
     source_b = store.project_dir(project_id) / source_b_info["relative_path"] if source_b_info else None
     if source_b is not None and not source_b.is_file():
         raise FileNotFoundError(f"Source B media is missing: {source_b.name}")
-    media_inputs = library_input_args(project, store.project_dir(project_id))
-    chroma_inputs = chroma_background_input_args(project, store.project_dir(project_id))
+    input_inventory = compile_render_inputs(project)
+    # Resolve every current input before capability checks or output creation.
+    # The graph consumes this exact inventory; no independent suffix arithmetic.
+    input_inventory.input_args(store.project_dir(project_id))
     if any(source_chroma_key(project, slot)["enabled"] for slot in chroma_video_targets(project, used_only=True)):
         capability = chroma_key_capability(settings)
         if not capability["available"]:
@@ -1620,7 +1694,10 @@ def render_project(context: JobContext, project_id: str, store: ProjectStore, se
                 text_clips=text_clips,
                 caption_lines=burn_lines if burn_transcript else [],
             )
-        graph, maps, has_audio = build_filter_graph(project, width, height, caption_ass)
+        graph, maps, has_audio = build_filter_graph(project, width, height, caption_ass, input_inventory)
+        needs_source_b_input = input_inventory.needs_source_b(graph)
+        input_demand = input_inventory.demand(graph, include_source_b=needs_source_b_input)
+        input_args = input_inventory.input_args(store.project_dir(project_id), include_source_b=needs_source_b_input)
     except BaseException:
         if caption_ass is not None:
             caption_ass.unlink(missing_ok=True)
@@ -1646,12 +1723,8 @@ def render_project(context: JobContext, project_id: str, store: ProjectStore, se
     normalization_filter = _final_audio_filter(project) if has_audio else "anull"
     normalize_audio = has_audio and normalization_filter != "anull"
     render_target = normalization_stage if normalize_audio else partial
-    command = [capabilities.executable, "-hide_banner", "-loglevel", "error", "-y", "-i", str(source_a)]
-    needs_source_b_input = "[1:v]" in graph or "[1:a]" in graph or bool(library_clips(project)) or bool(chroma_inputs)
-    if source_b and needs_source_b_input:
-        command += ["-i", str(source_b)]
-    command += media_inputs
-    command += chroma_inputs
+    command = [capabilities.executable, "-hide_banner", "-loglevel", "error", "-y",
+               *input_args]
     command += [
         *capabilities.graph_file_args(graph_path), *maps,
         "-c:v", encoder, *encoder_args,
@@ -1737,6 +1810,7 @@ def render_project(context: JobContext, project_id: str, store: ProjectStore, se
             "manual_text_count": len(text_clips),
             "editorial_effects": _render_effects_payload(project).get("effects", []),
             "input_fingerprint": render_input_fingerprint,
+            "input_demand": input_demand,
         }
         if caption_ass is not None or project.get("settings", {}).get("captions"):
             record["caption_settings"] = caption_settings
@@ -1751,9 +1825,14 @@ def render_project(context: JobContext, project_id: str, store: ProjectStore, se
                              if normalizes_audio(project) else None),
                 caption_lines=burn_lines if burn_transcript else [], text_clips=text_clips,
                 caption_position=caption_settings["caption_position"],
-                # A sequence's own empty stretches are rendered as black.
-                timeline_gaps=[(float(row["start"]), float(row["end"])) for row in _frame_aligned_plan(project)
-                               if row.get("camera") == "black"] if has_sequence(project) else None,
+                # Added video/images occupy edit time beyond A/B coverage.
+                # Pixel blackness/alpha is independently checked on the output.
+                timeline_gaps=remaining_picture_gaps(
+                    [(float(row["start"]), float(row["end"])) for row in _frame_aligned_plan(project)
+                     if row.get("camera") == "black"],
+                    [(float(clip["start"]), float(clip["end"]))
+                     for clip, asset in library_clips(project) if asset["kind"] in {"video", "image"}],
+                ) if has_sequence(project) else None,
             )
         except Exception as exc:  # Advice only: a failed check never fails the export.
             record["review"] = {"version": 1, "error": type(exc).__name__, "warnings": 0, "checks": []}

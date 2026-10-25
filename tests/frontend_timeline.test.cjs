@@ -7,6 +7,25 @@ const test = require("node:test");
 const source = fs.readFileSync(path.join(__dirname, "../web/timeline.js"), "utf8").replace(/^export /gm, "");
 const plain = (value) => JSON.parse(JSON.stringify(value));
 
+for (const field of ['media_clips','text_clips']) {
+  test(`whole-edit gaps exclude time occupied by independent ${field}`,()=>{
+    const h=sequenceFixture(),p={sources:{A:{}},manual:{sequence:{duration:9.25},
+      source_tracks:{A:[{start:0,end:3},{start:4.25,end:9.25}],B:[]},
+      [field]:[{start:3,end:4.25}]}};
+    const tracks=(project,slot)=>project.manual.source_tracks[slot];
+    assert.deepEqual(plain(h.scope.sequenceGaps(p,tracks)),[]);
+    assert.deepEqual(plain(h.scope.sequenceGaps(p,tracks,'A')),[{start:3,end:4.25}]);
+    assert.equal(h.scope.sequenceGapClosureIssue(p,[]),'');
+  });
+}
+
+test('gap cleanup reports unsupported downstream layer ripple, but permits empty tail',()=>{
+  const h=sequenceFixture(),p={manual:{media_clips:[{start:5,end:6.25}]}};
+  assert.match(h.scope.sequenceGapClosureIssue(p,[{start:1,end:2}]),/shift added media or text/);
+  assert.equal(h.scope.sequenceGapClosureIssue(p,[{start:16.25,end:17.25}]),'');
+  assert.equal(h.scope.sequenceGapClosureIssue(p,[{start:1,end:2}],'A'),'');
+});
+
 test('caption blocks show whole words or an ellipsis, never unreadable fragments', () => {
   const scope = vm.createContext({ window: { devicePixelRatio: 1 }, ResizeObserver: class { observe() {} }, requestAnimationFrame: () => 1, cancelAnimationFrame() {} });
   vm.runInContext(source + "\nglobalThis.fitCanvasLabel = fitCanvasLabel;", scope);

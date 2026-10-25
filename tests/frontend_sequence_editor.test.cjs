@@ -13,6 +13,7 @@ function app() {
     const nested = new Map();
     return {id,value:'',dataset:{},hidden:false,attrs:{},listeners:{},style:{setProperty(){}},
       classList:{add(){},remove(){},toggle(){}},
+      replaceChildren(...children){this.children=children;},
       setAttribute(key,value){this.attrs[key]=value;},removeAttribute(key){delete this.attrs[key];},
       addEventListener(key,fn){this.listeners[key]=fn;},
       querySelector(key){if(!nested.has(key))nested.set(key,element(key));return nested.get(key);},
@@ -57,6 +58,93 @@ function app() {
   `);
   return {run,nodes,context};
 }
+
+test('missing B in a requested split is visible beside preview without rewriting the edit',()=>{
+  const {run,nodes}=app();
+  run(`state.project.manual.source_mixer.default_layout='stacked';
+    state.project.editor_sequence.source_tracks.B=[];
+    globalThis.beforeCoverage=JSON.stringify(state.project);
+    renderSourceBCoverage();`);
+  assert.equal(nodes.get('layoutCoverageAlert').hidden,false);
+  assert.match(nodes.get('layoutCoverageAlertText').textContent,/0\.00 of 6\.00/);
+  assert.match(nodes.get('layoutCoverageAlertText').textContent,/does not fulfil the requested layout/);
+  assert.equal(run('JSON.stringify(state.project)===beforeCoverage'),true);
+  run(`state.project.editor_sequence.source_tracks.B=[{id:'independent-b',start:0,end:6,source_start:0}];renderSourceBCoverage();`);
+  assert.equal(nodes.get('layoutCoverageAlert').hidden,true);
+});
+
+test('layout warning only counts source B gaps in requested B ranges, respecting source roles',()=>{
+  const {run,nodes}=app();
+  run(`state.project.editor_sequence.sequence.camera_plan=[{start:0,end:3,camera:'stacked'},{start:3,end:6,camera:'A'}];
+    state.project.editor_sequence.source_tracks.B=[{id:'b',start:0,end:3,source_start:0}];renderSourceBCoverage();`);
+  assert.equal(nodes.get('layoutCoverageAlert').hidden,true,'an intentional A-only tail needs no B');
+  run(`state.project.editor_sequence.sequence.camera_plan[1].camera='stacked';renderSourceBCoverage();`);
+  assert.equal(nodes.get('layoutCoverageAlert').hidden,false);
+  assert.match(nodes.get('layoutCoverageAlertText').textContent,/3\.00 of 6\.00/);
+  run(`state.manualSelection={start:0,end:3};renderSourceBCoverage();`);
+  assert.equal(nodes.get('layoutCoverageAlert').hidden,false,'a covered selection cannot hide uncovered export ranges');
+  run(`state.manualSelection=null;state.project.manual.source_mixer.camera_slot='A';
+    state.project.manual.source_mixer.screen_slot='B';
+    state.project.editor_sequence.sequence.camera_plan=[{start:0,end:6,camera:'camera'}];renderSourceBCoverage();`);
+  assert.equal(nodes.get('layoutCoverageAlert').hidden,true,'camera-only mapped to A does not require B');
+  run(`state.project.editor_sequence.sequence.camera_plan[0].camera='screen';renderSourceBCoverage();`);
+  assert.equal(nodes.get('layoutCoverageAlert').hidden,false,'screen-only mapped to B still needs B');
+});
+
+test('source timing recovery opens the existing framing workflow and preserves the project',()=>{
+  const {run,nodes}=app();
+  run(`globalThis.beforeTimingReview=JSON.stringify(state.project);
+    elements.exportDialog.open=true;elements.exportDialog.close=()=>{elements.exportDialog.open=false;};
+    openStudioTab=name=>{globalThis.reviewedTab=name;return true;};reviewSourceTiming();`);
+  assert.equal(run('reviewedTab'),'framing');
+  assert.equal(run('elements.exportDialog.open'),false);
+  assert.equal(nodes.get('sourceTimingStep').scrolled,true);
+  assert.equal(run('JSON.stringify(state.project)===beforeTimingReview'),true);
+});
+
+test('baked-in podcast controls only appear for a supported single portrait source without changing edits',()=>{
+  const {run,nodes}=app();
+  run(`globalThis.beforeFramingUI=JSON.stringify(state.project);renderPodcastFraming();`);
+  assert.equal(nodes.get('podcastFraming').hidden,true,'separate feeds use the source layout controls');
+  assert.equal(run('JSON.stringify(state.project)===beforeFramingUI'),true);
+  run(`delete state.project.sources.B;state.project.sources.A={generation:'portrait-v1',width:720,height:1280,rotation:0};
+    globalThis.beforePortraitUI=JSON.stringify(state.project);renderPodcastFraming();`);
+  assert.equal(nodes.get('podcastFraming').hidden,false,'single portrait framing remains discoverable');
+  assert.match(nodes.get('podcastFramingStatus').textContent,/Select a range/);
+  assert.equal(run('JSON.stringify(state.project)===beforePortraitUI'),true);
+  for(const source of [{generation:'landscape',width:1920,height:1080},{generation:'rotated',width:720,height:1280,rotation:90},
+    {width:720,height:1280},{generation:'unknown',width:0,height:0}]) {
+    run(`state.project.sources.A=${JSON.stringify(source)};renderPodcastFraming();`);
+    assert.equal(nodes.get('podcastFraming').hidden,true);
+  }
+});
+
+test('an appended project video keeps transport available after primary clips are removed',()=>{
+  const {run}=app();
+  run(`state.project.editor_sequence.source_tracks={A:[],B:[]};
+    state.mediaStudio={videoAt:()=>null};`);
+  assert.equal(run('hasTimelineFootage()'),false);
+  run(`state.mediaStudio.videoAt=()=>({id:'third-video',start:0,end:6});`);
+  assert.equal(run('hasTimelineFootage()'),true);
+  run(`state.mediaStudio.videoAt=()=>null;`);
+  assert.equal(run('hasTimelineFootage()'),false);
+});
+
+test('visible appended footage is labeled VIDEO while an uncovered edit interval remains GAP',()=>{
+  const {run,nodes}=app();
+  run(`state.project.editor_sequence.source_tracks={A:[],B:[]};
+    state.preview.mode='edit';
+    state.mediaStudio={videoAt:time=>time>=3&&time<6?{id:'third-video'}:null};
+    refreshEmbeddedCropControls=applyPreviewPipGeometry=applyCompositionCrop=syncIndependentMedia=updateMediaPreview=()=>{};
+    renderSourceBCoverage=()=>{};`);
+  run('syncSecondaryPreview(4)');
+  assert.equal(run('elements.cameraBadge.textContent'),'VIDEO');
+  assert.match(run('elements.cameraBadge.title'),/project video/i);
+  assert.equal(run('elements.previewA.hidden'),true);
+  assert.equal(run('elements.previewB.hidden'),true);
+  run('syncSecondaryPreview(2)');
+  assert.equal(run('elements.cameraBadge.textContent'),'GAP');
+});
 
 test('per-cut focus follows playback time and source instead of global framing', () => {
   const {run}=app();

@@ -9,7 +9,7 @@ on:
         default: false
         type: boolean
       review_release_id:
-        description: Optional numeric ID of the unpublished cutroom-review-203d164 draft release
+        description: Optional numeric ID of the unpublished cutroom-review-b657bd1 draft release
         required: false
         default: ''
         type: string
@@ -236,7 +236,7 @@ jobs:
           gh api "repos/$GITHUB_REPOSITORY/releases/$REVIEW_RELEASE_ID" > "$RUNNER_TEMP/review-release.json"
           python -B -X utf8 packaging/review_asset_metadata.py \
             --metadata "$RUNNER_TEMP/review-release.json" \
-            --record packaging/review-candidates/203d164.json --repo . \
+            --record packaging/review-candidates/b657bd1.json --repo . \
             --release-id "$REVIEW_RELEASE_ID" > "$RUNNER_TEMP/review-assets.tsv"
           while IFS=$'\t' read -r asset_id asset_name; do
             echo "Read pinned asset ID $asset_id ($asset_name)"
@@ -249,10 +249,10 @@ jobs:
         shell: bash
         run: |
           python -B -X utf8 packaging/native_review_candidate.py \
-            --record packaging/review-candidates/203d164.json --repo . \
-            --windows-zip "$RUNNER_TEMP/review-inputs/CUTROOM-1.2-Beta-Windows-review-203d164.zip" \
-            --combined-zip "$RUNNER_TEMP/review-inputs/CUTROOM-1.2-Beta-combined-review-203d164.zip" \
-            --source-archive "$RUNNER_TEMP/review-inputs/SOURCE-203d164.zip" \
+            --record packaging/review-candidates/b657bd1.json --repo . \
+            --windows-zip "$RUNNER_TEMP/review-inputs/CUTROOM-1.2-Beta-Windows-review-b657bd1.zip" \
+            --combined-zip "$RUNNER_TEMP/review-inputs/CUTROOM-1.2-Beta-combined-review-b657bd1.zip" \
+            --source-archive "$RUNNER_TEMP/review-inputs/SOURCE-b657bd1.zip" \
             --output-dir "$RUNNER_TEMP/review-preflight"
       - name: Set up Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -280,10 +280,10 @@ jobs:
           extra=()
           if [[ "$REVIEW_TRANSCRIBE" == '1' ]]; then extra+=(--transcribe); fi
           "$RUNNER_TEMP/cutroom-review-venv/bin/python" -B -X utf8 packaging/native_review_candidate.py \
-            --record packaging/review-candidates/203d164.json --repo . \
-            --windows-zip "$RUNNER_TEMP/review-inputs/CUTROOM-1.2-Beta-Windows-review-203d164.zip" \
-            --combined-zip "$RUNNER_TEMP/review-inputs/CUTROOM-1.2-Beta-combined-review-203d164.zip" \
-            --source-archive "$RUNNER_TEMP/review-inputs/SOURCE-203d164.zip" \
+            --record packaging/review-candidates/b657bd1.json --repo . \
+            --windows-zip "$RUNNER_TEMP/review-inputs/CUTROOM-1.2-Beta-Windows-review-b657bd1.zip" \
+            --combined-zip "$RUNNER_TEMP/review-inputs/CUTROOM-1.2-Beta-combined-review-b657bd1.zip" \
+            --source-archive "$RUNNER_TEMP/review-inputs/SOURCE-b657bd1.zip" \
             --output-dir "$RUNNER_TEMP/review-reports" --native "${extra[@]}"
       - name: Retain private-review JSON evidence
         if: ${{ always() }}

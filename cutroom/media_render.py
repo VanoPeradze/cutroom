@@ -8,6 +8,7 @@ from typing import Any
 from .composition import source_chroma_key
 from .effects import build_chroma_key_nodes
 from .frame_rates import project_export_fps
+from .render_inventory import RenderInputInventory, audible as _audible, compile_render_inputs, library_clips, library_visual_start
 
 
 def _number(value: Any, default: float = 0.0) -> float:
@@ -18,51 +19,16 @@ def _number(value: Any, default: float = 0.0) -> float:
     return result if math.isfinite(result) else default
 
 
-def library_clips(project: dict[str, Any]) -> list[tuple[dict[str, Any], dict[str, Any]]]:
-    rows = (project.get("manual") or {}).get("media_clips") or []
-    if not isinstance(rows, list) or len(rows) > 200:
-        raise ValueError("The media timeline must contain at most 200 clips")
-    assets = project.get("assets") or {}
-    result = []
-    for clip in rows:
-        if not isinstance(clip, dict):
-            raise ValueError("Invalid library clip")
-        asset = assets.get(clip.get("asset_id")) if isinstance(assets, dict) else None
-        if not isinstance(asset, dict) or asset.get("kind") not in {"video", "image", "audio"}:
-            raise ValueError("A timeline asset is missing; remove its clip or import it again")
-        if asset.get("status", "ready") != "ready":
-            raise ValueError("Wait until timeline media finishes importing before exporting")
-        result.append((clip, asset))
-    return result
-
-
-def _audible(clip: dict[str, Any], asset: dict[str, Any]) -> bool:
-    return asset["kind"] == "audio" or asset["kind"] == "video" and bool(asset.get("has_audio")) and bool(clip.get("audio_enabled", False))
-
-
 def library_has_audio(project: dict[str, Any]) -> bool:
     return any(_audible(clip, asset) for clip, asset in library_clips(project))
 
 
-def library_input_args(project: dict[str, Any], project_dir: Path) -> list[str]:
+def library_input_args(project: dict[str, Any], project_dir: Path,
+                       input_inventory: RenderInputInventory | None = None) -> list[str]:
     """Only open validated local asset paths, in the same order as the graph."""
-    result: list[str] = []
-    root = project_dir.resolve()
-    fps = project_export_fps(project)
-    for clip, asset in library_clips(project):
-        path_value = asset.get("path") or asset.get("relative_path")
-        if not isinstance(path_value, str) or not path_value:
-            raise ValueError("The timeline asset has no local media path")
-        path = (root / path_value).resolve()
-        if not path.is_relative_to(root):
-            raise ValueError("Timeline media must belong to this project")
-        if not path.is_file():
-            raise FileNotFoundError(f"Timeline media is missing: {path.name}")
-        if asset["kind"] == "image":
-            length = max(1 / fps, _number(clip.get("end")) - _number(clip.get("start")))
-            result += ["-loop", "1", "-framerate", str(fps), "-t", f"{length + 2 / fps:.9f}"]
-        result += ["-protocol_whitelist", "file,pipe", "-i", str(path)]
-    return result
+    inventory = input_inventory or compile_render_inputs(project, include_chroma=False)
+    inventory.validate(project, require_chroma=False)
+    return inventory.input_args(project_dir, category="library")
 
 
 def _gain(mixer: dict[str, Any], role: str) -> float:
@@ -77,13 +43,16 @@ def append_media_graph(
     project: dict[str, Any], width: int, height: int, duration: float,
     video_label: str, audio_label: str | None,
     *, chroma_background_labels: dict[str, str] | None = None,
+    input_inventory: RenderInputInventory | None = None,
 ) -> tuple[list[str], str, str | None]:
-    clips = library_clips(project)
+    inventory = input_inventory or compile_render_inputs(project, include_chroma=False)
+    inventory.validate(project, require_chroma=False)
+    inputs = inventory.inputs("library")
+    clips = [(entry.clip, entry.media) for entry in inputs]
     mixer = (project.get("manual") or {}).get("audio_mixer") or {}
     if not clips and not mixer:
         return [], video_label, audio_label
     fps = project_export_fps(project)
-    first_input = 2 if (project.get("sources") or {}).get("B") else 1
     filters: list[str] = []
     # Each occurrence has an independent decoded input and clip clock. Split a
     # selected still image once so duplicated uses cannot consume its label twice.
@@ -114,15 +83,13 @@ def append_media_graph(
         length = end - start
         if length < 1 / fps - 1e-8:
             continue
-        source_start = max(0.0, _number(clip.get("source_start")))
-        input_index = first_input + index
+        source_start = max(0.0, _number(clip.get("source_start"))) - inputs[index].seek_start
+        input_index = inputs[index].index
         fade_in = max(0.0, min(length, _number(clip.get("fade_in"))))
         fade_out = max(0.0, min(length, _number(clip.get("fade_out"))))
         if asset["kind"] in {"video", "image"}:
             speed = max(0.25, min(4.0, _number(clip.get("speed"), 1)))
-            visual_start = max(0.0, _number(clip.get("video_source_start"), source_start)) if asset["kind"] == "video" else 0.0
-            if asset["kind"] == "video" and _number(asset.get("duration")) > 0:
-                visual_start = min(visual_start, max(0.0, _number(asset.get("duration")) - 1 / fps))
+            visual_start = library_visual_start(clip, asset, fps) - inputs[index].seek_start
             target_w = max(2, min(width, int(round(width * max(0.01, min(1.0, _number(clip.get("w"), 1))))) // 2 * 2))
             target_h = max(2, min(height, int(round(height * max(0.01, min(1.0, _number(clip.get("h"), 1))))) // 2 * 2))
             x = int(round(max(0.0, min(1.0, _number(clip.get("x")))) * width))
@@ -184,7 +151,10 @@ def append_media_graph(
                 audio += f",afade=t=in:st=0:d={fade_in:.9f}"
             if fade_out:
                 audio += f",afade=t=out:st={length - fade_out:.9f}:d={fade_out:.9f}"
-            audio += f",adelay={round(start * 48000)}S:all=1,apad,atrim=duration={duration:.9f},asetpts=N/48000/TB[libaudio{index}]"
+            # Delay can emit leading silence before its first timestamped
+            # input frame. Establish the sample clock before a time-based trim
+            # can discard that padding and pull speech earlier in the edit.
+            audio += f",adelay={round(start * 48000)}S:all=1,asetpts=N/48000/TB,apad,atrim=duration={duration:.9f},asetpts=N/48000/TB[libaudio{index}]"
             filters.append(audio)
             audio_roles[role].append(f"[libaudio{index}]")
     buses: dict[str, str] = {}

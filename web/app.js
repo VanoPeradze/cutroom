@@ -1,10 +1,10 @@
 import { applyTranslations, dictionaries } from "./i18n.js?v=1.2-beta";
-import { TimelineView, formatTime, editableClips, timelineDuration, sequenceBlocks, sequenceGaps, rippleMoveStart } from "./timeline.js?v=1.2-beta-20261019";
+import { TimelineView, formatTime, editableClips, timelineDuration, sequenceBlocks, sequenceGaps, sequenceGapClosureIssue, rippleMoveStart } from "./timeline.js?v=1.2-beta-20261024-insertgaps1";
 import { MediaStudio } from "./media-studio.js?v=1.2-beta-20261019";
 import { StabilizationStudio } from "./stabilization-studio.js?v=1.2-beta";
 import { ChromaStudio } from "./chroma-studio.js?v=1.2-beta";
 import { ChromaPreview } from "./chroma-preview.js?v=1.2-beta";
-import { SourceReview } from "./source-review.js?v=1.2-beta-20261019";
+import { SourceReview } from "./source-review.js?v=1.2-beta-20261024-insertgaps1";
 import { initWorkspace } from "./workspace.js?v=1.2-beta-20261019";
 import { KEYBOARD_PROFILES, resolveEditorShortcut, isEditorTransportSpace, shortcutRows } from "./keyboard.js?v=1.2-beta";
 import { AudioThresholdView } from "./audio-meter.js?v=1.2-beta";
@@ -14,6 +14,9 @@ import { trackClips, trackAt, hasSourceTracks, SourceTimelineClock } from "./sou
 import { initTrackProtection } from "./track-protection.js?v=1.2-beta";
 import { TextStudio } from "./text-studio.js?v=1.2-beta-20261019";
 import { initNumericScrub } from "./numeric-scrub.js?v=1.2-beta";
+import { ReelProposalReview, supportsReelReview } from "./reel-proposals.js?v=20261022";
+import { CaptionAlternatives } from "./caption-alternatives.js?v=20261023";
+import { reviewEditingRequest } from "./request-review.js?v=20261023";
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -27,6 +30,9 @@ const state = {
   dictionary: null,
   activeJob: null,
   activeUploads: new Map(),
+  uploadStorage: new Map(),
+  analysisSnapshot: null,
+  directorOutcome: null,
   backgroundJobs: new Set(),
   modelInstallJob: null,
   modelInstallPending: false,
@@ -59,6 +65,7 @@ const state = {
   transcriptSaving: false,
   captionSelection: null,
   captionDirty: false,
+  captionAlternativesUI: null,
   captionStatus: "",
   manualEditBusy: false,
   manualEditPromise: null,
@@ -90,6 +97,13 @@ const elements = {};
 function editorProject(project = state.project) {
   const sequence = project?.editor_sequence;
   if (!sequence || project.__sequenceView) return project;
+  if (sequence.error || !sequence.sequence || !sequence.source_tracks) {
+    // Keep an opaque/invalid timeline openable without inventing legacy clips.
+    return { ...project, __sequenceView: true, __timelineUnavailable: true,
+      manual: { ...project.manual, sequence: { version: 1, duration: 0, camera_plan: [] },
+        source_tracks: { A: [], B: [] }, media_clips: [], text_clips: [] },
+      draft: { ...project.draft, keep_ranges: [], cuts: [], camera_plan: [], output_duration: 0, edit_points: [] } };
+  }
   return { ...project, __sequenceView: true,
     manual: { ...project.manual, sequence: sequence.sequence, source_tracks: sequence.source_tracks },
     draft: { ...project.draft, keep_ranges: sequence.duration > 0 ? [{start:0,end:sequence.duration}] : [], cuts: [],
@@ -97,6 +111,8 @@ function editorProject(project = state.project) {
 }
 
 function playbackProject() {
+  const view = editorProject();
+  if (view?.__timelineUnavailable) return view;
   if (!state.project?.editor_sequence || !previewUsesSourceTime()) return editorProject();
   const manual = { ...state.project.manual };
   delete manual.sequence; delete manual.source_tracks;
@@ -118,7 +134,7 @@ function cacheElements() {
     "projectsButton", "projectsDialog", "dialogProjects", "dialogNewProject", "newProjectButton", "homeButton",
     "advancedButton", "advancedPanel", "closeAdvanced", "studioPreviewDock", "studioDirectorDock", "studioRenderButton", "studioDraftStatus", "studioPanelFraming", "renderButton", "resultRenderButton", "setupPanel", "setupSourceMixerDock", "analysisPanel", "resultPanel", "resultGrid", "previewColumn", "verdictColumn",
     "sourceSlotA", "sourceSlotB", "sourceInputA", "sourceInputB", "cancelUploadA", "cancelUploadB", "audioCalibration", "audioMeterCanvas", "recommendedThreshold", "useRecommendedThreshold", "silenceThreshold", "silenceThresholdOut", "preSilenceMin", "preSilenceMinOut", "preSilenceKeep", "preSilenceKeepOut", "audioCutEstimate", "audioProfileSummary", "editStyleChoices", "editStyleNote", "goalChoices", "goalExplainer", "goalExplainerTitle", "goalExplainerText", "durationGroup", "targetDuration", "durationMode", "durationOutput", "paceChoices", "paceNote",
-    "directorInstruction", "allowExtractiveRoughCut", "readiness", "generateButton", "jobMessage", "jobProgress", "cancelJobButton", "analysisError", "analysisErrorTitle", "analysisErrorMessage", "retryDirectorButton", "backFromErrorButton", "draftTitle", "draftSummary", "draftEngineBadge",
+    "directorInstruction", "directorInstructionCounter", "uploadStorageInfo", "directorOutcomeNotice", "instructionResults", "instructionResultsTitle", "instructionResultsSummary", "instructionResultsList", "allowExtractiveRoughCut", "readiness", "generateButton", "jobMessage", "jobProgress", "cancelJobButton", "analysisError", "analysisErrorTitle", "analysisErrorMessage", "retryDirectorButton", "backFromErrorButton", "draftTitle", "draftSummary", "draftEngineBadge",
     "reelCandidates", "reelCandidatesTitle", "reelCandidateList", "draftWarning", "draftWarningText", "reviewSpeechSettings", "gameplayMoments",
     "beforeDuration", "afterDuration", "decisionCount", "decisionList", "previewStage", "previewA", "previewB", "previewPaneA", "previewPaneB", "previewPlay", "playButton",
     "previewTime", "previewSeek", "previewMode", "previewModeHint", "previewCaption", "restartPreview", "backToBriefButton", "timelineCanvas", "timelineScroll", "timelineFit", "timelineZoomOut",
@@ -228,6 +244,7 @@ function initializeMediaStudio() {
     chromaPreview: video => new ChromaPreview(video),
     project: () => state.project, audioPanel: document.getElementById("studioPanelAudio"), audioSlot: () => sourceMixerSettings().audioSlot, api, edit: applyManualEdit, pause: pauseAllMedia,
     time: previewTimelineTime, duration: editorDuration, flushSettings: flushProjectSaves,
+    uploadFile: uploadMediaAsset,
     busy: () => Boolean(state.activeJob || state.activeUploads.size || state.jobStartLocks.size || state.stabilizationStudio?.uploading
       || state.sourceSyncPending || (state.manualEditBusy && !state.mediaStudio?.saving)),
     preview: () => { updateMediaPreview(); state.timeline?.scheduleDraw(); },
@@ -364,6 +381,8 @@ function clearRememberedProject(projectId = null) {
 }
 
 function renderAllLocalizedContent() {
+  renderDirectorInstruction();
+  renderUploadStorage();
   renderReadiness();
   renderActiveJobBar();
   renderUploadLimits();
@@ -445,13 +464,74 @@ function validateUploadFile(file) {
       .replace("{file}", formatBytes(file.size))
       .replace("{limit}", formatBytes(limit));
   }
-  const free = Number(state.system?.limits?.disk_free_bytes || 0);
-  if (free && Number(file?.size || 0) + 1024 ** 3 > free) {
-    return t("notEnoughDisk")
-      .replace("{file}", formatBytes(file.size))
-      .replace("{free}", formatBytes(free));
-  }
   return null;
+}
+
+const DIRECTOR_INSTRUCTION_LIMIT = 8000;
+
+function renderDirectorInstruction() {
+  if (!elements.directorInstruction) return;
+  const hebrew = state.locale === "he";
+  const count = String(elements.directorInstruction.value || "").length;
+  elements.directorInstruction.maxLength = DIRECTOR_INSTRUCTION_LIMIT;
+  elements.directorInstruction.placeholder = hebrew
+    ? "לדוגמה: לשמור את ההסבר על המחיר ואת ההסתייגות שמגיעה אחריו."
+    : "Example: keep the pricing explanation and the qualification that follows it.";
+  elements.directorInstruction.setAttribute("aria-invalid", String(count > DIRECTOR_INSTRUCTION_LIMIT));
+  if (elements.directorInstructionCounter) {
+    elements.directorInstructionCounter.textContent = `${count.toLocaleString("en-US")} / 8,000 ${hebrew ? "תווים" : "characters"}`;
+    elements.directorInstructionCounter.setAttribute("dir", "auto");
+  }
+}
+
+function storagePlanText(plan) {
+  if (!Array.isArray(plan?.filesystems)) return "";
+  return plan.filesystems.map((filesystem) => {
+    const roles = (filesystem.roles || []).map((role) => role === "data" ? "Project data" : role === "temporary" ? "Temporary files" : role).join(" + ");
+    const locations=Array.isArray(filesystem.locations)?filesystem.locations.join(" · "):filesystem.location||filesystem.filesystem||"filesystem";
+    return `${roles} (${locations}): ${formatBytes(filesystem.disk_free_bytes)} free; ${formatBytes(filesystem.reserved_bytes||0)} reserved by other imports; ${formatBytes(filesystem.required_bytes)} estimated work + ${formatBytes(filesystem.reserve_bytes??plan.reserve_bytes??0)} safety reserve; ${formatBytes(filesystem.available_bytes)} available after reserve.`;
+  }).join("\n");
+}
+
+function rememberUploadStorage(upload, plan) {
+  if (!plan) return;
+  upload.storagePlan = plan;
+  state.uploadStorage.set(uploadStateKey(upload.projectId, upload.slot || "media"), {
+    projectId: upload.projectId, label: upload.slot || "Media", plan,
+  });
+  renderUploadStorage();
+}
+
+function renderUploadStorage() {
+  if (!elements.uploadStorageInfo) return;
+  const entries = [...state.uploadStorage.values()].filter((entry) => entry.projectId === state.project?.id);
+  elements.uploadStorageInfo.textContent = entries.map((entry) => `${entry.label}: ${storagePlanText(entry.plan)}`).join("\n");
+  elements.uploadStorageInfo.hidden = !elements.uploadStorageInfo.textContent;
+}
+
+function uploadStatusText(upload) {
+  if (upload.cancelRequested) return t("cancelling");
+  if (upload.phase === "checking") return "Checking storage";
+  if (upload.phase === "importing") return "Checking / importing";
+  return `Sending ${Math.round(Math.max(0, Math.min(1, Number(upload.progress) || 0)) * 100)}%`;
+}
+
+function uploadFailureMessage(error, file) {
+  const payload = error?.payload || {};
+  if (Number(error?.status) === 413 || error?.code === "file_too_large") {
+    const limit = Number(payload.max_upload_bytes);
+    return Number.isFinite(limit) && limit > 0
+      ? t("fileTooLarge").replace("{file}", formatBytes(file.size)).replace("{limit}", formatBytes(limit))
+      : error.message || "The file exceeds this import limit.";
+  }
+  if (Number(error?.status) === 507 || error?.code === "insufficient_storage") {
+    const free = Number(payload.disk_free_bytes);
+    const message = Number.isFinite(free)
+      ? t("notEnoughDisk").replace("{file}", formatBytes(file.size)).replace("{free}", formatBytes(free))
+      : String(error.message || "Insufficient storage for this import.");
+    return [message, storagePlanText(payload.storage_plan)].filter(Boolean).join("\n");
+  }
+  return error?.message || String(error);
 }
 
 function setStep(step) {
@@ -565,6 +645,8 @@ function bindEvents() {
     schedulePatch({ name: elements.projectName.value });
   });
   elements.directorInstruction.addEventListener("input", () => {
+    renderDirectorInstruction();
+    renderReadiness();
     scheduleSettingsPatch({ requiresRebuild: true, reason: "brief" });
   });
   elements.allowExtractiveRoughCut?.addEventListener("change", () => {
@@ -696,6 +778,21 @@ function bindEvents() {
   elements.reelCandidateList.addEventListener("click", async (event) => {
     const button = event.target.closest("button[data-candidate-id]");
     if (!button || button.disabled) return;
+    if (supportsReelReview(state.project)) {
+      const projectId = state.project.id;
+      if (!(await flushCurrentProjectSaves()) || state.project?.id !== projectId || foregroundBusy() || state.draftDirtyReasons.size) return;
+      pauseAllMedia();
+      const project = state.project;
+      const revision = project.revision;
+      const review = new ReelProposalReview({
+        project, candidateId: button.dataset.candidateId, api, copy: uiCopy, formatTime,
+        sourceUrl: sourceMediaUrl(project.sources.A),
+        isCurrent: () => state.project?.id === projectId && state.project.revision === revision && !foregroundBusy() && !state.draftDirtyReasons.size,
+        apply: proposal => applyManualEdit(proposal.kind === "unverified_source_candidate" ? "apply_review_candidate" : "apply_reel_candidate", {candidate_id: proposal.candidate_id, proposal_id: proposal.proposal_id}),
+      });
+      await review.open();
+      return;
+    }
     const updated = await applyManualEdit("apply_reel_candidate", { candidate_id: button.dataset.candidateId });
     if (updated) toast(uiCopy("חלופת ה־Reel נטענה וניתנת לביטול", "Reel alternative loaded — you can undo it"), "success", 2800);
   });
@@ -854,6 +951,19 @@ function bindEvents() {
   elements.sourceInsertForm.addEventListener("submit", insertSourceFootage);
   elements.emptyTimelineAdd.addEventListener("click", openSourceReview);
   document.getElementById("reviewSourceButton").addEventListener("click", openSourceReview);
+  for (const id of ["reviewLayoutCoverage", "reviewExportLayout"]) {
+    document.getElementById(id)?.addEventListener("click", reviewSourceTiming);
+  }
+  document.getElementById("reviewSharedSourceTiming")?.addEventListener("click", () => {
+    if (sourceMixerControlBusy()) return;
+    openStudioTab("framing");
+    const details = document.getElementById("sharedSourceTimingDetails"); if (details) details.open = true;
+    elements.sourceSyncOffset?.scrollIntoView({block:"center"});
+  });
+  document.getElementById("reviewIndependentSourceTiming")?.addEventListener("click", () => {
+    if (sourceMixerControlBusy()) return;
+    setEditTarget("B"); openSourceReview();
+  });
   document.getElementById("closeTimelineGaps").addEventListener("click", () => {
     const slot = activeEditTarget();
     applyManualEdit("sequence_close_gaps", slot === "edit" ? {} : {slot});
@@ -1104,7 +1214,7 @@ function showWorkspace() {
   elements.welcomeView.hidden = true;
   elements.workspaceView.hidden = false;
   elements.projectHead.hidden = false;
-  elements.renderButton.disabled = !state.project?.draft || foregroundBusy() || state.draftDirtyReasons.size > 0;
+  elements.renderButton.disabled = !state.project?.draft || Boolean(state.project?.editor_sequence?.error) || foregroundBusy() || state.draftDirtyReasons.size > 0;
 }
 
 async function createProject({ workflow = "short" } = {}) {
@@ -1201,6 +1311,7 @@ function hydrateSettings() {
   elements.durationMode.value = settings.duration_mode || "style";
   updateDurationControl(Number(settings.target_duration || 60));
   elements.directorInstruction.value = settings.instruction || "";
+  renderDirectorInstruction();
   if (elements.allowExtractiveRoughCut) elements.allowExtractiveRoughCut.checked = settings.allow_extractive_rough_cut === true;
   const embeddedOption = elements.layoutSelect.querySelector('option[value="embedded_stack"]');
   const hasSecondSource = Boolean(state.project.sources?.B);
@@ -1668,9 +1779,11 @@ function renderSources() {
     const uploadProgress = $(".source-upload", container);
     const uploadValue = Math.max(0, Math.min(1, Number(upload?.progress || 0)));
     uploadProgress.hidden = !upload;
-    uploadProgress.setAttribute("aria-valuenow", String(Math.round(uploadValue * 100)));
+    if (upload?.phase === "sending") uploadProgress.setAttribute("aria-valuenow", String(Math.round(uploadValue * 100)));
+    else uploadProgress.removeAttribute("aria-valuenow");
+    uploadProgress.setAttribute("aria-valuetext", upload ? uploadStatusText(upload) : "");
     $("span", uploadProgress).style.transform = `scaleX(${uploadValue})`;
-    $("b", uploadProgress).textContent = `${Math.round(uploadValue * 100)}%`;
+    $("b", uploadProgress).textContent = upload ? uploadStatusText(upload) : "";
     elements[`cancelUpload${slot}`].disabled = Boolean(upload?.cancelRequested);
     elements[`cancelUpload${slot}`].textContent = upload?.cancelRequested ? t("cancelling") : t("stopProcess");
     if (upload) container.setAttribute("aria-busy", "true"); else container.removeAttribute("aria-busy");
@@ -1699,6 +1812,7 @@ function renderSources() {
     }
   }
   renderReadiness();
+  renderUploadStorage();
   renderAudioCalibration();
   renderSourceMixer();
   if (state.project?.draft) {
@@ -1716,12 +1830,13 @@ function renderReadiness() {
   const audioSlot = sourceMixerSettings().audioSlot;
   const selectedAudioSource = state.project?.sources?.[audioSlot];
   const audioMeasured = state.project?.settings?.workflow === "manual" || !selectedAudioSource?.has_audio || Boolean(preAudioProfile());
-  const directorReady = ready && audioMeasured;
+  const instructionValid = String(elements.directorInstruction?.value || "").length <= DIRECTOR_INSTRUCTION_LIMIT;
+  const directorReady = ready && audioMeasured && instructionValid;
   const busy = foregroundBusy();
   elements.readiness.classList.toggle("ready", directorReady);
   elements.fpsSelect.disabled = busy;
   elements.exportFpsSelect.disabled = busy;
-  $("p", elements.readiness).textContent = !ready ? t("waitingForVideo") : !audioMeasured ? t("measuringAudio") : t("ready");
+  $("p", elements.readiness).textContent = !ready ? t("waitingForVideo") : !audioMeasured ? t("measuringAudio") : !instructionValid ? "Shorten the director instruction to 8,000 characters." : t("ready");
   elements.generateButton.disabled = !directorReady || busy;
   state.welcome?.updateProject(state.project);
   const renderDisabled = !state.project?.draft || !hasTimelineFootage() || busy || state.draftDirtyReasons.size > 0;
@@ -1751,7 +1866,9 @@ async function uploadSource(slot, file) {
   if (!state.project) await createProject();
   if (!state.project) return;
   const projectId = state.project.id;
+  const viewToken = state.projectViewToken;
   if (!(await flushCurrentProjectSaves())) return;
+  if (state.project?.id !== projectId || state.projectViewToken !== viewToken) return;
   if (uploadStartBlocked(projectId, slot)) {
     toast(uiCopy("כבר מתבצע תהליך אחר", "Another process is already running"));
     elements[`sourceInput${slot}`].value = "";
@@ -1762,7 +1879,9 @@ async function uploadSource(slot, file) {
     projectId,
     slot,
     uploadToken,
+    purpose: "source",
     fileName: file.name,
+    phase: "checking",
     progress: 0,
     cancelRequested: false,
     cancelConfirmed: false,
@@ -1780,23 +1899,24 @@ async function uploadSource(slot, file) {
   container.setAttribute("aria-busy", "true");
   progress.setAttribute("aria-valuenow", "0");
   bar.style.transform = "scaleX(0)";
-  label.textContent = "0%";
+  label.textContent = uploadStatusText(uploadState);
   renderReadiness();
   try {
     const payload = await uploadWithProgress(`/api/projects/${encodeURIComponent(projectId)}/sources/${slot}`, file, uploadToken, (value) => {
       if (state.activeUploads.get(uploadKey) !== uploadState) return;
       uploadState.progress = Math.max(0, Math.min(1, Number(value) || 0));
-      const percent = Math.round(value * 100);
       if (state.project?.id === projectId) {
         bar.style.transform = `scaleX(${value})`;
-        label.textContent = `${percent}%`;
-        progress.setAttribute("aria-valuenow", String(percent));
+        label.textContent = uploadStatusText(uploadState);
+        progress.setAttribute("aria-valuetext", uploadStatusText(uploadState));
+        if (uploadState.phase === "sending") progress.setAttribute("aria-valuenow", String(Math.round(uploadState.progress * 100)));
+        else progress.removeAttribute("aria-valuenow");
       }
       renderActiveJobBar();
     }, (xhr) => {
       uploadState.xhr = xhr;
       if (uploadState.cancelRequested) xhr.abort();
-    });
+    }, uploadState);
     // The upload response and the cancel request can cross on different local
     // server threads. Never publish a successful source/toast after the user has
     // already asked to cancel it; wait for the authoritative cancellation result.
@@ -1811,6 +1931,10 @@ async function uploadSource(slot, file) {
     } catch (_error) {
       // The upload response is still a durable fallback. A parallel slot upload
       // will reconcile the project again when it finishes.
+    }
+    if (uploadState.cancelRequested) {
+      await uploadState.cancelPromise;
+      return;
     }
     rememberProjectRevision(authoritativeProject);
     if (!authoritativeProject?.draft) clearDraftRebuild(projectId);
@@ -1828,21 +1952,22 @@ async function uploadSource(slot, file) {
     }
     loadProjects().catch(() => {});
     loadSystem().catch(() => {});
-    toast(`${slot}: ${file.name}`, "success");
+    toast(`Ready: ${slot} · ${file.name}`, "success");
   } catch (error) {
     if (error?.name === "AbortError") {
       if (uploadState.cancelRequested) await uploadState.cancelPromise;
       else toast(t("localUploadInterrupted"));
     }
-    else toast(`${t("uploadFailed")}: ${error.message}`);
+    else toast(`${t("uploadFailed")}: ${uploadFailureMessage(error, file)}`);
   } finally {
-    if (state.activeUploads.get(uploadKey) === uploadState) state.activeUploads.delete(uploadKey);
-    if (state.project?.id === projectId) {
+    const currentAttempt = state.activeUploads.get(uploadKey) === uploadState;
+    if (currentAttempt) state.activeUploads.delete(uploadKey);
+    if (currentAttempt && state.project?.id === projectId) {
       progress.hidden = true;
       container.removeAttribute("aria-busy");
       progress.setAttribute("aria-valuenow", "0");
     }
-    elements[`sourceInput${slot}`].value = "";
+    if (currentAttempt) elements[`sourceInput${slot}`].value = "";
     renderReadiness();
   }
   if (state.project?.id === projectId) {
@@ -1851,43 +1976,123 @@ async function uploadSource(slot, file) {
   }
 }
 
-function uploadWithProgress(url, file, uploadToken, onProgress, onRequest = null) {
+function uploadAbortError() {
+  const error = new Error(t("uploadCancelled"));
+  error.name = "AbortError";
+  return error;
+}
+
+function sendUploadChunk(url, chunk, offset, upload, onProgress, onRequest) {
   return new Promise((resolve, reject) => {
+    if (upload.cancelRequested) { reject(uploadAbortError()); return; }
     const xhr = new XMLHttpRequest();
-    xhr.open("POST", url);
+    xhr.open("PUT", url);
     xhr.responseType = "json";
-    xhr.setRequestHeader("X-Cutroom-Upload-Token", uploadToken);
-    onRequest?.(xhr);
+    xhr.setRequestHeader("Content-Type", "application/octet-stream");
+    xhr.setRequestHeader("X-Cutroom-Upload-Token", upload.uploadToken);
+    xhr.setRequestHeader("X-Cutroom-Upload-Offset", String(offset));
     xhr.upload.addEventListener("progress", (event) => {
-      if (event.lengthComputable) onProgress(event.loaded / event.total);
+      if (event.lengthComputable && !upload.cancelRequested) onProgress(offset + Math.min(chunk.size, event.loaded));
     });
     xhr.addEventListener("load", () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        resolve(xhr.response);
-        return;
-      }
-      if (xhr.status === 413 || xhr.response?.error === "file_too_large") {
-        reject(new Error(t("fileTooLarge")
-          .replace("{file}", formatBytes(file.size))
-          .replace("{limit}", formatBytes(maxUploadBytes()))));
-        return;
-      }
-      if (xhr.status === 507 || xhr.response?.error === "insufficient_storage") {
-        reject(new Error(t("notEnoughDisk")
-          .replace("{file}", formatBytes(file.size))
-          .replace("{free}", formatBytes(state.system?.limits?.disk_free_bytes || 0))));
-        return;
-      }
-      reject(new Error(xhr.response?.message || `HTTP ${xhr.status}`));
+      if (xhr.status >= 200 && xhr.status < 300) resolve(xhr.response);
+      else reject(new ApiError(xhr.response?.message || `HTTP ${xhr.status}`, xhr.status, xhr.response?.error, xhr.response));
     });
     xhr.addEventListener("error", () => reject(new Error(t("localUploadInterrupted"))));
-    xhr.addEventListener("abort", () => {
-      const error = new Error(t("uploadCancelled"));
-      error.name = "AbortError";
-      reject(error);
-    });
-    const data = new FormData(); data.append("file", file, file.name); xhr.send(data);
+    xhr.addEventListener("abort", () => reject(uploadAbortError()));
+    onRequest?.(xhr);
+    if (upload.cancelRequested) { reject(uploadAbortError()); return; }
+    xhr.send(chunk);
   });
+}
+
+async function uploadWithProgress(url, file, uploadToken, onProgress, onRequest = null, upload = null) {
+  const route = url.match(/^\/api\/projects\/([^/]+)\/(?:sources\/([AB])|assets)$/);
+  if (!route) throw new Error("Unsupported import destination");
+  upload ||= { projectId: decodeURIComponent(route[1]), slot: route[2] || null, uploadToken, purpose: route[2] ? "source" : "asset" };
+  const validationError = validateUploadFile(file);
+  if (validationError) throw new Error(validationError);
+  const notify = (phase, progress = upload.progress || 0) => {
+    upload.phase = phase;
+    upload.progress = Math.max(0, Math.min(1, progress));
+    onProgress?.(upload.progress, upload);
+  };
+  let admitted = false;
+  let committed = false;
+  try {
+    notify("checking", 0);
+    const preflight = await api(`/api/projects/${route[1]}/uploads/preflight`, {
+      method: "POST", body: JSON.stringify({ purpose: upload.purpose, slot: upload.slot || undefined,
+        filename: file.name, size_bytes: file.size, upload_token: uploadToken }),
+    });
+    admitted = true;
+    rememberUploadStorage(upload, preflight.storage_plan);
+    if (preflight.upload_token !== uploadToken || !preflight.upload_url || !preflight.cancel_url) throw new Error("The import reservation did not match this upload attempt.");
+    upload.cancelUrl = preflight.cancel_url;
+    if (upload.cancelRequested) {
+      // A stop may precede the admission reply. Release this reservation before
+      // returning, without allowing the next chunk or finalization to start.
+      await api(upload.cancelUrl, { method: "POST", body: "{}" });
+      upload.cancelConfirmed = true;
+      throw uploadAbortError();
+    }
+    const chunkSize = Number(preflight.chunk_size_bytes);
+    if (!Number.isSafeInteger(chunkSize) || chunkSize <= 0) throw new Error("The import chunk size is invalid.");
+    notify("sending", 0);
+    for (let offset = 0; offset < file.size;) {
+      if (upload.cancelRequested) throw uploadAbortError();
+      const chunk = file.slice(offset, Math.min(file.size, offset + chunkSize));
+      const result = await sendUploadChunk(preflight.upload_url, chunk, offset, upload,
+        (sent) => notify("sending", sent / Math.max(1, file.size)), onRequest);
+      const received = Number(result?.received_bytes);
+      if (received !== offset + chunk.size) throw new Error("The server did not confirm the complete upload chunk.");
+      offset = received;
+      notify("sending", offset / Math.max(1, file.size));
+    }
+    if (upload.cancelRequested) throw uploadAbortError();
+    notify("importing", 1);
+    const result = await api(url, { method: "POST", body: "{}", headers: {
+      "X-Cutroom-Upload-Transport": "chunked-v1", "X-Cutroom-Upload-Token": uploadToken,
+    } });
+    committed = true;
+    if (upload.cancelRequested && upload.purpose === "asset") return { ...result, import_stop_too_late: true };
+    if (upload.cancelRequested) throw uploadAbortError();
+    return result;
+  } catch (error) {
+    rememberUploadStorage(upload, error?.payload?.storage_plan);
+    if (admitted && !committed && upload.cancelUrl) {
+      await api(upload.cancelUrl, { method: "POST", body: "{}" }).catch(() => {});
+    }
+    if (upload.cancelRequested) throw uploadAbortError();
+    throw error;
+  }
+}
+
+async function uploadMediaAsset(file, projectId, onStatus) {
+  const uploadToken = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const upload = { projectId, purpose: "asset", uploadToken, fileName: file.name, progress: 0, phase: "checking", cancelRequested: false,
+    cancelUrl: `/api/projects/${encodeURIComponent(projectId)}/uploads/${encodeURIComponent(uploadToken)}/cancel` };
+  const key = `${projectId}:asset:${uploadToken}`;
+  state.activeUploads.set(key, upload);
+  const report = () => {
+    if (state.project?.id === projectId) onStatus?.(uploadStatusText(upload), storagePlanText(upload.storagePlan));
+    renderActiveJobBar();
+  };
+  renderReadiness();
+  try {
+    return await uploadWithProgress(`/api/projects/${encodeURIComponent(projectId)}/assets`, file, uploadToken, report,
+      (xhr) => { upload.xhr = xhr; }, upload);
+  } catch (error) {
+    if (upload.cancelRequested) await upload.cancelPromise;
+    report();
+    if (error?.name === "AbortError") throw error;
+    const formatted = new Error(uploadFailureMessage(error, file));
+    formatted.cause = error;
+    throw formatted;
+  } finally {
+    if (state.activeUploads.get(key) === upload) state.activeUploads.delete(key);
+    renderReadiness();
+  }
 }
 
 function cancelUpload(slot = null) {
@@ -1910,7 +2115,8 @@ function cancelUpload(slot = null) {
 
 async function requestUploadCancellation(upload) {
   const payload = await api(
-    `/api/projects/${encodeURIComponent(upload.projectId)}/sources/${encodeURIComponent(upload.slot)}/uploads/${encodeURIComponent(upload.uploadToken)}/cancel`,
+    upload.purpose === "asset" ? upload.cancelUrl
+      : `/api/projects/${encodeURIComponent(upload.projectId)}/sources/${encodeURIComponent(upload.slot)}/uploads/${encodeURIComponent(upload.uploadToken)}/cancel`,
     { method: "POST" },
   );
   upload.cancelConfirmed = Boolean(payload?.cancelled);
@@ -1926,7 +2132,7 @@ async function requestUploadCancellation(upload) {
     if (Number(error?.status) !== 404) console.warn("Upload cancellation reconciliation failed", error);
   }
   loadProjects().catch(() => {});
-  toast(t("uploadCancelled"), "success", 2600);
+  if (upload.cancelConfirmed && upload.purpose !== "asset") toast(t("uploadCancelled"), "success", 2600);
   return payload;
 }
 
@@ -1978,6 +2184,8 @@ function currentSettings() {
     target_duration: Number(elements.targetDuration.value),
     duration_mode: elements.durationMode?.value || "style",
     instruction: elements.directorInstruction.value.trim(),
+    output_count: state.project?.settings?.output_count ?? 1,
+    source_continuity: state.project?.settings?.source_continuity || "unspecified",
     allow_extractive_rough_cut: elements.allowExtractiveRoughCut?.checked === true,
     aspect: elements.aspectSelect.value,
     layout: elements.layoutSelect.value,
@@ -2207,9 +2415,9 @@ function renderActiveJobBar(job = null) {
   const uploads = activeUploadsForProject();
   const uploadSnapshot = uploads.length ? {
     progress: uploads.reduce((total, upload) => total + Number(upload.progress || 0), 0) / uploads.length,
-    message: `${t("preparing")}: ${uploads.map((upload) => `${upload.slot} · ${upload.fileName}`).join(" + ")}`,
+    message: uploads.map((upload) => `${upload.slot || "Media"}: ${uploadStatusText(upload)} · ${upload.fileName}`).join(" + "),
   } : null;
-  const snapshot = job || state.activeJobSnapshot || uploadSnapshot;
+  const snapshot = job || uploadSnapshot || state.activeJobSnapshot;
   const pendingStart = !state.activeJob && [...state.jobStartLocks].some((item) => !String(item).startsWith("recover:"));
   const visible = Boolean(state.activeJob || uploads.length || pendingStart);
   elements.activeJobBar.hidden = !visible;
@@ -2274,7 +2482,7 @@ function clearActiveJob(jobId = null) {
   renderReadiness();
 }
 
-async function reconcileDirectorOutcome(projectId, message, { cancelled = false } = {}) {
+async function reconcileDirectorOutcome(projectId, error, { cancelled = false } = {}) {
   if (state.project?.id !== projectId) return false;
   try {
     const latest = await api(`/api/projects/${encodeURIComponent(projectId)}`);
@@ -2287,15 +2495,23 @@ async function reconcileDirectorOutcome(projectId, message, { cancelled = false 
   }
   if (state.project?.id !== projectId) return false;
   if (state.project?.draft) {
+    if (!cancelled) state.directorOutcome = directorOutcomeDescription(error);
     hydrateProject();
+    if (!cancelled) toast(`${state.directorOutcome.title}: ${state.directorOutcome.message}`, "info", 6500);
     return true;
   }
   if (cancelled) showSetup();
-  else showAnalysisError(message);
+  else showAnalysisError(error);
   return false;
 }
 
 async function generateDraft() {
+  if (String(elements.directorInstruction?.value || "").length > DIRECTOR_INSTRUCTION_LIMIT) {
+    renderDirectorInstruction();
+    toast("Shorten the director instruction to 8,000 characters.");
+    elements.directorInstruction?.focus();
+    return;
+  }
   if (state.textStudio && !(await state.textStudio.flush())) return;
   if (state.mediaStudio && !(await state.mediaStudio.flush())) return;
   if (!requireSavedTranscript()) return;
@@ -2307,6 +2523,24 @@ async function generateDraft() {
   const viewToken = state.projectViewToken;
   if (liveEmbeddedCameraRequest()
     && (!(await flushEmbeddedCameraSave(projectId)) || state.project?.id !== projectId || state.projectViewToken !== viewToken)) return;
+  if(state.requestReviewBusy || foregroundBusy())return;
+  state.requestReviewBusy=true;
+  let reviewed, reviewedRevision;
+  try {
+    await flushProjectSaves(projectId);
+    assertJobStartNotCancelled();
+    if(state.project?.id!==projectId || state.projectViewToken!==viewToken)return;
+    const revision=state.project.revision, originalSettings=JSON.stringify(currentSettings());
+    reviewedRevision=revision;
+    reviewed=await reviewEditingRequest({settings:currentSettings(),styles:state.system?.edit_styles||[],projectId,revision,
+      isCurrent:()=>state.project?.id===projectId&&state.projectViewToken===viewToken&&state.project.revision===revision&&JSON.stringify(currentSettings())===originalSettings,
+      check:settings=>api(`/api/projects/${encodeURIComponent(projectId)}/director/request-review`,{method:"POST",body:JSON.stringify(settings)})});
+  } catch(error){
+    if(error.message==="Cancelled" && !state.activeJob)state.cancelBeforeStart=false;
+    toast(error.message);return;
+  }
+  finally{state.requestReviewBusy=false;}
+  if(!reviewed || state.project?.id!==projectId || state.projectViewToken!==viewToken)return;
   const lock = acquireJobStartLock("director", projectId);
   if (!lock) {
     toast(t("directorBusy"));
@@ -2318,15 +2552,20 @@ async function generateDraft() {
     await flushProjectSaves(projectId);
     assertJobStartNotCancelled();
     if (state.project?.id !== projectId || state.projectViewToken !== viewToken) throw new Error("Cancelled");
-    const settings = currentSettings();
+    if(state.project.revision!==reviewedRevision)throw new Error("The project changed after request review. Review again; the current edit was kept.");
+    const settings = reviewed;
     await ensureStoryAIReady(settings.goal);
     assertJobStartNotCancelled();
     if (state.project?.id !== projectId || state.projectViewToken !== viewToken) throw new Error("Cancelled");
-    const payload = await api(`/api/projects/${encodeURIComponent(projectId)}/director`, { method: "POST", body: JSON.stringify(settings) });
+    if(state.project.revision!==reviewedRevision)throw new Error("The project changed after request review. Review again; the current edit was kept.");
+    const payload = await api(`/api/projects/${encodeURIComponent(projectId)}/director`, {
+      method: "POST", headers: {"X-Cutroom-Reviewed-Revision": String(reviewedRevision)},
+      body: JSON.stringify(settings),
+    });
     await pollJob(payload.job.id, { director: true, projectId });
   } catch (error) {
     if (state.project?.id === projectId) {
-      await reconcileDirectorOutcome(projectId, error.message, { cancelled: error.message === "Cancelled" });
+      await reconcileDirectorOutcome(projectId, error, { cancelled: error.message === "Cancelled" });
     }
   } finally {
     if (!state.activeJob) state.cancelBeforeStart = false;
@@ -2394,8 +2633,7 @@ async function refineDraft(command) {
       toast(t(changed ? "anotherCutReady" : "anotherCutUnchanged"), changed ? "success" : "info", 4000);
     }
   } catch (error) {
-    if (error.message !== "Cancelled") toast(`${t("directorFailed")}: ${error.message}`);
-    if (state.project?.id === projectId) showResult();
+    if (state.project?.id === projectId) await reconcileDirectorOutcome(projectId, error, { cancelled: error.message === "Cancelled" });
   } finally {
     if (!state.activeJob) state.cancelBeforeStart = false;
     releaseJobStartLock(lock);
@@ -2413,11 +2651,14 @@ function showSetup() {
   elements.setupPanel.hidden = false;
   elements.analysisPanel.hidden = true;
   elements.resultPanel.hidden = true;
-  elements.renderButton.disabled = !state.project?.draft || foregroundBusy() || state.draftDirtyReasons.size > 0;
+  elements.renderButton.disabled = !state.project?.draft || Boolean(state.project?.editor_sequence?.error) || foregroundBusy() || state.draftDirtyReasons.size > 0;
   renderReadiness();
+  renderReelCandidates();
 }
 
 function showAnalysis() {
+  state.analysisSnapshot = null;
+  state.directorOutcome = null;
   const sourceContext = document.getElementById("analysisSources");
   if (sourceContext) sourceContext.textContent = Object.entries(state.project?.sources || {}).filter(([, source]) => source).map(([slot, source]) => `${slot} · ${source.name || "Recording"}\n${formatTime(source.duration || 0)}`).join("\n\n");
   pauseAllMedia();
@@ -2476,18 +2717,50 @@ function friendlyDirectorError(message) {
   return clean || uiCopy("אירעה שגיאה מקומית בזמן בניית העריכה.", "A local error occurred while building the edit.");
 }
 
-function showAnalysisError(message) {
-  showAnalysis();
+function directorOutcomeDescription(error) {
+  const job = error?.job || (error?.status && typeof error.status === "string" ? error : null);
+  const failure = job?.failure || error?.failure || error?.payload?.failure || {};
+  const outcome = failure.outcome || "technical_error";
+  const message = typeof error === "string" ? error : error?.message || job?.error || job?.message || "";
+  const detail = String(message || "").trim() ? friendlyDirectorError(message) : "";
+  const descriptions = {
+    editorial_no_fit: { title: "No suitable story found", message: `${detail || "Story review finished without a suitable cut for this brief."} Review the source or adjust the brief and target length.` },
+    constraint_conflict: { title: "The brief has conflicting requirements", message: `${detail || "The requested requirements could not be satisfied together."} Review the instruction and requested length, then try again.` },
+    invalid_model_output: { title: "Story AI returned an unusable response", message: "The response could not be validated. Completed transcript and context work may be reused when you retry." },
+    technical_error: { title: "The edit stopped before completion", message: friendlyDirectorError(message) },
+  };
+  const description = descriptions[outcome] || descriptions.technical_error;
+  const issues = failure.instruction_contract?.issues || failure.instruction_contract?.conflicts || [];
+  const reasons = issues.map((issue) => String(issue.reason || issue.message || "").trim()).filter(Boolean);
+  return { ...description, outcome, job, projectId: job?.project_id || state.project?.id, contract: failure.instruction_contract,
+    message: [description.message, ...reasons].join(" ") };
+}
+
+function showAnalysisError(error) {
+  const description = directorOutcomeDescription(error);
+  const snapshot = description.job || state.analysisSnapshot;
+  // A terminal outcome keeps the last observed stage. Re-entering showAnalysis
+  // here would reset progress and falsely restart the transcription indicator.
+  pauseAllMedia();
+  setStep(2);
+  elements.setupPanel.hidden = true;
+  elements.resultPanel.hidden = true;
+  elements.analysisPanel.hidden = false;
+  if (snapshot) updateJobUI({ ...snapshot, status: snapshot.status || "failed" });
+  $$(".analysis-checks li").forEach((item) => item.classList.remove("active"));
+  const message = typeof error === "string" ? error : error?.message || description.job?.error || "";
   const transcriptProblem = /transcript quality is too low|too little usable speech|language confidence|very long hallucinated segment|needs reliable speech/i.test(String(message || ""));
   elements.analysisPanel.classList.add("failed");
-  elements.jobMessage.textContent = uiCopy("העריכה לא הושלמה", "The edit was not completed");
+  elements.analysisPanel.dataset.outcome = description.outcome;
+  elements.jobMessage.textContent = description.title;
   elements.analysisErrorTitle.textContent = transcriptProblem
     ? uiCopy("הסגנון הזה צריך דיבור ברור", "This style needs clear speech")
-    : uiCopy("העריכה נעצרה לפני הסיום", "The edit stopped before completion");
-  elements.analysisErrorMessage.textContent = friendlyDirectorError(message);
+    : description.title;
+  elements.analysisErrorMessage.textContent = description.message;
   elements.analysisError.hidden = false;
   elements.cancelJobButton.hidden = true;
-  toast(`${t("directorFailed")}: ${friendlyDirectorError(message)}`);
+  renderReelCandidates();
+  toast(`${description.title}: ${description.message}`, description.outcome === "technical_error" ? "error" : "info");
 }
 
 function showResult() {
@@ -2497,7 +2770,7 @@ function showResult() {
   elements.setupPanel.hidden = true;
   elements.analysisPanel.hidden = true;
   elements.resultPanel.hidden = false;
-  elements.renderButton.disabled = foregroundBusy() || state.draftDirtyReasons.size > 0;
+  elements.renderButton.disabled = Boolean(state.project?.editor_sequence?.error) || foregroundBusy() || state.draftDirtyReasons.size > 0;
   renderDraft();
   setAdvanced(true);
 }
@@ -2668,9 +2941,9 @@ function renderAiDraftNotice() {
   const text = notice.querySelector("p"); if (text) text.textContent = t("aiDraftKept");
   const button = document.getElementById("applyAiDraftButton");
   if (button) { button.textContent = t("aiDraftApply"); button.disabled = state.manualEditBusy || foregroundBusy() || state.draftDirtyReasons.size > 0; }
-  const host = state.studio.open ? elements.advancedPanel?.querySelector(".studio-header") : elements.resultPanel;
+  const host = state.studio.open ? elements.advancedPanel?.querySelector(".advanced-content") : elements.resultPanel;
   if (!notice.hidden && host && notice.parentElement !== host) {
-    if (state.studio.open) host.appendChild(notice); else host.insertBefore(notice, host.firstChild);
+    host.insertBefore(notice, host.firstChild);
   }
 }
 
@@ -2751,11 +3024,15 @@ async function recoverActiveJobs(projectId, viewToken) {
           const notice = directorCompletionNotice(latestDirector, preserved);
           toast(notice.message, notice.kind);
         } catch (error) {
-          showAnalysisError(error.message);
+          showAnalysisError(error);
         }
-      } else if (["failed", "interrupted"].includes(latestDirector?.status) && !state.project?.draft && !state.reportedFailedJobs.has(latestDirector.id)) {
+      } else if (["failed", "interrupted"].includes(latestDirector?.status) && !state.reportedFailedJobs.has(latestDirector.id)) {
         state.reportedFailedJobs.add(latestDirector.id);
-        showAnalysisError(latestDirector.error || latestDirector.message);
+        if (state.project?.draft) {
+          state.directorOutcome = directorOutcomeDescription(latestDirector);
+          renderDirectorOutcomeNotice();
+          renderInstructionResults();
+        } else showAnalysisError(latestDirector);
       }
       return;
     }
@@ -2767,7 +3044,7 @@ async function recoverActiveJobs(projectId, viewToken) {
     showAnalysis();
     pollJob(foreground.id, { director: true, projectId, resumed: true }).catch(async (error) => {
       if (state.project?.id !== projectId) return;
-      await reconcileDirectorOutcome(projectId, error.message, { cancelled: error.message === "Cancelled" });
+      await reconcileDirectorOutcome(projectId, error, { cancelled: error.message === "Cancelled" });
     });
   } finally {
     state.jobStartLocks.delete(recoveryLock);
@@ -2870,7 +3147,24 @@ async function pollJob(jobId, options = {}) {
         return true;
       }
       if (["failed", "interrupted"].includes(job.status)) {
-        finishWithError(new Error(job.error || (job.status === "interrupted" ? "Job interrupted by restart" : "Job failed")));
+        const error = new Error(job.error || (job.status === "interrupted" ? "Job interrupted by restart" : "Job failed"));
+        if (options.director && job.project_id && state.project?.id === job.project_id) {
+          try {
+            const payload = await api(`/api/projects/${encodeURIComponent(job.project_id)}`);
+            if (state.project?.id === job.project_id) {
+              state.project = reconcileProjectSnapshot(payload.project);
+              rememberProjectRevision(state.project);
+              hydrateProject();
+              const shelf = state.project.analysis?.review_candidates;
+              if (shelf?.revision === state.project.revision && shelf.items?.length) {
+                error.message = uiCopy("לא אושרה עריכה אוטומטית. זמינות הצעות מקור לסקירה; העריכה הקיימת נשמרה.", "No automatic edit was approved. Source proposals are available for review; your current edit was kept.");
+              }
+            }
+          } catch (refreshError) { console.warn("Source proposal refresh failed", refreshError); }
+        }
+        error.job = job;
+        error.failure = job.failure;
+        finishWithError(error);
         return true;
       }
       if (job.status === "cancelled") {
@@ -2931,6 +3225,7 @@ async function pollJob(jobId, options = {}) {
 }
 
 function updateJobUI(job) {
+  state.analysisSnapshot = job;
   const value = Number(job.progress || 0);
   const progress = Math.round(value * 100);
   const cancelling = jobCancellationRequested(job);
@@ -2946,7 +3241,8 @@ function updateJobUI(job) {
     const threshold = Number(item.dataset.threshold);
     const nextThreshold = index + 1 < items.length ? Number(items[index + 1].dataset.threshold) : 1.01;
     item.classList.toggle("done", job.kind !== "model_install" && value >= nextThreshold);
-    item.classList.toggle("active", !cancelling && (job.kind === "model_install" ? index === 0 : value >= threshold && value < nextThreshold));
+    item.classList.toggle("active", !cancelling && !["completed", "failed", "cancelled", "interrupted"].includes(job.status)
+      && (job.kind === "model_install" ? index === 0 : value >= threshold && value < nextThreshold));
   });
   renderActiveJobBar(job);
 }
@@ -2994,6 +3290,8 @@ function renderDraft() {
   const draft = editorProject().draft;
   elements.draftTitle.textContent = draft.title || state.project.name;
   elements.draftSummary.textContent = draft.summary || "";
+  renderDirectorOutcomeNotice();
+  renderInstructionResults();
   const hierarchy = state.project.analysis?.story_hierarchy;
   const engineLabel = draft.engine === "ollama_hierarchical_story"
     ? `Story AI · ${hierarchy?.model || state.system?.models?.editor_model || "local model"}`
@@ -3021,14 +3319,86 @@ function renderDraft() {
   seekPreview(firstKeptTime());
 }
 
+function renderDirectorOutcomeNotice() {
+  if (!elements.directorOutcomeNotice) return;
+  const outcome = state.directorOutcome;
+  const visible = outcome && outcome.projectId === state.project?.id;
+  elements.directorOutcomeNotice.hidden = !visible;
+  elements.directorOutcomeNotice.textContent = visible
+    ? `${outcome.title}. ${outcome.message} Your existing edit was kept.` : "";
+  if (outcome) elements.directorOutcomeNotice.dataset.outcome = outcome.outcome;
+  const host = state.studio.open ? elements.advancedPanel?.querySelector(".advanced-content") : elements.resultPanel;
+  if (visible && host && elements.directorOutcomeNotice.parentElement !== host) {
+    host.insertBefore(elements.directorOutcomeNotice, host.firstChild);
+  }
+}
+
+function renderInstructionResults() {
+  if (!elements.instructionResults || !elements.instructionResultsList) return;
+  const contract = (state.directorOutcome?.projectId === state.project?.id ? state.directorOutcome.contract : null) || state.project?.draft?.instruction_contract
+    || state.project?.analysis?.instruction_contract || state.project?.analysis?.story_hierarchy?.instruction_contract;
+  const requirements = Array.isArray(contract?.requirements) ? contract.requirements : [];
+  elements.instructionResults.hidden = !requirements.length;
+  elements.instructionResultsList.replaceChildren();
+  if (!requirements.length) return;
+  const hebrew = state.locale === "he";
+  elements.instructionResultsTitle.textContent = hebrew ? "בדיקת הוראות הבימוי" : "Director instruction check";
+  elements.instructionResultsSummary.textContent = hebrew
+    ? "המצב מוצג לכל בקשה בנפרד. בקשות שלא אומתו דורשות בדיקה שלך."
+    : "Each requirement has its own result. Unverified requests need your review.";
+  if (contract.verification_scope === "proposed_director_draft") {
+    elements.instructionResultsSummary.textContent += hebrew
+      ? " הבדיקה מתייחסת לטיוטת הבימוי המוצעת. אם שמרת שינויים ידניים, יש לבדוק את ציר הזמן הנוכחי."
+      : " Scope: proposed Director draft. Review the current timeline if you kept manual changes.";
+  }
+  const labels = hebrew
+    ? { fulfilled: "מולא", not_fulfilled: "לא מולא", unverified: "לא אומת" }
+    : { fulfilled: "Fulfilled", not_fulfilled: "Not fulfilled", unverified: "Unverified" };
+  for (const requirement of requirements) {
+    const item = document.createElement("li");
+    const status = ["fulfilled", "not_fulfilled", "unverified"].includes(requirement.status) ? requirement.status : "unverified";
+    item.dataset.status = status;
+    item.dir = "auto";
+    const label = document.createElement("b");
+    label.textContent = labels[status];
+    const text = document.createElement("p");
+    text.dir = "auto";
+    text.textContent = String(requirement.text || requirement.kind || requirement.id || "");
+    const reason = document.createElement("small");
+    reason.dir = "auto";
+    reason.textContent = String(requirement.reason || "");
+    item.append(label, text, reason);
+    elements.instructionResultsList.append(item);
+  }
+}
+
 function renderReelCandidates() {
   if (!elements.reelCandidates || !elements.reelCandidateList) return;
   const draft = state.project?.draft;
-  const candidates = Array.isArray(draft?.reel_candidates) ? draft.reel_candidates : [];
-  elements.reelCandidates.hidden = candidates.length < 2;
+  const shelf = state.project?.analysis?.review_candidates;
+  const needsReview = shelf?.revision === state.project?.revision && Array.isArray(shelf?.items) ? shelf.items : [];
+  const reviewRedo = !draft && Number(state.project?.manual?.history?.redo_count || 0) > 0;
+  if (!state.reelCandidateHome) state.reelCandidateHome = {parent: elements.reelCandidates.parentNode, next: elements.reelCandidates.nextSibling};
+  if ((needsReview.length || reviewRedo) && (!draft || !elements.analysisPanel.hidden)) {
+    const host = !elements.analysisPanel.hidden && !elements.analysisError.hidden ? elements.analysisError : elements.setupPanel;
+    host.append(elements.reelCandidates);
+  } else if (elements.reelCandidates.parentNode !== state.reelCandidateHome.parent) {
+    state.reelCandidateHome.parent.insertBefore(elements.reelCandidates, state.reelCandidateHome.next);
+  }
+  const candidates = [...(Array.isArray(draft?.reel_candidates) ? draft.reel_candidates : []), ...needsReview];
+  elements.reelCandidates.hidden = needsReview.length || reviewRedo ? false : candidates.length < 2;
   elements.reelCandidateList.replaceChildren();
-  if (candidates.length < 2) return;
-  elements.reelCandidatesTitle.textContent = uiCopy("כמה עריכות מאותו ניתוח", "Several edits from one analysis");
+  if (reviewRedo) {
+    elements.reelCandidatesTitle.textContent = uiCopy("היסטוריית עריכה", "Edit history");
+    const redo = document.createElement("button");
+    redo.type = "button"; redo.className = "button ghost compact";
+    redo.textContent = uiCopy("החזר את בחירת הסקירה", "Redo reviewed selection");
+    redo.disabled = state.manualEditBusy || foregroundBusy();
+    redo.addEventListener("click", () => applyManualEdit("redo"));
+    elements.reelCandidateList.append(redo);
+  }
+  if (!candidates.length || (!needsReview.length && candidates.length < 2)) return;
+  elements.reelCandidatesTitle.textContent = needsReview.length ? uiCopy("הצעות מקור — נדרשת סקירה", "Source proposals — review required") : uiCopy("כמה עריכות מאותו ניתוח", "Several edits from one analysis");
   const labels = {
     director_pick: uiCopy("בחירת ה־Director", "Director's pick"),
     focused_moment: uiCopy("רגע ממוקד", "Focused moment"),
@@ -3050,7 +3420,7 @@ function renderReelCandidates() {
     const visual = Number.isFinite(action) && action >= 50 ? ` · ${uiCopy("אקשן על המסך", "On-screen action")} ${Math.round(action)}` : "";
     return ` · ${energyLabels[signals.energy]}${reactions ? ` · ${reactions} ${uiCopy("תגובות", reactions === 1 ? "reaction" : "reactions")}` : ""}${visual}`;
   };
-  const activeId = String(draft.active_reel_candidate || "director_pick");
+  const activeId = String(draft?.active_reel_candidate || "director_pick");
   for (const candidate of candidates) {
     const id = String(candidate.id || "");
     if (!id) continue;
@@ -3062,7 +3432,7 @@ function renderReelCandidates() {
     rank.textContent = `0${Number(candidate.rank || 1)}`.slice(-2);
     const title = document.createElement("span");
     const strong = document.createElement("b");
-    strong.textContent = labels[candidate.kind] || uiCopy("חלופת Reel", "Reel option");
+    strong.textContent = candidate.kind === "unverified_source_candidate" ? uiCopy("הצעה לא מאומתת", "Unverified proposal") : labels[candidate.kind] || uiCopy("חלופת Reel", "Reel option");
     const meta = document.createElement("small");
     meta.textContent = `${formatTime(Number(candidate.output_duration || 0))}${signalText(candidate.signals)}`;
     if (candidate.signals) meta.title = candidate.signals.visual
@@ -3080,6 +3450,7 @@ function renderReelCandidates() {
     button.disabled = active || state.manualEditBusy || foregroundBusy();
     button.textContent = active ? uiCopy("פעיל עכשיו", "Currently active") : uiCopy("טען עריכה", "Load edit");
     card.append(head, preview, button);
+    if (!active && supportsReelReview(state.project)) button.textContent = uiCopy("סקור לפני החלה", "Review before applying");
     elements.reelCandidateList.append(card);
   }
   renderDraftActions();
@@ -3096,7 +3467,9 @@ function renderDraftActions() {
     button.title = dirty ? t("rebuildBeforeRefine") : "";
   });
   $$("button[data-candidate-id]", elements.reelCandidateList || document).forEach((button) => {
-    button.disabled = disabled || button.dataset.candidateId === String(draft?.active_reel_candidate || "director_pick");
+    const shelf = state.project?.analysis?.review_candidates;
+    const sourceProposal = Boolean(shelf && shelf.revision === state.project?.revision && shelf.items?.some(item => item.id === button.dataset.candidateId));
+    button.disabled = (sourceProposal ? foregroundBusy() || dirty : disabled) || button.dataset.candidateId === String(draft?.active_reel_candidate || "director_pick");
     button.title = dirty ? t("rebuildBeforeRefine") : "";
   });
 }
@@ -3125,9 +3498,11 @@ function renderDurationReview() {
   const message = t(summaryKey) + " " + t(key) + assessment + (chain.length > 2 ? ` ${t("durationChain")} ${chain.join(" → ")}.` : "");
   const text = node.querySelector("p");
   if (text) text.textContent = message.replace(/\{(selected|requested|available|limit|supported)\}/g,(_match,key)=>String(replacements[key]));
+  const summary = node.querySelector(".duration-review-summary");
+  if (summary) summary.textContent = t(summaryKey).replace(/\{(selected|requested)\}/g,(_match,key)=>String(replacements[key]));
   const button = document.getElementById("reviewDurationSettings");
   if (button) { button.textContent=t("reviewDurationSettings"); button.disabled=foregroundBusy() || state.manualEditBusy; }
-  const host = state.studio.open ? elements.advancedPanel?.querySelector(".studio-header") : elements.resultPanel;
+  const host = state.studio.open ? elements.advancedPanel?.querySelector(".advanced-content") : elements.resultPanel;
   if (host && node.parentElement !== host) host.insertBefore(node, host.firstChild);
 }
 
@@ -3277,7 +3652,10 @@ function sourceMixerSettings() {
   const defaultLayoutExplicit = Object.hasOwn(raw, "default_layout") && allowedLayouts.includes(rawDefaultLayout);
   const defaultLayout = defaultLayoutExplicit ? rawDefaultLayout : "auto";
   const stackFit = ["cover", "contain"].includes(raw.stack_fit) ? raw.stack_fit : vertical ? "cover" : "contain";
-  return { screenSlot, cameraSlot, firstSlot, primaryRole, audioSlot, syncOffset, hasManualSync, defaultLayout, defaultLayoutExplicit, stackFit };
+  const screenFit=state.project?.sources?.B && ["auto","cover","contain"].includes(raw.screen_fit)?raw.screen_fit:"auto";
+  const pipScale=Number(raw.pip_scale??.34),pipX=Number(raw.pip_x??1),pipY=Number(raw.pip_y??1);
+  const pipConfigured=["pip_scale","pip_x","pip_y"].some(key=>Object.hasOwn(raw,key));
+  return { screenSlot, cameraSlot, firstSlot, primaryRole, audioSlot, syncOffset, hasManualSync, defaultLayout, defaultLayoutExplicit, stackFit,screenFit,pipScale,pipX,pipY,pipConfigured };
 }
 
 function sourceMixerLayoutFromSetting(layout, mixer = sourceMixerSettings()) {
@@ -3351,6 +3729,7 @@ function editedClipCrop(slot, time = previewPlaybackTime()) {
 
 function previewCropForLayout(slot, layout, mixer, override = null, time = previewPlaybackTime()) {
   const clipCrop = editedClipCrop(slot, time);
+  if(slot===mixer.screenSlot && mixer.screenFit==="contain")return{x:.5,y:.5,zoom:1};
   const primarySlot = mixer.primaryRole === "camera" ? mixer.cameraSlot : mixer.screenSlot;
   const fitted = layout === "auto" || layout === "side_by_side"
     || (layout === "stacked" && mixer.stackFit !== "cover")
@@ -3358,7 +3737,7 @@ function previewCropForLayout(slot, layout, mixer, override = null, time = previ
   // Export's fit filter keeps the complete frame centred, without applying
   // crop/zoom. Keep stored framing intact, but do not preview a crop that will
   // disappear from the rendered video when Fit entire source is selected.
-  if (fitted && !(state.project?.editor_sequence && override) && !clipCrop) return { x: .5, y: .5, zoom: 1 };
+  if (fitted && !(slot===mixer.screenSlot && mixer.screenFit==="cover") && !(state.project?.editor_sequence && override) && !clipCrop) return { x: .5, y: .5, zoom: 1 };
   const crop = override || clipCrop || state.project?.manual?.crop?.[slot] || {};
   const finite = (value, fallback) => value == null || !Number.isFinite(Number(value)) ? fallback : Number(value);
   return {
@@ -3371,7 +3750,8 @@ function previewCropForLayout(slot, layout, mixer, override = null, time = previ
 function applyCompositionCrop(video, slot, layout, mixer, override = null, time = previewPlaybackTime()) {
   if (!video) return;
   const crop = previewCropForLayout(slot, layout, mixer, override, time);
-  video.style.objectFit = editedClipCrop(slot, time) || (state.project?.editor_sequence && override) ? "cover" : "";
+  video.style.objectFit = slot===mixer.screenSlot && ["cover","contain"].includes(mixer.screenFit) ? mixer.screenFit
+    : editedClipCrop(slot,time) || (state.project?.editor_sequence && override) ? "cover" : "";
   const position = `${crop.x * 100}% ${crop.y * 100}%`;
   video.style.objectPosition = position;
   video.style.transformOrigin = position;
@@ -3401,15 +3781,59 @@ function previewExportDimensions() {
   return dimensions[aspect]?.[resolution] || dimensions["9:16"]["1080"];
 }
 
+function creatorPipGeometry(width,height,mixer=sourceMixerSettings()) {
+  let w=Math.max(160,Math.floor(width*.34/2)*2),h=Math.max(90,Math.floor(height*.28/2)*2),x=width-w-32,y=height-h-32;
+  if(mixer.pipConfigured){
+    const slot=mixer.primaryRole==="screen"?mixer.cameraSlot:mixer.screenSlot,source=state.project?.sources?.[slot]||{};
+    let sw=Number(source.width),sh=Number(source.height);
+    if(Number(source.rotation||0)%180)[sw,sh]=[sh,sw];
+    if(!(sw>0&&sh>0))return null;
+    const ratio=sw/sh;w=Math.max(2,Math.floor(width*mixer.pipScale/2)*2);h=Math.max(2,Math.floor(w/ratio/2)*2);
+    if(h>height){h=Math.floor(height/2)*2;w=Math.max(2,Math.floor(h*ratio/2)*2);}
+    x=Math.round((width-w)*mixer.pipX);y=Math.round((height-h)*mixer.pipY);
+  }
+  return{width:w,height:h,x,y};
+}
 function applyPreviewPipGeometry(container) {
   if (!container) return;
-  const [width, height] = previewExportDimensions();
-  const insetWidth = Math.max(160, Math.floor(width * .34 / 2) * 2);
-  const insetHeight = Math.max(90, Math.floor(height * .28 / 2) * 2);
-  container.style.setProperty("--pip-width", `${100 * insetWidth / width}%`);
-  container.style.setProperty("--pip-height", `${100 * insetHeight / height}%`);
-  container.style.setProperty("--pip-right", `${3200 / width}%`);
-  container.style.setProperty("--pip-bottom", `${3200 / height}%`);
+  const [width,height]=previewExportDimensions(),rect=creatorPipGeometry(width,height);
+  if(!rect)return;
+  container.style.setProperty("--pip-width",`${100*rect.width/width}%`);
+  container.style.setProperty("--pip-height",`${100*rect.height/height}%`);
+  container.style.setProperty("--pip-right",`${100*(width-rect.width-rect.x)/width}%`);
+  container.style.setProperty("--pip-bottom",`${100*(height-rect.height-rect.y)/height}%`);
+}
+
+function renderCreatorLayout(mixer,busy,hasTwoSources) {
+  const form=document.getElementById("creatorLayoutForm");if(!form)return;
+  form.hidden=!hasTwoSources;
+  if(!form.dataset.bound){
+    form.dataset.bound="true";
+    form.addEventListener("input",()=>form.dataset.dirty="true");
+    form.addEventListener("submit",event=>{
+      event.preventDefault();if(sourceMixerControlBusy())return;
+      const values={screen_fit:document.getElementById("creatorScreenFit").value};
+      if (!document.getElementById("creatorInsetControls")?.hidden) Object.assign(values, {
+        pip_scale:Number(document.getElementById("creatorPipScale").value)/100,
+        pip_x:Number(document.getElementById("creatorPipX").value)/100,pip_y:Number(document.getElementById("creatorPipY").value)/100});
+      if(!form.reportValidity())return;
+      const projectId=state.project?.id;
+      void saveSourceMixer(values).then(saved=>{if(saved&&state.project?.id===projectId){form.dataset.dirty="";renderSourceMixer();}})
+        .catch(error=>toast(error.message));
+    });
+  }
+  const key=`${state.project?.id}`;
+  if(form.dataset.project!==key){form.dataset.project=key;form.dataset.dirty="";}
+  if(form.dataset.dirty!=="true"){
+    for(const[id,value]of [["creatorScreenFit",mixer.screenFit],["creatorPipScale",mixer.pipScale*100],["creatorPipX",mixer.pipX*100],["creatorPipY",mixer.pipY*100]])document.getElementById(id).value=value;
+  }
+  form.querySelectorAll("input,select,button").forEach(node=>node.disabled=busy);
+  const inset = document.getElementById("creatorInsetControls");
+  if (inset) {
+    inset.hidden = (state.sourceMixerPreviewLayout || state.sourceMixerLayout) !== "pip";
+    inset.querySelectorAll?.("input").forEach(node=>node.disabled=busy || inset.hidden);
+  }
+  document.getElementById("creatorLayoutStatus").textContent=mixer.screenFit==="contain"?uiCopy("תמונת המסך נשמרת בשלמותה; זום שמור אינו מוחל עליה.","Full gameplay frame preserved; stored screen zoom is ignored."):uiCopy("מסגור ידני · ניתן לביטול", "Manual framing · Undo available");
 }
 
 function renderSourceCompositionPreview(mixer, cropOverride = null) {
@@ -3477,6 +3901,7 @@ function renderSourceMixer() {
   const mixer = sourceMixerSettings();
   const busy = sourceMixerControlBusy();
   renderSourceIdentity(mixer, busy);
+  renderCreatorLayout(mixer,busy,hasTwoSources);
   elements.sourceMixerTitle.textContent = hasTwoSources
     ? uiCopy("שליטה במקורות A/B", "Screen + camera")
     : sourceA
@@ -3695,7 +4120,7 @@ function sourceSyncDescription(mixer = sourceMixerSettings()) {
 function sourceBEditCoverage(project, mixer, selection = null) {
   const limit = Number(project?.sources?.B?.video_duration) > 0
     ? Number(project.sources.B.video_duration) : Math.max(0, Number(project?.sources?.B?.duration) || 0);
-  const ranges = selection ? [selection] : project?.draft?.keep_ranges || [{ start: 0, end: Number(project?.sources?.A?.duration) || 0 }];
+  const ranges = Array.isArray(selection) ? selection : selection ? [selection] : project?.draft?.keep_ranges || [{ start: 0, end: Number(project?.sources?.A?.duration) || 0 }];
   const union = values => {
     const merged = [];
     for (const range of values.filter(item => Number.isFinite(item.start) && Number.isFinite(item.end) && item.end > item.start).sort((a, b) => a.start - b.start)) {
@@ -3720,9 +4145,18 @@ function sourceBEditCoverage(project, mixer, selection = null) {
   return { duration, covered, full: duration > 0 && covered >= duration - .001, clips: clips.length };
 }
 
+function reviewSourceTiming() {
+  if (sourceMixerControlBusy()) return;
+  if (elements.exportDialog?.open) elements.exportDialog.close();
+  openStudioTab("framing");
+  document.getElementById("sourceTimingStep")?.scrollIntoView({block:"center"});
+}
+
 function renderSourceBCoverage(mixer = sourceMixerSettings(), preview = null) {
   const target = elements.sourceBCoverage;
   if (!target) return;
+  const layoutAlert = document.getElementById?.("layoutCoverageAlert");
+  if (layoutAlert) layoutAlert.hidden = true;
   if (!state.project?.sources?.B) {
     target.textContent = "";
     for (const id of ["sourceBCoverageNotice", "sourceBReviewPlacement"]) {
@@ -3750,6 +4184,29 @@ function renderSourceBCoverage(mixer = sourceMixerSettings(), preview = null) {
   }
   if (preview?.requiresB && !preview.available) text = `B has no mapped frame at the playhead; preview uses ${preview.fallback === "gap" ? "an empty frame" : "source A"}. ${text}`;
   const warning = hasEdit ? !coverage.full : !original.full;
+  // Only require B during ranges whose saved layout actually uses it. A gap
+  // during an intentional screen-only section is not a failed split layout.
+  const needsB = camera => ["B", "stacked", "side_by_side", "pip"].includes(camera)
+    || (camera === "camera" && mixer.cameraSlot === "B") || (camera === "screen" && mixer.screenSlot === "B");
+  // The preview alert describes export readiness for the whole edit, even
+  // when the timing tools below are inspecting a fully covered selection.
+  const scopeRanges = project?.draft?.keep_ranges || [];
+  const requestedRanges = (project?.draft?.camera_plan || []).filter(row => needsB(row.camera)).flatMap(row => scopeRanges
+    .map(range => ({start:Math.max(Number(row.start), Number(range.start)), end:Math.min(Number(row.end), Number(range.end))}))
+    .filter(range => range.end > range.start));
+  const layoutCoverage = sourceBEditCoverage(project, mixer, requestedRanges);
+  if (layoutAlert && hasEdit && layoutCoverage.duration > 0 && !layoutCoverage.full) {
+    layoutAlert.hidden = false;
+    const message = document.getElementById("layoutCoverageAlertText");
+    if (message) message.textContent = `Requested layout needs B, but only ${layoutCoverage.covered.toFixed(2)} of ${layoutCoverage.duration.toFixed(2)} required edit seconds have mapped B footage. The A-only fallback does not fulfil the requested layout. Review source timing before export.`;
+  }
+  const busy = sourceMixerControlBusy();
+  const shared = document.getElementById("reviewSharedSourceTiming"); if (shared) shared.disabled = busy;
+  const independent = document.getElementById("reviewIndependentSourceTiming"); if (independent) independent.disabled = busy || !hasEdit;
+  const readiness = document.getElementById("sourceTimingReadiness");
+  if (readiness) readiness.textContent = hasEdit
+    ? "For independent narration, choose its range and position on the edit timeline; select its audio in step 1. Nothing is looped or frozen."
+    : "Independent footage is placed after a draft or manual edit exists. Choosing a layout does not synchronize unrelated recordings.";
   if (target.textContent !== text) target.textContent = text;
   target.dataset.warning = String(warning || Boolean(preview?.requiresB && !preview.available));
   let notice = document.getElementById?.("sourceBCoverageNotice");
@@ -3761,7 +4218,7 @@ function renderSourceBCoverage(mixer = sourceMixerSettings(), preview = null) {
   if (notice) {
     const syncText = sourceSyncDescription(mixer);
     const unconfirmed = syncText.startsWith("Sync unconfirmed:");
-    notice.hidden = !warning && !unconfirmed;
+    notice.hidden = Boolean(layoutAlert && !layoutAlert.hidden) || (!warning && !unconfirmed);
     notice.textContent = `${warning ? text : ""}${warning && unconfirmed ? " " : ""}${unconfirmed ? syncText : ""}`;
   }
   let review = document.getElementById?.("sourceBReviewPlacement");
@@ -3773,7 +4230,7 @@ function renderSourceBCoverage(mixer = sourceMixerSettings(), preview = null) {
     (notice || target).after(review);
   }
   if (review) {
-    review.hidden = !state.project.editor_sequence || coverage.full || !hasEdit;
+    review.hidden = Boolean(independent) || !state.project.editor_sequence || coverage.full || !hasEdit;
     review.disabled = sourceMixerControlBusy();
   }
 }
@@ -3873,7 +4330,7 @@ function applyOptimisticSourceMixer(payload) {
     audio_slot: payload.audio_slot,
     first_slot: payload.first_slot,
   };
-  for (const key of ["default_layout", "sync_offset", "stack_fit"]) {
+  for (const key of ["default_layout", "sync_offset", "stack_fit", "screen_fit", "pip_scale", "pip_x", "pip_y"]) {
     if (!Object.hasOwn(payload, key)) continue;
     if (payload[key] == null) delete next[key];
     else next[key] = payload[key];
@@ -4056,11 +4513,11 @@ async function applyCreatorFrame() {
   pauseAllMedia();
   const projectId = state.project.id;
   const mixer = sourceMixerSettings();
-  const saved = await saveSourceMixer({ primary_role: "screen", first_slot: mixer.cameraSlot, stack_fit: "cover", default_layout: "stacked" }, { silent: true });
+  const saved = await saveSourceMixer({ primary_role: "screen", first_slot: mixer.cameraSlot, stack_fit: "cover", screen_fit: "cover", default_layout: "stacked" }, { silent: true });
   if (!saved || state.project?.id !== projectId) return;
   state.sourceMixerLayout = "stacked";
   applyFramingPreview();
-  if (state.project.draft) await applySourceLayout(state.manualSelection ? "selection" : "all", { immediate: true });
+  if (state.project.draft) await applySourceLayout("all", { immediate: true });
   else renderSourceMixer();
 }
 
@@ -4883,9 +5340,10 @@ function syncSecondaryPreview(globalTime) {
     side_by_side: uiCopy("זה לצד זה", "SPLIT"), pip: "PIP", embedded_stack: uiCopy("מצלמה פנימית", "SCREEN + CAM"),
   };
   const missingB = Boolean(sourceB && requiresB && !sourceBAvailable);
-  elements.cameraBadge.textContent = missingB && camera === "A" ? "A · B unavailable" : camera === "gap" ? "GAP" : cameraLabels[camera] || singleSlot;
+  const libraryPicture = camera === "gap" && state.preview.mode !== "source" && state.mediaStudio?.videoAt?.(globalTime);
+  elements.cameraBadge.textContent = missingB && camera === "A" ? "A · B unavailable" : camera === "gap" ? libraryPicture ? "VIDEO" : "GAP" : cameraLabels[camera] || singleSlot;
   elements.cameraBadge.dataset.missingSource = missingB ? "B" : "";
-  elements.cameraBadge.title = missingB ? "Source B has no mapped footage at this playhead. Check B coverage and source alignment before export." : "";
+  elements.cameraBadge.title = libraryPicture ? "Added project video on the edit timeline." : missingB ? "Source B has no mapped footage at this playhead. Check B coverage and source alignment before export." : "";
   const coverageKey = `${project.id}:${requiresB}:${sourceBAvailable}:${camera}`;
   if (state.preview.bCoverageKey !== coverageKey) {
     state.preview.bCoverageKey = coverageKey;
@@ -5038,7 +5496,8 @@ function editDuration() {
 
 function hasTimelineFootage() {
   if (!state.project?.editor_sequence) return Boolean(state.project?.draft);
-  return ["A", "B"].some((slot) => trackClips(editorProject(), slot).length > 0);
+  return ["A", "B"].some((slot) => trackClips(editorProject(), slot).length > 0)
+    || Boolean(state.mediaStudio?.videoAt?.());
 }
 
 function sourceToOutputTime(sourceTime) {
@@ -5484,6 +5943,7 @@ function setAdvanced(open) {
     if (elements.resultPanel) elements.resultPanel.inert = true;
     state.studio.open = true;
     renderAiDraftNotice();
+    renderDirectorOutcomeNotice();
     updatePreviewUI(previewPlaybackTime());
     dockRuntimeStatus();
     elements.advancedButton.setAttribute("aria-expanded", "true");
@@ -5505,6 +5965,7 @@ function setAdvanced(open) {
   elements.advancedPanel.hidden = true;
   state.studio.open = false;
   renderAiDraftNotice();
+  renderDirectorOutcomeNotice();
   updatePreviewUI(previewPlaybackTime());
   dockRuntimeStatus();
   state.sourceMixerPreviewLayout = null;
@@ -5710,6 +6171,123 @@ function framingScope(slot) {
   return clip ? { start: clip.start, end: clip.end } : null;
 }
 
+// Cues are views over saved clip crops, not a second timing or speaker track.
+function podcastFramingCues(project) {
+  if (!project?.editor_sequence) return [];
+  const rows = trackClips(project, "A").filter(row => row.crop &&
+    [row.start,row.end,row.crop.x,row.crop.y,row.crop.zoom].every(Number.isFinite) &&
+    row.end > row.start && (row.crop.x !== .5 || row.crop.y !== .5 || row.crop.zoom !== 1)).sort((a,b) => a.start-b.start);
+  const cues = [];
+  for (const row of rows) {
+    const previous = cues[cues.length-1], crop = row.crop;
+    const sourceRef = row.source_ref || "primary:A";
+    const sourceEnd = Number(row.source_start) + row.end-row.start;
+    if (previous && Math.abs(previous.end-row.start) < 1e-6 && previous.sourceRef === sourceRef &&
+      Math.abs(previous.sourceEnd-Number(row.source_start)) < 1e-6 &&
+      ["x","y","zoom"].every(key => previous.crop[key] === crop[key])) {
+      previous.end = row.end; previous.sourceEnd = sourceEnd;
+    } else cues.push({start:row.start,end:row.end,crop:{...crop},sourceRef,sourceEnd});
+  }
+  return cues;
+}
+
+function renderPodcastFramingCues(panel) {
+  const host = document.getElementById("podcastFramingCues");
+  if (!host) return;
+  host.replaceChildren();
+  const projectId = state.project?.id, revision = state.project?.revision;
+  const sourceGeneration = state.project?.sources?.A?.generation;
+  const cues = podcastFramingCues(editorProject());
+  document.getElementById("podcastFramingCuesHelp").textContent = uiCopy(
+    "בחר טווח שמור כדי לשנות את המסגור או לאפס לשניהם. לטווח חדש השתמש בכלי טווח בטיימליין. אלה אינם זמני דיבור מזוהים.",
+    "Select a saved range to change its framing or reset to Both. Use timeline Range for a new interval. These are not detected speaker times.");
+  for (const cue of cues) {
+    const button = document.createElement("button"); button.type = "button";
+    button.dataset.podcastCue = `${cue.start}:${cue.end}`;
+    const focus = cue.crop.x === .5 && cue.crop.zoom > 1 && cue.crop.y === 0 ? uiCopy("מיקוד עליון", "Top focus")
+      : cue.crop.x === .5 && cue.crop.zoom > 1 && cue.crop.y === 1 ? uiCopy("מיקוד תחתון", "Bottom focus") : uiCopy("מסגור מותאם", "Custom crop");
+    button.textContent = `${formatSourceTime(cue.start)}–${formatSourceTime(cue.end)} · ${focus}`;
+    button.disabled = state.manualEditBusy || foregroundBusy();
+    button.addEventListener("click", () => {
+      if (state.manualEditBusy || foregroundBusy()) return;
+      if (state.project?.id !== projectId || state.project?.revision !== revision || state.project?.sources?.A?.generation !== sourceGeneration) {
+        toast(uiCopy("העריכה השתנתה. בחר שוב טווח עדכני.", "The edit changed. Select the current range again.")); return;
+      }
+      setManualSelection({start:cue.start,end:cue.end});
+      seekPreview(cue.start + Math.min(.04,(cue.end-cue.start)/2));
+      syncSecondaryPreview(previewPlaybackTime());
+    });
+    host.append(button);
+  }
+  host.hidden = !cues.length;
+}
+
+function podcastFramingSourceSupported(project) {
+  const source = project?.sources?.A;
+  const ratio = Number(source?.width) / Number(source?.height);
+  return Boolean(source?.generation && !project.sources?.B && Number.isFinite(ratio)
+    && ratio > 0 && ratio < 1 && Number(source.rotation || 0) === 0);
+}
+
+function renderPodcastFraming() {
+  const panel = document.getElementById("podcastFraming");
+  if (!panel) return;
+  // This tool only crops an already stacked portrait recording. Separate
+  // screen/camera feeds use source timing and layout, not participant crops.
+  panel.hidden = !podcastFramingSourceSupported(state.project);
+  if (panel.hidden) return;
+  const confirm = document.getElementById("podcastStackedClean");
+  if (!panel.dataset.bound) {
+    panel.dataset.bound = "true";
+    confirm.addEventListener("change", renderPodcastFraming);
+    document.getElementById("podcastPanelSplit").addEventListener("input", renderPodcastFraming);
+    elements.aspectSelect?.addEventListener("change", renderPodcastFraming);
+    panel.querySelectorAll("[data-podcast-focus]").forEach(button => button.addEventListener("click", () => void applyPodcastFraming(button.dataset.podcastFocus).catch(error => toast(error.message))));
+  }
+  renderPodcastFramingCues(panel);
+  const source = state.project?.sources?.A;
+  const key = `${state.project?.id}:${source?.generation}`;
+  if (panel.dataset.sourceKey !== key) { panel.dataset.sourceKey = key; confirm.checked = false; document.getElementById("podcastPanelSplit").value = "50"; }
+  document.getElementById("podcastFramingTitle").textContent = uiCopy("מסגור פודקאסט ידני", "Manual podcast framing");
+  document.getElementById("podcastFramingHelp").textContent = uiCopy("בחירת משתתף לטווח המסומן. אין כאן זיהוי של הדובר. כתוביות נפרדות נשארות בגודלן.", "Choose a participant for the selected range. No speaker detection. Separate captions keep their size.");
+  document.getElementById("podcastStackedCleanLabel").textContent = uiCopy("אני מאשר את החלונות המוערמים ואת קו ההפרדה שסומן, ללא כתוביות צרובות במקור.", "I confirm the stacked panels, marked divider and absence of burned-in captions.");
+  document.getElementById("podcastPanelSplitLabel").textContent = uiCopy("החלון העליון מסתיים בגובה", "Upper panel ends at");
+  document.getElementById("podcastPanelSplitValue").textContent = `${Number(document.getElementById("podcastPanelSplit").value).toFixed(1)}%`;
+  const range = state.manualSelection;
+  const ratio = Number(source?.width) / Number(source?.height);
+  const aspect = elements.aspectSelect?.value || state.project?.settings?.aspect;
+  const outputRatio = aspect === "source" ? ratio : ({"9:16":9/16,"16:9":16/9,"1:1":1,"4:5":4/5})[aspect];
+  let reason = !state.project?.editor_sequence || !range ? uiCopy("סמן טווח בטיימליין הערוך.", "Select a range in the edited timeline.")
+    : previewUsesSourceTime() ? uiCopy("עבור לתצוגת הסרטון הערוך.", "Switch the preview to Edited video.")
+    : state.project.sources?.B || activeEditTarget() === "B" ? uiCopy("הפקדים מיועדים לקובץ A יחיד עם חלונות מוערמים.", "These controls require one stacked source A, not separate feeds.")
+    : !source?.generation || !Number.isFinite(ratio) || !(ratio > 0 && ratio < 1) || Number(source.rotation || 0) !== 0 ? uiCopy("נדרש מקור אנכי ישר עם גרסה מזוהה.", "An upright versioned portrait source is required.")
+    : !outputRatio || Math.abs(outputRatio / ratio - 1) > .005 ? uiCopy("בחר יחס פלט אנכי זהה למקור; אין התאמה אוטומטית ליחס אחר.", "Choose source-matching portrait output; other aspect ratios are unsupported.")
+    : source.has_burned_captions ? uiCopy("יש כתוביות צרובות במקור. השתמש במקור נקי.", "This source has burned-in captions. Use clean footage.")
+    : state.project.manual?.track_locks?.A ? uiCopy("מסלול A נעול.", "Source A is locked.")
+    : !confirm.checked ? uiCopy("אשר את מבנה החלונות ואת היעדר הכתוביות הצרובות.", "Confirm the panel layout and absence of burned-in captions.") : "";
+  const busy = state.manualEditBusy || foregroundBusy();
+  panel.querySelectorAll("[data-podcast-focus]").forEach(button => {
+    button.textContent = ({both:uiCopy("שניהם", "Both"),top:uiCopy("משתתף עליון", "Top participant"),bottom:uiCopy("משתתף תחתון", "Bottom participant")})[button.dataset.podcastFocus];
+    button.disabled = Boolean(reason) || busy;
+  });
+  document.getElementById("podcastFramingStatus").textContent = reason || `${formatSourceTime(range.start)}–${formatSourceTime(range.end)} · ${uiCopy("מסגור ידני בלבד · ניתן לביטול", "manual range framing · Undo available")}`;
+}
+
+async function applyPodcastFraming(focus) {
+  if (!state.manualSelection || !state.project?.sources?.A || state.manualEditBusy || foregroundBusy()) return;
+  if (state.captionDirty || pendingTranscriptBuffers().length) { toast(uiCopy("שמור או בטל שינויי כתוביות תחילה.", "Save or discard pending caption text first.")); return; }
+  const range = {...state.manualSelection}, projectId = state.project.id;
+  const updated = await applyManualEdit("sequence_podcast_frame", {slot:"A", ...range, focus,
+    panel_split: Number(document.getElementById("podcastPanelSplit").value) / 100,
+    source_generation: state.project.sources.A.generation,
+    confirmed_stacked_clean: document.getElementById("podcastStackedClean").checked});
+  if (!updated || state.project?.id !== projectId) return;
+  loadCropControls("A", false);
+  seekPreview(range.start + Math.min(.04, (range.end-range.start)/2));
+  syncSecondaryPreview(previewPlaybackTime());
+  renderPodcastFraming();
+}
+
 function loadCropControls(slot, preview = true) {
   if (!state.project || !elements.cropSourceSelect) return;
   const selected = state.project.sources?.[slot] ? slot : "A";
@@ -5729,6 +6307,7 @@ function loadCropControls(slot, preview = true) {
     : "Default framing for this source · build a draft to frame individual clips.";
   if (preview && !state.project.editor_sequence) applyFramingPreview();
   refreshEmbeddedCropControls(embedded ? "embedded_stack" : cameraAt(Number(state.timeline?.playhead || 0)));
+  renderPodcastFraming();
 }
 
 function applyFramingPreview() {
@@ -5841,6 +6420,7 @@ function setManualSelection(selection, context = {}) {
   const start = Number(selection?.start);
   const end = Number(selection?.end);
   state.manualSelection = Number.isFinite(start) && Number.isFinite(end) && end - start >= (state.project?.editor_sequence ? 1 / 60 - 1e-6 : .03) ? { start: Math.min(start, end), end: Math.max(start, end) } : null;
+  state.captionAlternativesUI?.render();
   if (state.project?.sources?.B) hydrateSourceMixerLayout();
   renderManualControls();
   renderSourceMixer();
@@ -6513,6 +7093,7 @@ async function applySelectedClipTrim(event) {
 }
 
 function renderManualControls() {
+  renderPodcastFraming();
   if (!elements.manualSelectionLabel) return;
   const selection = state.manualSelection;
   const available = Boolean(state.project?.draft);
@@ -6558,10 +7139,11 @@ function renderManualControls() {
   const gapButton = document.getElementById("closeTimelineGaps");
   if (gapButton) {
     const gaps = sequence ? sequenceGaps(editorProject(),trackClips,target === "edit" ? null : target) : [];
+    const gapIssue = sequenceGapClosureIssue(editorProject(),gaps,target === "edit" ? null : target);
     gapButton.hidden = !gaps.length;
-    gapButton.disabled = !available || busy;
+    gapButton.disabled = !available || busy || Boolean(gapIssue);
     gapButton.textContent = `Close gaps (${gaps.length})`;
-    gapButton.title = target === "edit" ? "Remove only time where both A and B are empty. Both tracks and their layout stay synchronized. Undo available." : `Close empty spaces on ${target} only. The other track stays still. Undo available.`;
+    gapButton.title = gapIssue || (target === "edit" ? "Remove only time with no source footage or added media/text. Downstream timing stays protected. Undo available." : `Close empty spaces on ${target} only. The other track stays still. Undo available.`);
   }
   elements.manualDelete.textContent = target === "edit" ? "Remove from video" : `Remove from ${target}`;
   elements.manualSplit.textContent = uiCopy("פצל", "Split");
@@ -6607,18 +7189,44 @@ function runManualRangeEdit(action, target = activeEditTarget()) {
   return applyManualEdit(target === "edit" ? (state.project?.editor_sequence && action === "delete_range" ? "sequence_ripple_delete" : action) : action === "delete_range" ? "track_remove_range" : "track_restore_range", { ...state.manualSelection, ...(target !== "edit" ? { slot: target } : {}) });
 }
 
+function timelineEditIdentity(project, action, detail = {}) {
+  const bindings = project?.timeline_bindings;
+  if (bindings?.version !== 1 || !["sequence_split", "sequence_trim", "sequence_speed"].includes(action)
+    || !Array.isArray(bindings.id_actions) || !bindings.id_actions.includes(action)) return null;
+  if (bindings.revision !== project.revision) throw new Error("The edit changed. Select the clip again and retry.");
+  const track = bindings.tracks?.find(row => row.legacy_slot === detail.slot);
+  if (!track?.can_edit_by_id) return null; // Legacy unversioned media keeps its slot API.
+  const clips = bindings.clips?.filter(row => row.collection === "primary" && row.track_id === track.id) || [];
+  if (action !== "sequence_split" && !clips.some(row => row.id === detail.clip_id)) {
+    throw new Error("The clip changed. Select it again and retry.");
+  }
+  return { fields: { track_id: track.id, source_ref: track.source_ref }, selection: JSON.stringify(clips) };
+}
+
 async function applyManualEdit(action, detail = {}, { isCurrent = () => true } = {}) {
-  if (!action.startsWith("text_") && state.textStudio && !(await state.textStudio.flush())) return null;
+  if (state.project?.editor_sequence?.error) {
+    toast(state.project.editor_sequence.error);
+    return null;
+  }
   if (state.project?.editor_sequence) {
     action = ({ track_move: "sequence_move", track_split: "sequence_split", track_remove_range: "sequence_remove_range", track_trim: "sequence_trim", set_camera_layout: "sequence_layout", track_reset: "sequence_reset" })[action] || action;
     if (action === "sequence_reset") detail = {};
   }
-  if (action === "apply_reel_candidate" && state.draftDirtyReasons.size) {
+  if (["apply_reel_candidate", "apply_review_candidate"].includes(action) && state.draftDirtyReasons.size) {
     toast(t("rebuildBeforeRefine"));
     return null;
   }
-  const projectLevelAction = action === "set_source_mixer" || action === "set_embedded_camera";
+  const projectLevelAction = action === "set_source_mixer" || action === "set_embedded_camera" || action === "apply_review_candidate"
+    || (action === "redo" && Number(state.project?.manual?.history?.redo_count || 0) > 0);
   if ((!state.project?.draft && !projectLevelAction) || state.manualEditBusy || foregroundBusy() || !isCurrent()) return null;
+  let displayedIdentity;
+  try { displayedIdentity = timelineEditIdentity(state.project, action, detail); }
+  catch (error) { toast(error.message); return null; }
+  const displayedProjectId = state.project.id;
+  if (!action.startsWith("text_") && state.textStudio && !(await state.textStudio.flush())) return null;
+  if (state.project?.id !== displayedProjectId || state.manualEditBusy || foregroundBusy() || !isCurrent()) return null;
+  if ((action === "undo" || action === "redo") && state.mediaStudio && !(await state.mediaStudio.flush())) return null;
+  if (state.project?.id !== displayedProjectId || state.manualEditBusy || foregroundBusy() || !isCurrent()) return null;
   state.timeline?.cancelPendingCut?.();
   const projectId = state.project.id;
   const preservedSelection = state.manualSelection ? { ...state.manualSelection } : null;
@@ -6638,16 +7246,22 @@ async function applyManualEdit(action, detail = {}, { isCurrent = () => true } =
   try {
     await flushProjectSaves(projectId);
     if (state.project?.id !== projectId || !isCurrent()) return null;
+    const currentIdentity = timelineEditIdentity(state.project, action, detail);
+    if (JSON.stringify(currentIdentity) !== JSON.stringify(displayedIdentity)) {
+      state.timeline?.clearSelection();
+      throw new Error("The edit or source changed while saving. Select the clip again and retry.");
+    }
     const expectedRevision = saveQueueFor(projectId, state.project?.revision).revision;
     const submit = (revision) => api(`/api/projects/${encodeURIComponent(projectId)}/manual/edit`, {
       method: "POST",
-      body: JSON.stringify({ action, ...detail, expected_revision: revision }),
+      body: JSON.stringify({ action, ...detail, ...displayedIdentity?.fields, expected_revision: revision }),
     });
     let payload;
     try {
       payload = await submit(expectedRevision);
     } catch (error) {
-      if (!isRevisionConflict(error) || state.project?.id !== projectId || action === "transcript_text") throw error;
+      const sourceConflict = Number(error?.status) === 409 && error?.code === "source_binding_conflict";
+      if (detail.proposal_id || detail.review_fingerprint || (!isRevisionConflict(error) && !sourceConflict) || state.project?.id !== projectId || action === "transcript_text") throw error;
       const latest = await api(`/api/projects/${encodeURIComponent(projectId)}`);
       if (!latest?.project || (!latest.project.draft && !projectLevelAction)) throw error;
       state.project = latest.project;
@@ -6678,7 +7292,7 @@ async function applyManualEdit(action, detail = {}, { isCurrent = () => true } =
       if (state.timeline) { state.timeline.project = editorProject(); state.timeline.scheduleDraw(); }
       updateMediaPreview();
       if (action.startsWith("caption_")) {
-        if (detail.scope === "source") renderTranscript();
+        if (detail.scope === "source" || action === "caption_alternative") renderTranscript();
         renderCaptionInspector();
         updatePreviewCaption(previewPlaybackTime());
       }
@@ -6686,8 +7300,12 @@ async function applyManualEdit(action, detail = {}, { isCurrent = () => true } =
     }
     elements.projectName.value = projectLabel(state.project);
     hydrateSettings();
-    if (state.project.draft) renderDraft();
+    if (state.project.draft) {
+      if (action === "apply_review_candidate" || (action === "redo" && elements.resultPanel.hidden)) showResult();
+      else renderDraft();
+    }
     else {
+      showSetup();
       renderSources();
       renderSourceMixer();
     }
@@ -6720,6 +7338,7 @@ async function applyManualEdit(action, detail = {}, { isCurrent = () => true } =
     renderReadiness();
     renderManualControls();
     renderSourceMixer();
+    renderReelCandidates();
   }
 }
 
@@ -6931,6 +7550,23 @@ function highlightTranscriptSelection() {
 
 function renderTranscript() {
   if (!elements.transcriptList) return;
+  if (!state.captionAlternativesUI && document.getElementById("captionAlternatives")) {
+    state.captionAlternativesUI = new CaptionAlternatives({
+      root: document.getElementById("captionAlternatives"), getProject: () => state.project,
+      getSelection: () => state.manualSelection ? {...state.manualSelection} : null,
+      copy: uiCopy, api, formatTime, sourceUrl: sourceMediaUrl,
+      beforeReview: async () => {
+        if (foregroundBusy() || state.manualEditBusy || state.transcriptSaving) throw new Error(uiCopy("יש להמתין לסיום הפעולה הנוכחית.", "Wait for the current operation to finish."));
+        if (state.captionDirty || [...state.transcriptBuffers.values()].some(row => row.projectId === state.project?.id)) throw new Error(uiCopy("יש לשמור או לבטל שינויי טקסט לפני סקירת גרסה.", "Save or discard pending text changes before reviewing another version."));
+        return flushCurrentProjectSaves();
+      },
+      acceptProject: project => { state.project = project; rememberProjectRevision(project); renderTranscript(); },
+      apply: (proposal, isCurrent) => applyManualEdit("caption_alternative", {
+        alternative_id: proposal.id, review_fingerprint: proposal.review_fingerprint,
+      }, {isCurrent}),
+    });
+  }
+  state.captionAlternativesUI?.render();
   const query = elements.transcriptSearch.value.trim().toLowerCase();
   const transcript = state.project?.analysis?.transcript;
   const segments = transcript?.segments || [];
@@ -7321,6 +7957,12 @@ function formatDate(value) {
 }
 
 function openExportDialog({ progress = false } = {}) {
+  const previousStorageInfo=document.getElementById("exportStorageInfo");
+  if(previousStorageInfo){previousStorageInfo.textContent="";previousStorageInfo.hidden=true;}
+  if (state.project?.editor_sequence?.error) {
+    toast(state.project.editor_sequence.error);
+    return;
+  }
   if (!progress && !requireSavedTranscript()) return;
   if (!state.project?.draft) return;
   if (!progress && !hasTimelineFootage()) { toast("Add footage to the timeline before exporting."); openSourceReview(); return; }
@@ -7388,6 +8030,7 @@ async function startExport() {
   if (state.draftDirtyReasons.size) { toast(t("rebuildBeforeRefine")); return; }
   pauseAllMedia();
   const projectId = state.project.id;
+  const reviewLayout = document.getElementById("reviewExportLayout"); if (reviewLayout) reviewLayout.hidden = true;
   if (liveEmbeddedCameraRequest() && (!(await flushEmbeddedCameraSave(projectId)) || state.project?.id !== projectId)) return;
   const lock = acquireJobStartLock("render", projectId);
   if (!lock) { toast(uiCopy("כבר מתבצעת עבודה", "Another job is already running")); return; }
@@ -7396,17 +8039,24 @@ async function startExport() {
   elements.exportFrameRateField.hidden = true;
   elements.exportTitle.textContent = "Exporting your video";
   elements.exportDescription.textContent = "You can stop this export at any time. Your edit stays saved.";
+  const storageInfo=document.getElementById("exportStorageInfo");if(storageInfo){storageInfo.textContent="Checking export and project working space…";storageInfo.hidden=false;}
   elements.downloadExport.hidden = true;
   try {
     await flushProjectSaves(projectId);
     assertJobStartNotCancelled();
     if (state.project?.id !== projectId) throw new Error("Cancelled");
     const payload = await api(`/api/projects/${encodeURIComponent(projectId)}/render`, { method: "POST", body: JSON.stringify({ quality: elements.qualitySelect.value, fps: selectedFrameRate() }) });
+    if(storageInfo){const estimate=payload.storage_estimate;
+      storageInfo.textContent=estimate?storagePlanText({filesystems:estimate.volumes.map(row=>({...row,required_bytes:row.working_bytes,disk_free_bytes:row.free_bytes,reserved_bytes:0,available_bytes:Math.max(0,row.free_bytes-row.reserve_bytes)}))}):"";
+      storageInfo.hidden=!storageInfo.textContent;
+    }
     setActiveJob(payload.job.id, { projectId, kind: "render" });
     const job = await pollExportJob(payload.job.id, projectId);
     await completeExportJob(job, projectId);
   } catch (error) {
     if (state.project?.id === projectId) {
+      if (reviewLayout) reviewLayout.hidden = error.payload?.error !== "layout_coverage_incomplete";
+      if(storageInfo){storageInfo.textContent=storagePlanText(error.payload?.storage_plan);storageInfo.hidden=!storageInfo.textContent;}
       elements.exportActions.hidden = false;
       elements.exportProgress.hidden = true;
       elements.exportFrameRateField.hidden = false;

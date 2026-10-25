@@ -21,7 +21,8 @@ class Settings:
 @pytest.fixture
 def story():
     candidates = [{"id": f"b{i}", "start": float((i - 1) * 10),
-                   "end": float((i - 1) * 10 + 8), "segment_ids": [f"s{i}"]}
+                   "end": float((i - 1) * 10 + 8), "segment_ids": [f"s{i}"],
+                   "text": f"A complete synthetic source statement number {i}."}
                   for i in range(1, 4)]
     selection = {"keep_beat_ids": ["b1", "b3"], "highlight_beat_ids": [],
                  "opening_beat_id": "b1", "closing_beat_id": "b3",
@@ -31,16 +32,56 @@ def story():
 
 
 def response(**patch):
-    return {"verdict": "revise", "add_beat_ids": [], "remove_beat_ids": [],
-            "issues": ["continuity"], "summary": "", **patch}
+    result = {"verdict": "revise", "add_beat_ids": [], "remove_beat_ids": [],
+              "issues": ["continuity"], "summary": "", **patch}
+    if "action_evidence" not in patch:
+        # These tests exercise action reconciliation, not model entailment. Give
+        # valid actions an exact synthetic-source reference without repairing a
+        # malformed field, unknown ID, contradictory verdict or explicit override.
+        result["action_evidence"] = [
+            {"action": action, "beat_id": identifier,
+             "defect_kind": "missing_context" if action == "add" else "meaning_change",
+             "source_evidence_ids": [f"{identifier}:s{identifier[1:]}:f1"],
+             "instruction_quote": "",
+             "explanation": "Review this exact synthetic statement for the proposed context or meaning change."}
+            for action, field in (("add", "add_beat_ids"), ("remove", "remove_beat_ids"))
+            if isinstance(result[field], list)
+            for identifier in result[field] if isinstance(identifier, str) and identifier in {"b1", "b2", "b3"}
+        ]
+    return result
 
 
 def critic(monkeypatch, story, reply):
     selection, candidates = story
+    segments = [{"id": row["segment_ids"][0], **{key: row[key] for key in ("start", "end", "text")}}
+                for row in candidates]
     monkeypatch.setattr(intelligence, "_call_ollama_story_pass", lambda *_args: reply)
     return intelligence._critic_story_selection(
         Settings(), selection, candidates, {}, {}, {"target_duration": 30}, "fixture-model",
+        segments=segments,
     )
+
+
+def confirmed_action_fixture(proposal):
+    """Model already-adjudicated actions for downstream reconciliation tests.
+
+    This is deliberately explicit at each call site. It does not turn the real
+    critic helper into an approving reviewer or mark a selection semantically
+    verified; final-review entailment is covered by its own contract tests.
+    """
+    review = proposal["critic"]
+    assert review["action_authority"] == "proposal"
+    assert proposal["keep_beat_ids"] == review["selection_before"]
+    assert review["added"] == review["removed"] == []
+    assert intelligence._critic_action_sets(review) == (set(), set())
+    confirmed = copy.deepcopy(proposal)
+    confirmed["keep_beat_ids"] = list(review["proposed_beat_ids"])
+    confirmed["critic"].update(
+        action_authority="final", accepted_added=list(review["requested_added"]),
+        accepted_removed=list(review["requested_removed"]),
+        post_review_beat_ids=list(review["proposed_beat_ids"]),
+    )
+    return intelligence._reconcile_critic_actions(confirmed)
 
 
 def verified_story_fixture(selection, candidates):
@@ -88,8 +129,24 @@ def test_valid_pass_preserves_story_without_invented_actions(monkeypatch, story)
     assert reviewed["critic"]["unapplied_actions"] == []
 
 
+def test_known_source_action_without_evidence_stays_an_unverified_proposal(monkeypatch, story):
+    original = copy.deepcopy(story)
+    reviewed = critic(monkeypatch, story, response(remove_beat_ids=["b2"], action_evidence=[]))
+    assert story == original
+    assert reviewed["keep_beat_ids"] == original[0]["keep_beat_ids"]
+    assert reviewed["critic"]["action_authority"] == "proposal"
+    assert reviewed["critic"]["action_attribution_verified"] is False
+    assert reviewed["critic"]["action_evidence_error"]
+    assert reviewed["critic"]["grounded_actions"] == []
+    assert reviewed["critic"]["requested_removed"] == ["b2"]
+    assert intelligence._critic_action_sets(reviewed["critic"]) == (set(), set())
+
+
 def test_removing_an_unselected_candidate_is_a_noop_not_an_applied_repair(monkeypatch, story):
-    reviewed = critic(monkeypatch, story, response(remove_beat_ids=["b2"]))
+    proposal = critic(monkeypatch, story, response(remove_beat_ids=["b2"]))
+    assert proposal["critic"]["unapplied_actions"] == []
+    assert proposal["critic"]["proposed_beat_ids"] == ["b1", "b3"]
+    reviewed = confirmed_action_fixture(proposal)
     assert reviewed["keep_beat_ids"] == ["b1", "b3"]
     assert reviewed["critic"]["requested_removed"] == ["b2"]
     assert reviewed["critic"]["removed"] == []
@@ -103,7 +160,7 @@ def test_rejected_required_slot_is_exposed_without_restoring_its_material(monkey
     selection["keep_beat_ids"] = ["b1", "b2", "b3"]
     selection["slot_map"] = [{"slot_index": i, "beat_ids": [row["id"]]}
                              for i, row in enumerate(candidates)]
-    reviewed = critic(monkeypatch, story, response(remove_beat_ids=["b2"]))
+    reviewed = confirmed_action_fixture(critic(monkeypatch, story, response(remove_beat_ids=["b2"])))
     assert reviewed["keep_beat_ids"] == ["b1", "b3"]
     assert reviewed["critic"]["removed"] == ["b2"]
     assert reviewed["critic"]["unapplied_actions"] == []
@@ -115,7 +172,7 @@ def test_rejected_required_slot_is_exposed_without_restoring_its_material(monkey
 
 def test_effective_nonessential_removal_is_recorded_exactly(monkeypatch, story):
     story[0]["keep_beat_ids"] = ["b1", "b2", "b3"]
-    reviewed = critic(monkeypatch, story, response(remove_beat_ids=["b2"]))
+    reviewed = confirmed_action_fixture(critic(monkeypatch, story, response(remove_beat_ids=["b2"])))
     assert reviewed["keep_beat_ids"] == ["b1", "b3"]
     assert reviewed["critic"]["removed"] == ["b2"]
     assert reviewed["critic"]["unapplied_actions"] == []
@@ -123,7 +180,7 @@ def test_effective_nonessential_removal_is_recorded_exactly(monkeypatch, story):
 
 
 def test_later_budget_fit_preserves_a_requested_context_addition(monkeypatch, story):
-    reviewed = critic(monkeypatch, story, response(add_beat_ids=["b2"]))
+    reviewed = confirmed_action_fixture(critic(monkeypatch, story, response(add_beat_ids=["b2"])))
     assert reviewed["keep_beat_ids"] == ["b1", "b2", "b3"]
     assert reviewed["critic"]["added"] == ["b2"]
     fitted = intelligence._fit_story_selection_to_budget(
@@ -137,7 +194,10 @@ def test_later_budget_fit_preserves_a_requested_context_addition(monkeypatch, st
 
 
 def test_adding_an_existing_selected_beat_is_not_an_applied_repair(monkeypatch, story):
-    reviewed = critic(monkeypatch, story, response(add_beat_ids=["b1"]))
+    proposal = critic(monkeypatch, story, response(add_beat_ids=["b1"]))
+    assert proposal["critic"]["unapplied_actions"] == []
+    assert proposal["critic"]["proposed_beat_ids"] == ["b1", "b3"]
+    reviewed = confirmed_action_fixture(proposal)
     assert reviewed["keep_beat_ids"] == ["b1", "b3"]
     assert reviewed["critic"]["added"] == []
     assert reviewed["critic"]["unapplied_actions"] == [
@@ -147,7 +207,7 @@ def test_adding_an_existing_selected_beat_is_not_an_applied_repair(monkeypatch, 
 
 def test_later_budget_slot_restoration_keeps_actual_removal(monkeypatch, story):
     story[0]["keep_beat_ids"] = ["b1", "b2", "b3"]
-    reviewed = critic(monkeypatch, story, response(remove_beat_ids=["b2"]))
+    reviewed = confirmed_action_fixture(critic(monkeypatch, story, response(remove_beat_ids=["b2"])))
     assert reviewed["critic"]["removed"] == ["b2"]
     reviewed["slot_map"] = [{"slot_index": i, "beat_ids": [row["id"]]}
                             for i, row in enumerate(story[1])]
@@ -232,7 +292,7 @@ def test_critic_removal_of_a_required_slot_is_not_undone_by_budget_fit(monkeypat
     selection["keep_beat_ids"] = ["b1", "b2", "b3"]
     selection["slot_map"] = [{"slot_index": i, "beat_ids": [row["id"]]}
                              for i, row in enumerate(candidates)]
-    reviewed = critic(monkeypatch, story, response(remove_beat_ids=["b2"]))
+    reviewed = confirmed_action_fixture(critic(monkeypatch, story, response(remove_beat_ids=["b2"])))
     fitted = intelligence._fit_story_selection_to_budget(
         reviewed, candidates, {"slots": [{"desired_seconds": 8}] * 3}, 30,
     )
@@ -244,7 +304,7 @@ def test_critic_removal_of_a_required_slot_is_not_undone_by_budget_fit(monkeypat
 
 def test_rejected_segment_provenance_survives_conversion(monkeypatch, story):
     story[0]["keep_beat_ids"] = ["b1", "b2", "b3"]
-    reviewed = critic(monkeypatch, story, response(remove_beat_ids=["b2"]))
+    reviewed = confirmed_action_fixture(critic(monkeypatch, story, response(remove_beat_ids=["b2"])))
     # Conversion must also defend against a stale slot or extension restoring it.
     reviewed["keep_beat_ids"].append("b2")
     decision = intelligence._story_decision_from_beats(
@@ -257,15 +317,27 @@ def test_rejected_segment_provenance_survives_conversion(monkeypatch, story):
     assert decision["rejected_story_ranges"] == [{"start": 10.0, "end": 18.0, "beat_id": "b2"}]
 
 
-def test_removing_every_selected_beat_is_structurally_invalid(monkeypatch, story):
-    with pytest.raises(intelligence.StoryPlanningError, match="no.*material|no.*selection"):
-        critic(monkeypatch, story, response(remove_beat_ids=["b1", "b3"]))
+def test_proposing_removal_of_all_source_keeps_original_pending_final_review(monkeypatch, story):
+    original = copy.deepcopy(story)
+    proposal = critic(monkeypatch, story, response(remove_beat_ids=["b1", "b3"]))
+    assert story == original
+    assert proposal["keep_beat_ids"] == ["b1", "b3"]
+    assert proposal["critic"]["action_authority"] == "proposal"
+    assert proposal["critic"]["proposed_beat_ids"] == []
+    assert proposal["critic"]["removed"] == []
+    # Even an already-adjudicated rejection cannot revive its rejected source
+    # through stale slots or a fallback during decision conversion.
+    rejected = confirmed_action_fixture(proposal)
+    assert rejected["keep_beat_ids"] == []
+    assert intelligence._story_decision_from_beats(
+        rejected, story[1], [{"id": f"s{i}"} for i in range(1, 4)],
+    ) is None
 
 
 def test_later_budget_change_cannot_retain_an_earlier_critic_pass(monkeypatch, story):
     selection, candidates = story
     selection["keep_beat_ids"] = ["b1", "b2", "b3"]
-    reviewed = critic(monkeypatch, story, response(verdict="pass", issues=[]))
+    reviewed = confirmed_action_fixture(critic(monkeypatch, story, response(verdict="pass", issues=[])))
     fitted = intelligence._fit_story_selection_to_budget(
         reviewed, candidates, {"slots": [{"desired_seconds": 8}] * 2}, 16,
     )
@@ -304,22 +376,34 @@ def test_unchanged_title_provenance_does_not_claim_semantic_verification(story):
     }
 
 
-def test_explicitly_empty_critic_selection_cannot_fall_back_to_rejected_story(monkeypatch, story):
+def test_final_no_fit_after_all_removal_proposal_cannot_fall_back_to_source(monkeypatch, story):
     selection, candidates = story
-    segments = [{"id": f"s{i}", "start": row["start"], "end": row["end"]}
+    plan = verified_story_fixture(selection, candidates)
+    original = copy.deepcopy(story)
+    segments = [{"id": f"s{i}", "start": row["start"], "end": row["end"], "text": row["text"]}
                 for i, row in enumerate(candidates, 1)]
     monkeypatch.setattr(intelligence, "_ollama_inventory", lambda _settings: (True, {"fixture-model"}))
     monkeypatch.setattr(intelligence, "_summarize_story_chapters", lambda *_args: [{"id": "c001"}])
     monkeypatch.setattr(intelligence, "_build_global_outline", lambda *_args: {})
-    monkeypatch.setattr(intelligence, "_build_story_plan", lambda *_args: {"slots": []})
+    monkeypatch.setattr(intelligence, "_build_story_plan", lambda *_args: plan)
     monkeypatch.setattr(intelligence, "_select_story_beats", lambda *_args: (copy.deepcopy(selection), candidates))
-    monkeypatch.setattr(intelligence, "_call_ollama_story_pass",
-                        lambda *_args: response(remove_beat_ids=["b1", "b3"]))
+    calls = []
+    def respond(_settings, payload, *_args):
+        calls.append(payload)
+        if "continuity critic" in payload["messages"][0]["content"]:
+            return response(remove_beat_ids=["b1", "b3"])
+        return {"verdict": "no_fit", "keep_beat_ids": [], "released_optional_beat_ids": [],
+                "role_selections": {}, "critic_action_decisions": []}
+    monkeypatch.setattr(intelligence, "_call_ollama_story_pass", respond)
 
-    with pytest.raises(intelligence.StoryPlanningError, match="no selected source material"):
+    with pytest.raises(intelligence.StoryBudgetError) as error:
         intelligence.hierarchical_story_edit(
-            candidates, segments, Settings(), {"goal": "short", "target_duration": 30},
+            candidates, segments, Settings(), {"goal": "short", "duration_mode": "style", "target_duration": 30},
         )
+    assert error.value.diagnostic["reason"] == "planner_no_fit"
+    assert error.value.diagnostic["applied_to_timeline"] is False
+    assert len(calls) == 2
+    assert story == original
 
 
 def test_hierarchy_saves_final_selection_and_the_exact_reviewed_input(monkeypatch, story):

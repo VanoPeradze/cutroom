@@ -152,6 +152,7 @@ function fixture({mediaReady = true} = {}) {
 }
 
 test('Layout returns the same source controls to the right inspector after setup and on reopening drafts', () => {
+  assert.doesNotMatch(web('index.html'),/id="studioShelfLayout"/,'the duplicate sidebar composition group is removed');
   for (const direction of ['ltr', 'rtl']) {
     const {run, nodes, document} = fixture({mediaReady:false});
     document.documentElement.dir = direction;
@@ -164,15 +165,12 @@ test('Layout returns the same source controls to the right inspector after setup
     const project = run('JSON.stringify(state.project)');
     run('placeSourceMixer(true)');
     assert.deepEqual(panel.children, [framing,mixer]);
-    const shelf = document.getElementById('studioShelfLayout');
-    assert.deepEqual(shelf.children, []);
     run('globalThis.existingDraft=state.project.draft;state.project.draft=null;placeSourceMixer(true)');
     assert.equal(mixer.parentElement, nodes.get('setupSourceMixerDock'));
     assert.equal(nodes.get('setupSourceMixerDock').hidden, false);
     let handled = 0; mixer.addEventListener('click', () => handled++);
     run('state.project.draft=existingDraft;placeSourceMixer(true);placeSourceMixer(true)');
     assert.deepEqual(panel.children, [framing,mixer], direction + ': setup must return the same composition controls');
-    assert.deepEqual(shelf.children, []);
     assert.equal(nodes.get('setupSourceMixerDock').hidden, true);
     assert.equal(nodes.get('setupSourceMixerDock').children.length, 0);
     dispatch('click', mixer); assert.equal(handled, 1, 'Moving the existing controls retains their handlers');

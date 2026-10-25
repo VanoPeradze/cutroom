@@ -10,6 +10,7 @@ from .source_tracks import (
     EPSILON, MAX_SEQUENCE_SECONDS, SourceTrackError, _duration, _finite, _new_id,
     _number, _validated, _shift_video_start, has_sequence, minimum_clip_seconds,
     source_track_clips, timeline_duration,
+    validate_sequence_version,
 )
 
 SEQUENCE_ACTION_FIELDS = {
@@ -27,6 +28,7 @@ SEQUENCE_ACTION_FIELDS = {
     "sequence_insert_linked": {"slot", "start", "source_start", "source_end"},
     "sequence_layout": {"start", "end", "layout"},
     "sequence_crop": {"slot", "start", "end", "x", "y", "zoom"},
+    "sequence_podcast_frame": {"slot", "start", "end", "focus", "panel_split", "source_generation", "confirmed_stacked_clean"},
     "sequence_speed": {"slot", "clip_id", "speed"},
     "sequence_source_restore": {"slot", "source_start", "source_end", "scope"},
     "sequence_source_remove": {"slot", "source_start", "source_end", "scope"},
@@ -68,6 +70,7 @@ def materialize_sequence(project: dict[str, Any]) -> tuple[dict[str, Any], float
     expected project revision protects them if the underlying draft changes.
     Physical source metadata, original draft ranges, and transcript stay intact.
     """
+    validate_sequence_version(project)
     if not isinstance(project.get("draft"), dict):
         raise SourceTrackError("Generate a draft before editing clips")
     value = copy.deepcopy(project)
@@ -339,6 +342,11 @@ def _close_sequence_gaps(value: dict[str, Any], slot: str | None = None) -> dict
     """Close only empty time in the requested scope, in one undoable action."""
     manual, duration = value["manual"], timeline_duration(value)
     clips = manual["source_tracks"][slot] if slot else [clip for rows in manual["source_tracks"].values() for clip in rows]
+    attached = [*(manual.get("media_clips") or []), *(manual.get("text_clips") or [])]
+    if not slot:
+        # Independent shots/audio/titles occupy edit time too. In particular,
+        # a library insert deliberately leaves A/B empty beneath its footage.
+        clips = [*clips, *attached]
     gaps, cursor = [], 0.0
     for clip in sorted(clips, key=lambda row: row["start"]):
         if clip["start"] > cursor + EPSILON:
@@ -348,6 +356,10 @@ def _close_sequence_gaps(value: dict[str, Any], slot: str | None = None) -> dict
         gaps.append((cursor, duration))
     if not gaps:
         return None
+    if not slot and any(row["end"] > start + EPSILON for row in attached for start, _end in gaps):
+        # This source-track operation cannot ripple independent layer clocks.
+        # Reject before mutation instead of leaving those layers misaligned.
+        raise SourceTrackError("Closing these gaps would shift added media or text. Move or remove those layers before closing gaps across the whole edit.")
     before = copy.deepcopy(manual)
     for start, end in reversed(gaps):
         if slot:
@@ -544,6 +556,12 @@ def prepare_sequence_edit(project: dict[str, Any], payload: dict[str, Any]) -> d
         return manual
     value, duration = materialize_sequence(project)
     manual = value["manual"]
+    if action == "sequence_podcast_frame":
+        from .podcast_framing import podcast_crop
+        start, end = _validate_range(value, payload)
+        crop = podcast_crop(value, {**payload, "start": start, "end": end})
+        payload = {"action": "sequence_crop", "slot": "A", "start": start, "end": end, **crop}
+        action = "sequence_crop"
     initial_tracks = copy.deepcopy(manual["source_tracks"])
     if action == "sequence_trim_edge":
         return _trim_sequence_edge(value, payload)
