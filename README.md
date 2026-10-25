@@ -18,8 +18,8 @@
 
 <p align="center">
   <a href="https://cutroom-studio.expo.app/"><strong>Website</strong></a> ·
-  <a href="https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261019-hotfix1/CUTROOM-1.2-Beta-Windows-20261019-hotfix1.zip"><strong>Download for Windows</strong></a> ·
-  <a href="https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261019-hotfix1/CUTROOM-1.2-Beta-Mac-20261019-hotfix1.zip"><strong>Download for Mac</strong></a> ·
+  <a href="https://github.com/VanoPeradze/cutroom/releases/download/v1.3-beta-20261025-audiofix1/CUTROOM-1.3-Beta-Windows-review-bd62ec2.zip"><strong>Download for Windows</strong></a> ·
+  <a href="https://github.com/VanoPeradze/cutroom/releases/download/v1.3-beta-20261025-audiofix1/CUTROOM-1.3-Beta-combined-review-bd62ec2.zip"><strong>Download for Mac</strong></a> ·
   <a href="docs/USER_GUIDE_EN.md">User guide</a> ·
   <a href="docs/README_HE.md">Hebrew README</a>
 </p>
@@ -32,7 +32,7 @@ Captured on **19 October 2026**, the screenshots show the actual editor with an 
 
 ## Contents
 
-- [1.3 Beta candidate](#13-beta-candidate)
+- [1.3 Beta update](#13-beta-update)
 - [Highlights](#highlights)
 - [Quick start](#quick-start)
 - [How it works](#how-it-works)
@@ -44,9 +44,9 @@ Captured on **19 October 2026**, the screenshots show the actual editor with an 
 - [Contributing and support](#contributing-and-support)
 - [License and credits](#license-and-credits)
 
-## 1.3 Beta candidate
+## 1.3 Beta update
 
-A focused presentation pass refreshes the home screen, keyboard focus and website motion while preserving the six-workspace editing workflow. The next beta is being prepared; download links below remain pinned to the current published packages until the new archives are verified and published.
+The repaired1.3 beta gives added videos their detected source sound by default and exposes sound, mute and gain controls. Existing silent overlays keep their saved choice. The concise AI draft notice expands in the inspector, leaving the preview clear. Exact Mac ARM64/Intel automation and configured-Windows synthetic exports passed; clean-OS Windows installation and human acceptance remain unqualified.
 
 ## Highlights
 
@@ -93,8 +93,8 @@ A focused presentation pass refreshes the home screen, keyboard focus and websit
 
 | Platform | Download | Launcher |
 | --- | --- | --- |
-| **Windows** | [Windows beta ZIP](https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261019-hotfix1/CUTROOM-1.2-Beta-Windows-20261019-hotfix1.zip) | **START CUTROOM.bat** |
-| **macOS** | [Mac beta ZIP](https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261019-hotfix1/CUTROOM-1.2-Beta-Mac-20261019-hotfix1.zip) | **START CUTROOM.command** |
+| **Windows** | [Windows beta ZIP](https://github.com/VanoPeradze/cutroom/releases/download/v1.3-beta-20261025-audiofix1/CUTROOM-1.3-Beta-Windows-review-bd62ec2.zip) | **START CUTROOM.bat** |
+| **macOS** | [Mac beta ZIP](https://github.com/VanoPeradze/cutroom/releases/download/v1.3-beta-20261025-audiofix1/CUTROOM-1.3-Beta-combined-review-bd62ec2.zip) | Open **mac**, then **START CUTROOM.command** |
 
 1. Extract the entire ZIP into a fresh folder. Keep **App**, **START HERE.html** and the launcher together.
 2. Open your platform's launcher beside **App** and let setup finish.
@@ -105,13 +105,13 @@ A focused presentation pass refreshes the home screen, keyboard focus and websit
 > [!IMPORTANT]
 > Before the first Windows launch, make sure WinGet is available and install the [official Microsoft Visual C++ x64 runtime](https://aka.ms/vc14/vc_redist.x64.exe). The CUTROOM launcher does not install this prerequisite. See the [platform guide](docs/PLATFORMS.md) for setup and troubleshooting.
 
-[Release notes](https://github.com/VanoPeradze/cutroom/releases/tag/v1.2-beta-20261019-hotfix1). The [18 October beta](https://github.com/VanoPeradze/cutroom/releases/tag/v1.2-beta-20261018) remains available for rollback. To update, extract a fresh copy separately and back up your projects before moving them.
+[Release notes](https://github.com/VanoPeradze/cutroom/releases/tag/v1.3-beta-20261025-audiofix1). The [18 October beta](https://github.com/VanoPeradze/cutroom/releases/tag/v1.2-beta-20261018) remains available for rollback. To update, extract a fresh copy separately and back up your projects before moving them.
 
-This hotfix addresses a Windows export failure after fresh setup selected FFmpeg 9.0.2. Setup and rendering now verify supported graph-file and constant-frame-rate options. See the release notes for the exact tested packages and remaining acceptance limits.
+Mac uses the exact tested combined ZIP: extract it, open **mac**, then run **START CUTROOM.command** beside **App**. This is a feedback beta; see the release notes for exact source/archive checks and the incomplete Windows clean-OS/prerequisite qualification. No models were downloaded for this repair.
 
-The release includes SHA-256 sidecars for the [Windows ZIP](https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261019-hotfix1/CUTROOM-1.2-Beta-Windows-20261019-hotfix1.zip.sha256), [Mac ZIP](https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261019-hotfix1/CUTROOM-1.2-Beta-Mac-20261019-hotfix1.zip.sha256) and [combined ZIP](https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261019-hotfix1/CUTROOM-1.2-Beta-20261019-hotfix1.zip.sha256). The [dated release notes](https://github.com/VanoPeradze/cutroom/releases/tag/v1.2-beta-20261019-hotfix1) identify the exact app source and recorded checks.
+The release includes SHA-256 sidecars for the [Windows ZIP](https://github.com/VanoPeradze/cutroom/releases/download/v1.3-beta-20261025-audiofix1/CUTROOM-1.3-Beta-Windows-review-bd62ec2.zip.sha256), [Mac ZIP](https://github.com/VanoPeradze/cutroom/releases/download/v1.3-beta-20261025-audiofix1/CUTROOM-1.3-Beta-combined-review-bd62ec2.zip.sha256) and [combined ZIP](https://github.com/VanoPeradze/cutroom/releases/download/v1.3-beta-20261025-audiofix1/CUTROOM-1.3-Beta-combined-review-bd62ec2.zip.sha256). The [dated release notes](https://github.com/VanoPeradze/cutroom/releases/tag/v1.3-beta-20261025-audiofix1) identify the exact app source and recorded checks.
 
-An optional [Windows + Mac ZIP](https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261019-hotfix1/CUTROOM-1.2-Beta-20261019-hotfix1.zip) contains both platforms. Open **windows** or **mac** inside it before launching.
+An optional [Windows + Mac ZIP](https://github.com/VanoPeradze/cutroom/releases/download/v1.3-beta-20261025-audiofix1/CUTROOM-1.3-Beta-combined-review-bd62ec2.zip) contains both platforms. Open **windows** or **mac** inside it before launching.
 
 ### Run from source
 

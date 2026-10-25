@@ -1,119 +1,125 @@
 {
-  "version": "1.2-beta",
-  "label": "1.2 Beta",
+  "filename": "CUTROOM-1.3-Beta-combined-review-bd62ec2.zip",
+  "bytes": 7133509,
+  "sha256": "5c9fae5ff015dbc23c9aa397a905a21ee3995dfdccdfb827d7c5b7ef550b09c8",
+  "build_id": "CUTROOM-1.3-beta-mac-review-bd62ec2a6857-20261025",
+  "url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.3-beta-20261025-audiofix1/CUTROOM-1.3-Beta-combined-review-bd62ec2.zip",
+  "mirrors": [
+    "https://cutroom-studio.expo.app/downloads/CUTROOM-1.3-Beta-combined-review-bd62ec2.zip"
+  ],
+  "version": "1.3-beta",
+  "label": "1.3 Beta",
   "layout": "windows-mac-folders-v1",
-  "filename": "CUTROOM-1.2-Beta-combined-review-ad3259b.zip",
-  "bytes": 7098260,
-  "sha256": "65bac791fb312661b62bcb938e3d700c21bae889278ac44e064adbc3b92d0aef",
-  "build_id": "CUTROOM-1.2-beta-mac-local-entry-ad3259bd19ab-20261024",
   "release_state": "beta",
   "public_beta_authorized": true,
   "full_release_qualified": false,
-  "source_commit": "ad3259bd19abc5fa1bab3e063fe62caeb1ecf93c",
+  "source_commit": "bd62ec2a6857aeb2c0bd7ed55ef8f717bd83bbf6",
+  "source_tree": "16c2fdd875f1f173494e591def1842650b0f2d8c",
   "uncommitted_changes": false,
-  "mac_validation_url": "https://github.com/VanoPeradze/cutroom/actions/runs/40064653092",
-  "validated_pr_head": "c718be7f1af9a0b5fb61b2102f3b14a681578c67",
+  "mac_validation_url": "https://github.com/VanoPeradze/cutroom/actions/runs/40189484448",
+  "validated_pr_head": "6bbdb8f6b7476d9a7aace4b9d7788a8f38eb18cd",
   "native_mac_validation": "automated-passed",
-  "native_validation_app_source_commit": "ad3259bd19abc5fa1bab3e063fe62caeb1ecf93c",
-  "native_mac_validation_scope": "Exact combined archive automated ARM64/Intel native install/export/app restart/persistence; no physical UI or transcription acceptance.",
+  "native_validation_app_source_commit": "bd62ec2a6857aeb2c0bd7ed55ef8f717bd83bbf6",
+  "native_mac_validation_scope": "Exact new combined archive on ARM64 and Intel: source/feature/overlay-audio, empty App install, missing-pip recovery, synthetic exports and application restart. No physical UI, transcription or human acceptance claim.",
   "native_validation": {
-    "run_id": 40064653092,
-    "head_commit": "c718be7f1af9a0b5fb61b2102f3b14a681578c67",
-    "application_source_commit": "ad3259bd19abc5fa1bab3e063fe62caeb1ecf93c",
+    "run_id": 40189484448,
+    "head_commit": "6bbdb8f6b7476d9a7aace4b9d7788a8f38eb18cd",
+    "application_source_commit": "bd62ec2a6857aeb2c0bd7ed55ef8f717bd83bbf6",
     "transcription_run": false,
     "architectures": {
       "arm64": {
         "status": "passed",
-        "offline_checks_passed": 69,
+        "offline_checks_passed": 73,
         "feature_tests_passed": 350,
         "required_cases_passed": 50,
         "skipped": 0,
-        "job_id": 120785246826,
-        "job_url": "https://github.com/VanoPeradze/cutroom/actions/runs/40064653092/job/120785246826",
+        "overlay_audio_regressions_passed": 10,
+        "frontend_audio_notice_checks_passed": 67,
+        "job_id": 121157244112,
+        "job_url": "https://github.com/VanoPeradze/cutroom/actions/runs/40189484448/job/121157244112",
         "fresh_app_install": "passed",
         "missing_pip_recovery": "passed",
         "restart_persistence": "passed",
-        "combined_archive_sha256": "65bac791fb312661b62bcb938e3d700c21bae889278ac44e064adbc3b92d0aef"
+        "combined_archive_sha256": "5c9fae5ff015dbc23c9aa397a905a21ee3995dfdccdfb827d7c5b7ef550b09c8"
       },
       "x64": {
         "status": "passed",
-        "offline_checks_passed": 69,
+        "offline_checks_passed": 73,
         "feature_tests_passed": 350,
         "required_cases_passed": 50,
         "skipped": 0,
-        "job_id": 120785246691,
-        "job_url": "https://github.com/VanoPeradze/cutroom/actions/runs/40064653092/job/120785246691",
+        "overlay_audio_regressions_passed": 10,
+        "frontend_audio_notice_checks_passed": 67,
+        "job_id": 121157244042,
+        "job_url": "https://github.com/VanoPeradze/cutroom/actions/runs/40189484448/job/121157244042",
         "fresh_app_install": "passed",
         "missing_pip_recovery": "passed",
         "restart_persistence": "passed",
-        "combined_archive_sha256": "65bac791fb312661b62bcb938e3d700c21bae889278ac44e064adbc3b92d0aef"
+        "combined_archive_sha256": "5c9fae5ff015dbc23c9aa397a905a21ee3995dfdccdfb827d7c5b7ef550b09c8"
       }
     }
   },
-  "url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261024-update1/CUTROOM-1.2-Beta-combined-review-ad3259b.zip",
-  "mirrors": [
-    "https://cutroom-studio.expo.app/downloads/CUTROOM-1.2-Beta-combined-review-ad3259b.zip"
-  ],
   "github_release": {
-    "tag": "v1.2-beta-20261024-update1",
-    "url": "https://github.com/VanoPeradze/cutroom/releases/tag/v1.2-beta-20261024-update1",
-    "tag_commit": "ad3259bd19abc5fa1bab3e063fe62caeb1ecf93c",
-    "publication_date": "2026-10-24",
+    "tag": "v1.3-beta-20261025-audiofix1",
+    "url": "https://github.com/VanoPeradze/cutroom/releases/tag/v1.3-beta-20261025-audiofix1",
+    "tag_commit": "bd62ec2a6857aeb2c0bd7ed55ef8f717bd83bbf6",
+    "publication_date": "2026-10-25",
     "package_bytes_changed": true,
-    "package_bytes_basis": "Exact frozen reviewed archives; not rebuilt for publication.",
-    "previous_public_tag": "v1.2-beta-20261022-maintenance1"
+    "package_bytes_basis": "Exact canonical source-bound archives qualified in run40189484448; not rebuilt for public release.",
+    "previous_public_tag": "v1.2-beta-20261024-update1"
   },
   "platforms": {
     "windows": {
-      "filename": "CUTROOM-1.2-Beta-Windows-review-ad3259b.zip",
-      "bytes": 3526187,
-      "sha256": "08c9a9e7b72d9aa3e68f4c85713be96c9d881256e3ace759d9b0c08e2e06f22f",
-      "url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261024-update1/CUTROOM-1.2-Beta-Windows-review-ad3259b.zip",
+      "filename": "CUTROOM-1.3-Beta-Windows-review-bd62ec2.zip",
+      "bytes": 3543563,
+      "sha256": "c5855176f60230806fd5a5380d1b207953a2a24a2ac648109921512f4f398b96",
+      "build_id": "CUTROOM-1.3-beta-review-bd62ec2a6857-20261025",
+      "url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.3-beta-20261025-audiofix1/CUTROOM-1.3-Beta-Windows-review-bd62ec2.zip",
       "mirrors": [
-        "https://cutroom-studio.expo.app/downloads/CUTROOM-1.2-Beta-Windows-review-ad3259b.zip"
-      ],
-      "build_id": "CUTROOM-1.2-beta-local-entry-ad3259bd19ab-20261024"
+        "https://cutroom-studio.expo.app/downloads/CUTROOM-1.3-Beta-Windows-review-bd62ec2.zip"
+      ]
     },
     "mac": {
-      "filename": "CUTROOM-1.2-Beta-combined-review-ad3259b.zip",
-      "bytes": 7098260,
-      "sha256": "65bac791fb312661b62bcb938e3d700c21bae889278ac44e064adbc3b92d0aef",
-      "url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261024-update1/CUTROOM-1.2-Beta-combined-review-ad3259b.zip",
+      "filename": "CUTROOM-1.3-Beta-combined-review-bd62ec2.zip",
+      "bytes": 7133509,
+      "sha256": "5c9fae5ff015dbc23c9aa397a905a21ee3995dfdccdfb827d7c5b7ef550b09c8",
+      "build_id": "CUTROOM-1.3-beta-mac-review-bd62ec2a6857-20261025",
+      "url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.3-beta-20261025-audiofix1/CUTROOM-1.3-Beta-combined-review-bd62ec2.zip",
       "mirrors": [
-        "https://cutroom-studio.expo.app/downloads/CUTROOM-1.2-Beta-combined-review-ad3259b.zip"
+        "https://cutroom-studio.expo.app/downloads/CUTROOM-1.3-Beta-combined-review-bd62ec2.zip"
       ],
-      "build_id": "CUTROOM-1.2-beta-mac-local-entry-ad3259bd19ab-20261024",
       "folder": "mac",
       "layout": "windows-mac-folders-v1",
-      "native_validation_basis": "Exact native-tested combined archive; open its mac folder. No standalone rebuild."
+      "native_validation_basis": "Exact tested combined archive; extract it and open its mac folder. No separate standalone Mac rebuild."
     }
   },
   "source_archive": {
-    "filename": "SOURCE-ad3259b.zip",
-    "bytes": 5511996,
-    "sha256": "2dedf9b1db8a678fa4e1aed5b35616c9bc036bd9900d44fa4598c74d1a1d256d",
-    "url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261024-update1/SOURCE-ad3259b.zip",
+    "filename": "SOURCE-bd62ec2.zip",
+    "bytes": 5534944,
+    "sha256": "fbc74936c7beb28072d7edb6fb1a81eb1107b4ef39a82667594fda75f86c30d9",
+    "url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.3-beta-20261025-audiofix1/SOURCE-bd62ec2.zip",
     "mirrors": [
-      "https://cutroom-studio.expo.app/downloads/SOURCE-ad3259b.zip"
+      "https://cutroom-studio.expo.app/downloads/SOURCE-bd62ec2.zip"
     ]
   },
-  "update_date": "2026-10-24",
-  "release_summary": "Source timing and explicit layout coverage, clearer controls and cache revalidation; accepted beta with incomplete Windows clean-install qualification.",
+  "update_date": "2026-10-25",
+  "release_summary": "Added-video source sound enabled by default with clear controls; compact AI draft notice keeps preview clear. Bounded app/site update for beta feedback.",
   "known_limitations": [
-    "Windows clean-install qualification for this exact ZIP is incomplete: no Sandbox guest report within90seconds. This gap was explicitly accepted for beta publication, not marked passed.",
-    "Mac ARM/Intel automated native checks passed; physical Finder/Gatekeeper/Safari and human listening acceptance remain pending.",
-    "Hebrew transcription/semantic selection remain imperfect and require review; automatic audio-to-visible-speaker framing is unfinished. Current framing cues are manual.",
-    "Application-process restart is not an OS reboot. Physical Windows11, SmartScreen and browser-download quarantine are not qualified.",
-    "With an old cached entry page, an ordinary reload may be needed once after updating."
+    "Windows clean-OS/prerequisite installation for this revised ZIP is not qualified. The earlier50843dd Sandbox attempt was resource-aborted; no new Sandbox was run. Configured installed-Windows synthetic exports and persistence passed.",
+    "Mac ARM64/Intel automated exact-package installation, export and application restart checks passed. Physical Finder/Gatekeeper/Safari and human listening acceptance remain untested.",
+    "No transcription or model download was run for this repair. Hebrew accuracy, semantic editing and automatic audio-to-visible-speaker framing remain unfinished and require review.",
+    "Application-process restart is not an OS reboot. Physical Windows11, SmartScreen, browser-download quarantine and arbitrary long original/export paths are not qualified.",
+    "Existing silent overlays preserve their saved setting. Select the clip and enable Include source sound; also check clip/group mute and gain.",
+    "Picture speed changes only the image; sound retains its normal clock from Source in. Review sync before publishing."
   ],
   "accepted_limitations": [
-    "Windows clean-install qualification for this exact ZIP is incomplete: no Sandbox guest report within90seconds. This gap was explicitly accepted for beta publication, not marked passed.",
-    "Mac ARM/Intel automated native checks passed; physical Finder/Gatekeeper/Safari and human listening acceptance remain pending.",
-    "Hebrew transcription/semantic selection remain imperfect and require review; automatic audio-to-visible-speaker framing is unfinished. Current framing cues are manual.",
-    "Application-process restart is not an OS reboot. Physical Windows11, SmartScreen and browser-download quarantine are not qualified.",
-    "With an old cached entry page, an ordinary reload may be needed once after updating."
+    "Windows clean-OS/prerequisite installation for this revised ZIP is not qualified. The earlier50843dd Sandbox attempt was resource-aborted; no new Sandbox was run. Configured installed-Windows synthetic exports and persistence passed.",
+    "Mac ARM64/Intel automated exact-package installation, export and application restart checks passed. Physical Finder/Gatekeeper/Safari and human listening acceptance remain untested.",
+    "No transcription or model download was run for this repair. Hebrew accuracy, semantic editing and automatic audio-to-visible-speaker framing remain unfinished and require review.",
+    "Application-process restart is not an OS reboot. Physical Windows11, SmartScreen, browser-download quarantine and arbitrary long original/export paths are not qualified.",
+    "Existing silent overlays preserve their saved setting. Select the clip and enable Include source sound; also check clip/group mute and gain.",
+    "Picture speed changes only the image; sound retains its normal clock from Source in. Review sync before publishing."
   ],
-  "source_tree": "38a689569eb21b5bd0ac74846b1cee28a33c1299",
   "historical_windows_validation": [
     {
       "windows_fresh_install_acceptance": "failed-native-dll-check",
@@ -291,21 +297,109 @@
         "evidence_summary_sha256": "72f3353100ffa6f19d3bffedf495e2d3b09c1b1d7f489ac052f0462dca9e5fe4",
         "scope": "Automated synthetic HTTP editing/export in Windows 10 Sandbox; no human UI/listening, physical Windows 11, OS reboot, SmartScreen, quarantine or model acceptance."
       }
+    },
+    {
+      "release_tag": "v1.2-beta-20261024-update1",
+      "application_source_commit": "ad3259bd19abc5fa1bab3e063fe62caeb1ecf93c",
+      "archive_sha256": "08c9a9e7b72d9aa3e68f4c85713be96c9d881256e3ace759d9b0c08e2e06f22f",
+      "scope": "Historical only; does not qualify the1.3 repair.",
+      "windows_fresh_install_acceptance": "not-completed-user-accepted-beta-gap",
+      "windows_fresh_install": {
+        "application_source_commit": "ad3259bd19abc5fa1bab3e063fe62caeb1ecf93c",
+        "archive_sha256": "08c9a9e7b72d9aa3e68f4c85713be96c9d881256e3ace759d9b0c08e2e06f22f",
+        "result": "not_completed_sandbox_startup_timeout",
+        "guest_report_received": false,
+        "heartbeat_timeout_seconds": 90,
+        "status": "unverified",
+        "beta_gate_waiver": "explicitly-accepted-not-passed",
+        "model_inference": "not_run",
+        "scope": "One isolated Windows Sandbox startup attempt produced no guest report; clean install/start/export/reopen/persistence unverified. No demonstrated CUTROOM installation defect."
+      }
+    },
+    {
+      "application_source_commit": "50843dd178282cf7d55846aad7ec1d8de61aeed7",
+      "archive_sha256": "4a9fa16ad1894d9837f53f163d41ce25cf852262321ae8f727d7982ef48cb95e",
+      "scope": "Preserved earlier1.3 candidate qualification, not the revised audio repair.",
+      "windows_fresh_install_acceptance": "resource-aborted-incomplete",
+      "windows_fresh_install": {
+        "result": "resource_abort",
+        "guest_report_received": true,
+        "passed_stages": 7,
+        "resource_aborted_stages": 1,
+        "not_run_stages": 4,
+        "available_ram_gib_at_abort": 4.473,
+        "unchanged_reserve_gib": 4.5,
+        "export_restart_persistence": "not_completed",
+        "attempt_consumed": true,
+        "not_a_proven_application_install_defect": true
+      }
+    }
+  ],
+  "historical_native_validation": [
+    {
+      "source_commit": "ad3259bd19abc5fa1bab3e063fe62caeb1ecf93c",
+      "release_tag": "v1.2-beta-20261024-update1",
+      "native_validation": {
+        "run_id": 40064653092,
+        "head_commit": "c718be7f1af9a0b5fb61b2102f3b14a681578c67",
+        "application_source_commit": "ad3259bd19abc5fa1bab3e063fe62caeb1ecf93c",
+        "transcription_run": false,
+        "architectures": {
+          "arm64": {
+            "status": "passed",
+            "offline_checks_passed": 69,
+            "feature_tests_passed": 350,
+            "required_cases_passed": 50,
+            "skipped": 0,
+            "job_id": 120785246826,
+            "job_url": "https://github.com/VanoPeradze/cutroom/actions/runs/40064653092/job/120785246826",
+            "fresh_app_install": "passed",
+            "missing_pip_recovery": "passed",
+            "restart_persistence": "passed",
+            "combined_archive_sha256": "65bac791fb312661b62bcb938e3d700c21bae889278ac44e064adbc3b92d0aef"
+          },
+          "x64": {
+            "status": "passed",
+            "offline_checks_passed": 69,
+            "feature_tests_passed": 350,
+            "required_cases_passed": 50,
+            "skipped": 0,
+            "job_id": 120785246691,
+            "job_url": "https://github.com/VanoPeradze/cutroom/actions/runs/40064653092/job/120785246691",
+            "fresh_app_install": "passed",
+            "missing_pip_recovery": "passed",
+            "restart_persistence": "passed",
+            "combined_archive_sha256": "65bac791fb312661b62bcb938e3d700c21bae889278ac44e064adbc3b92d0aef"
+          }
+        }
+      }
     }
   ],
   "windows_fresh_install_acceptance": "not-completed-user-accepted-beta-gap",
   "windows_fresh_install": {
-    "application_source_commit": "ad3259bd19abc5fa1bab3e063fe62caeb1ecf93c",
-    "archive_sha256": "08c9a9e7b72d9aa3e68f4c85713be96c9d881256e3ace759d9b0c08e2e06f22f",
-    "result": "not_completed_sandbox_startup_timeout",
+    "application_source_commit": "bd62ec2a6857aeb2c0bd7ed55ef8f717bd83bbf6",
+    "archive_sha256": "c5855176f60230806fd5a5380d1b207953a2a24a2ac648109921512f4f398b96",
+    "result": "not_performed_for_revised_package",
     "guest_report_received": false,
-    "heartbeat_timeout_seconds": 90,
-    "status": "unverified",
+    "status": "not_verified",
     "beta_gate_waiver": "explicitly-accepted-not-passed",
     "model_inference": "not_run",
-    "scope": "One isolated Windows Sandbox startup attempt produced no guest report; clean install/start/export/reopen/persistence unverified. No demonstrated CUTROOM installation defect."
+    "scope": "No new Sandbox or clean-OS/prerequisite installation was run for the repaired ZIP. Prior resource-aborted50843dd evidence is preserved separately as history; configured installed-Windows validation does not replace it."
   },
-  "maintenance": {
+  "windows_installed_validation": {
+    "application_source_commit": "bd62ec2a6857aeb2c0bd7ed55ef8f717bd83bbf6",
+    "archive_sha256": "c5855176f60230806fd5a5380d1b207953a2a24a2ac648109921512f4f398b96",
+    "environment": "existing Windows Python/FFmpeg; isolated synthetic media and disposable projects",
+    "native_encoded_export_cases_passed": 5,
+    "portrait_and_landscape": "passed",
+    "decoded_source_audio_and_gain": "passed",
+    "explicit_silence_clip_and_group_mute": "passed",
+    "source_in_picture_speed_audio_clock": "passed",
+    "save_reopen_and_export_records": "passed",
+    "clean_os_installation": "not_run",
+    "human_listening": "not_performed"
+  },
+  "historical_maintenance": {
     "scope": "Actual FFprobe container must match suffix and allowed codecs for direct preview.",
     "production_fix_commit": "203d164d04ef9d610cc9aedf55fe640b99f19f85",
     "canonical_packaging_correction": "Rebuilt from exact unchanged Git archive; only test-file LF/CRLF payload differed from the prior local package."

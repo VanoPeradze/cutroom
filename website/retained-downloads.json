@@ -148,5 +148,23 @@
     "mirrors": [
       "https://cutroom-studio.expo.app/downloads/SOURCE-203d164.zip"
     ]
+  },
+  {
+    "filename": "CUTROOM-1.2-Beta-combined-review-ad3259b.zip",
+    "bytes": 7098260,
+    "sha256": "65bac791fb312661b62bcb938e3d700c21bae889278ac44e064adbc3b92d0aef",
+    "url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261024-update1/CUTROOM-1.2-Beta-combined-review-ad3259b.zip"
+  },
+  {
+    "filename": "CUTROOM-1.2-Beta-Windows-review-ad3259b.zip",
+    "bytes": 3526187,
+    "sha256": "08c9a9e7b72d9aa3e68f4c85713be96c9d881256e3ace759d9b0c08e2e06f22f",
+    "url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261024-update1/CUTROOM-1.2-Beta-Windows-review-ad3259b.zip"
+  },
+  {
+    "filename": "SOURCE-ad3259b.zip",
+    "bytes": 5511996,
+    "sha256": "2dedf9b1db8a678fa4e1aed5b35616c9bc036bd9900d44fa4598c74d1a1d256d",
+    "url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261024-update1/SOURCE-ad3259b.zip"
   }
 ]
