@@ -113,3 +113,44 @@ def test_registry_cap_prevents_wasted_generation(backend):
     result=client.get(f"/api/projects/{pid}/caption-generation?language=en").get_json()
     assert result["ready"] is False and "three" in result["message"]
     assert start(backend).status_code==409
+
+
+@pytest.mark.parametrize("method", ["get", "post"])
+def test_caption_readiness_exception_details_stay_private(api, monkeypatch, method):
+    app, client, store, pid = api
+    private_detail = r"C:\private\speech-model\model.bin token=caption-readiness-secret"
+
+    def fail_readiness(*args, **kwargs):
+        raise ValueError(private_detail)
+
+    monkeypatch.setattr(generation, "readiness", fail_readiness)
+    before = store.state_path(pid).read_bytes()
+    url = f"/api/projects/{pid}/caption-generation"
+    if method == "get":
+        response = client.get(url, query_string={"language": "en"})
+        assert response.status_code == 200
+        assert response.get_json()["ready"] is False
+    else:
+        response = client.post(url, json={"language": "en", "expected_revision": store.load(pid)["revision"]})
+        assert response.status_code == 409
+        assert response.get_json()["error"] == "caption_generation_unavailable"
+    assert response.get_json()["message"] == (
+        "Caption generation is unavailable. Check Local models, the language and the selected source range, then retry."
+    )
+    assert private_detail not in response.get_data(as_text=True)
+    assert "caption-readiness-secret" not in response.get_data(as_text=True)
+    assert store.state_path(pid).read_bytes() == before
+    assert not app.extensions["cutroom_jobs"].active(project_id=pid)
+
+
+@pytest.mark.parametrize("field", ["start", "end"])
+def test_caption_readiness_invalid_range_does_not_echo_query_input(api, field):
+    _, client, store, pid = api
+    private_detail = r"C:\private\caption-input token=caption-range-secret"
+    query = {"language": "en", "start": "0", "end": "1", field: private_detail}
+    before = store.state_path(pid).read_bytes()
+    response = client.get(f"/api/projects/{pid}/caption-generation", query_string=query)
+    assert response.status_code == 200 and response.get_json()["ready"] is False
+    assert private_detail not in response.get_data(as_text=True)
+    assert "caption-range-secret" not in response.get_data(as_text=True)
+    assert store.state_path(pid).read_bytes() == before

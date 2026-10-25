@@ -1187,8 +1187,8 @@ def create_app(settings: Settings | None = None) -> Flask:
             if "start" in request.args or "end" in request.args:
                 selection={"start":float(request.args.get("start","nan")),"end":float(request.args.get("end","nan"))}
             state = readiness(store.load(project_id), settings, request.args.get("language", "he"),selection)
-        except ValueError as error:
-            return jsonify({"ready":False,"message":str(error)})
+        except ValueError:
+            return jsonify({"ready":False,"message":"Caption generation is unavailable. Check Local models, the language and the selected source range, then retry."})
         return jsonify(state)
 
     @app.post("/api/projects/<project_id>/caption-generation")
@@ -1205,7 +1205,7 @@ def create_app(settings: Settings | None = None) -> Flask:
                 state = readiness(current, settings, payload.get("language"),payload.get("selection"))
                 if not state["ready"]: raise ValueError(state["message"])
             except ValueError as error:
-                raise APIInputError("caption_generation_unavailable", str(error), 409) from error
+                raise APIInputError("caption_generation_unavailable", "Caption generation is unavailable. Check Local models, the language and the selected source range, then retry.", 409) from error
         job = submit_project_job("caption_alternative", project_id, generate, project_id, store, settings,
             payload.get("language"), revision, payload.get("selection"), validate_project=validate, job_identity=payload)
         return jsonify({"job":job.public()}), 202

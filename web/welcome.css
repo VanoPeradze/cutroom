@@ -93,6 +93,10 @@ body { background:var(--ink); }
 .service-copy strong i { font-style:normal; color:#b6a2db; }
 .service-copy > span { font-size:12px; line-height:1.7; color:var(--paper-dim); }
 .service-copy small { font-size:10px; line-height:1.6; color:#adc4d7; margin-top:auto; padding-top:5px; }
+.home-hub .service-copy { min-width:0; gap:10px; }
+.home-hub .service-copy strong { line-height:1.35; text-wrap:balance; }
+.home-hub .service-copy :is(strong,span,small) { overflow-wrap:anywhere; }
+.home-hub .service-card:focus-visible { outline:3px solid var(--focus-ring,#82d8da); outline-offset:3px; border-color:var(--focus-ring,#82d8da); }
 .home-hub .recent-strip { margin:28px 0 0; padding:0; border:0; }
 .home-hub .recent-list { grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
 .home-hub .recent-project { background:var(--surface-panel); padding:16px; border-color:var(--line); min-height:82px; }
@@ -200,4 +204,12 @@ dialog.connection-dialog { width:min(1050px,calc(100vw - 32px)); }
 }
 @media (prefers-reduced-motion:reduce) {
   .home-hub *,.welcome-dialog *,.button { animation:none !important; transition:none !important; scroll-behavior:auto !important; }
+}
+
+/* A short entrance for project choices; editing controls stay stationary. */
+@media (prefers-reduced-motion:no-preference) {
+  @keyframes home-choice-in { from { opacity:0; } to { opacity:1; } }
+  .home-hub .service-card { animation:home-choice-in 180ms cubic-bezier(.23,1,.32,1) both; }
+  .home-hub .service-card:nth-child(2) { animation-delay:35ms; }
+  .home-hub .service-card:nth-child(3) { animation-delay:70ms; }
 }

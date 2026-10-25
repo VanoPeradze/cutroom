@@ -91,6 +91,33 @@ class ReviewAssetMetadataTests(unittest.TestCase):
                                           (201, "CUTROOM-1.2-Beta-combined-review-1111111.zip"),
                                           (202, "SOURCE-1111111.zip")))
 
+    def test_13_beta_metadata_uses_matching_pinned_names(self) -> None:
+        for platform in ("windows", "combined"):
+            self.record[platform]["build_id"] = self.record[platform]["build_id"].replace("1.2-beta", "1.3-beta")
+        for asset in self.metadata["assets"]:
+            asset["name"] = asset["name"].replace("CUTROOM-1.2-Beta", "CUTROOM-1.3-Beta")
+        self.assertEqual(self.validate(), ((200, "CUTROOM-1.3-Beta-Windows-review-1111111.zip"),
+                                          (201, "CUTROOM-1.3-Beta-combined-review-1111111.zip"),
+                                          (202, "SOURCE-1111111.zip")))
+
+    def test_13_beta_rejects_historical_12_asset_names(self) -> None:
+        for platform in ("windows", "combined"):
+            self.record[platform]["build_id"] = self.record[platform]["build_id"].replace("1.2-beta", "1.3-beta")
+        with self.assertRaisesRegex(ValueError, "asset name"):
+            self.validate()
+
+    def test_mixed_pinned_beta_versions_are_rejected(self) -> None:
+        self.record["windows"]["build_id"] = "CUTROOM-1.3-beta-20261025"
+        with self.assertRaisesRegex(ValueError, "versions differ"):
+            self.validate()
+
+    def test_unsupported_or_malformed_pinned_beta_version_is_rejected(self) -> None:
+        for build_id in ("CUTROOM-1.4-beta-20261025", "CUTROOM-1.3-beta-", "CUTROOM-1.3-beta-20261025\n",
+                         "CUTROOM-1.3-Beta-20261025", "CUTROOM-1.3-beta-../unsafe", True):
+            with self.subTest(build_id=build_id), self.assertRaisesRegex(ValueError, "pinned 1.2 or 1.3"):
+                self.record["windows"]["build_id"] = build_id
+                self.validate()
+
     def test_absent_api_digest_still_requires_size_and_later_byte_gate(self) -> None:
         for asset in self.metadata["assets"]:
             del asset["digest"]

@@ -7,6 +7,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const {spawn} = require('node:child_process');
 const {setTimeout: pause} = require('node:timers/promises');
+const {browserElementBox} = require('./browser_dom_box.cjs');
 const [origin,pid,chrome,out] = process.argv.slice(2);
 if (!/^http:\/\/127\.0\.0\.1:\d+$/.test(origin||'') || !/^project_[\w-]+$/.test(pid||'') || !out || !chrome) throw Error('Use an isolated local QA project');
 fs.mkdirSync(out,{recursive:true});
@@ -22,7 +23,7 @@ class CDP {
   close(){for(const p of this.pending.values())clearTimeout(p.timer);this.ws.close();}
 }
 async function wait(check,label,timeout=15000){const start=Date.now();while(Date.now()-start<timeout){if(launchError)throw launchError;if(await check())return;await pause(80);}throw Error(`Timed out: ${label}`);}
-async function box(selector){return cdp.eval(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});if(!e||e.disabled||e.closest('[inert]'))throw Error('Unavailable or inert UI control');e.scrollIntoView({block:'center'});const r=e.getBoundingClientRect();if(!r.width||!r.height)throw Error('Hidden UI control');const hit=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);if(!hit||!(hit===e||e.contains(hit)))throw Error('UI control is covered');return{x:r.x,y:r.y,width:r.width,height:r.height};})()`);}
+async function box(selector){return browserElementBox(cdp,selector);}
 async function mouseClick(x,y,count=1){await cdp.send('Input.dispatchMouseEvent',{type:'mouseMoved',x,y});await cdp.send('Input.dispatchMouseEvent',{type:'mousePressed',x,y,button:'left',clickCount:count});await cdp.send('Input.dispatchMouseEvent',{type:'mouseReleased',x,y,button:'left',clickCount:count});}
 async function click(selector){const r=await box(selector);await mouseClick(r.x+r.width/2,r.y+r.height/2);}
 async function state(){return (await(await fetch(`${origin}/__qa/state`)).json());}
