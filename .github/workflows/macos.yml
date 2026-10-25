@@ -9,7 +9,7 @@ on:
         default: false
         type: boolean
       review_release_id:
-        description: Optional numeric ID of the unpublished cutroom-review-b657bd1 draft release
+        description: Optional numeric ID of the unpublished cutroom-review-bd62ec2 draft release
         required: false
         default: ''
         type: string
@@ -236,7 +236,7 @@ jobs:
           gh api "repos/$GITHUB_REPOSITORY/releases/$REVIEW_RELEASE_ID" > "$RUNNER_TEMP/review-release.json"
           python -B -X utf8 packaging/review_asset_metadata.py \
             --metadata "$RUNNER_TEMP/review-release.json" \
-            --record packaging/review-candidates/b657bd1.json --repo . \
+            --record packaging/review-candidates/bd62ec2.json --repo . \
             --release-id "$REVIEW_RELEASE_ID" > "$RUNNER_TEMP/review-assets.tsv"
           while IFS=$'\t' read -r asset_id asset_name; do
             echo "Read pinned asset ID $asset_id ($asset_name)"
@@ -249,10 +249,10 @@ jobs:
         shell: bash
         run: |
           python -B -X utf8 packaging/native_review_candidate.py \
-            --record packaging/review-candidates/b657bd1.json --repo . \
-            --windows-zip "$RUNNER_TEMP/review-inputs/CUTROOM-1.2-Beta-Windows-review-b657bd1.zip" \
-            --combined-zip "$RUNNER_TEMP/review-inputs/CUTROOM-1.2-Beta-combined-review-b657bd1.zip" \
-            --source-archive "$RUNNER_TEMP/review-inputs/SOURCE-b657bd1.zip" \
+            --record packaging/review-candidates/bd62ec2.json --repo . \
+            --windows-zip "$RUNNER_TEMP/review-inputs/CUTROOM-1.3-Beta-Windows-review-bd62ec2.zip" \
+            --combined-zip "$RUNNER_TEMP/review-inputs/CUTROOM-1.3-Beta-combined-review-bd62ec2.zip" \
+            --source-archive "$RUNNER_TEMP/review-inputs/SOURCE-bd62ec2.zip" \
             --output-dir "$RUNNER_TEMP/review-preflight"
       - name: Set up Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -280,11 +280,30 @@ jobs:
           extra=()
           if [[ "$REVIEW_TRANSCRIBE" == '1' ]]; then extra+=(--transcribe); fi
           "$RUNNER_TEMP/cutroom-review-venv/bin/python" -B -X utf8 packaging/native_review_candidate.py \
-            --record packaging/review-candidates/b657bd1.json --repo . \
-            --windows-zip "$RUNNER_TEMP/review-inputs/CUTROOM-1.2-Beta-Windows-review-b657bd1.zip" \
-            --combined-zip "$RUNNER_TEMP/review-inputs/CUTROOM-1.2-Beta-combined-review-b657bd1.zip" \
-            --source-archive "$RUNNER_TEMP/review-inputs/SOURCE-b657bd1.zip" \
+            --record packaging/review-candidates/bd62ec2.json --repo . \
+            --windows-zip "$RUNNER_TEMP/review-inputs/CUTROOM-1.3-Beta-Windows-review-bd62ec2.zip" \
+            --combined-zip "$RUNNER_TEMP/review-inputs/CUTROOM-1.3-Beta-combined-review-bd62ec2.zip" \
+            --source-archive "$RUNNER_TEMP/review-inputs/SOURCE-bd62ec2.zip" \
             --output-dir "$RUNNER_TEMP/review-reports" --native "${extra[@]}"
+      - name: Verify repaired overlay audio on the exact extracted Mac payload
+        timeout-minutes: 4
+        shell: bash
+        env:
+          HF_HUB_OFFLINE: '1'
+          TRANSFORMERS_OFFLINE: '1'
+          PIP_NO_INDEX: '1'
+        run: |
+          "$RUNNER_TEMP/cutroom-review-venv/bin/python" -B -X utf8 - <<'PY'
+          import os, pathlib, subprocess, sys
+          sys.path.insert(0, str(pathlib.Path.cwd() / "scripts"))
+          from smoke_macos import extract_mac
+          scratch = pathlib.Path(os.environ["RUNNER_TEMP"]) / "repaired-overlay-audio"
+          scratch.mkdir()
+          app = extract_mac(pathlib.Path(os.environ["RUNNER_TEMP"]) / "review-inputs/CUTROOM-1.3-Beta-combined-review-bd62ec2.zip", scratch)
+          env = dict(os.environ, PYTHONPATH=str(app), PYTHONDONTWRITEBYTECODE="1", CUTROOM_DATA_DIR=str(scratch / "data"))
+          subprocess.run([sys.executable, "-B", "-m", "pytest", "-q", "-o", "addopts=", "--junitxml", str(pathlib.Path(os.environ["RUNNER_TEMP"]) / "review-reports/overlay-audio.junit.xml"), "tests/test_overlay_native_audio.py"], cwd=app, env=env, check=True)
+          subprocess.run(["node", "--test", "tests/frontend_media_studio.test.cjs", "tests/frontend_chroma_studio.test.cjs"], cwd=app, env=env, check=True)
+          PY
       - name: Retain private-review JSON evidence
         if: ${{ always() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -293,5 +312,6 @@ jobs:
           path: |
             ${{ runner.temp }}/review-preflight/*.json
             ${{ runner.temp }}/review-reports/*.json
+            ${{ runner.temp }}/review-reports/*.xml
           if-no-files-found: warn
           retention-days: 7
