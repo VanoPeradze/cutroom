@@ -1,6 +1,7 @@
 """Native Windows stabilization regressions, separate from the portable gate."""
 from __future__ import annotations
 
+import copy
 import hashlib
 import importlib
 import os
@@ -126,4 +127,82 @@ def test_windows_long_partial_cancellation_before_publication_cleans_partial(win
         stabilization.stabilize_video(source, target, settings)
     assert not target.exists() and source.read_bytes() == b"original synthetic bytes"
     assert not list(target.parent.glob("*.partial.mp4"))
+
+
+@pytest.mark.parametrize("final_units", [260, 272])
+def test_windows_chroma_cache_publication(tmp_path, monkeypatch, final_units):
+    if os.name != "nt":
+        pytest.skip("Native Windows chroma cache publication regression")
+    import server
+    from cutroom.config import load_settings
+    from test_chroma_api import apply, frame, green_png
+
+    def units(path):
+        return len(str(path).encode("utf-16-le")) // 2
+
+    # Keep the UUID output below MAX_PATH while the SHA256 cache target reaches
+    # and exceeds it. Exercise the real API, rename, cache read, and send_file.
+    suffix = Path("projects") / ("project_" + "0" * 12) / "cache" / "chroma-preview" / ("0" * 64 + ".png")
+    padding = final_units - units(tmp_path.resolve()) - units(suffix) - 2
+    assert 1 <= padding <= 255, "The regression needs a shorter pytest temporary root."
+    data = tmp_path / ("p" * padding)
+    monkeypatch.setenv("CUTROOM_DATA_DIR", str(data))
+    monkeypatch.setenv("CUTROOM_NO_BROWSER", "1")
+    settings = load_settings()
+    settings.ai["enabled"] = False
+    app = server.create_app(settings)
+    app.config["TESTING"] = True
+    store = app.extensions["cutroom_store"]
+    value = store.create("Synthetic native cache boundary")
+    pid = value["id"]
+    root = store.project_dir(pid)
+    source = root / "media" / "A.mov"
+    source.parent.mkdir(parents=True, exist_ok=True)
+    source.write_bytes(b"synthetic immutable source")
+    value["sources"]["A"] = {"name": source.name, "relative_path": "media/A.mov", "duration": 2,
+        "width": 1280, "height": 720, "has_audio": True, "generation": "native-cache-A"}
+    value["draft"] = {"keep_ranges": [{"start": 0, "end": 2}]}
+    store.save(value)
+    monkeypatch.setattr(server, "chroma_key_capability", lambda *_: {"available": True, "supports": ["solid"]})
+    calls = []
+    png = green_png()
+
+    def run(command, **kwargs):
+        calls.append(command)
+        assert kwargs["timeout"] == 15
+        output = Path(command[-1])
+        assert units(output) == final_units - 32 < 260
+        output.write_bytes(png)
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(server.subprocess, "run", run)
+    client = app.test_client()
+    responses = []
+    try:
+        assert apply(client, store, pid).status_code == 200
+        before = copy.deepcopy(store.load(pid))
+        original = hashlib.sha256(source.read_bytes()).hexdigest()
+        for _ in range(2):
+            response = frame(client, store, pid)
+            responses.append(response)
+            assert response.status_code == 200, response.get_json(silent=True)
+            assert response.data == png
+            assert response.headers["Cache-Control"] == "no-store"
+            assert response.headers["X-Cutroom-Project-Revision"] == str(before["revision"])
+        assert len(calls) == 1
+        cache = root / "cache" / "chroma-preview"
+        # Native reads below are independent of the production path helper.
+        files = list(Path("\\\\?\\" + str(cache)).glob("*.png"))
+        assert len(files) == 1 and len(files[0].stem) == 64
+        assert units(str(files[0])[4:]) == final_units
+        assert files[0].read_bytes() == png
+        assert store.load(pid) == before
+        assert hashlib.sha256(source.read_bytes()).hexdigest() == original
+    finally:
+        for response in responses:
+            response.close()
+        app.extensions["cutroom_jobs"].shutdown(wait=True, cancel_pending=True)
+        resolved = data.resolve()
+        assert resolved != tmp_path.resolve() and resolved.is_relative_to(tmp_path.resolve())
+        shutil.rmtree("\\\\?\\" + str(resolved))
 

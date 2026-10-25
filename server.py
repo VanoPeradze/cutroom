@@ -1442,7 +1442,9 @@ def create_app(settings: Settings | None = None) -> Flask:
         source_stat = source_path.stat()
         identity = json.dumps([revision, slot, round(native_time, 6), source.get("generation"),
             source.get("relative_path"), source_stat.st_size, source_stat.st_mtime_ns, config, background_identity], sort_keys=True)
-        frame = cache / (hashlib.sha256(identity.encode()).hexdigest() + ".png")
+        # The SHA256 cache name is longer than the UUID temporary name and can
+        # cross Windows MAX_PATH even when FFmpeg's temporary output is short.
+        frame = native_io_path(cache / (hashlib.sha256(identity.encode()).hexdigest() + ".png"))
         if not frame.is_file():
             temporary = cache / (uuid.uuid4().hex + ".png")
             # Key at the same source dimensions as export, then downscale the
@@ -1466,7 +1468,7 @@ def create_app(settings: Settings | None = None) -> Flask:
                     raise APIInputError("chroma_preview_failed", "Could not create the frame preview. Your original footage is unchanged.", 422)
                 if store.load(project_id)["revision"] != project["revision"]:
                     raise APIInputError("revision_conflict", "The project changed while creating this preview. Refresh and retry.", 409)
-                temporary.replace(frame)
+                native_io_path(temporary).replace(frame)
             except subprocess.TimeoutExpired as error:
                 raise APIInputError("chroma_preview_timeout", "Frame preview timed out. Retry at a different source time.", 503) from error
             finally:

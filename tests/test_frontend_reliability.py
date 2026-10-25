@@ -447,7 +447,13 @@ def test_source_mixer_routing_controls_wrap_without_overlapping():
     role_pair = HTML.split('<div class="source-role-pair">', 1)[1].split("</div>", 1)[0]
     routing = HTML.split('<div class="source-routing-grid">', 1)[1].split("</div>", 1)[0]
     assert 'id="screenSourceSelect"' in role_pair and 'id="cameraSourceSelect"' in role_pair
-    assert 'id="audioSourceSelect"' in routing and 'id="firstSlotSelect"' in routing
+    assert 'id="primaryRoleSelect"' in routing and 'id="audioSourceSelect"' in routing
+    # First-source and fit controls belong to the advanced framing disclosure;
+    # source and audio routing stay visible in the primary source mixer.
+    disclosure = HTML.split('id="sourceSetupDisclosure"', 1)[1].split("</details>", 1)[0]
+    framing = disclosure.split('<div class="source-role-grid source-advanced-framing">', 1)[1].split("</div>", 1)[0]
+    assert 'id="firstSlotSelect"' in framing and 'id="stackFitSelect"' in framing
+    assert HTML.count('id="audioSourceSelect"') == HTML.count('id="firstSlotSelect"') == 1
     assert ".source-role-grid { display:grid; gap:12px; min-width:0; }" in CSS
     assert "repeat(auto-fit,minmax(min(100%,170px),1fr))" in CSS
     assert ".source-role-grid select { width:100%; min-width:0; max-width:100%;" in CSS
