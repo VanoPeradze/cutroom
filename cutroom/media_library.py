@@ -386,7 +386,17 @@ def prepare_media_edit(project: dict[str, Any], payload: dict[str, Any]) -> dict
         speed = number(payload.get("speed", 1), "speed", .25, 4)
         source_start = number(payload.get("source_start", 0), "source_start", 0, MAX_ASSET_SECONDS)
         available = 5 if asset["kind"] == "image" else float(asset["duration"]) - source_start
-        clip = {"id": "media_" + uuid.uuid4().hex, "asset_id": asset_id, "start": start, "end": min(duration, start + available), "source_start": source_start, "speed": speed, "volume_db": 0, "muted": False, "role": "music", "fade_in": 0, "fade_out": 0, "x": 0, "y": 0, "w": 1, "h": 1, "fit": "cover", "motion": "none", "audio_enabled": asset["kind"] == "audio"}
+        # Newly added footage keeps its attached sound, just like appended
+        # footage. Apply this only at creation: saved silent overlays and any
+        # explicit audio choice in the request must remain unchanged.
+        clip = {"id": "media_" + uuid.uuid4().hex, "asset_id": asset_id,
+                "start": start, "end": min(duration, start + available),
+                "source_start": source_start, "speed": speed, "volume_db": 0,
+                "muted": False, "role": "voice" if asset["kind"] == "video" else "music",
+                "fade_in": 0, "fade_out": 0, "x": 0, "y": 0, "w": 1, "h": 1,
+                "fit": "cover", "motion": "none",
+                "audio_enabled": asset["kind"] == "audio" or
+                                 asset["kind"] == "video" and bool(asset.get("has_audio"))}
         clip.update({key: payload[key] for key in CLIP_FIELDS if key in payload})
         clips.append(validate_media_clip(project, clip, duration))
     else:

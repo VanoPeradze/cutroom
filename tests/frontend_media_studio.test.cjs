@@ -146,7 +146,7 @@ test('video cards expose a separately gated append control and preserve Add over
     const card=studio.library.children[0];
     const overlay=card.children.find(node=>node.dataset.asset);
     assert.equal(overlay.dataset.asset,'video');
-    if(state === 'ready')assert.equal(overlay.textContent,'+ Add');
+    if(state === 'ready')assert.equal(overlay.textContent,'+ Overlay');
     const append=card.children.find(node=>node.dataset.append);
     if(state === 'audio')assert.equal(append,undefined);
     else {assert.equal(append.dataset.append,'video');assert.equal(append.textContent,'Append video');assert.equal(Boolean(append.disabled),state!=='ready');}
@@ -160,6 +160,38 @@ test('Append video click dispatches append without triggering Add overlay or imp
   studio.append=id=>calls.push(['append',id]);studio.add=id=>calls.push(['add',id]);studio.upload=()=>calls.push(['upload']);
   root.listeners.get('click')({target:{closest:()=>({dataset:{append:'video'},hasAttribute:()=>false})}});
   assert.deepEqual(calls,[['append','video']]);
+});
+
+test('selected video exposes saved audio state, mute recovery and absent-stream state without changing choices', () => {
+  for (const state of ['on','off','muted','group-muted','no-stream']) {
+    const {studio,activate} = studioHarness(async()=>null,{document:{createElement:()=>mediaControlNode()}});
+    const clip={id:'overlay',asset_id:'video',start:1,end:3,source_start:0,speed:2,role:'voice',audio_enabled:state!=='off',muted:state==='muted',volume_db:-6};
+    const project=appendProject({manual:{media_clips:[clip],audio_mixer:{voice_muted:state==='group-muted'}}});
+    project.assets.video.has_audio=state!=='no-stream';
+    const inputs=['audio_enabled','muted','volume_db','role','source_start'].map(key=>({dataset:{media:key},type:['audio_enabled','muted'].includes(key)?'checkbox':'number'}));
+    activate(project);studio.projectId=project.id;studio.selected='overlay';studio.root=mediaControlNode();studio.library=mediaControlNode();
+    studio.root.querySelectorAll=selector=>selector==='[data-media]'?inputs:[];
+    const before=JSON.stringify(project);Object.getPrototypeOf(studio).render.call(studio);
+    const status=studio.root.querySelector('.media-audio-status').textContent;
+    assert.match(status,state==='no-stream'?/no audio stream/:state==='off'?/sound is off/:state==='muted'?/clip is muted/:state==='group-muted'?/group is muted/:/sound is on.*-6 dB/);
+    assert.equal(inputs[0].checked,clip.audio_enabled);assert.equal(inputs[0].disabled,state==='no-stream');
+    assert.equal(inputs[1].checked,clip.muted);assert.equal(inputs[1].disabled,['off','no-stream'].includes(state));
+    assert.equal(inputs.at(-1).disabled,undefined,'audio availability never disables Source in');
+    assert.equal(JSON.stringify(project),before,'opening the inspector preserves saved silent overlays');
+    if(state==='on') { studio.mixerOverride={voice_muted:true};studio.renderClipAudio();assert.match(studio.root.querySelector('.media-audio-status').textContent,/group is muted/); }
+  }
+});
+
+test('enabling a previously silent overlay persists only that explicit choice and preserves trim, mute and speed', async () => {
+  let saved=appendProject({manual:{media_clips:[{id:'overlay',asset_id:'video',start:2,end:4,source_start:.5,video_source_start:1,speed:2,audio_enabled:false,muted:true,volume_db:-9,role:'voice'}]}});
+  saved.assets.video.has_audio=true;
+  const calls=[],{studio,activate}=studioHarness(async(action,payload)=>{calls.push([action,payload]);saved={...saved,manual:{...saved.manual,media_clips:saved.manual.media_clips.map(clip=>clip.id===payload.clip_id?{...clip,...payload}:clip)}};activate(saved);return saved;});
+  activate(saved);studio.selected='overlay';
+  studio.change({dataset:{media:'audio_enabled'},type:'checkbox',checked:true,value:'on',hasAttribute:()=>false,checkValidity:()=>true});
+  await studio.flush();
+  assert.equal(calls.length,1);assert.equal(calls[0][0],'media_update');assert.equal(calls[0][1].audio_enabled,true);
+  const clip=saved.manual.media_clips[0];assert.equal(clip.muted,true);assert.equal(clip.source_start,.5);assert.equal(clip.video_source_start,1);assert.equal(clip.speed,2);assert.equal(clip.volume_db,-9);
+  assert.equal(studio.clips()[0].audio_enabled,true,'reopened saved state retains explicit inclusion');
 });
 
 test('library video presence follows independent repeated occurrences and half-open timeline bounds', () => {

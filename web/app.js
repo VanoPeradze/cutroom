@@ -2941,9 +2941,9 @@ function renderAiDraftNotice() {
   const text = notice.querySelector("p"); if (text) text.textContent = t("aiDraftKept");
   const button = document.getElementById("applyAiDraftButton");
   if (button) { button.textContent = t("aiDraftApply"); button.disabled = state.manualEditBusy || foregroundBusy() || state.draftDirtyReasons.size > 0; }
-  const host = state.studio.open ? elements.advancedPanel?.querySelector(".studio-header") : elements.resultPanel;
+  const host = state.studio.open ? elements.advancedPanel?.querySelector(".advanced-content") : elements.resultPanel;
   if (!notice.hidden && host && notice.parentElement !== host) {
-    if (state.studio.open) host.appendChild(notice); else host.insertBefore(notice, host.firstChild);
+    host.insertBefore(notice, host.firstChild);
   }
 }
 
@@ -3498,9 +3498,11 @@ function renderDurationReview() {
   const message = t(summaryKey) + " " + t(key) + assessment + (chain.length > 2 ? ` ${t("durationChain")} ${chain.join(" → ")}.` : "");
   const text = node.querySelector("p");
   if (text) text.textContent = message.replace(/\{(selected|requested|available|limit|supported)\}/g,(_match,key)=>String(replacements[key]));
+  const summary = node.querySelector(".duration-review-summary");
+  if (summary) summary.textContent = t(summaryKey).replace(/\{(selected|requested)\}/g,(_match,key)=>String(replacements[key]));
   const button = document.getElementById("reviewDurationSettings");
   if (button) { button.textContent=t("reviewDurationSettings"); button.disabled=foregroundBusy() || state.manualEditBusy; }
-  const host = state.studio.open ? elements.advancedPanel?.querySelector(".studio-header") : elements.resultPanel;
+  const host = state.studio.open ? elements.advancedPanel?.querySelector(".advanced-content") : elements.resultPanel;
   if (host && node.parentElement !== host) host.insertBefore(node, host.firstChild);
 }
 

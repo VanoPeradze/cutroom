@@ -100,6 +100,10 @@ export class MediaStudio {
       <p class="media-selection-empty">Select an added clip on the timeline to adjust its timing, position and sound.</p>
       <section class="media-inspector" hidden data-editor-shortcuts="off">
         <h4 class="media-selected-name"></h4>
+        <div class="media-audio-choice" data-kind="sound">
+          <label class="media-audio-toggle" data-kind="video"><input data-media="audio_enabled" type="checkbox"> Include source sound</label>
+          <p class="media-audio-status" role="status"></p>
+        </div>
         <div class="media-fields">
           <label>Start (seconds)<input data-media="start" type="number" min="0" step="0.01"></label>
           <label>End (seconds)<input data-media="end" type="number" min="0" step="0.01"></label>
@@ -108,12 +112,12 @@ export class MediaStudio {
           <label data-kind="visual">Framing<select data-media="fit"><option value="cover">Fill frame</option><option value="contain">Fit entire image</option></select></label>
           <label data-kind="image">Motion<select data-media="motion"><option value="none">Still</option><option value="zoom_in">Slow zoom</option><option value="pan">Slow pan</option></select></label>
         </div>
-        <details class="inspector-section media-clip-audio" data-kind="sound"><summary>Clip audio</summary><div class="media-fields">
+        <details class="inspector-section media-clip-audio" data-kind="sound" open><summary>Audio settings</summary><div class="media-fields">
           <label data-kind="sound">Audio group<select data-media="role"><option value="music">Music</option><option value="voice">Voiceover</option><option value="effects">Effects</option></select></label>
           <label data-kind="sound">Clip volume (dB)<input data-media="volume_db" type="range" min="-60" max="12" step="1"><output data-value="volume_db"></output></label>
           <label data-kind="sound">Fade in (seconds)<input data-media="fade_in" type="number" min="0" step="0.1"></label>
           <label data-kind="sound">Fade out (seconds)<input data-media="fade_out" type="number" min="0" step="0.1"></label>
-          <label data-kind="video"><input data-media="audio_enabled" type="checkbox"> Use clip audio</label>
+          <label data-kind="sound"><input data-media="muted" type="checkbox"> Mute this clip</label>
         </div></details>
         <details class="media-placement"><summary>Position & size</summary><div class="media-fields">
           <label>Left (%)<input data-media="x" type="number" min="0" max="100" step="1"></label>
@@ -121,7 +125,7 @@ export class MediaStudio {
           <label>Width (%)<input data-media="w" type="number" min="1" max="100" step="1"></label>
           <label>Height (%)<input data-media="h" type="number" min="1" max="100" step="1"></label>
         </div></details>
-        <p class="media-help">Drag the clip or its edges in the timeline. Changes save automatically. Picture speed does not change the main speech or music.</p>
+        <p class="media-help">Drag the clip or its edges in the timeline. Changes save automatically. Picture speed changes only the image; clip sound stays at normal speed from Source in.</p>
         <div class="media-actions"><button type="button" data-action="split">Split at playhead</button><button type="button" data-action="duplicate">Duplicate</button><button type="button" data-action="remove">Remove</button></div>
       </section>
       <details class="inspector-section media-library-section" open><summary>Project files</summary>
@@ -448,8 +452,9 @@ export class MediaStudio {
       const title = document.createElement('span'); title.textContent = `${asset.name} · ${asset.kind}`; title.title = asset.name; card.append(title);
       const meta = document.createElement('small'); meta.className = 'media-asset-meta'; meta.dataset.kind = asset.kind; meta.textContent = asset.kind === 'image' ? 'Image' : libraryClock(asset.duration); card.append(meta);
       const button = document.createElement('button'); button.type = 'button'; button.dataset.asset = asset.id;
-      button.textContent = asset.status === 'ready' ? '+ Add' : asset.status || 'Preparing'; button.disabled = asset.status !== 'ready'; card.append(button); library.append(card);
+      button.textContent = asset.status === 'ready' ? asset.kind === 'video' ? '+ Overlay' : '+ Add' : asset.status || 'Preparing'; button.disabled = asset.status !== 'ready'; card.append(button); library.append(card);
       if (asset.kind === 'video') {
+        button.title = asset.has_audio ? 'Overlay at the playhead with source sound; change sound in the selected clip' : 'Overlay at the playhead; this file has no audio stream';
         const review=document.createElement('button');review.type='button';review.dataset.reviewShot=asset.id;review.textContent='Review shot / In–Out';review.disabled=asset.status!=='ready'||!project?.draft||this.options.busy()||this.uploading;card.append(review);
         const append = document.createElement('button'); append.type = 'button'; append.dataset.append = asset.id;
         append.textContent = 'Append video'; append.title = 'Add this video and its sound at the end of the edit';
@@ -477,7 +482,25 @@ export class MediaStudio {
       for (const node of this.root.querySelectorAll('[data-kind]')) node.hidden = !({timed:asset.kind !== 'image',visual:asset.kind !== 'audio',sound:asset.kind !== 'image',video:asset.kind === 'video',image:asset.kind === 'image'}[node.dataset.kind]);
       this.root.querySelector('.media-placement').hidden = asset.kind === 'audio';
     }
+    this.renderClipAudio();
     this.renderMixer();
+  }
+  renderClipAudio() {
+    const clip = this.clips().find(item => item.id === this.selected), asset = this.project()?.assets?.[clip?.asset_id];
+    if (!clip || !asset || !this.root) return;
+    const hasSound = asset.kind === 'audio' || Boolean(asset.has_audio);
+    const included = asset.kind === 'audio' || Boolean(clip.audio_enabled);
+    const group = clip.role === 'voice' ? 'Voiceover' : clip.role === 'effects' ? 'Effects' : 'Music';
+    const status = this.root.querySelector('.media-audio-status');
+    status.textContent = !hasSound ? 'This source file has no audio stream.' : !included
+      ? 'Source sound is off for this clip. Enable it above for preview and export.'
+      : clip.muted ? 'This clip is muted in preview and export.'
+      : this.mixer()[`${clip.role || 'music'}_muted`] ? `${group} group is muted. Unmute it in Audio to hear this clip.`
+      : `Source sound is on · ${clip.volume_db || 0} dB · ${group} group`;
+    for (const input of this.root.querySelectorAll('[data-media]')) {
+      if (input.dataset.media === 'audio_enabled') input.disabled = !hasSound;
+      else if (['role','volume_db','fade_in','fade_out','muted'].includes(input.dataset.media)) input.disabled = !hasSound || !included;
+    }
   }
   renderMixer() {
     const mixer = this.mixer();
@@ -501,6 +524,7 @@ export class MediaStudio {
     for (const [role,{row}] of this.channelMeters || []) {
       row.classList.toggle('is-muted',Boolean(mixer[`${role}_muted`]) || Boolean(this.solo && role !== 'master' && this.solo !== role));
     }
+    this.renderClipAudio();
   }
   // Which channels carry sound in this edit, so the panel can say what a fader does.
   audibleChannels(mixer = this.mixer()) {

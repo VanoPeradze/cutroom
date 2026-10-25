@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.3 Beta repair candidate - 2026-10-25 - Preview space and added-video sound
+
+- The short AI draft notice now opens its explanation on demand in the inspector, leaving the preview header clear. Draft and target lengths remain visible.
+- Newly added video overlays include detected source sound by default, like appended footage. Existing silent clips and saved mute, gain and routing choices remain unchanged.
+- Select an added video to see **Include source sound**, clip mute, volume and audio group. For an older silent overlay, enable its source sound and check clip/group mute. Picture speed changes the image only; sound keeps its normal clock from Source in.
+- Website candidate changes show the update status in English and Hebrew while keeping current public downloads identified. This source entry does not establish publication or new native Mac qualification.
+
 ## 1.2 Beta - 2026-10-19 - FFmpeg export compatibility hotfix
 
 - A fresh Windows installation could open successfully but fail every video export after setup installed FFmpeg 9.0.2. Its renderer still requested the removed `-filter_complex_script` and `-vsync` options.

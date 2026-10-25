@@ -155,7 +155,7 @@ def test_existing_media_add_remains_an_overlay_and_does_not_extend_timeline(api)
     after = store.load(pid)
     assert after["manual"]["sequence"] == before["manual"]["sequence"]
     clip = after["manual"]["media_clips"][-1]
-    assert (clip["start"], clip["end"], clip["role"], clip["audio_enabled"]) == (3, 6, "music", False)
+    assert (clip["start"], clip["end"], clip["role"], clip["audio_enabled"]) == (3, 6, "voice", True)
 
 
 @pytest.mark.parametrize(("field", "bad"), [

@@ -182,7 +182,9 @@ Open **More editing tools → Keys / Shortcuts** and choose a preset. The list s
 
 ### Add media and mix sound
 
-In **Media & audio**, choose **Add media** to import video, an image or audio into this project's library. Wait for preparation, place the playhead and select **+ Add**. Drag the new clip or its edges in the waveform/timeline lanes; use its inspector for exact start/end, source in, volume and fades. Images can stay still, slowly zoom or pan. **Use clip audio** enables sound from an added video; check its **Audio group**.
+In **Media**, choose **Add media** to import video, an image or audio into this project's library. Wait for preparation, place the playhead and select **+ Overlay**. **Append video** adds footage and sound at the end of the edit instead. Drag the new clip or its edges in the waveform/timeline lanes; use its inspector for exact start/end, source in, volume and fades. Images can stay still, slowly zoom or pan.
+
+New video overlays include detected source sound by default. Select a clip to check **Include source sound**, **Mute this clip**, volume and **Audio group**; these choices affect preview and export. Existing silent overlays keep their saved choice: enable source sound to hear them, and check clip/group mute. Videos without an audio stream say so. Picture speed changes only the image; source sound stays at normal speed from **Source in**.
 
 The timeline waveform shows measured audio from the selected original A/B source, including manual edits without AI. Imported audio has its own waveform. A silent section, missing audio and a pending/unavailable measurement are different states.
 
