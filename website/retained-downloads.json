@@ -112,5 +112,41 @@
     "mirrors": [
       "https://cutroom-studio.expo.app/downloads/SOURCE-20261019-hotfix1.zip"
     ]
+  },
+  {
+    "filename": "CUTROOM-1.2-Beta-20261022-maintenance1.zip",
+    "bytes": 5966487,
+    "sha256": "3497a455d90d65ea7a84ca3569b36ad332dbede392bf480cc34f7bf331662677",
+    "url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261022-maintenance1/CUTROOM-1.2-Beta-20261022-maintenance1.zip",
+    "mirrors": [
+      "https://cutroom-studio.expo.app/downloads/CUTROOM-1.2-Beta-20261022-maintenance1.zip"
+    ]
+  },
+  {
+    "filename": "CUTROOM-1.2-Beta-Windows-20261022-maintenance1.zip",
+    "bytes": 2965586,
+    "sha256": "9a6d20825ad9f66dd29859fa683519400f8756bc6c572f66a8c82962060433ee",
+    "url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261022-maintenance1/CUTROOM-1.2-Beta-Windows-20261022-maintenance1.zip",
+    "mirrors": [
+      "https://cutroom-studio.expo.app/downloads/CUTROOM-1.2-Beta-Windows-20261022-maintenance1.zip"
+    ]
+  },
+  {
+    "filename": "CUTROOM-1.2-Beta-Mac-20261022-maintenance1.zip",
+    "bytes": 2976890,
+    "sha256": "c2fbc2b2f8bcd071ebd37f6059266c6cea3ec4db4cd5a4525f0539b95ff5f9b2",
+    "url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261022-maintenance1/CUTROOM-1.2-Beta-Mac-20261022-maintenance1.zip",
+    "mirrors": [
+      "https://cutroom-studio.expo.app/downloads/CUTROOM-1.2-Beta-Mac-20261022-maintenance1.zip"
+    ]
+  },
+  {
+    "filename": "SOURCE-203d164.zip",
+    "bytes": 4966866,
+    "sha256": "2f7cb74c682b681ab185306123c349d869b5d0dc7568825ab94602f9d0a92785",
+    "url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261022-maintenance1/SOURCE-203d164.zip",
+    "mirrors": [
+      "https://cutroom-studio.expo.app/downloads/SOURCE-203d164.zip"
+    ]
   }
 ]
