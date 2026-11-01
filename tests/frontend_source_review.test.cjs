@@ -96,10 +96,9 @@ test('failed edit keeps original selection and allows retry; busy blocks duplica
   const pending=f.review.edit('sequence_source_restore');
   assert.equal(f.nodes.restore.disabled,true);assert.equal(f.nodes.slot.disabled,true);
   await f.review.edit('sequence_source_restore');resolve(null);await pending;
-  assert.equal(f.nodes.restore.disabled,false);assert.match(f.nodes.status.textContent,/not changed/);
+  assert.equal(f.nodes.restore.disabled,false);assert.match(f.nodes.status.textContent,/not confirmed/);
   assert.deepEqual(plain(f.review.selection),{start:4,end:6});
 });
-
 test('B transcript and waveform are mapped back from analysis clock to B original time',()=>{
   const f=fixture();f.current.analysis={audio_source:'B',audio_timeline_offset:2,transcript:{segments:[{start:6,end:8,text:'B speech'}]},audio:{waveform:[{start:6,end:7,peak:.8}],ranges:{silence:[{start:7,end:8}]}}};
   f.review.open('B');f.nodes.video.listeners.loadedmetadata();
@@ -177,5 +176,25 @@ test('retry keeps the preview cursor inside the selected range',()=>{
   const f=fixture(); f.review.open(); f.review.select({start:4,end:6});
   f.nodes.video.currentTime=5; f.nodes.video.listeners.error(); f.nodes.retry.onclick();
   f.nodes.video.listeners.loadedmetadata(); assert.equal(f.nodes.video.currentTime,5);
+  assert.deepEqual(plain(f.review.selection),{start:4,end:6});
+});
+
+
+test('retry preserves a cursor at zero even when the selection starts later',()=>{
+  const f=fixture(); f.review.open(); f.review.select({start:4,end:6});
+  f.nodes.video.currentTime=0; f.nodes.video.listeners.error(); f.nodes.retry.onclick();
+  f.nodes.video.listeners.loadedmetadata();
+  assert.equal(f.nodes.video.currentTime,0);
+  assert.deepEqual(plain(f.review.selection),{start:4,end:6});
+});
+
+test('an unexpected edit failure ends loading and does not claim the edit was unchanged',async()=>{
+  const f=fixture(); f.review.open();
+  f.review.applyEdit=async()=>{ throw new Error('connection lost'); };
+  await assert.doesNotReject(f.review.edit('sequence_source_restore'));
+  assert.equal(f.review.busy,false);
+  assert.equal(f.nodes.restore.disabled,false);
+  assert.match(f.nodes.status.textContent,/could not confirm/i);
+  assert.match(f.nodes.status.textContent,/reopen/i);
   assert.deepEqual(plain(f.review.selection),{start:4,end:6});
 });

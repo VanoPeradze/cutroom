@@ -122,7 +122,7 @@ export class SourceReview {
   loadPreview({ resume = false } = {}) {
     const p=this.getProject(),n=this.nodes;
     if (!this.dialog.open || this.busy || p?.id !== this.projectId || !p.sources?.[this.slot]) return false;
-    this.resumePreviewAt=resume ? Number(n.video.currentTime || this.selection?.start || 0) : null;
+    this.resumePreviewAt=resume ? Number(n.video.currentTime ?? this.selection?.start ?? 0) : null;
     this.previewState="loading"; n.retry.hidden=true;
     n.status.textContent="Loading original preview. Your edit stays unchanged.";
     n.video.src=this.mediaUrl(p.sources[this.slot]); n.video.load();
@@ -193,7 +193,9 @@ export class SourceReview {
       const detail=action === "undo" ? {} : {slot:this.slot,scope:this.nodes.scope.value === "edit" ? "edit" : this.slot,source_start:this.selection.start,source_end:this.selection.end};
       const result=await this.applyEdit(action,detail);
       this.refresh();
-      this.nodes.status.textContent=result ? (action === "undo" ? "Undone." : action === "sequence_source_restore" ? "Footage restored. Already-kept footage was not duplicated." : "Selection removed from the edit. The original is still here.") : "The edit was not changed. Select the section again and retry.";
+      this.nodes.status.textContent=result ? (action === "undo" ? "Undone." : action === "sequence_source_restore" ? "Footage restored. Already-kept footage was not duplicated." : "Selection removed from the edit. The original is still here.") : "The edit was not confirmed. Check the current project before trying again.";
+    } catch (error) {
+      this.nodes.status.textContent="Could not confirm whether the edit changed. Close and reopen the project to check it before trying again.";
     } finally { this.busy=false; this.updateControls(); }
   }
 }
