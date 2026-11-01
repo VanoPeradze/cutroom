@@ -198,3 +198,33 @@ test('an unexpected edit failure ends loading and does not claim the edit was un
   assert.match(f.nodes.status.textContent,/reopen/i);
   assert.deepEqual(plain(f.review.selection),{start:4,end:6});
 });
+
+
+test('source B does not invent a clock for old waveform or transcript data',()=>{
+  for(const value of [undefined,null,'','  ',false,{},NaN,Infinity]) {
+    const f=fixture();
+    f.current.analysis={audio_source:'B',audio:{waveform:[{start:4,end:5,peak:.8}]},
+      transcript:{segments:[{start:4,end:6,text:'B speech'}]}};
+    if(value!==undefined) f.current.analysis.audio_timeline_offset=value;
+    f.review.open('B'); f.nodes.video.listeners.loadedmetadata();
+    assert.equal(f.review.timeline.project.analysis.audio,null,'unknown B clock must not plot old analysis waveform');
+    assert.notEqual(f.nodes.quote.textContent,'B speech','unknown B clock must not match a transcript segment');
+  }
+});
+
+test('an explicit zero offset retains source B transcript and waveform',()=>{
+  const f=fixture();
+  f.current.analysis={audio_source:'B',audio_timeline_offset:0,audio:{waveform:[{start:4,end:5,peak:.8}]},
+    transcript:{segments:[{start:4,end:6,text:'B speech'}]}};
+  f.review.open('B'); f.nodes.video.listeners.loadedmetadata();
+  assert.deepEqual(plain(f.review.timeline.project.analysis.audio.waveform),[{start:4,end:5,peak:.8}]);
+  assert.equal(f.nodes.quote.textContent,'B speech');
+});
+
+test('a native source B waveform remains usable without an analysis offset',()=>{
+  const f=fixture();
+  f.current.analysis={audio_source:'B',audio:{waveform:[{start:4,end:5,peak:.8}]}};
+  f.current.pre_analysis={audio:{B:{available:true,waveform:[{start:1,end:2,peak:.6}]}}};
+  f.review.open('B');
+  assert.deepEqual(plain(f.review.timeline.project.analysis.audio.waveform),[{start:1,end:2,peak:.6}]);
+});

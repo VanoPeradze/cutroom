@@ -29,6 +29,13 @@ export function reviewSelectionStats(ranges, selection) {
   return {kept,removed:Math.max(0,selection.end-selection.start-kept)};
 }
 
+function analysisOffset(analysis, slot) {
+  if (slot !== "B") return 0;
+  const value=analysis?.audio_timeline_offset;
+  if (value == null || (typeof value !== "number" && typeof value !== "string") || (typeof value === "string" && !value.trim())) return NaN;
+  return Number(value);
+}
+
 export function sourceReviewAudio(project, slot) {
   if (project?.sources?.[slot]?.has_audio === false) return null;
   // Preparation is measured on the original A/B clocks before AI analysis.
@@ -38,7 +45,7 @@ export function sourceReviewAudio(project, slot) {
   const analysis=project?.analysis || {};
   const audioSlot=String(analysis.audio_source || project?.draft?.audio_source || "A").toUpperCase();
   if (audioSlot!==slot || !analysis.audio) return null;
-  const offset=slot==="B" ? Number(analysis.audio_timeline_offset || 0) : 0;
+  const offset=analysisOffset(analysis,slot);
   if (!Number.isFinite(offset)) return null;
   const duration=Number(project.sources[slot].duration);
   const remap=rows=>(rows || []).map(row=>({...row,start:Math.max(0,row.start-offset),end:Math.min(duration,row.end-offset)})).filter(row=>row.end>row.start);
@@ -153,8 +160,9 @@ export class SourceReview {
     const p=this.getProject(),n=this.nodes;
     // Transcript timestamps belong to their audio source, never the other lane.
     const audioSlot=String(p?.analysis?.audio_source || p?.draft?.audio_source || "A").toUpperCase();
-    const time=n.video.currentTime + (audioSlot === "B" ? Number(p?.analysis?.audio_timeline_offset) : 0);
-    const segment=audioSlot===this.slot ? p.analysis?.transcript?.segments?.find(s=>time>=s.start&&time<s.end) : null;
+    const offset=analysisOffset(p?.analysis,audioSlot);
+    const time=n.video.currentTime + offset;
+    const segment=audioSlot===this.slot && Number.isFinite(offset) ? p.analysis?.transcript?.segments?.find(s=>time>=s.start&&time<s.end) : null;
     n.quote.textContent=segment?.text || "Preview the original footage here. Your edited preview stays separate.";
   }
 
