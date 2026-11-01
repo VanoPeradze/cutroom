@@ -64,31 +64,33 @@
   // Native details keeps section navigation usable without JavaScript.
   const mobileNav = document.getElementById('mobileNav');
   const mobileNavToggle = document.getElementById('mobileNavToggle');
-  let mobileNavHasFocus = false;
-  mobileNav.addEventListener('focusin', () => { mobileNavHasFocus = true; });
-  mobileNav.addEventListener('focusout', event => {
-    if (event.relatedTarget && !mobileNav.contains(event.relatedTarget)) mobileNavHasFocus = false;
-  });
-  mobileNav.addEventListener('keydown', event => {
-    if (event.key !== 'Escape' || !mobileNav.open) return;
-    event.preventDefault();
-    event.stopPropagation();
-    mobileNav.open = false;
-    mobileNavToggle.focus({preventScroll: true});
-  });
-  mobileNav.addEventListener('click', event => {
-    if (event.target.closest('a[href^="#"]')) { mobileNavHasFocus = false; mobileNav.open = false; }
-  });
-  document.addEventListener('click', event => {
-    if (!mobileNav.contains(event.target)) { mobileNavHasFocus = false; mobileNav.open = false; }
-  });
-  window.matchMedia('(max-width: 767px)').addEventListener('change', event => {
-    if (event.matches) return;
-    const hadFocus = mobileNavHasFocus && document.hasFocus();
-    mobileNavHasFocus = false;
-    mobileNav.open = false;
-    if (hadFocus) languageSwitch.focus({preventScroll: true});
-  });
+  if (mobileNav && mobileNavToggle) {
+    let mobileNavHasFocus = false;
+    mobileNav.addEventListener('focusin', () => { mobileNavHasFocus = true; });
+    mobileNav.addEventListener('focusout', event => {
+      if (event.relatedTarget && !mobileNav.contains(event.relatedTarget)) mobileNavHasFocus = false;
+    });
+    mobileNav.addEventListener('keydown', event => {
+      if (event.key !== 'Escape' || !mobileNav.open) return;
+      event.preventDefault();
+      event.stopPropagation();
+      mobileNav.open = false;
+      mobileNavToggle.focus({preventScroll: true});
+    });
+    mobileNav.addEventListener('click', event => {
+      if (event.target.closest('a[href^="#"]')) { mobileNavHasFocus = false; mobileNav.open = false; }
+    });
+    document.addEventListener('click', event => {
+      if (!mobileNav.contains(event.target)) { mobileNavHasFocus = false; mobileNav.open = false; }
+    });
+    window.matchMedia('(max-width: 767px)').addEventListener('change', event => {
+      if (event.matches) return;
+      const hadFocus = mobileNavHasFocus && document.hasFocus();
+      mobileNavHasFocus = false;
+      mobileNav.open = false;
+      if (hadFocus) languageSwitch.focus({preventScroll: true});
+    });
+  }
 
   // Workspace tour: without this script every panel stays visible in reading order.
   const tabList = document.querySelector('.tour-tabs');

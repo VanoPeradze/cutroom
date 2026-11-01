@@ -403,3 +403,26 @@ test('mobile navigation keeps section links available without script', () => {
   }
   assert.match(css, /@media\s*\(max-width:\s*767px\)[\s\S]*?\.mobile-nav\s*\{\s*display:\s*block/);
 });
+
+test('cached pages without the mobile menu do not break site initialization', async () => {
+  const {runInNewContext} = await import('node:vm');
+  const block = script.slice(script.indexOf('  // Native details keeps section navigation'), script.indexOf('  // Workspace tour:'));
+  assert.ok(block.includes('mobileNav'));
+  assert.doesNotThrow(() => runInNewContext(block, {document:{getElementById:()=>null},window:{}}));
+});
+
+test('mobile navigation restores focus after its element is hidden on resize', async () => {
+  const {runInNewContext} = await import('node:vm');
+  const block = script.slice(script.indexOf('  // Native details keeps section navigation'), script.indexOf('  // Workspace tour:'));
+  const listeners={}, documentListeners={}; let mediaChange, focused=false;
+  const menu={open:true,addEventListener:(name,fn)=>{listeners[name]=fn;},contains:()=>false};
+  const summary={focus(){}};
+  const document={getElementById:id=>id==='mobileNav'?menu:summary,addEventListener:(name,fn)=>{documentListeners[name]=fn;},hasFocus:()=>true,activeElement:{}};
+  const window={matchMedia:()=>({addEventListener:(name,fn)=>{mediaChange=fn;}})};
+  const languageSwitch={focus:()=>{focused=true;}};
+  runInNewContext(block,{document,window,languageSwitch});
+  listeners.focusin();
+  mediaChange({matches:false});
+  assert.equal(menu.open,false);
+  assert.equal(focused,true);
+});
