@@ -261,7 +261,7 @@ html[data-motion=paused] .hero-lead::before { animation-play-state:paused; }
 .mobile-nav summary { display:flex; align-items:center; justify-content:center; min-width:44px; min-height:44px; border:1px solid var(--line); border-radius:6px; color:var(--text); cursor:pointer; list-style:none; }
 .mobile-nav summary::-webkit-details-marker { display:none; }
 .mobile-nav-label { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
-.mobile-nav-menu { position:absolute; z-index:25; inset-block-start:calc(100% + 8px); inset-inline-start:0; min-width:200px; padding:6px; background:var(--panel); border:1px solid var(--line); border-radius:8px; box-shadow:0 12px 32px #0008; }
+.mobile-nav-menu { position:absolute; z-index:25; inset-block-start:calc(100% + 8px); inset-inline-start:0; min-width:200px; max-height:calc(100vh - 82px); max-height:calc(100dvh - 82px); overflow-y:auto; overscroll-behavior:contain; padding:6px; background:var(--panel); border:1px solid var(--line); border-radius:8px; box-shadow:0 12px 32px #0008; }
 .site-header nav .mobile-nav-menu a { display:flex; justify-content:flex-start; min-height:44px; padding:10px 12px; border-radius:4px; color:var(--text); white-space:nowrap; }
 @media (max-width:767px) { .mobile-nav { display: block; } }
 

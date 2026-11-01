@@ -402,6 +402,7 @@ test('mobile navigation keeps section links available without script', () => {
     else assert.match(links[0][0], /data-he="AI"/);
   }
   assert.match(css, /@media\s*\(max-width:\s*767px\)[\s\S]*?\.mobile-nav\s*\{\s*display:\s*block/);
+  assert.match(css, /\.mobile-nav-menu\s*\{[^}]*max-height:[^}]*overflow-y:\s*auto/);
 });
 
 test('cached pages without the mobile menu do not break site initialization', async () => {
