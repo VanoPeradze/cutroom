@@ -54,6 +54,7 @@ export class SourceReview {
     this.timeline = new TimelineView(n.canvas,n.scroll,time => this.seek(time),range => this.select(range),null,{sourceReview:true,canEdit:()=>!this.busy});
     n.close.onclick = () => this.dialog.close();
     this.dialog.addEventListener("close", () => { n.video.pause(); this.timeline.cancelGesture(); n.video.removeAttribute("src"); n.video.load(); });
+    n.retry.onclick = () => { if (this.loadPreview({ resume: true })) n.canvas.focus(); };
     n.slot.onchange = () => { this.slot=n.slot.value; this.selection=null; this.refresh(true); };
     n.scope.onchange = () => this.updateControls();
     n.restore.onclick = () => this.edit("sequence_source_restore");
@@ -66,8 +67,20 @@ export class SourceReview {
     n.zoomOut.onclick = () => this.timeline.setZoom(this.timeline.zoom/1.5);
     n.exact.onclick = () => { this.dialog.close(); this.exactInsert(); };
     n.video.addEventListener("timeupdate", () => { this.timeline.setPlayhead(n.video.currentTime); this.updateQuote(); });
-    n.video.addEventListener("loadedmetadata", () => this.seek(this.selection?.start || 0));
-    n.video.addEventListener("error", () => { if (this.dialog.open && n.video.getAttribute("src")) n.status.textContent="This source could not be played. Try closing and reopening the project."; });
+    n.video.addEventListener("loadedmetadata", () => {
+      if (!this.dialog.open) return;
+      this.seek(this.resumePreviewAt ?? this.selection?.start ?? 0);
+      this.resumePreviewAt=null;
+      if (this.previewState === "loading" || this.previewState === "error") {
+        n.status.textContent="Preview ready. Click a section or drag to select a range.";
+      }
+      this.previewState="ready"; n.retry.hidden=true;
+    });
+    n.video.addEventListener("error", () => {
+      if (!this.dialog.open || !n.video.getAttribute("src")) return;
+      this.previewState="error"; n.retry.hidden=false;
+      n.status.textContent="Preview could not load. Check that the source file is available and CUTROOM is running, then retry. Your edit and selection have not changed.";
+    });
     this.dialog.addEventListener("keydown", event => {
       if (event.code !== "Space" || event.target.closest("input,select,button,video")) return;
       event.preventDefault(); event.stopPropagation();
@@ -97,13 +110,23 @@ export class SourceReview {
     this.timeline.setProject({id:`${p.id}:${this.slot}`,__sourceReview:true,settings:p.settings,sources:{A:{...p.sources[this.slot],thumbnail_urls:p.sources[this.slot].thumbnail_urls || p.analysis?.thumbnail_urls?.[this.slot]}},
       analysis:{audio:waveform},draft:{keep_ranges:this.ranges.keeps,cuts:this.ranges.removed,camera_plan:[]}});
     if (sourceChanged) {
-      n.video.src=this.mediaUrl(p.sources[this.slot]); n.video.load();
+      this.loadPreview();
       this.timeline.fit();
       const first=this.ranges.removed[0];
       this.selection=first ? {...first} : null;
     }
     if (this.selection) this.timeline.setSelection(this.selection,false,true);
     this.updateControls();
+  }
+
+  loadPreview({ resume = false } = {}) {
+    const p=this.getProject(),n=this.nodes;
+    if (!this.dialog.open || this.busy || p?.id !== this.projectId || !p.sources?.[this.slot]) return false;
+    this.resumePreviewAt=resume ? Number(n.video.currentTime || this.selection?.start || 0) : null;
+    this.previewState="loading"; n.retry.hidden=true;
+    n.status.textContent="Loading original preview. Your edit stays unchanged.";
+    n.video.src=this.mediaUrl(p.sources[this.slot]); n.video.load();
+    return true;
   }
 
   select(range) {

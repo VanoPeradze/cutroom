@@ -10,14 +10,14 @@
   <meta name="theme-color" content="#101615">
   <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
   <link rel="canonical" href="https://cutroom-studio.expo.app/">
-  <link rel="stylesheet" href="/styles.css?v=20261025-audiofix1">
-  <script src="/site.js?v=20261022-studio" defer></script>
+  <link rel="stylesheet" href="/styles.css?v=20261101-publish1">
+  <script src="/site.js?v=20261101-publish1" defer></script>
 </head>
 <body class="marketing-page">
 <a class="skip" href="#main" data-he="דילוג לתוכן">Skip to content</a>
 <header class="site-header">
   <a class="brand" href="#main" aria-label="CUTROOM home" data-he-aria="עמוד הבית של CUTROOM"><img src="/assets/mark.svg" width="30" height="24" alt=""><span>CUTROOM</span></a>
-  <nav aria-label="Site navigation" data-he-aria="ניווט באתר"><a class="nav-section" href="#start" data-he="התחלה">Start</a><a class="nav-section" href="#workspaces" data-he="סביבות עבודה">Workspaces</a><a class="nav-section" href="#ai" data-he="AI">AI</a><a class="nav-section" href="#guide" data-he="התקנה">Install</a><a id="languageSwitch" href="?lang=he" lang="he">עברית</a><a class="github-link" href="https://github.com/VanoPeradze/cutroom" dir="ltr" aria-label="CUTROOM on GitHub" data-he-aria="CUTROOM ב־GitHub"><img src="/assets/github-mark.svg" width="18" height="18" alt=""><span>GitHub</span></a></nav>
+  <nav aria-label="Site navigation" data-he-aria="ניווט באתר"><a class="nav-section" href="#start" data-he="התחלה">Start</a><a class="nav-section" href="#workspaces" data-he="סביבות עבודה">Workspaces</a><a class="nav-section" href="#ai" data-he="AI">AI</a><a class="nav-section" href="#guide" data-he="התקנה">Install</a><a id="languageSwitch" href="?lang=he" lang="he">עברית</a><a class="github-link" href="https://github.com/VanoPeradze/cutroom" dir="ltr" aria-label="CUTROOM on GitHub" data-he-aria="CUTROOM ב־GitHub"><img src="/assets/github-mark.svg" width="18" height="18" alt=""><span>GitHub</span></a><button id="motionToggle" class="motion-toggle" type="button" aria-pressed="false" aria-label="Pause background animation"><svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><path d="M7 4v12M13 4v12" fill="none" stroke="currentColor" stroke-width="2"/></svg><span>Pause motion</span></button></nav>
 </header>
 <main id="main" tabindex="-1">
   <section class="hero" id="download">
@@ -35,20 +35,19 @@
         <a id="downloadButton" class="button download-link" href="https://github.com/VanoPeradze/cutroom/releases/download/v1.3-beta-20261025-audiofix1/CUTROOM-1.3-Beta-Windows-review-bd62ec2.zip"><span data-he="הורדה ל־Windows">Download for Windows</span><svg width="18" height="18" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M10 3v10m-4-4 4 4 4-4M4 16h12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
         <a id="macDownloadButton" class="button button-secondary download-link" href="https://github.com/VanoPeradze/cutroom/releases/download/v1.3-beta-20261025-audiofix1/CUTROOM-1.3-Beta-combined-review-bd62ec2.zip"><span data-he="הורדה ל־Mac">Download for Mac</span><svg width="18" height="18" viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M10 3v10m-4-4 4 4 4-4M4 16h12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
       </div>
-        <p class="setup-note" data-he="בדיקת התקנה נקייה של ה־ZIP הזה ב־Windows לא הושלמה. בדיקות Mac האוטומטיות עברו; בדיקות ממשק והאזנה ידניות עדיין לא בוצעו. דיוק בעברית ומסגור אוטומטי לפי דובר עדיין אינם גמורים.">Windows clean-install qualification for this ZIP is incomplete. Mac automated checks passed; physical UI and listening checks remain untested. Hebrew accuracy and automatic speaker framing remain unfinished.</p>
-        <p class="platform-links"><span class="version-pill" dir="ltr">1.3 Beta</span><a href="#install-help" data-he="איך מתקינים?">Installation help</a><a href="#accessibility-help" data-he="נגישות">Accessibility</a><a href="https://github.com/VanoPeradze/cutroom/blob/master/docs/PLATFORMS.md#linux-source-based-development-path" data-he="מדריך Linux מקוד המקור">Linux source guide</a></p>
-        <p class="setup-note" data-he="בטא ציבורית — 25 באוקטובר 2026. בדקו טיוטות וייצוא לפני פרסום.">Public beta · 25 October 2026. Review drafts and exports before publishing.</p>
+        <p class="setup-note download-status" data-he="גרסת בטא: בדקו את הייצוא לפני פרסום. בדיקת התקנה נקייה ב־Windows טרם הושלמה.">Beta: review exports before publishing. Windows clean-install checks are incomplete.</p>
+        <p class="setup-note download-status" id="download-build-status" data-he="ההורדות הן מבניית 25 באוקטובר 2026. שיפורי ממשק העורך מ־1 בנובמבר נמצאים בבדיקת קוד וטרם נכללו בקובצי ה־ZIP.">Downloads use the 25 October 2026 build. The 1 November editor UI improvements are in source review and are not yet included in these ZIPs.</p>
+        <p class="platform-links"><span class="version-pill" dir="ltr">1.3 Beta</span><a href="#install-help" data-he="איך מתקינים?">Installation help</a></p>
         <details id="download-setup" class="download-setup"><summary data-he="לפני ההורדה">Before you download</summary><div>
+        <p class="setup-note" data-he="בדיקת התקנה נקייה של ה־ZIP הזה ב־Windows לא הושלמה. בדיקות Mac האוטומטיות עברו; בדיקות ממשק והאזנה ידניות עדיין לא בוצעו. דיוק בעברית ומסגור אוטומטי לפי דובר עדיין אינם גמורים.">Windows clean-install qualification for this ZIP is incomplete. Mac automated checks passed; physical UI and listening checks remain untested. Hebrew accuracy and automatic speaker framing remain unfinished.</p>
+        <p class="setup-note" data-he="בטא ציבורית — 25 באוקטובר 2026. בדקו טיוטות וייצוא לפני פרסום.">Public beta · 25 October 2026. Review drafts and exports before publishing.</p>
+        <p class="platform-links"><a href="#accessibility-help" data-he="נגישות">Accessibility</a><a href="https://github.com/VanoPeradze/cutroom/blob/master/docs/PLATFORMS.md#linux-source-based-development-path" data-he="מדריך Linux מקוד המקור">Linux source guide</a></p>
         <p class="setup-note" data-he="Windows דורש תחילה WinGet וסביבת Microsoft Visual C++ x64. הוראות וקישור ההתקנה מופיעים בהמשך.">Windows requires WinGet and Microsoft Visual C++ x64 runtime first. See installation help below.</p>
         <p class="setup-note" data-he="ב־Mac משתמשים בקובץ המשולב. חלצו אותו, פתחו את תיקיית mac והפעילו START CUTROOM.command לצד App.">Mac uses the combined ZIP. Extract it, open mac, then run START CUTROOM.command beside App.</p>
         <p class="setup-note" data-he="ההתקנה הראשונית דורשת אינטרנט. עריכה ידנית ללא חשבון.">First setup needs internet. Manual editing needs no account.</p>
         </div></details>
       </div>
     </div>
-    <aside class="update-strip shell" aria-labelledby="update-title">
-      <div class="update-heading"><p class="eyebrow" data-he="בטא 1.3 · סביבת העבודה והסאונד">1.3 Beta · Workspace &amp; sound</p><h2 id="update-title" data-he="יותר מקום לעריכה. שליטה ברורה בסאונד.">More room to edit.<br>Clearer control of sound.</h2></div>
-      <div class="update-copy"><p data-he="סרטונים חדשים מביאים איתם את הסאונד. אפשר להשאיר אותו, להשתיק או להתאים את העוצמה בחלונית המדיה. אורך טיוטת ה־AI מוצג כעת בהודעה קצרה שאפשר לפתוח לפרטים.">New videos bring their sound. Keep it, mute it, or set its level in Media. AI draft length now lives in a compact notice you can expand for details.</p><a class="update-link" href="#update-status"><span data-he="מה חדש ב־1.3">What’s new in 1.3</span><span aria-hidden="true">↗</span></a></div>
-    </aside>
     <figure class="editor-preview shell" id="inside">
       <div class="preview-heading"><span class="preview-index" dir="ltr">CUTROOM / EDIT</span><span data-he="העורך האמיתי. חומר הדגמה מקורי.">Actual editor. Original demo footage.</span></div>
       <button id="expandShot" class="shot-button" type="button" aria-label="Enlarge editor screenshot" data-he-aria="הגדלת צילום העורך" aria-haspopup="dialog" aria-controls="imageDialog">
@@ -57,6 +56,10 @@
       </button>
       <figcaption><span data-he="צילום אמיתי של העורך · 19 באוקטובר 2026">Actual editor · Captured 19 October 2026</span><span data-he="כותרת STUDIO SESSION ואודיו מקוריים שנוצרו במחשב. ללא חומר של צד שלישי או אדם אמיתי.">Original STUDIO SESSION footage and procedural audio. No third-party footage or real person is shown.</span></figcaption>
     </figure>
+    <aside class="update-strip shell" aria-labelledby="update-title">
+      <div class="update-heading"><p class="eyebrow" data-he="בטא 1.3 · סביבת העבודה והסאונד">1.3 Beta · Workspace &amp; sound</p><h2 id="update-title" data-he="יותר מקום לעריכה. שליטה ברורה בסאונד.">More room to edit.<br>Clearer control of sound.</h2></div>
+      <div class="update-copy"><p data-he="סרטונים חדשים מביאים איתם את הסאונד. אפשר להשאיר אותו, להשתיק או להתאים את העוצמה בחלונית המדיה. אורך טיוטת ה־AI מוצג כעת בהודעה קצרה שאפשר לפתוח לפרטים.">New videos bring their sound. Keep it, mute it, or set its level in Media. AI draft length now lives in a compact notice you can expand for details.</p><a class="update-link" href="#update-status"><span data-he="מה חדש ב־1.3">What’s new in 1.3</span><span aria-hidden="true">↗</span></a></div>
+    </aside>
     <div class="promise shell"><span data-he="חינם. קוד פתוח.">Free. Open source.</span><span data-he="בלי סימן מים.">No watermark.</span><span data-he="הקבצים נשארים אצלך.">Your files stay with you.</span></div>
   </section>
 

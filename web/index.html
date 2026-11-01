@@ -10,17 +10,17 @@
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/assets/styles.css?v=1.2-beta-20261019">
   <link rel="stylesheet" href="/assets/workspace.css?v=1.2-beta-20261019">
-  <link rel="stylesheet" href="/assets/media-studio.css?v=1.2-beta-20261019">
+  <link rel="stylesheet" href="/assets/media-studio.css?v=1.3-beta-20261101-ui1">
   <link rel="stylesheet" href="/assets/stabilization-studio.css?v=1.2-beta-20261019">
-  <link rel="stylesheet" href="/assets/chroma-studio.css?v=1.2-beta-20261019">
+  <link rel="stylesheet" href="/assets/chroma-studio.css?v=1.3-beta-20261101-ui1">
   <link rel="stylesheet" href="/assets/text-studio.css?v=1.2-beta-20261019">
-  <link rel="stylesheet" href="/assets/welcome.css?v=20261025-v13">
+  <link rel="stylesheet" href="/assets/welcome.css?v=1.3-beta-20261101-ui1">
   <link rel="stylesheet" href="/assets/creator-ui.css?v=1.2-beta-20261024-ui-clarity1">
   <link rel="stylesheet" href="/assets/editor-panels.css?v=1.2-beta-20261019">
   <link rel="stylesheet" href="/assets/studio-design.css?v=1.2-beta-20261019">
   <link rel="stylesheet" href="/assets/studio-chrome.css?v=1.2-beta-20261019">
   <link rel="stylesheet" href="/assets/studio-screens.css?v=1.2-beta-20261019">
-  <link rel="stylesheet" href="/assets/ui-polish.css?v=1.2-beta-20261019">
+  <link rel="stylesheet" href="/assets/ui-polish.css?v=1.3-beta-20261101-ui4">
 </head>
 <body class="welcome-mode">
   <a class="skip-link" href="#main" data-i18n="skip">Skip to content</a>
@@ -62,9 +62,9 @@
       <div class="welcome-copy">
         <div class="welcome-kicker">
           <p class="eyebrow">FREE VIDEO EDITOR FOR CREATORS</p>
-          <span>1.2 BETA · OPEN SOURCE</span>
+          <span>1.3 BETA · OPEN SOURCE</span>
         </div>
-        <h1>Hours of footage.<br><em>Minutes to a great clip.</em></h1>
+        <h1>Your footage.<br><em>Your next edit.</em></h1>
         <p class="welcome-lead">Choose how you want to start.</p>
         <div class="welcome-actions">
           <button class="button primary large" id="newProjectButton">
@@ -811,7 +811,7 @@
       <div class="source-review-player"><video data-review="video" controls playsinline preload="metadata" aria-label="Original source preview"></video><p data-review="quote" dir="auto"></p></div>
       <div class="source-review-toolbar"><label>View <select data-review="slot" aria-label="Original recording"><option value="A">Source A</option><option value="B">Source B</option></select></label><span class="source-review-legend"><span>■ In edit</span><span>▧ Removed</span></span><button data-review="previous" type="button">← Previous removed</button><button data-review="next" type="button">Next removed →</button><div><button data-review="zoomOut" type="button" aria-label="Zoom out original timeline">−</button><button data-review="zoomIn" type="button" aria-label="Zoom in original timeline">＋</button><button data-review="fit" type="button">Fit</button></div></div>
       <div class="timeline-scroll source-review-timeline" data-review="scroll"><canvas data-review="canvas" height="180" tabindex="0" role="slider" aria-label="Original footage timeline" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"></canvas></div>
-      <div class="source-review-actions"><p data-review="selection" aria-live="polite"></p><div><select data-review="scope" aria-label="Original footage edit scope"><option value="edit">Together (A+B)</option><option value="source">This source only</option></select><button class="button primary" data-review="restore" type="button">Restore to edit</button><button data-review="remove" type="button">Remove from edit</button><button data-review="undo" type="button">Undo</button><button class="source-review-exact" data-review="exact" type="button">Insert a copy by time…</button></div><p data-review="effect"></p><p data-review="status" role="status">Click a section to preview it. Drag to select your own range. Use the ruler to seek anywhere.</p></div>
+      <div class="source-review-actions"><p data-review="selection" aria-live="polite"></p><div><select data-review="scope" aria-label="Original footage edit scope"><option value="edit">Together (A+B)</option><option value="source">This source only</option></select><button class="button primary" data-review="restore" type="button">Restore to edit</button><button data-review="remove" type="button">Remove from edit</button><button data-review="undo" type="button">Undo</button><button class="source-review-exact" data-review="exact" type="button">Insert a copy by time…</button></div><p data-review="effect"></p><button type="button" class="button ghost" data-review="retry" hidden>Retry preview</button><p data-review="status" role="status">Click a section to preview it. Drag to select your own range. Use the ruler to seek anywhere.</p></div>
     </div>
   </dialog>
   <dialog id="projectsDialog" class="sheet-dialog" aria-labelledby="projectsTitle">
@@ -924,7 +924,7 @@
       <footer class="connection-actions"><button class="button ghost" id="forgetCloudKey" type="button">Forget session key</button><button class="button primary" id="saveAIConnection" type="submit">Use this connection</button></footer>
     </form>
   </dialog>
-  <script type="module" src="/assets/app.js?v=1.2-beta-20261024-insertgaps1"></script>
+  <script type="module" src="/assets/app.js?v=1.3-beta-20261101-ui6"></script>
   <script src="/assets/studio-screens.js?v=1.2-beta-20261024-ui-dedup1" defer></script>
 </body>
 </html>

@@ -1,10 +1,10 @@
 import { applyTranslations, dictionaries } from "./i18n.js?v=1.2-beta";
 import { TimelineView, formatTime, editableClips, timelineDuration, sequenceBlocks, sequenceGaps, sequenceGapClosureIssue, rippleMoveStart } from "./timeline.js?v=1.2-beta-20261024-insertgaps1";
-import { MediaStudio } from "./media-studio.js?v=1.2-beta-20261019";
+import { MediaStudio } from "./media-studio.js?v=1.3-beta-20261101-ui1";
 import { StabilizationStudio } from "./stabilization-studio.js?v=1.2-beta";
 import { ChromaStudio } from "./chroma-studio.js?v=1.2-beta";
 import { ChromaPreview } from "./chroma-preview.js?v=1.2-beta";
-import { SourceReview } from "./source-review.js?v=1.2-beta-20261024-insertgaps1";
+import { SourceReview } from "./source-review.js?v=1.3-beta-20261101-ui6";
 import { initWorkspace } from "./workspace.js?v=1.2-beta-20261019";
 import { KEYBOARD_PROFILES, resolveEditorShortcut, isEditorTransportSpace, shortcutRows } from "./keyboard.js?v=1.2-beta";
 import { AudioThresholdView } from "./audio-meter.js?v=1.2-beta";
@@ -8079,6 +8079,13 @@ async function startExport() {
 
 function friendlyRenderError(message) {
   const value = String(message || "");
+  if (value.includes("Cannot inspect configured FFmpeg") || /(?:ENOENT|FileNotFoundError).*ffmpeg/i.test(value)) {
+    return uiCopy(
+      "FFmpeg אינו זמין לייצוא. העריכה נשמרה. בדקו את הוראות ההתקנה, הפעילו מחדש את CUTROOM ונסו שוב.",
+      "FFmpeg is unavailable for export. Your edit is saved. Check the installation guide, restart CUTROOM, then try again.",
+    );
+  }
+
   if (value === "captions_out_of_date" || value.includes("Captions no longer match")) {
     return uiCopy(
       "מקור האודיו או הסנכרון השתנו מאז יצירת הכתוביות. בנו את ה־Draft מחדש ואז ייצאו.",

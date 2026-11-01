@@ -7,8 +7,25 @@
   const dialog = document.getElementById('imageDialog');
   const screenshotButton = document.getElementById('expandShot');
   let screenshotOpener = null;
+  const motionToggle = document.getElementById('motionToggle');
+  const motionPreference = window.matchMedia('(prefers-reduced-motion: reduce)');
+  let motionPaused = motionPreference.matches;
+  function renderMotion() {
+    if (motionPreference.matches) motionPaused = true;
+    motionToggle.disabled = motionPreference.matches;
+    document.documentElement.dataset.motion = motionPaused ? 'paused' : 'running';
+    motionToggle.setAttribute('aria-pressed', String(motionPaused));
+    const label = language === 'he' ? (motionPaused ? 'הפעלת תנועה' : 'השהיית תנועה') : (motionPaused ? 'Play motion' : 'Pause motion');
+    const motionLabel = motionPreference.matches ? (language === 'he' ? 'תנועה מופחתת' : 'Reduced motion') : label;
+    motionToggle.setAttribute('aria-label', motionLabel);
+    motionToggle.querySelector('span').textContent = motionLabel;
+    motionToggle.querySelector('path').setAttribute('d', motionPaused ? 'M6 3l9 7-9 7Z' : 'M7 4v12M13 4v12');
+  }
+  motionToggle.addEventListener('click', () => { motionPaused = !motionPaused; renderMotion(); });
+  motionPreference.addEventListener('change', renderMotion);
   let language = new URL(location.href).searchParams.get('lang') === 'he' ? 'he' : 'en';
   function renderLanguage() {
+    renderMotion();
     document.documentElement.lang = language;
     document.documentElement.dir = language === 'he' ? 'rtl' : 'ltr';
     for (const item of translations) {

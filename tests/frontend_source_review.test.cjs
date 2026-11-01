@@ -9,7 +9,7 @@ const project=()=>({id:'p',settings:{fps:30},sources:{A:{duration:12,url:'a.mp4'
 
 function fixture() {
   const nodes={};
-  for(const key of ['canvas','scroll','close','slot','scope','restore','remove','undo','previous','next','fit','zoomIn','zoomOut','exact','video','status','quote','selection','summary','effect']) nodes[key]={
+  for(const key of ['retry','canvas','scroll','close','slot','scope','restore','remove','undo','previous','next','fit','zoomIn','zoomOut','exact','video','status','quote','selection','summary','effect']) nodes[key]={
     dataset:{review:key},value:'',listeners:{},currentTime:0,paused:true,
     addEventListener(name,fn){this.listeners[name]=fn;},querySelector(){return {};},focus(){this.focused=true;},
     pause(){this.paused=true;},play(){this.paused=false;return Promise.resolve();},load(){},removeAttribute(name){delete this[name];},getAttribute(name){return this[name];}
@@ -143,4 +143,39 @@ test('source review distinguishes no audio and unavailable preparation from meas
   f.review.refresh();
   assert.equal(f.review.timeline.project.analysis.audio.available,false);
   assert.equal(f.review.timeline.project.analysis.audio.warning,'decode failed');
+});
+
+test('failed source preview can retry without changing selection, zoom or saved edits',()=>{
+  const f=fixture(); f.review.open(); f.review.select({start:4,end:6}); f.review.timeline.zoom=3;
+  const before=JSON.stringify(f.current);
+  f.nodes.video.listeners.error();
+  assert.equal(f.nodes.retry.hidden,false); assert.match(f.nodes.status.textContent,/retry/);
+  f.nodes.retry.onclick();
+  assert.equal(f.nodes.retry.hidden,true); assert.match(f.nodes.status.textContent,/Loading/);
+  assert.deepEqual(plain(f.review.selection),{start:4,end:6}); assert.equal(f.review.timeline.zoom,3);
+  f.nodes.video.listeners.loadedmetadata();
+  assert.equal(f.nodes.video.currentTime,4); assert.match(f.nodes.status.textContent,/Preview ready/);
+  assert.equal(JSON.stringify(f.current),before); assert.equal(f.requests.length,0);
+});
+
+test('switching from a failed source clears its error after the next source loads',()=>{
+  const f=fixture(); f.review.open('A'); f.nodes.video.listeners.error();
+  f.nodes.slot.value='B'; f.nodes.slot.onchange();
+  assert.equal(f.nodes.video.src,'b.mp4'); assert.equal(f.nodes.retry.hidden,true);
+  f.nodes.video.listeners.loadedmetadata(); assert.doesNotMatch(f.nodes.status.textContent,/could not/);
+  assert.match(f.nodes.status.textContent,/Preview ready/);
+});
+
+test('retry cannot load a closed dialog, another project or a busy edit',()=>{
+  const f=fixture(); f.review.open(); f.dialog.close(); f.nodes.retry.onclick();
+  assert.equal(f.nodes.video.src,undefined);
+  f.review.open(); f.current={...f.current,id:'other'}; assert.equal(f.review.loadPreview(),false);
+  f.current={...f.current,id:'p'}; f.review.busy=true; assert.equal(f.review.loadPreview(),false);
+});
+
+test('retry keeps the preview cursor inside the selected range',()=>{
+  const f=fixture(); f.review.open(); f.review.select({start:4,end:6});
+  f.nodes.video.currentTime=5; f.nodes.video.listeners.error(); f.nodes.retry.onclick();
+  f.nodes.video.listeners.loadedmetadata(); assert.equal(f.nodes.video.currentTime,5);
+  assert.deepEqual(plain(f.review.selection),{start:4,end:6});
 });
