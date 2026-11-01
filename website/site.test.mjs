@@ -391,3 +391,15 @@ test('website resources remain local with no tracking or browser-storage APIs', 
     }
   }
 });
+
+test('mobile navigation keeps section links available without script', () => {
+  const menu = region('details', 'mobileNav');
+  assert.match(menu, /<summary\b[^>]*id="mobileNavToggle"/);
+  for (const target of ['#start', '#workspaces', '#ai', '#guide']) {
+    const links = linksTo(menu, target);
+    assert.equal(links.length, 1, `Missing mobile link to ${target}`);
+    if (target !== "#ai") assertLocalized(links[0]);
+    else assert.match(links[0][0], /data-he="AI"/);
+  }
+  assert.match(css, /@media\s*\(max-width:\s*767px\)[\s\S]*?\.mobile-nav\s*\{\s*display:\s*block/);
+});

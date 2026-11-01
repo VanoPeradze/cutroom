@@ -255,3 +255,16 @@ html[data-motion=paused] .hero-lead::before { animation-play-state:paused; }
  .footer { padding-bottom:max(28px,env(safe-area-inset-bottom)); }
 }
 @media (hover:none) { .motion-toggle:hover { background:transparent; color:var(--dim); } }
+
+/* Keep section navigation available at touch and keyboard sizes. */
+.mobile-nav { display:none; position:relative; }
+.mobile-nav summary { display:flex; align-items:center; justify-content:center; min-width:44px; min-height:44px; border:1px solid var(--line); border-radius:6px; color:var(--text); cursor:pointer; list-style:none; }
+.mobile-nav summary::-webkit-details-marker { display:none; }
+.mobile-nav-label { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
+.mobile-nav-menu { position:absolute; z-index:25; inset-block-start:calc(100% + 8px); inset-inline-start:0; min-width:200px; padding:6px; background:var(--panel); border:1px solid var(--line); border-radius:8px; box-shadow:0 12px 32px #0008; }
+.site-header nav .mobile-nav-menu a { display:flex; justify-content:flex-start; min-height:44px; padding:10px 12px; border-radius:4px; color:var(--text); white-space:nowrap; }
+@media (max-width:767px) { .mobile-nav { display: block; } }
+
+.mobile-nav-menu .mobile-github img { width:17px; height:17px; filter:invert(1); }
+@media (max-width:699px) { .site-header nav { gap:0; } }
+@media (max-width:399px) { .site-header { padding-inline:max(12px,env(safe-area-inset-left)) max(12px,env(safe-area-inset-right)); } .site-header nav > .github-link { display:none; } .mobile-nav-menu { position:fixed; left:max(12px,env(safe-area-inset-left)); right:max(12px,env(safe-area-inset-right)); top:70px; min-width:0; width:auto; } }
