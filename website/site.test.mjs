@@ -45,9 +45,9 @@ test('the 1.3 beta uses exact Windows, shared Mac/combined and source downloads'
     assert.match(mirror[0][2], /mirror/i);
     assert.ok(linksTo(html, `/downloads/${entry.filename}.sha256`).length >= 1);
   }
-  assert.equal(release.filename, 'CUTROOM-1.3-Beta-combined-review-bd62ec2.zip');
-  assert.equal(release.platforms.windows.filename, 'CUTROOM-1.3-Beta-Windows-review-bd62ec2.zip');
-  assert.equal(release.platforms.mac.filename, 'CUTROOM-1.3-Beta-combined-review-bd62ec2.zip');
+  assert.equal(release.filename, 'CUTROOM-1.3-Beta-combined-538eef2.zip');
+  assert.equal(release.platforms.windows.filename, 'CUTROOM-1.3-Beta-Windows-538eef2.zip');
+  assert.equal(release.platforms.mac.filename, 'CUTROOM-1.3-Beta-combined-538eef2.zip');
   assert.equal(release.platforms.mac.filename, release.filename);
   assert.equal(release.platforms.mac.folder,'mac', 'Mac uses the shared combined archive mac folder');
   assert.equal(linksTo(html, release.url).length, 2); // Optional combined ZIP help link, separate from the Mac button.
@@ -56,7 +56,7 @@ test('the 1.3 beta uses exact Windows, shared Mac/combined and source downloads'
   assert.match(html, /Mac uses the combined ZIP\. Extract it, open mac, then run START CUTROOM\.command beside App\./);
   assert.match(region('details', 'install-help'), /The optional combined ZIP has exactly two folders: windows and mac/);
   const source = release.source_archive;
-  assert.equal(source.filename, 'SOURCE-bd62ec2.zip');
+  assert.equal(source.filename, 'SOURCE-538eef2.zip');
   for (const url of [source.url, `/downloads/${source.filename}`, `/downloads/${source.filename}.sha256`]) assert.equal(linksTo(html,url).length,1);
   assert.equal(downloadEntries(release).length,3);
   assert.match(html, /1\.3 Beta · Workspace &amp; sound/);
@@ -71,8 +71,8 @@ test('the 1.3 beta uses exact Windows, shared Mac/combined and source downloads'
 
 test('download metadata pins a dated release and preserves Expo mirrors and provenance', () => {
   const release = JSON.parse(readFileSync(new URL('./release.json', import.meta.url), 'utf8'));
-  assert.equal(release.github_release.tag, 'v1.3-beta-20261025-audiofix1');
-  assert.equal(release.github_release.previous_public_tag, 'v1.2-beta-20261024-update1');
+  assert.equal(release.github_release.tag, 'v1.3-beta-20261102-ui1');
+  assert.equal(release.github_release.previous_public_tag, 'v1.3-beta-20261025-audiofix1');
   assert.equal(release.github_release.tag_commit, release.source_commit);
   assert.equal(release.github_release.package_bytes_changed, true);
   assert.equal(release.github_release.url, `${repository}/releases/tag/${release.github_release.tag}`);
@@ -87,23 +87,23 @@ test('public beta retains exact automated native provenance and visible pending 
   assertPublishable(release);
   assert.equal(release.release_state,'beta');
   assert.equal(release.full_release_qualified,false);
-  assert.equal(release.source_commit,'bd62ec2a6857aeb2c0bd7ed55ef8f717bd83bbf6');
-  assert.equal(release.github_release.tag,'v1.3-beta-20261025-audiofix1');
-  assert.equal(release.native_validation.run_id,40189484448);
-  assert.equal(release.validated_pr_head,'6bbdb8f6b7476d9a7aace4b9d7788a8f38eb18cd');
+  assert.equal(release.source_commit,'538eef2adc6cad2ca60b20679fbf027dea142826');
+  assert.equal(release.github_release.tag,'v1.3-beta-20261102-ui1');
+  assert.equal(release.native_validation.run_id,41441683099);
+  assert.equal(release.validated_pr_head,'151d47e153893c1a86530abe61a46e2a124ac509');
   assert.equal(release.native_validation.head_commit,release.validated_pr_head);
   assert.equal(release.native_validation.application_source_commit,release.source_commit);
   assert.equal(release.native_validation.transcription_run,false);
   for (const architecture of ['arm64','x64']) {
     const checks = release.native_validation.architectures[architecture];
     assert.equal(checks.status,'passed');
-    assert.equal(checks.offline_checks_passed,73);
-    assert.equal(checks.feature_tests_passed,350);
+    assert.equal(checks.offline_checks_passed,7);
+    assert.equal(checks.offline_checks_scope,'seven named smoke groups, not a count of individual assertions');
+    assert.equal(checks.feature_tests_passed,357);
     assert.equal(checks.required_cases_passed,50);
     assert.equal(checks.skipped,0);
-    assert.equal(checks.overlay_audio_regressions_passed,10);
-    assert.equal(checks.frontend_audio_notice_checks_passed,67);
-    assert.equal(checks.job_id,architecture === 'arm64' ? 121157244112 : 121157244042);
+    assert.equal(checks.source_audio_and_caption_checks,'passed');
+    assert.equal(checks.job_id,architecture === 'arm64' ? 125266374797 : 125266374708);
     for (const gate of ['fresh_app_install','missing_pip_recovery','restart_persistence']) assert.equal(checks[gate],'passed');
     assert.equal(checks.combined_archive_sha256,release.sha256);
   }
@@ -120,10 +120,11 @@ test('public beta retains exact automated native provenance and visible pending 
   const installedWindows = release.windows_installed_validation;
   assert.equal(installedWindows.application_source_commit,release.source_commit);
   assert.equal(installedWindows.archive_sha256,release.platforms.windows.sha256);
-  assert.equal(installedWindows.native_encoded_export_cases_passed,5);
+  assert.equal(installedWindows.packaged_batch_launcher,'not_run');
+  assert.equal(installedWindows.model_inference,'not_run');
   assert.equal(installedWindows.clean_os_installation,'not_run');
   assert.equal(installedWindows.human_listening,'not_performed');
-  for (const gate of ['portrait_and_landscape','decoded_source_audio_and_gain','explicit_silence_clip_and_group_mute','source_in_picture_speed_audio_clock','save_reopen_and_export_records']) assert.equal(installedWindows[gate],'passed');
+  for (const gate of ['portrait_720x1280','two_source_stacked_30_70_pixels','selected_source_b_audio_detected','full_decode','direct_unmodified_setup_without_ollama','saved_project_and_export_after_server_restart']) assert.equal(installedWindows[gate],'passed');
   const resourceAbort = release.historical_windows_validation.find(entry=>entry.application_source_commit==='50843dd178282cf7d55846aad7ec1d8de61aeed7');
   assert.ok(resourceAbort,'Preserve the earlier candidate resource abort without qualifying the revised package');
   assert.equal(resourceAbort.archive_sha256,'4a9fa16ad1894d9837f53f163d41ce25cf852262321ae8f727d7982ef48cb95e');

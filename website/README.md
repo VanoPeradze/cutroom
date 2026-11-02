@@ -7,7 +7,13 @@ This folder is the maintained website source inside the public [CUTROOM reposito
 It does not run the editor, receive footage, process video, or handle user API keys.
 The previous separate website checkout is not needed for future updates.
 
-## 1.3 beta - 25 October 2026
+## 1.3 beta - 2 November 2026
+
+Product source is `538eef2adc6cad2ca60b20679fbf027dea142826` and the release tag is `v1.3-beta-20261102-ui1`. The exact Windows and combined archives were tested in [run 41441683099](https://github.com/VanoPeradze/cutroom/actions/runs/41441683099). The combined archive supplies the `mac/` folder; there is no separate Mac rebuild. The source, Windows and combined ZIP hashes are pinned in `release.json`.
+
+Windows direct setup and synthetic portrait export were tested on a configured hosted runner, but clean-OS installation and the batch launcher remain untested. Physical-device, human listening, Gatekeeper and model/transcription acceptance remain untested. This proposal must not be deployed until PR #105 is merged and all three exact public release assets have been verified.
+
+## Previous 1.3 beta - 25 October 2026 (history)
 
 The exact product source is `bd62ec2a6857aeb2c0bd7ed55ef8f717bd83bbf6`, tree `16c2fdd875f1f173494e591def1842650b0f2d8c`. The release is [v1.3-beta-20261025-audiofix1](https://github.com/VanoPeradze/cutroom/releases/tag/v1.3-beta-20261025-audiofix1). Exact Mac ARM64 and Intel automated qualification passed in [run40189484448](https://github.com/VanoPeradze/cutroom/actions/runs/40189484448), tied to qualification head `6bbdb8f6b7476d9a7aace4b9d7788a8f38eb18cd` and the frozen combined archive. Both architectures passed empty-App installation, missing-pip recovery, synthetic exports and application restart/persistence. Physical UI, human listening and model transcription were not performed. Publication remains a separate action.
 
@@ -23,7 +29,7 @@ Windows clean-install/export/restart/persistence qualification is **incomplete**
 - `app.json`: the existing Expo website project identity, not a credential.
 - `release.json`: exact filenames, sizes, checksums and provenance for Windows, the shared Mac/combined archive and the source ZIP, their tag-specific GitHub URLs and retained Expo mirrors.
 - `prepare-download.mjs`: restores those approved artifacts locally without committing ZIPs to Git. A shared Mac/combined artifact is verified once; conflicting shared metadata is rejected.
-- `retained-downloads.json`: historical 1.1 and previous 1.2 archives that remain verified and deployed at their original mirror paths, including on a fresh checkout.
+- `retained-downloads.json`: historical 1.1, 1.2 and previous 1.3 archives that remain verified and deployed at their original mirror paths, including on a fresh checkout.
 - `prepare-assets.mjs`: copies exactly six canonical repository files into `public/`, entirely offline.
 
 Edit screenshots in `docs/images/{welcome,editor,ai-options}.png`, user guides in
