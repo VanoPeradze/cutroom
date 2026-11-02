@@ -19,7 +19,6 @@ jobs:
     env:
       TESTED_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
       CUTROOM_NO_BROWSER: '1'
-      CUTROOM_DATA_DIR: ${{ runner.temp }}\cutroom-test-data
       HF_HUB_OFFLINE: '1'
       TRANSFORMERS_OFFLINE: '1'
       HF_DATASETS_OFFLINE: '1'
@@ -28,6 +27,10 @@ jobs:
       PYTHONDONTWRITEBYTECODE: '1'
       PYTHONUTF8: '1'
     steps:
+      - name: Isolate test data in runner temporary storage
+        shell: pwsh
+        run: |
+          "CUTROOM_DATA_DIR=$(Join-Path $env:RUNNER_TEMP 'cutroom-test-data')" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - name: Check out the reviewed PR head
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -130,3 +133,4 @@ jobs:
           if-no-files-found: error
           compression-level: 0
           retention-days: 7
+
