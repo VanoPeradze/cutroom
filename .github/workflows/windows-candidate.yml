@@ -1,0 +1,132 @@
+name: Temporary Windows candidate qualification
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-candidate-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  candidate:
+    if: ${{ github.event.pull_request.head.repo.full_name == 'VanoPeradze/cutroom' && github.event.pull_request.head.ref == 'codex/cutroom-ui-20261101' }}
+    runs-on: windows-2022
+    timeout-minutes: 60
+    env:
+      TESTED_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      CUTROOM_NO_BROWSER: '1'
+      CUTROOM_DATA_DIR: ${{ runner.temp }}\cutroom-test-data
+      HF_HUB_OFFLINE: '1'
+      TRANSFORMERS_OFFLINE: '1'
+      HF_DATASETS_OFFLINE: '1'
+      HF_HUB_DISABLE_TELEMETRY: '1'
+      PIP_DISABLE_PIP_VERSION_CHECK: '1'
+      PYTHONDONTWRITEBYTECODE: '1'
+      PYTHONUTF8: '1'
+    steps:
+      - name: Check out the reviewed PR head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+      - name: Obtain and verify FFmpeg in temporary runner storage
+        timeout-minutes: 8
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $archive = Join-Path $env:RUNNER_TEMP 'ffmpeg-9.0.2-essentials.zip'
+          Invoke-WebRequest -Uri 'https://www.gyan.dev/ffmpeg/builds/packages/ffmpeg-9.0.2-essentials_build.zip' -OutFile $archive
+          $actual = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne '60f467265b1e312373dbcd92200c2618a74850f98d3d078e94296bb3fa2047ba') { throw 'FFmpeg archive checksum mismatch' }
+          $dest = Join-Path $env:RUNNER_TEMP 'ffmpeg-extracted'
+          Expand-Archive -LiteralPath $archive -DestinationPath $dest
+          $files = @(Get-ChildItem -LiteralPath $dest -Filter ffmpeg.exe -File -Recurse)
+          if ($files.Count -ne 1 -or -not (Test-Path -LiteralPath (Join-Path $files[0].DirectoryName 'ffprobe.exe'))) { throw 'FFmpeg binaries missing or ambiguous' }
+          $files[0].DirectoryName | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      - name: Build and verify the Windows source-beta archive
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $buildRoot = Join-Path $env:RUNNER_TEMP 'cutroom-windows-build'
+          $output = @(python scripts/build_test_package.py --output-dir $buildRoot)
+          if ($LASTEXITCODE -ne 0) { throw 'Package build failed' }
+          $archive = $output[-1].Trim()
+          if (-not (Test-Path -LiteralPath $archive -PathType Leaf)) { throw 'Package archive missing' }
+          python scripts/build_test_package.py --verify $archive
+          if ($LASTEXITCODE -ne 0) { throw 'Package verification failed' }
+          $packageRoot = Join-Path $env:RUNNER_TEMP 'cutroom-windows-extracted'
+          Expand-Archive -LiteralPath $archive -DestinationPath $packageRoot
+          "CUTROOM_CANDIDATE_ARCHIVE=$archive" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "CUTROOM_EXTRACTED_APP=$packageRoot\App" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Validate the packaged Windows installer source
+        shell: pwsh
+        run: |
+          & (Join-Path $env:CUTROOM_EXTRACTED_APP 'scripts\verify_windows_installer.ps1')
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged installer source validation failed' }
+      - name: Install test runtime in a runner-only virtual environment
+        timeout-minutes: 15
+        shell: pwsh
+        run: |
+          $venv = Join-Path $env:RUNNER_TEMP 'cutroom-test-venv'
+          python -m venv $venv
+          if ($LASTEXITCODE -ne 0) { throw 'Could not create test virtual environment' }
+          $python = Join-Path $venv 'Scripts\python.exe'
+          & $python -m pip install -r (Join-Path $env:CUTROOM_EXTRACTED_APP 'tests\requirements.txt')
+          if ($LASTEXITCODE -ne 0) { throw 'Test dependencies failed to install' }
+          "CUTROOM_TEST_PYTHON=$python" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Run packaged runtime preflight
+        shell: pwsh
+        run: |
+          Set-Location -LiteralPath $env:CUTROOM_EXTRACTED_APP
+          & $env:CUTROOM_TEST_PYTHON scripts/preflight.py
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged runtime preflight failed' }
+      - name: Run frontend tests from the extracted package
+        timeout-minutes: 5
+        shell: pwsh
+        run: |
+          Set-Location -LiteralPath $env:CUTROOM_EXTRACTED_APP
+          $tests = @(Get-ChildItem -LiteralPath 'tests' -Filter 'frontend*.test.cjs' -File | ForEach-Object { $_.FullName })
+          if ($tests.Count -lt 1) { throw 'Packaged frontend tests missing' }
+          node --test @tests
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged frontend tests failed' }
+      - name: Run strict feature tests from the extracted package
+        timeout-minutes: 8
+        shell: pwsh
+        run: |
+          Set-Location -LiteralPath $env:CUTROOM_EXTRACTED_APP
+          & $env:CUTROOM_TEST_PYTHON scripts/check_editor_release.py --source --report (Join-Path $env:RUNNER_TEMP 'cutroom-features.json')
+          if ($LASTEXITCODE -ne 0) { throw 'Required extracted-source feature tests failed or skipped' }
+          & $env:CUTROOM_TEST_PYTHON -c 'import json,os,pathlib; p=pathlib.Path(os.environ["RUNNER_TEMP"]); r=json.loads((p/"cutroom-features.json").read_text(encoding="utf-8")); (p/"cutroom-features-sanitized.json").write_text(json.dumps({"mode":r["mode"],"platform":r["platform"],"architecture":r["architecture"],"runtime":r["runtime"],"passed":r["features"]["passed"],"skipped":r["features"]["skipped"],"required_cases":r["features"]["required_cases"]},indent=2),encoding="utf-8")'
+          if ($LASTEXITCODE -ne 0) { throw 'Could not sanitize the feature report' }
+      - name: Test synthetic portrait, audio and process restart
+        timeout-minutes: 12
+        shell: pwsh
+        run: |
+          & $env:CUTROOM_TEST_PYTHON .github/scripts/windows_candidate_smoke.py --app $env:CUTROOM_EXTRACTED_APP --archive $env:CUTROOM_CANDIDATE_ARCHIVE --report (Join-Path $env:RUNNER_TEMP 'cutroom-windows-smoke.json')
+          if ($LASTEXITCODE -ne 0) { throw 'Candidate synthetic smoke failed' }
+          python scripts/build_test_package.py --verify $env:CUTROOM_CANDIDATE_ARCHIVE
+          if ($LASTEXITCODE -ne 0) { throw 'Candidate archive changed during tests' }
+      - name: Retain only the source package and test reports
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: CUTROOM-unpublished-windows-candidate
+          path: |
+            ${{ env.CUTROOM_CANDIDATE_ARCHIVE }}
+            ${{ env.CUTROOM_CANDIDATE_ARCHIVE }}.sha256
+            ${{ runner.temp }}/cutroom-features-sanitized.json
+            ${{ runner.temp }}/cutroom-windows-smoke.json
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
