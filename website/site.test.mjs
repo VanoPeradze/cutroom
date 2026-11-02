@@ -197,10 +197,12 @@ test('language switching preserves links, images and actionable controls', () =>
   }
   assert.match(html, /<html\b[^>]*lang="en"[^>]*dir="ltr"/);
   const languageLink = linksTo(html, '?lang=he');
-  assert.equal(languageLink.length, 1);
-  assert.match(languageLink[0][1], /lang="he"/);
-  assert.match(languageLink[0][2], /[\u0590-\u05ff]/);
-  assert.doesNotMatch(languageLink[0][1], /aria-label=/, 'The visible language name is the accessible name');
+  assert.equal(languageLink.length, 2);
+  for (const link of languageLink) {
+    assert.match(link[1], /lang="he"/);
+    assert.match(link[2], /[\u0590-\u05ff]/);
+    assert.doesNotMatch(link[1], /aria-label=/, 'The visible language name is the accessible name');
+  }
 });
 
 test('the concise introduction shows an authentic bilingual dark editor preview', () => {
@@ -426,4 +428,61 @@ test('mobile navigation restores focus after its element is hidden on resize', a
   mediaChange({matches:false});
   assert.equal(menu.open,false);
   assert.equal(focused,true);
+});
+
+test('background animation controls stay synchronized and respect device motion settings', async () => {
+  const {runInNewContext} = await import('node:vm');
+  const start = script.indexOf("  const motionToggle = document.getElementById('motionToggle');");
+  const end = script.indexOf('  let language = new URL(location.href)', start);
+  assert.ok(start >= 0 && end > start);
+  const block = script.slice(start, end);
+  const createControl = () => {
+    const state={textContent:''}, attributes={}, listeners={};
+    return {state,attributes,listeners,disabled:false,
+      querySelector:selector=>selector==='[data-motion-state]' ? state : null,
+      setAttribute:(name,value)=>{attributes[name]=value;},
+      addEventListener:(name,fn)=>{listeners[name]=fn;}};
+  };
+  const desktop=createControl(),mobile=createControl(), preference={matches:false};
+  preference.addEventListener=(name,fn)=>{preference[name]=fn;};
+  const document={documentElement:{dataset:{}},getElementById:id=>id==='motionToggle'?desktop:mobile};
+  const window={matchMedia:()=>preference};
+  runInNewContext("let language='he';\n"+block+'\nrenderMotion();',{document,window});
+  assert.equal(document.documentElement.dataset.motion,'running');
+  assert.equal(desktop.attributes['aria-pressed'],'true');
+  assert.equal(mobile.state.textContent,'פעיל');
+  mobile.listeners.click();
+  assert.equal(document.documentElement.dataset.motion,'paused');
+  assert.equal(desktop.attributes['aria-pressed'],'false');
+  assert.equal(mobile.state.textContent,'כבוי');
+  desktop.listeners.click();
+  assert.equal(document.documentElement.dataset.motion,'running');
+  preference.matches=true; preference.change();
+  assert.equal(document.documentElement.dataset.motion,'paused');
+  assert.equal(desktop.disabled,true);
+  assert.equal(mobile.disabled,true);
+  assert.match(mobile.state.textContent,/הגדרות המכשיר/);
+  mobile.listeners.click();
+  assert.equal(document.documentElement.dataset.motion,'paused');
+  preference.matches=false; preference.change();
+  assert.equal(mobile.disabled,false);
+  assert.equal(document.documentElement.dataset.motion,'paused');
+});
+
+test('an older cached page retains a working legacy motion control', async () => {
+  const {runInNewContext} = await import('node:vm');
+  const start=script.indexOf("  const motionToggle = document.getElementById('motionToggle');");
+  const end=script.indexOf('  let language = new URL(location.href)',start);
+  const block=script.slice(start,end), attrs={}, listeners={}, span={textContent:''}, path={d:'',setAttribute:(key,value)=>{path[key]=value;}};
+  const legacy={disabled:false,setAttribute:(name,value)=>{attrs[name]=value;},
+    querySelector:selector=>selector==='span'?span:selector==='path'?path:null,
+    addEventListener:(name,fn)=>{listeners[name]=fn;}};
+  const preference={matches:false,addEventListener(){}};
+  const document={documentElement:{dataset:{}},getElementById:id=>id==='motionToggle'?legacy:null};
+  runInNewContext("let language='en';\n"+block+'\nrenderMotion();',{document,window:{matchMedia:()=>preference}});
+  assert.equal(attrs['aria-label'],'Pause motion');
+  assert.equal(document.documentElement.dataset.motion,'running');
+  listeners.click();
+  assert.equal(attrs['aria-label'],'Play motion');
+  assert.equal(document.documentElement.dataset.motion,'paused');
 });
