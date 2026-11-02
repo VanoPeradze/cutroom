@@ -19,6 +19,7 @@ import tempfile
 import threading
 import time
 from urllib.error import URLError
+from urllib.parse import quote
 from urllib.request import urlopen
 
 
@@ -59,7 +60,7 @@ def exercise_server(app: Path, env: dict[str, str], project_id: str, export_name
             mixer = project["manual"]["source_mixer"]
             assert mixer["screen_slot"] == "A" and mixer["camera_slot"] == "B"
             assert mixer["primary_role"] == "screen" and mixer["first_slot"] == "B"
-            with urlopen(base + "/api/exports/" + export_name, timeout=20) as response:
+            with urlopen(base + "/api/exports/" + quote(export_name, safe=""), timeout=20) as response:
                 assert hashlib.sha256(response.read()).hexdigest() == expected_sha, "Export download bytes changed"
         finally:
             if proc.poll() is None:
@@ -170,13 +171,15 @@ def main() -> None:
         config_path.write_bytes(original_config)
         if hashlib.sha256(archive.read_bytes()).hexdigest() != archive_sha:
             raise RuntimeError("Candidate archive changed")
+        setup_result = (runner_temp / "cutroom-setup-result.txt").read_text(encoding="utf-8-sig").strip()
         report = {"head_sha": os.environ["TESTED_HEAD_SHA"], "candidate_sha256": archive_sha,
                   "mode": "extracted Windows source-beta on hosted Windows runner",
                   "checks": {"portrait_width": 720, "portrait_height": 1280, "duration_seconds": metadata["duration"],
                              "two_source_stacked_30_70_pixels": "passed", "source_B_audio_rms": rms,
                              "source_B_audio_frequency_hz": frequency, "full_decode": "passed",
+                             "direct_setup": setup_result,
                              "saved_project_and_export_after_server_restart": "passed"},
-                  "limits": ["Packaged native launcher and first-run setup were not run",
+                  "limits": ["Packaged native batch launcher was not run",
                              "No clean OS install, human listening, model, or physical-device test",
                              "AI disabled in extracted test configuration; archive unmodified"]}
         args.report.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
@@ -185,3 +188,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
