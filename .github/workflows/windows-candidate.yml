@@ -58,6 +58,11 @@ jobs:
           $files = @(Get-ChildItem -LiteralPath $dest -Filter ffmpeg.exe -File -Recurse)
           if ($files.Count -ne 1 -or -not (Test-Path -LiteralPath (Join-Path $files[0].DirectoryName 'ffprobe.exe'))) { throw 'FFmpeg binaries missing or ambiguous' }
           $files[0].DirectoryName | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          "CUTROOM_EXPECTED_FFMPEG=$($files[0].FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "CUTROOM_FFMPEG=$($files[0].FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "CUTROOM_FFPROBE=$(Join-Path $files[0].DirectoryName 'ffprobe.exe')" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          $filters = & $files[0].FullName -nostdin -hide_banner -filters
+          if ($LASTEXITCODE -ne 0 -or -not ($filters -match 'vidstabdetect') -or -not ($filters -match 'vidstabtransform')) { throw 'Downloaded FFmpeg lacks the required stabilization filters' }
       - name: Build and verify the Windows source-beta archive
         shell: pwsh
         run: |
@@ -78,6 +83,48 @@ jobs:
         run: |
           & (Join-Path $env:CUTROOM_EXTRACTED_APP 'scripts\verify_windows_installer.ps1')
           if ($LASTEXITCODE -ne 0) { throw 'Packaged installer source validation failed' }
+      - name: Run unmodified setup only when it cannot install or start Ollama
+        timeout-minutes: 15
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $setup = Join-Path $env:CUTROOM_EXTRACTED_APP 'setup_windows.ps1'
+          $setupHash = (Get-FileHash -LiteralPath $setup -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($setupHash -ne '7dff875f5ded0bdd78cef3560941c02188457cd6a9ef9befeca9d44e275ba633') { throw 'Setup changed since its optional installs were reviewed' }
+          $config = Get-Content -LiteralPath (Join-Path $env:CUTROOM_EXTRACTED_APP 'config.json') -Raw | ConvertFrom-Json
+          if ($config.ai.download_models_on_setup) { throw 'Model downloads must remain disabled' }
+          if ((Get-Command ffmpeg.exe).Source -ne $env:CUTROOM_EXPECTED_FFMPEG) { throw 'Unexpected FFmpeg on PATH' }
+          function Test-SetupExecutable([string]$Name) {
+            $command = Get-Command $Name -ErrorAction SilentlyContinue
+            if ($command -and $command.Source -and (Test-Path -LiteralPath $command.Source -PathType Leaf)) { return $true }
+            $directories = @()
+            if ($env:LOCALAPPDATA) { $directories += (Join-Path $env:LOCALAPPDATA 'Microsoft\WindowsApps'), (Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Links'), (Join-Path $env:LOCALAPPDATA 'Programs\Ollama') }
+            if ($env:ProgramFiles) { $directories += (Join-Path $env:ProgramFiles 'Ollama'), (Join-Path $env:ProgramFiles 'FFmpeg\bin') }
+            if (${env:ProgramFiles(x86)}) { $directories += (Join-Path ${env:ProgramFiles(x86)} 'FFmpeg\bin') }
+            if ($env:ChocolateyInstall) { $directories += (Join-Path $env:ChocolateyInstall 'bin') }
+            if ($env:USERPROFILE) { $directories += (Join-Path $env:USERPROFILE 'scoop\shims') }
+            $paths = @([Environment]::GetEnvironmentVariable('Path', 'Machine'), [Environment]::GetEnvironmentVariable('Path', 'User'), $env:PATH) -join ';'
+            $directories += @($paths -split ';' | Where-Object { $_ })
+            foreach ($directory in $directories) { if (Test-Path -LiteralPath (Join-Path $directory $Name) -PathType Leaf) { return $true } }
+            if ($env:LOCALAPPDATA) {
+              $packages = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages'
+              if (Test-Path -LiteralPath $packages -PathType Container) {
+                if (Get-ChildItem -LiteralPath $packages -Filter $Name -File -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1) { return $true }
+              }
+            }
+            return $false
+          }
+          $result = Join-Path $env:RUNNER_TEMP 'cutroom-setup-result.txt'
+          if ((Test-SetupExecutable 'winget.exe') -or (Test-SetupExecutable 'ollama.exe')) {
+            'not_run_optional_ollama_could_be_installed_or_started' | Set-Content -LiteralPath $result -Encoding utf8
+            Write-Host 'Setup not run because it could install or start an unapproved optional service.'
+          } else {
+            python -c 'import sys; assert sys.version_info[:2] == (3,12)'
+            if ($LASTEXITCODE -ne 0) { throw 'Expected Python 3.12 is unavailable' }
+            & (Get-Command pwsh).Source -NoProfile -NonInteractive -File $setup
+            if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath (Join-Path $env:CUTROOM_EXTRACTED_APP '.setup-complete') -PathType Leaf)) { throw 'Unmodified first-run setup failed' }
+            'passed_direct_unmodified_setup_without_ollama' | Set-Content -LiteralPath $result -Encoding utf8
+          }
       - name: Install test runtime in a runner-only virtual environment
         timeout-minutes: 15
         shell: pwsh
@@ -104,6 +151,20 @@ jobs:
           if ($tests.Count -lt 1) { throw 'Packaged frontend tests missing' }
           node --test @tests
           if ($LASTEXITCODE -ne 0) { throw 'Packaged frontend tests failed' }
+      - name: Test synthetic portrait, audio and process restart
+        timeout-minutes: 12
+        shell: pwsh
+        run: |
+          & $env:CUTROOM_TEST_PYTHON .github/scripts/windows_candidate_smoke.py --app $env:CUTROOM_EXTRACTED_APP --archive $env:CUTROOM_CANDIDATE_ARCHIVE --report (Join-Path $env:RUNNER_TEMP 'cutroom-windows-smoke.json')
+          if ($LASTEXITCODE -ne 0) { throw 'Candidate synthetic smoke failed' }
+          python scripts/build_test_package.py --verify $env:CUTROOM_CANDIDATE_ARCHIVE
+          if ($LASTEXITCODE -ne 0) { throw 'Candidate archive changed during tests' }
+      - name: Run release checker format regressions
+        shell: pwsh
+        run: |
+          Set-Location -LiteralPath $env:CUTROOM_EXTRACTED_APP
+          & $env:CUTROOM_TEST_PYTHON -m pytest -q tests/test_editor_release_checks.py::test_real_stabilization_cannot_be_silently_skipped_without_both_filters tests/test_editor_release_checks.py::test_available_filter_inventory_records_the_actual_runtime tests/test_editor_release_checks.py::test_vidstab_alone_cannot_skip_required_real_chroma_release_check
+          if ($LASTEXITCODE -ne 0) { throw 'Release checker format regression failed' }
       - name: Run strict feature tests from the extracted package
         timeout-minutes: 8
         shell: pwsh
@@ -113,14 +174,6 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Required extracted-source feature tests failed or skipped' }
           & $env:CUTROOM_TEST_PYTHON -c 'import json,os,pathlib; p=pathlib.Path(os.environ["RUNNER_TEMP"]); r=json.loads((p/"cutroom-features.json").read_text(encoding="utf-8")); (p/"cutroom-features-sanitized.json").write_text(json.dumps({"mode":r["mode"],"platform":r["platform"],"architecture":r["architecture"],"runtime":r["runtime"],"passed":r["features"]["passed"],"skipped":r["features"]["skipped"],"required_cases":r["features"]["required_cases"]},indent=2),encoding="utf-8")'
           if ($LASTEXITCODE -ne 0) { throw 'Could not sanitize the feature report' }
-      - name: Test synthetic portrait, audio and process restart
-        timeout-minutes: 12
-        shell: pwsh
-        run: |
-          & $env:CUTROOM_TEST_PYTHON .github/scripts/windows_candidate_smoke.py --app $env:CUTROOM_EXTRACTED_APP --archive $env:CUTROOM_CANDIDATE_ARCHIVE --report (Join-Path $env:RUNNER_TEMP 'cutroom-windows-smoke.json')
-          if ($LASTEXITCODE -ne 0) { throw 'Candidate synthetic smoke failed' }
-          python scripts/build_test_package.py --verify $env:CUTROOM_CANDIDATE_ARCHIVE
-          if ($LASTEXITCODE -ne 0) { throw 'Candidate archive changed during tests' }
       - name: Retain only the source package and test reports
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -130,7 +183,7 @@ jobs:
             ${{ env.CUTROOM_CANDIDATE_ARCHIVE }}.sha256
             ${{ runner.temp }}/cutroom-features-sanitized.json
             ${{ runner.temp }}/cutroom-windows-smoke.json
+            ${{ runner.temp }}/cutroom-setup-result.txt
           if-no-files-found: error
           compression-level: 0
           retention-days: 7
-

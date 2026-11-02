@@ -102,6 +102,7 @@ def main() -> None:
                    TRANSFORMERS_OFFLINE="1", HF_DATASETS_OFFLINE="1")
         os.environ.update({key: env[key] for key in ("CUTROOM_DATA_DIR", "CUTROOM_FFMPEG", "CUTROOM_FFPROBE")})
         config_path = app / "config.json"
+        original_config = config_path.read_bytes()
         config = json.loads(config_path.read_text(encoding="utf-8"))
         config["ai"]["enabled"] = False
         config["ai"]["download_models_on_setup"] = False
@@ -166,6 +167,7 @@ def main() -> None:
             raise RuntimeError(f"Selected source B audio did not survive export: rms={rms}, hz={frequency}")
         output_sha = hashlib.sha256(output.read_bytes()).hexdigest()
         exercise_server(app, env, project["id"], output.name, output_sha)
+        config_path.write_bytes(original_config)
         if hashlib.sha256(archive.read_bytes()).hexdigest() != archive_sha:
             raise RuntimeError("Candidate archive changed")
         report = {"head_sha": os.environ["TESTED_HEAD_SHA"], "candidate_sha256": archive_sha,

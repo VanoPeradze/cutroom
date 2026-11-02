@@ -87,7 +87,8 @@ def stabilization_capability(settings, *, cancel_check=None) -> dict:
                       timeout=15, cancel_check=cancel_check)
     except (OSError, subprocess.SubprocessError):
         return {"available": False, "engine": "vidstab", "message": "CUTROOM could not inspect the installed FFmpeg."}
-    filters = set(re.findall(r"^\s*[.TSC]{3}\s+(vidstabdetect|vidstabtransform)\s+", result.stdout, re.MULTILINE))
+    # FFmpeg 8+ prints two filter flags; older releases print three.
+    filters = set(re.findall(r"^\s*[.TSC]{2,3}\s+(vidstabdetect|vidstabtransform)\s+", result.stdout, re.MULTILINE))
     available = filters == {"vidstabdetect", "vidstabtransform"}
     return {
         "available": available, "engine": "vidstab",
