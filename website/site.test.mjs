@@ -197,10 +197,12 @@ test('language switching preserves links, images and actionable controls', () =>
   }
   assert.match(html, /<html\b[^>]*lang="en"[^>]*dir="ltr"/);
   const languageLink = linksTo(html, '?lang=he');
-  assert.equal(languageLink.length, 1);
-  assert.match(languageLink[0][1], /lang="he"/);
-  assert.match(languageLink[0][2], /[\u0590-\u05ff]/);
-  assert.doesNotMatch(languageLink[0][1], /aria-label=/, 'The visible language name is the accessible name');
+  assert.equal(languageLink.length, 2);
+  for (const link of languageLink) {
+    assert.match(link[1], /lang="he"/);
+    assert.match(link[2], /[\u0590-\u05ff]/);
+    assert.doesNotMatch(link[1], /aria-label=/, 'The visible language name is the accessible name');
+  }
 });
 
 test('the concise introduction shows an authentic bilingual dark editor preview', () => {
@@ -390,4 +392,97 @@ test('website resources remain local with no tracking or browser-storage APIs', 
       assert.doesNotMatch(source, /document\s*\.\s*cookie\b|\bcookieStore\b|\blocalStorage\b|\bsessionStorage\b|\bindexedDB\b|\bsendBeacon\b|\bfetch\s*\(|\bXMLHttpRequest\b|\bWebSocket\b|\bEventSource\b|\bserviceWorker\b/, filename);
     }
   }
+});
+
+test('mobile navigation keeps section links available without script', () => {
+  const menu = region('details', 'mobileNav');
+  assert.match(menu, /<summary\b[^>]*id="mobileNavToggle"/);
+  for (const target of ['#start', '#workspaces', '#ai', '#guide']) {
+    const links = linksTo(menu, target);
+    assert.equal(links.length, 1, `Missing mobile link to ${target}`);
+    if (target !== "#ai") assertLocalized(links[0]);
+    else assert.match(links[0][0], /data-he="AI"/);
+  }
+  assert.match(css, /@media\s*\(max-width:\s*767px\)[\s\S]*?\.mobile-nav\s*\{\s*display:\s*block/);
+  assert.match(css, /\.mobile-nav-menu\s*\{[^}]*max-height:[^}]*overflow-y:\s*auto/);
+});
+
+test('cached pages without the mobile menu do not break site initialization', async () => {
+  const {runInNewContext} = await import('node:vm');
+  const block = script.slice(script.indexOf('  // Native details keeps section navigation'), script.indexOf('  // Workspace tour:'));
+  assert.ok(block.includes('mobileNav'));
+  assert.doesNotThrow(() => runInNewContext(block, {document:{getElementById:()=>null},window:{}}));
+});
+
+test('mobile navigation restores focus after its element is hidden on resize', async () => {
+  const {runInNewContext} = await import('node:vm');
+  const block = script.slice(script.indexOf('  // Native details keeps section navigation'), script.indexOf('  // Workspace tour:'));
+  const listeners={}, documentListeners={}; let mediaChange, focused=false;
+  const menu={open:true,addEventListener:(name,fn)=>{listeners[name]=fn;},contains:()=>false};
+  const summary={focus(){}};
+  const document={getElementById:id=>id==='mobileNav'?menu:summary,addEventListener:(name,fn)=>{documentListeners[name]=fn;},hasFocus:()=>true,activeElement:{}};
+  const window={matchMedia:()=>({addEventListener:(name,fn)=>{mediaChange=fn;}})};
+  const languageSwitch={focus:()=>{focused=true;}};
+  runInNewContext(block,{document,window,languageSwitch});
+  listeners.focusin();
+  mediaChange({matches:false});
+  assert.equal(menu.open,false);
+  assert.equal(focused,true);
+});
+
+test('background animation controls stay synchronized and respect device motion settings', async () => {
+  const {runInNewContext} = await import('node:vm');
+  const start = script.indexOf("  const motionToggle = document.getElementById('motionToggle');");
+  const end = script.indexOf('  let language = new URL(location.href)', start);
+  assert.ok(start >= 0 && end > start);
+  const block = script.slice(start, end);
+  const createControl = () => {
+    const state={textContent:''}, attributes={}, listeners={};
+    return {state,attributes,listeners,disabled:false,
+      querySelector:selector=>selector==='[data-motion-state]' ? state : null,
+      setAttribute:(name,value)=>{attributes[name]=value;},
+      addEventListener:(name,fn)=>{listeners[name]=fn;}};
+  };
+  const desktop=createControl(),mobile=createControl(), preference={matches:false};
+  preference.addEventListener=(name,fn)=>{preference[name]=fn;};
+  const document={documentElement:{dataset:{}},getElementById:id=>id==='motionToggle'?desktop:mobile};
+  const window={matchMedia:()=>preference};
+  runInNewContext("let language='he';\n"+block+'\nrenderMotion();',{document,window});
+  assert.equal(document.documentElement.dataset.motion,'running');
+  assert.equal(desktop.attributes['aria-pressed'],'true');
+  assert.equal(mobile.state.textContent,'פעיל');
+  mobile.listeners.click();
+  assert.equal(document.documentElement.dataset.motion,'paused');
+  assert.equal(desktop.attributes['aria-pressed'],'false');
+  assert.equal(mobile.state.textContent,'כבוי');
+  desktop.listeners.click();
+  assert.equal(document.documentElement.dataset.motion,'running');
+  preference.matches=true; preference.change();
+  assert.equal(document.documentElement.dataset.motion,'paused');
+  assert.equal(desktop.disabled,true);
+  assert.equal(mobile.disabled,true);
+  assert.match(mobile.state.textContent,/הגדרות המכשיר/);
+  mobile.listeners.click();
+  assert.equal(document.documentElement.dataset.motion,'paused');
+  preference.matches=false; preference.change();
+  assert.equal(mobile.disabled,false);
+  assert.equal(document.documentElement.dataset.motion,'paused');
+});
+
+test('an older cached page retains a working legacy motion control', async () => {
+  const {runInNewContext} = await import('node:vm');
+  const start=script.indexOf("  const motionToggle = document.getElementById('motionToggle');");
+  const end=script.indexOf('  let language = new URL(location.href)',start);
+  const block=script.slice(start,end), attrs={}, listeners={}, span={textContent:''}, path={d:'',setAttribute:(key,value)=>{path[key]=value;}};
+  const legacy={disabled:false,setAttribute:(name,value)=>{attrs[name]=value;},
+    querySelector:selector=>selector==='span'?span:selector==='path'?path:null,
+    addEventListener:(name,fn)=>{listeners[name]=fn;}};
+  const preference={matches:false,addEventListener(){}};
+  const document={documentElement:{dataset:{}},getElementById:id=>id==='motionToggle'?legacy:null};
+  runInNewContext("let language='en';\n"+block+'\nrenderMotion();',{document,window:{matchMedia:()=>preference}});
+  assert.equal(attrs['aria-label'],'Pause motion');
+  assert.equal(document.documentElement.dataset.motion,'running');
+  listeners.click();
+  assert.equal(attrs['aria-label'],'Play motion');
+  assert.equal(document.documentElement.dataset.motion,'paused');
 });

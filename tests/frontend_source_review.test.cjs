@@ -9,7 +9,7 @@ const project=()=>({id:'p',settings:{fps:30},sources:{A:{duration:12,url:'a.mp4'
 
 function fixture() {
   const nodes={};
-  for(const key of ['canvas','scroll','close','slot','scope','restore','remove','undo','previous','next','fit','zoomIn','zoomOut','exact','video','status','quote','selection','summary','effect']) nodes[key]={
+  for(const key of ['retry','canvas','scroll','close','slot','scope','restore','remove','undo','previous','next','fit','zoomIn','zoomOut','exact','video','status','quote','selection','summary','effect']) nodes[key]={
     dataset:{review:key},value:'',listeners:{},currentTime:0,paused:true,
     addEventListener(name,fn){this.listeners[name]=fn;},querySelector(){return {};},focus(){this.focused=true;},
     pause(){this.paused=true;},play(){this.paused=false;return Promise.resolve();},load(){},removeAttribute(name){delete this[name];},getAttribute(name){return this[name];}
@@ -96,10 +96,9 @@ test('failed edit keeps original selection and allows retry; busy blocks duplica
   const pending=f.review.edit('sequence_source_restore');
   assert.equal(f.nodes.restore.disabled,true);assert.equal(f.nodes.slot.disabled,true);
   await f.review.edit('sequence_source_restore');resolve(null);await pending;
-  assert.equal(f.nodes.restore.disabled,false);assert.match(f.nodes.status.textContent,/not changed/);
+  assert.equal(f.nodes.restore.disabled,false);assert.match(f.nodes.status.textContent,/not confirmed/);
   assert.deepEqual(plain(f.review.selection),{start:4,end:6});
 });
-
 test('B transcript and waveform are mapped back from analysis clock to B original time',()=>{
   const f=fixture();f.current.analysis={audio_source:'B',audio_timeline_offset:2,transcript:{segments:[{start:6,end:8,text:'B speech'}]},audio:{waveform:[{start:6,end:7,peak:.8}],ranges:{silence:[{start:7,end:8}]}}};
   f.review.open('B');f.nodes.video.listeners.loadedmetadata();
@@ -143,4 +142,89 @@ test('source review distinguishes no audio and unavailable preparation from meas
   f.review.refresh();
   assert.equal(f.review.timeline.project.analysis.audio.available,false);
   assert.equal(f.review.timeline.project.analysis.audio.warning,'decode failed');
+});
+
+test('failed source preview can retry without changing selection, zoom or saved edits',()=>{
+  const f=fixture(); f.review.open(); f.review.select({start:4,end:6}); f.review.timeline.zoom=3;
+  const before=JSON.stringify(f.current);
+  f.nodes.video.listeners.error();
+  assert.equal(f.nodes.retry.hidden,false); assert.match(f.nodes.status.textContent,/retry/);
+  f.nodes.retry.onclick();
+  assert.equal(f.nodes.retry.hidden,true); assert.match(f.nodes.status.textContent,/Loading/);
+  assert.deepEqual(plain(f.review.selection),{start:4,end:6}); assert.equal(f.review.timeline.zoom,3);
+  f.nodes.video.listeners.loadedmetadata();
+  assert.equal(f.nodes.video.currentTime,4); assert.match(f.nodes.status.textContent,/Preview ready/);
+  assert.equal(JSON.stringify(f.current),before); assert.equal(f.requests.length,0);
+});
+
+test('switching from a failed source clears its error after the next source loads',()=>{
+  const f=fixture(); f.review.open('A'); f.nodes.video.listeners.error();
+  f.nodes.slot.value='B'; f.nodes.slot.onchange();
+  assert.equal(f.nodes.video.src,'b.mp4'); assert.equal(f.nodes.retry.hidden,true);
+  f.nodes.video.listeners.loadedmetadata(); assert.doesNotMatch(f.nodes.status.textContent,/could not/);
+  assert.match(f.nodes.status.textContent,/Preview ready/);
+});
+
+test('retry cannot load a closed dialog, another project or a busy edit',()=>{
+  const f=fixture(); f.review.open(); f.dialog.close(); f.nodes.retry.onclick();
+  assert.equal(f.nodes.video.src,undefined);
+  f.review.open(); f.current={...f.current,id:'other'}; assert.equal(f.review.loadPreview(),false);
+  f.current={...f.current,id:'p'}; f.review.busy=true; assert.equal(f.review.loadPreview(),false);
+});
+
+test('retry keeps the preview cursor inside the selected range',()=>{
+  const f=fixture(); f.review.open(); f.review.select({start:4,end:6});
+  f.nodes.video.currentTime=5; f.nodes.video.listeners.error(); f.nodes.retry.onclick();
+  f.nodes.video.listeners.loadedmetadata(); assert.equal(f.nodes.video.currentTime,5);
+  assert.deepEqual(plain(f.review.selection),{start:4,end:6});
+});
+
+
+test('retry preserves a cursor at zero even when the selection starts later',()=>{
+  const f=fixture(); f.review.open(); f.review.select({start:4,end:6});
+  f.nodes.video.currentTime=0; f.nodes.video.listeners.error(); f.nodes.retry.onclick();
+  f.nodes.video.listeners.loadedmetadata();
+  assert.equal(f.nodes.video.currentTime,0);
+  assert.deepEqual(plain(f.review.selection),{start:4,end:6});
+});
+
+test('an unexpected edit failure ends loading and does not claim the edit was unchanged',async()=>{
+  const f=fixture(); f.review.open();
+  f.review.applyEdit=async()=>{ throw new Error('connection lost'); };
+  await assert.doesNotReject(f.review.edit('sequence_source_restore'));
+  assert.equal(f.review.busy,false);
+  assert.equal(f.nodes.restore.disabled,false);
+  assert.match(f.nodes.status.textContent,/could not confirm/i);
+  assert.match(f.nodes.status.textContent,/reopen/i);
+  assert.deepEqual(plain(f.review.selection),{start:4,end:6});
+});
+
+
+test('source B does not invent a clock for old waveform or transcript data',()=>{
+  for(const value of [undefined,null,'','  ',false,{},NaN,Infinity]) {
+    const f=fixture();
+    f.current.analysis={audio_source:'B',audio:{waveform:[{start:4,end:5,peak:.8}]},
+      transcript:{segments:[{start:4,end:6,text:'B speech'}]}};
+    if(value!==undefined) f.current.analysis.audio_timeline_offset=value;
+    f.review.open('B'); f.nodes.video.listeners.loadedmetadata();
+    assert.equal(f.review.timeline.project.analysis.audio,null,'unknown B clock must not plot old analysis waveform');
+    assert.notEqual(f.nodes.quote.textContent,'B speech','unknown B clock must not match a transcript segment');
+  }
+});
+
+test('an explicit zero offset retains source B transcript and waveform',()=>{
+  const f=fixture();
+  f.current.analysis={audio_source:'B',audio_timeline_offset:0,audio:{waveform:[{start:4,end:5,peak:.8}]},
+    transcript:{segments:[{start:4,end:6,text:'B speech'}]}};
+  f.review.open('B'); f.nodes.video.listeners.loadedmetadata();
+  assert.deepEqual(plain(f.review.timeline.project.analysis.audio.waveform),[{start:4,end:5,peak:.8}]);
+  assert.equal(f.nodes.quote.textContent,'B speech');
+});
+
+test('a native source B waveform remains usable without an analysis offset',()=>{
+  const f=fixture();
+  f.current.analysis={audio_source:'B',audio:{waveform:[{start:4,end:5,peak:.8}]}};
+  f.current.pre_analysis={audio:{B:{available:true,waveform:[{start:1,end:2,peak:.6}]}}};
+  f.review.open('B');
+  assert.deepEqual(plain(f.review.timeline.project.analysis.audio.waveform),[{start:1,end:2,peak:.6}]);
 });
