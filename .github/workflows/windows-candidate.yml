@@ -8,12 +8,33 @@ permissions:
   contents: read
 
 concurrency:
-  group: windows-candidate-${{ github.event.pull_request.number }}
+  group: windows-candidate-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
   cancel-in-progress: true
 
 jobs:
-  candidate:
+  scope:
     if: ${{ github.event.pull_request.head.repo.full_name == 'VanoPeradze/cutroom' && github.event.pull_request.head.ref == 'codex/cutroom-ui-20261101' }}
+    runs-on: ubuntu-latest
+    outputs:
+      build_candidate: ${{ steps.scope.outputs.build_candidate }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 2
+          persist-credentials: false
+      - id: scope
+        shell: bash
+        run: |
+          changed="$(git diff-tree --no-commit-id --name-only -r HEAD)"
+          if [[ "$changed" =~ ^packaging/review-candidates/ci-[0-9a-f]{7}\.json$ ]]; then
+            echo 'build_candidate=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'build_candidate=true' >> "$GITHUB_OUTPUT"
+          fi
+  candidate:
+    needs: scope
+    if: ${{ needs.scope.outputs.build_candidate == 'true' }}
     runs-on: windows-2022
     timeout-minutes: 60
     env:
@@ -174,6 +195,11 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Required extracted-source feature tests failed or skipped' }
           & $env:CUTROOM_TEST_PYTHON -c 'import json,os,pathlib; p=pathlib.Path(os.environ["RUNNER_TEMP"]); r=json.loads((p/"cutroom-features.json").read_text(encoding="utf-8")); (p/"cutroom-features-sanitized.json").write_text(json.dumps({"mode":r["mode"],"platform":r["platform"],"architecture":r["architecture"],"runtime":r["runtime"],"passed":r["features"]["passed"],"skipped":r["features"]["skipped"],"required_cases":r["features"]["required_cases"]},indent=2),encoding="utf-8")'
           if ($LASTEXITCODE -ne 0) { throw 'Could not sanitize the feature report' }
+      - name: Assemble exact unpublished Windows and Mac review inputs
+        shell: pwsh
+        run: |
+          & $env:CUTROOM_TEST_PYTHON .github/scripts/prepare_private_review.py --windows-zip $env:CUTROOM_CANDIDATE_ARCHIVE --smoke-report (Join-Path $env:RUNNER_TEMP 'cutroom-windows-smoke.json') --feature-report (Join-Path $env:RUNNER_TEMP 'cutroom-features-sanitized.json') --output-dir (Join-Path $env:RUNNER_TEMP 'cutroom-private-review')
+          if ($LASTEXITCODE -ne 0) { throw 'Could not qualify exact private review inputs' }
       - name: Retain only the source package and test reports
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -186,4 +212,124 @@ jobs:
             ${{ runner.temp }}/cutroom-setup-result.txt
           if-no-files-found: error
           compression-level: 0
+          retention-days: 7
+      - name: Retain exact private review inputs
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: CUTROOM-private-review-inputs
+          path: ${{ runner.temp }}/cutroom-private-review
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+
+  committed_review_record:
+    needs: candidate
+    runs-on: ubuntu-latest
+    outputs:
+      ready: ${{ steps.verify.outputs.ready }}
+      record_commit: ${{ steps.verify.outputs.record_commit }}
+    env:
+      TESTED_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - name: Read the current draft branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Download this run's immutable review inputs
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: CUTROOM-private-review-inputs
+          path: ${{ runner.temp }}/cutroom-private-review
+      - name: Require the exact committed review record
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          record="packaging/review-candidates/ci-${TESTED_HEAD_SHA:0:7}.json"
+          head="$(git rev-parse HEAD)"
+          if [[ "$head" == "$TESTED_HEAD_SHA" && ! -e "$record" ]]; then
+            echo 'ready=false' >> "$GITHUB_OUTPUT"
+            echo 'The exact private review record has not been committed yet; native review is pending.'
+            exit 0
+          fi
+          git merge-base --is-ancestor "$TESTED_HEAD_SHA" "$head"
+          [[ "$(git diff --name-only "$TESTED_HEAD_SHA" "$head")" == "$record" ]]
+          git show "HEAD:$record" | cmp - "$RUNNER_TEMP/cutroom-private-review/review-record.json"
+          echo 'ready=true' >> "$GITHUB_OUTPUT"
+          echo "record_commit=$head" >> "$GITHUB_OUTPUT"
+
+  macos_private_review:
+    needs: [candidate, committed_review_record]
+    if: ${{ needs.committed_review_record.outputs.ready == 'true' }}
+    name: Private candidate / macOS 15 / ${{ matrix.architecture }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            architecture: arm64
+          - runner: macos-15-intel
+            architecture: x64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    env:
+      TESTED_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      CUTROOM_NO_BROWSER: '1'
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+      HOMEBREW_NO_INSTALL_CLEANUP: '1'
+      HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: '1'
+      PIP_DISABLE_PIP_VERSION_CHECK: '1'
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - name: Check out the committed review record
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.committed_review_record.outputs.record_commit }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Download this run's exact review inputs
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: CUTROOM-private-review-inputs
+          path: ${{ runner.temp }}/cutroom-private-review
+      - name: Set up native Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+          architecture: ${{ matrix.architecture }}
+      - name: Install FFmpeg 7 in the temporary Mac runner
+        timeout-minutes: 10
+        shell: bash
+        run: |
+          brew install ffmpeg@7
+          echo "$(brew --prefix ffmpeg@7)/bin" >> "$GITHUB_PATH"
+      - name: Install the existing isolated Mac test dependencies
+        timeout-minutes: 10
+        shell: bash
+        run: |
+          python -m venv "$RUNNER_TEMP/cutroom-private-review-venv"
+          "$RUNNER_TEMP/cutroom-private-review-venv/bin/python" -m pip install -r tests/requirements.txt -c packaging/mac/constraints-macos.txt
+      - name: Run the unchanged native private-review gates
+        timeout-minutes: 40
+        shell: bash
+        run: |
+          set -euo pipefail
+          record="packaging/review-candidates/ci-${TESTED_HEAD_SHA:0:7}.json"
+          cmp "$record" "$RUNNER_TEMP/cutroom-private-review/review-record.json"
+          "$RUNNER_TEMP/cutroom-private-review-venv/bin/python" -B -X utf8 packaging/native_review_candidate.py \
+            --record "$record" --repo . \
+            --windows-zip "$RUNNER_TEMP/cutroom-private-review/candidate-windows.zip" \
+            --combined-zip "$RUNNER_TEMP/cutroom-private-review/candidate-combined.zip" \
+            --source-archive "$RUNNER_TEMP/cutroom-private-review/candidate-source.zip" \
+            --output-dir "$RUNNER_TEMP/cutroom-native-review" --native
+          "$RUNNER_TEMP/cutroom-private-review-venv/bin/python" .github/scripts/sanitize_private_review.py \
+            "$RUNNER_TEMP/cutroom-native-review/native-review.json" "$RUNNER_TEMP/cutroom-native-review-sanitized.json"
+      - name: Retain sanitized native evidence
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: CUTROOM-private-macos-${{ matrix.architecture }}
+          path: ${{ runner.temp }}/cutroom-native-review-sanitized.json
+          if-no-files-found: error
           retention-days: 7
