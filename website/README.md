@@ -7,11 +7,17 @@ This folder is the maintained website source inside the public [CUTROOM reposito
 It does not run the editor, receive footage, process video, or handle user API keys.
 The previous separate website checkout is not needed for future updates.
 
-## 1.3 beta - 2 November 2026
+## 1.3 beta - 3 November 2026
 
-Product source is `538eef2adc6cad2ca60b20679fbf027dea142826` and the release tag is `v1.3-beta-20261102-ui1`. The exact Windows and combined archives were tested in [run 41441683099](https://github.com/VanoPeradze/cutroom/actions/runs/41441683099). The combined archive supplies the `mac/` folder; there is no separate Mac rebuild. The source, Windows and combined ZIP hashes are pinned in `release.json`.
+Product source is `3caa23d2119e3963c044fc3281615227b2bea8e0` and the proposed release tag is `v1.3-beta-20261103-ui2`. The exact Windows and combined archives passed automated candidate checks in [run 41710068813](https://github.com/VanoPeradze/cutroom/actions/runs/41710068813). The combined archive supplies the `mac/` folder; there is no separate Mac rebuild.
 
-Windows direct setup and synthetic portrait export were tested on a configured hosted runner, but clean-OS installation and the batch launcher remain untested. Physical-device, human listening, Gatekeeper and model/transcription acceptance remain untested. This proposal must not be deployed until PR #105 is merged and all three exact public release assets have been verified.
+Windows setup and synthetic exports were tested on a configured hosted runner. Clean-OS and packaged batch-launcher testing, physical devices, human listening, Finder/Gatekeeper and model/transcription acceptance remain pending.
+
+## Previous 1.3 beta - 2 November 2026 (history)
+
+Product source is `538eef2adc6cad2ca60b20679fbf027dea142826` and the release tag is `v1.3-beta-20261102-ui1`. The exact Windows and combined archives were tested in [run 41441683099](https://github.com/VanoPeradze/cutroom/actions/runs/41441683099). The combined archive supplies the `mac/` folder; there is no separate Mac rebuild. The source, Windows and combined ZIP hashes are preserved in `retained-downloads.json`.
+
+Windows direct setup and synthetic portrait export were tested on a configured hosted runner, but clean-OS installation and the batch launcher remain untested. Physical-device, human listening, Gatekeeper and model/transcription acceptance remain untested.
 
 ## Previous 1.3 beta - 25 October 2026 (history)
 
