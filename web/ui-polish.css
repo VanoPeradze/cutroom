@@ -282,3 +282,39 @@ html[data-theme="light"] .result-panel .verdict-block { background:transparent; 
   #exportSummary.export-summary > div { display:flex; flex-direction:row-reverse; justify-content:space-between; gap:12px; padding:9px 0; border-inline-start:0; border-top:1px solid var(--line); text-align:start; }
   #exportSummary.export-summary > div:first-child { border-top:0; }
 }
+
+
+/* Keep unavailable editing actions distinct and navigation labels readable. */
+#advancedPanel.studio-workspace .editor-more-panel button:disabled {
+  color: var(--muted);
+  background: var(--surface-inset);
+  border-color: var(--line);
+  cursor: not-allowed;
+}
+@media (min-width:651px) {
+  #advancedPanel.studio-workspace > .advanced-tabs button span { font-size:12px; }
+}
+
+/* On narrow screens, do not cover the media choices or hide readiness. */
+@media (max-width:620px) {
+  #setupPanel .director-action {
+    position:static;
+    bottom:auto;
+    z-index:auto;
+    display:flex;
+    flex-direction:column;
+    align-items:stretch;
+    gap:8px;
+    margin:16px 0 0;
+    padding:14px 0 0;
+    border:0;
+    border-top:1px solid var(--line);
+    border-radius:0;
+    background:transparent;
+    backdrop-filter:none;
+    box-shadow:none;
+  }
+  #setupPanel .readiness { display:flex; font-size:13px; line-height:1.4; }
+  #setupPanel .readiness span { flex:0 0 8px; width:8px; height:8px; }
+  #setupPanel .director-button { width:100%; min-height:52px; }
+}
