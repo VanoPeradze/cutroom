@@ -987,9 +987,14 @@ function bindEvents() {
   elements.manualSplit.addEventListener("click", () => handleTimelineEdit({ action: "split", time: previewTimelineTime() }));
   elements.timelineTarget.addEventListener("change", () => setEditTarget(elements.timelineTarget.value));
   elements.trackReset.addEventListener("click", () => {
-    if (!confirm("Reset all manual timeline changes to the AI draft? You can undo this.")) return;
-    if (state.project?.editor_sequence) applyManualEdit("sequence_reset");
-    else if (activeEditTarget() !== "edit") applyManualEdit("track_reset", { slot: activeEditTarget() });
+    const sequence = Boolean(state.project?.editor_sequence);
+    const target = activeEditTarget();
+    const message = sequence
+      ? "Reset timeline edits to the current draft? You can undo this."
+      : `Reset changes to track ${target}? You can undo this.`;
+    if (!confirm(message)) return;
+    if (sequence) applyManualEdit("sequence_reset");
+    else if (target !== "edit") applyManualEdit("track_reset", { slot: target });
   });
   elements.clipMove.addEventListener("click", async () => {
     const clip = state.trimClip, start = Number(elements.clipTrimIn.value);
@@ -1833,10 +1838,12 @@ function renderReadiness() {
   const instructionValid = String(elements.directorInstruction?.value || "").length <= DIRECTOR_INSTRUCTION_LIMIT;
   const directorReady = ready && audioMeasured && instructionValid;
   const busy = foregroundBusy();
-  elements.readiness.classList.toggle("ready", directorReady);
+  elements.readiness.classList.toggle("ready", directorReady && !busy);
   elements.fpsSelect.disabled = busy;
   elements.exportFpsSelect.disabled = busy;
-  $("p", elements.readiness).textContent = !ready ? t("waitingForVideo") : !audioMeasured ? t("measuringAudio") : !instructionValid ? "Shorten the director instruction to 8,000 characters." : t("ready");
+  const readinessMessage = busy ? "Working — please wait." : !ready ? t("waitingForVideo") : !audioMeasured ? t("measuringAudio") : !instructionValid ? "Shorten the director instruction to 8,000 characters." : t("ready");
+  const readinessText = $("p", elements.readiness);
+  if (readinessText.textContent !== readinessMessage) readinessText.textContent = readinessMessage;
   elements.generateButton.disabled = !directorReady || busy;
   state.welcome?.updateProject(state.project);
   const renderDisabled = !state.project?.draft || !hasTimelineFootage() || busy || state.draftDirtyReasons.size > 0;
@@ -7114,7 +7121,7 @@ function renderManualControls() {
   if (elements.trackReset) {
     elements.trackReset.hidden = target === "edit" && !sequence;
     elements.trackReset.disabled = busy || (sequence ? !state.project.editor_sequence.active : !Object.hasOwn(state.project?.manual?.source_tracks || {}, target));
-    elements.trackReset.textContent = sequence ? "Reset to AI draft" : `Reset ${target} track`;
+    elements.trackReset.textContent = sequence ? "Reset to draft" : `Reset ${target} track`;
   }
   if (elements.trackHelp) {
     elements.trackHelp.hidden = !independent;
