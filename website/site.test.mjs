@@ -45,9 +45,9 @@ test('the 1.3 beta uses exact Windows, shared Mac/combined and source downloads'
     assert.match(mirror[0][2], /mirror/i);
     assert.ok(linksTo(html, `/downloads/${entry.filename}.sha256`).length >= 1);
   }
-  assert.equal(release.filename, 'CUTROOM-1.3-Beta-combined-538eef2.zip');
-  assert.equal(release.platforms.windows.filename, 'CUTROOM-1.3-Beta-Windows-538eef2.zip');
-  assert.equal(release.platforms.mac.filename, 'CUTROOM-1.3-Beta-combined-538eef2.zip');
+  assert.equal(release.filename, 'CUTROOM-1.3-Beta-combined-3caa23d.zip');
+  assert.equal(release.platforms.windows.filename, 'CUTROOM-1.3-Beta-Windows-3caa23d.zip');
+  assert.equal(release.platforms.mac.filename, 'CUTROOM-1.3-Beta-combined-3caa23d.zip');
   assert.equal(release.platforms.mac.filename, release.filename);
   assert.equal(release.platforms.mac.folder,'mac', 'Mac uses the shared combined archive mac folder');
   assert.equal(linksTo(html, release.url).length, 2); // Optional combined ZIP help link, separate from the Mac button.
@@ -56,7 +56,7 @@ test('the 1.3 beta uses exact Windows, shared Mac/combined and source downloads'
   assert.match(html, /Mac uses the combined ZIP\. Extract it, open mac, then run START CUTROOM\.command beside App\./);
   assert.match(region('details', 'install-help'), /The optional combined ZIP has exactly two folders: windows and mac/);
   const source = release.source_archive;
-  assert.equal(source.filename, 'SOURCE-538eef2.zip');
+  assert.equal(source.filename, 'SOURCE-3caa23d.zip');
   for (const url of [source.url, `/downloads/${source.filename}`, `/downloads/${source.filename}.sha256`]) assert.equal(linksTo(html,url).length,1);
   assert.equal(downloadEntries(release).length,3);
   assert.match(html, /1\.3 Beta · Workspace &amp; sound/);
@@ -71,8 +71,8 @@ test('the 1.3 beta uses exact Windows, shared Mac/combined and source downloads'
 
 test('download metadata pins a dated release and preserves Expo mirrors and provenance', () => {
   const release = JSON.parse(readFileSync(new URL('./release.json', import.meta.url), 'utf8'));
-  assert.equal(release.github_release.tag, 'v1.3-beta-20261102-ui1');
-  assert.equal(release.github_release.previous_public_tag, 'v1.3-beta-20261025-audiofix1');
+  assert.equal(release.github_release.tag, 'v1.3-beta-20261103-ui2');
+  assert.equal(release.github_release.previous_public_tag, 'v1.3-beta-20261102-ui1');
   assert.equal(release.github_release.tag_commit, release.source_commit);
   assert.equal(release.github_release.package_bytes_changed, true);
   assert.equal(release.github_release.url, `${repository}/releases/tag/${release.github_release.tag}`);
@@ -87,10 +87,10 @@ test('public beta retains exact automated native provenance and visible pending 
   assertPublishable(release);
   assert.equal(release.release_state,'beta');
   assert.equal(release.full_release_qualified,false);
-  assert.equal(release.source_commit,'538eef2adc6cad2ca60b20679fbf027dea142826');
-  assert.equal(release.github_release.tag,'v1.3-beta-20261102-ui1');
-  assert.equal(release.native_validation.run_id,41441683099);
-  assert.equal(release.validated_pr_head,'151d47e153893c1a86530abe61a46e2a124ac509');
+  assert.equal(release.source_commit,'3caa23d2119e3963c044fc3281615227b2bea8e0');
+  assert.equal(release.github_release.tag,'v1.3-beta-20261103-ui2');
+  assert.equal(release.native_validation.run_id,41710068813);
+  assert.equal(release.validated_pr_head,'ac2044d980c2a73e085a9315f49de605b777f135');
   assert.equal(release.native_validation.head_commit,release.validated_pr_head);
   assert.equal(release.native_validation.application_source_commit,release.source_commit);
   assert.equal(release.native_validation.transcription_run,false);
@@ -103,7 +103,7 @@ test('public beta retains exact automated native provenance and visible pending 
     assert.equal(checks.required_cases_passed,50);
     assert.equal(checks.skipped,0);
     assert.equal(checks.source_audio_and_caption_checks,'passed');
-    assert.equal(checks.job_id,architecture === 'arm64' ? 125266374797 : 125266374708);
+    assert.equal(checks.job_id,architecture === 'arm64' ? 126178971414 : 126178971353);
     for (const gate of ['fresh_app_install','missing_pip_recovery','restart_persistence']) assert.equal(checks[gate],'passed');
     assert.equal(checks.combined_archive_sha256,release.sha256);
   }
