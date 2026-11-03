@@ -1,12 +1,12 @@
 {
-  "filename": "CUTROOM-1.3-Beta-Windows-538eef2.zip",
-  "bytes": 3556968,
-  "sha256": "1789ede3f0583043dd57dcaa2b32c468710ae112fb96f0e3cbfb408ba3917890",
-  "build_id": "CUTROOM-1.3-beta-20261102-120441",
-  "url": "https://cutroom-studio--2wml79fmvg.expo.app/downloads/CUTROOM-1.3-Beta-Windows-538eef2.zip",
+  "filename": "CUTROOM-1.3-Beta-Windows-3caa23d.zip",
+  "bytes": 3557356,
+  "sha256": "04d3f59f916c9b5409ae1cdc3346f6c948093419744d51bdd80176ac6e175e99",
+  "build_id": "CUTROOM-1.3-beta-20261103-201116",
+  "url": "https://cutroom-studio--lnw6pk4zyo.expo.app/downloads/CUTROOM-1.3-Beta-Windows-3caa23d.zip",
   "mirrors": [],
   "version": "1.3-beta",
-  "manifest_sha256": "3268f265023f32dde82fa263db989da80c9c0d4f10ef3035111236cf08c53e65",
-  "source_commit": "538eef2adc6cad2ca60b20679fbf027dea142826",
-  "note": "Current 1.3 product baseline from the exact verified Windows candidate. Configured Windows synthetic tests passed; clean-OS/prerequisite, physical and human acceptance remain unverified. Historical validation pins are unchanged."
+  "manifest_sha256": "fd6d4900228d5c654da59b1a9fd3cde73d8dde1cf4b7d8793d61a1df414ebbf5",
+  "source_commit": "3caa23d2119e3963c044fc3281615227b2bea8e0",
+  "note": "Current 1.3 candidate baseline from the exact Windows runner-verified archive. Configured synthetic tests passed; clean-OS, physical-device and human acceptance remain unverified. Historical validation pins are unchanged."
 }
