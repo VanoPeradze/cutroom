@@ -9,7 +9,7 @@ The previous separate website checkout is not needed for future updates.
 
 ## 1.3 beta - 3 November 2026
 
-Product source is `3caa23d2119e3963c044fc3281615227b2bea8e0` and the proposed release tag is `v1.3-beta-20261103-ui2`. The exact Windows and combined archives passed automated candidate checks in [run 41710068813](https://github.com/VanoPeradze/cutroom/actions/runs/41710068813). The combined archive supplies the `mac/` folder; there is no separate Mac rebuild.
+Product source is `3caa23d2119e3963c044fc3281615227b2bea8e0` and the release tag is `v1.3-beta-20261103-ui2`. The exact Windows and combined archives passed automated candidate checks in [run 41710068813](https://github.com/VanoPeradze/cutroom/actions/runs/41710068813). The combined archive supplies the `mac/` folder; there is no separate Mac rebuild.
 
 Windows setup and synthetic exports were tested on a configured hosted runner. Clean-OS and packaged batch-launcher testing, physical devices, human listening, Finder/Gatekeeper and model/transcription acceptance remain pending.
 
