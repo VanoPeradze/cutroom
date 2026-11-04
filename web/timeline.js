@@ -151,6 +151,8 @@ export class TimelineView {
     this.playhead = 0;
     this.hoverTime = null;
     this.images = [];
+    this.imageUrls = [];
+    this.imageLoadGeneration = 0;
     this.scrubbing = false;
     this.selecting = false;
     this.selectionAnchor = null;
@@ -179,12 +181,18 @@ export class TimelineView {
   }
 
   setProject(project) {
+    const previousProjectId = this.project?.id;
     this.snapGuide = null;
     this.zoomFocusPending = false;
     this.afterDraw = null;
     this.cancelGesture(false);
     this.cancelPendingCut();
     this.project = project;
+    if (previousProjectId !== project?.id) {
+      this.images = [];
+      this.imageUrls = [];
+      this.mediaImages = new Map();
+    }
     // A caption keeps its selection across edits while it is still on the timeline.
     if (this.captionSelection && !this.captionItems()?.some(item => item.id === this.captionSelection)) this.selectCaption(null, true);
     if (!this.hasTrackLanes() || (this.editTarget !== "edit" && !project?.sources?.[this.editTarget])) this.setEditTarget("edit");
@@ -394,24 +402,40 @@ export class TimelineView {
   }
 
   async loadImages() {
-    const urls = this.project?.sources?.A?.thumbnail_urls || this.project?.analysis?.thumbnail_urls?.A || [];
-    const token = this.project?.id;
+    const project = this.project;
+    const urls = project?.sources?.A?.thumbnail_urls || project?.analysis?.thumbnail_urls?.A || [];
+    const token = project?.id;
+    const generation = ++this.imageLoadGeneration;
+    if (urls.length !== this.imageUrls.length || urls.some((url, index) => url !== this.imageUrls[index])) this.images = [];
+    this.imageUrls = [...urls];
+
+    // Other lanes need not wait for all source A images to finish loading.
+    this.mediaImages ||= new Map();
+    const mediaImages = this.mediaImages;
+    const extraUrls = [...(project?.sources?.B?.thumbnail_urls || []),
+      ...Object.values(project?.assets || {}).map(asset => asset.thumbnail_url).filter(Boolean)];
+    for (const url of extraUrls) if (!mediaImages.has(url)) {
+      mediaImages.set(url, null);
+      const image = new Image();
+      image.onload = () => {
+        if (this.mediaImages !== mediaImages) return;
+        mediaImages.set(url, image);
+        this.scheduleDraw();
+      };
+      image.src = url;
+    }
+
     const images = await Promise.all(urls.map((url) => new Promise((resolve) => {
       const image = new Image();
       image.onload = () => resolve(image);
       image.onerror = () => resolve(null);
       image.src = url;
     })));
-    if (this.project?.id === token) {
+    // A project can be refreshed without changing its ID. Only the most
+    // recent request is allowed to replace its visible filmstrip.
+    if (this.imageLoadGeneration === generation && this.project?.id === token) {
       this.images = images;
       this.scheduleDraw();
-    }
-    this.mediaImages ||= new Map();
-    const extraUrls = [...(this.project?.sources?.B?.thumbnail_urls || []),
-      ...Object.values(this.project?.assets || {}).map(asset => asset.thumbnail_url).filter(Boolean)];
-    for (const url of extraUrls) if (!this.mediaImages.has(url)) {
-      this.mediaImages.set(url, null);
-      const image = new Image(); image.onload = () => { this.mediaImages.set(url,image); this.scheduleDraw(); }; image.src = url;
     }
   }
 
