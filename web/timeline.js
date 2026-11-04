@@ -159,6 +159,7 @@ export class TimelineView {
     this.tool = "select";
     this.gesture = null;
     this.raf = null;
+    this.afterDraw = null;
     this.resizeObserver = new ResizeObserver(() => this.scheduleDraw());
     this.resizeObserver.observe(scroll);
     canvas.addEventListener("pointerdown", (event) => this.pointerDown(event));
@@ -180,6 +181,7 @@ export class TimelineView {
   setProject(project) {
     this.snapGuide = null;
     this.zoomFocusPending = false;
+    this.afterDraw = null;
     this.cancelGesture(false);
     this.cancelPendingCut();
     this.project = project;
@@ -305,6 +307,7 @@ export class TimelineView {
     const oldZoom = this.zoom;
     this.zoom = Math.max(1, Math.min(16, Number(value) || 1));
     if (Math.abs(oldZoom - this.zoom) < .001) return;
+    this.afterDraw = null;
     // All zoom controls target the playhead, not the mouse or the
     // viewport's old left edge. Apply after canvas sizing, even if playback
     // or pointer events replace this scheduled frame before it is painted.
@@ -314,6 +317,7 @@ export class TimelineView {
 
   fit() {
     this.zoomFocusPending = false;
+    this.afterDraw = null;
     this.zoom = 1;
     this.scroll.scrollLeft = 0;
     this.scheduleDraw();
@@ -712,10 +716,15 @@ export class TimelineView {
   }
 
   scheduleDraw(after = null) {
-    if (this.raf) cancelAnimationFrame(this.raf);
+    // Preserve the latest explicit post-draw focus while coalescing playhead,
+    // pointer, resize, and image updates into the already scheduled frame.
+    if (after) this.afterDraw = after;
+    if (this.raf !== null) return;
     this.raf = requestAnimationFrame(() => {
       this.raf = null;
       this.draw();
+      const after = this.afterDraw;
+      this.afterDraw = null;
       after?.();
     });
   }
