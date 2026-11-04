@@ -7,7 +7,13 @@ This folder is the maintained website source inside the public [CUTROOM reposito
 It does not run the editor, receive footage, process video, or handle user API keys.
 The previous separate website checkout is not needed for future updates.
 
-## 1.3 beta - 3 November 2026
+## 1.3 beta - 4 November 2026
+
+Product source is `6263f192054c2335158b8e0a88d7edfec3d18e98` and the release tag is `v1.3-beta-20261104-perf1`. The exact Windows and combined archives passed automated candidate checks in [run 41804756142](https://github.com/VanoPeradze/cutroom/actions/runs/41804756142). The combined archive supplies the `mac/` folder.
+
+Windows setup and synthetic exports were tested on a configured hosted runner. Clean-OS and packaged batch-launcher testing, physical devices, human listening, Finder/Gatekeeper and model/transcription acceptance remain pending.
+
+## Previous 1.3 beta - 3 November 2026 (history)
 
 Product source is `3caa23d2119e3963c044fc3281615227b2bea8e0` and the release tag is `v1.3-beta-20261103-ui2`. The exact Windows and combined archives passed automated candidate checks in [run 41710068813](https://github.com/VanoPeradze/cutroom/actions/runs/41710068813). The combined archive supplies the `mac/` folder; there is no separate Mac rebuild.
 
