@@ -419,11 +419,10 @@ function Write-RuntimePaths {
             $unique.Add($clean)
         }
     }
-    $prefix = $unique -join ";"
-    $lines = @("@echo off")
-    if ($prefix) {
-        $lines += "set `"PATH=$prefix;%PATH%`""
-    }
+    # Store UTF-8 paths as ASCII-safe data for cmd.exe and restore them in Python.
+    $json = ConvertTo-Json -InputObject ($unique.ToArray()) -Compress
+    $encoded = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($json))
+    $lines = @("@echo off", "set `"CUTROOM_RUNTIME_PATHS_B64=$encoded`"")
     $payload = ($lines -join "`r`n") + "`r`n"
     [System.IO.File]::WriteAllText((Join-Path $PSScriptRoot ".runtime-paths.cmd"), $payload, [System.Text.Encoding]::ASCII)
 }

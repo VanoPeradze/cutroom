@@ -116,7 +116,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $setup = Join-Path $env:CUTROOM_EXTRACTED_APP 'setup_windows.ps1'
           $setupHash = (Get-FileHash -LiteralPath $setup -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($setupHash -ne 'e1ee6a2be1a4b9e5c1bd3bde7b53631b52affe730a1192fd54301a56d39a377a') { throw 'Setup changed since its optional installs were reviewed' }
+          if ($setupHash -ne 'a61573132662ee34a5a7c2f741b7b4f6fa3cba33378a8ae58272612d018afa4d') { throw 'Setup changed since its optional installs were reviewed' }
           $config = Get-Content -LiteralPath (Join-Path $env:CUTROOM_EXTRACTED_APP 'config.json') -Raw | ConvertFrom-Json
           if ($config.ai.download_models_on_setup) { throw 'Model downloads must remain disabled' }
           if ((Get-Command ffmpeg.exe).Source -ne $env:CUTROOM_EXPECTED_FFMPEG) { throw 'Unexpected FFmpeg on PATH' }
@@ -168,6 +168,8 @@ jobs:
           Set-Location -LiteralPath $env:CUTROOM_EXTRACTED_APP
           & $env:CUTROOM_TEST_PYTHON scripts/preflight.py
           if ($LASTEXITCODE -ne 0) { throw 'Packaged runtime preflight failed' }
+          & $env:CUTROOM_TEST_PYTHON scripts/windows_runtime.py preflight
+          if ($LASTEXITCODE -ne 0) { throw 'Windows launcher runtime preflight failed' }
       - name: Run frontend tests from the extracted package
         timeout-minutes: 5
         shell: pwsh
