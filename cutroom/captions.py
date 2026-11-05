@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import re
+import unicodedata
 from pathlib import Path
 from typing import Any
 
@@ -136,6 +137,26 @@ def _ass_escape(text: str) -> str:
     return str(text).replace("\r\n", "\n").replace("\r", "\n").replace("\\", r"\\").replace("{", r"\{").replace("}", r"\}").replace("\n", r"\N")
 
 
+def _ass_plain_caption(text: str) -> str:
+    """Bind neutral punctuation to each RTL paragraph in libass.
+
+    Keep logical word order: libass performs the actual bidi/shaping work.
+    Decide from the first strong character, rather than treating any Hebrew
+    letter (or a number/emoji) as the direction of the entire caption. These
+    presentation controls never enter the transcript, caption items or SRT.
+    """
+    paragraphs = str(text).replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    rendered = []
+    for paragraph in paragraphs:
+        direction = next((unicodedata.bidirectional(char) for char in paragraph
+                          if unicodedata.bidirectional(char) in {"L", "R", "AL"}), None)
+        escaped = _ass_escape(paragraph)
+        if direction in {"R", "AL"}:
+            escaped = "\u200f" + escaped + "\u200f"
+        rendered.append(escaped)
+    return r"\N".join(rendered)
+
+
 def _caption_entries(
     transcript: dict[str, Any],
     keep_ranges: list[dict[str, Any]],
@@ -227,7 +248,7 @@ def _ass_caption_text(value: Any) -> str:
             f"{{\\c{HIGHLIGHT_ACTIVE_COLOUR}}}{_ass_escape(label)}{{\\r}}" if index == active else _ass_escape(label)
             for index, label in enumerate(labels)
         )
-    return _ass_escape(str(value))
+    return _ass_plain_caption(str(value))
 
 
 def _finite_time(value: Any) -> float | None:

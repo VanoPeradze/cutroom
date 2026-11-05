@@ -25,6 +25,17 @@ def _command(args):
     return subprocess.run(args, check=True, capture_output=True, timeout=30)
 
 
+@pytest.mark.parametrize("flags", ["...", ".."])
+@pytest.mark.parametrize("missing", [None, "vidstabdetect", "vidstabtransform"])
+def test_filter_capability_recognizes_old_and_new_ffmpeg_listings(monkeypatch, flags, missing):
+    stabilization = importlib.import_module("cutroom.stabilization")
+    names = [name for name in ("vidstabdetect", "vidstabtransform") if name != missing]
+    output = "\n".join(f" {flags} {name} V->V filter" for name in names)
+    monkeypatch.setattr(stabilization, "_run", lambda *args, **kwargs: SimpleNamespace(stdout=output))
+    result = stabilization.stabilization_capability(SimpleNamespace(ffmpeg="synthetic-ffmpeg"))
+    assert result["available"] is (missing is None)
+
+
 def _make_shaky_video(folder, settings, *, audio_codec="aac", duration=2):
     import numpy as np
     folder.mkdir(parents=True, exist_ok=True)

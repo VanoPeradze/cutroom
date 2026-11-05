@@ -6,8 +6,8 @@ import {fileURLToPath, pathToFileURL} from 'node:url';
 const root = dirname(fileURLToPath(import.meta.url));
 
 function assertArchiveFilename(filename) {
-  if (typeof filename !== 'string' || basename(filename) !== filename
-    || !/^(?:CUTROOM-[\w.-]+|SOURCE-[a-f0-9]{7,40})\.zip$/.test(filename)) throw new Error('Invalid release filename');
+  if (typeof filename !== 'string' || filename !== filename.trim() || basename(filename) !== filename
+    || !/^(?:CUTROOM-[\w.-]+|SOURCE-(?:[a-f0-9]{7,40}|\d{8}-hotfix[1-9]\d*))\.zip$/.test(filename)) throw new Error('Invalid release filename');
 }
 
 export function verifyArchive(bytes, release) {

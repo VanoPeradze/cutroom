@@ -140,6 +140,9 @@ def api(tmp_path, monkeypatch):
     value = project()
     value["id"] = created["id"]
     store.save({**created, **value})
+    source = safe_asset_path(store.project_dir(value["id"]), value["assets"][ASSET]["path"])
+    source.parent.mkdir(parents=True, exist_ok=True)
+    source.write_bytes(b"synthetic original for preparation boundary tests")
     yield app, app.test_client(), store, value["id"]
     app.extensions["cutroom_jobs"].shutdown(wait=True, cancel_pending=True)
 
@@ -222,8 +225,12 @@ def test_interrupted_import_is_retryable_on_reload_and_paths_stay_private(api, m
     subprocess.TimeoutExpired(["C:/private/ffmpeg.exe", "-i", "C:/private/recording.wav"], 90),
     OSError("Cannot access C:/private/recording.wav"),
 ])
-def test_preparation_failure_keeps_command_and_paths_out_of_public_job(api, monkeypatch, failure):
+@pytest.mark.parametrize("ready", [False, True], ids=["initial", "refresh"])
+def test_preparation_failure_keeps_command_and_paths_out_of_public_job(api, monkeypatch, failure, ready):
     app, client, store, pid = api
+    if not ready:
+        store.update(pid, lambda value: value["assets"][ASSET].update(status="preparing"))
+    before = store.state_path(pid).read_bytes()
     settings = app.extensions["cutroom_settings"]
     def fail(*_args, **_kwargs):
         raise failure
@@ -244,18 +251,26 @@ def test_preparation_failure_keeps_command_and_paths_out_of_public_job(api, monk
     assert "C:/private" not in response.get_data(as_text=True)
     assert "ffmpeg.exe" not in response.get_data(as_text=True)
     assert "C:/private" in job.result["traceback"]
-    assert store.load(pid)["assets"][ASSET]["status"] == "failed"
+    assert store.load(pid)["assets"][ASSET]["status"] == ("ready" if ready else "failed")
+    if ready:
+        assert store.state_path(pid).read_bytes() == before
 
 
-def test_preparation_cancellation_is_not_relabelled_as_failure(api, monkeypatch):
+@pytest.mark.parametrize("ready", [False, True], ids=["initial", "refresh"])
+def test_preparation_cancellation_is_not_relabelled_as_failure(api, monkeypatch, ready):
     app, _, store, pid = api
+    if not ready:
+        store.update(pid, lambda value: value["assets"][ASSET].update(status="preparing"))
+    before = store.state_path(pid).read_bytes()
     def cancel(*_args, **_kwargs):
         raise JobCancelled("Job cancelled")
     monkeypatch.setattr("cutroom.media_library.run_command", cancel)
     context = JobContext(Job("job_media_cancel", "prepare_asset", pid), threading.Lock())
     with pytest.raises(JobCancelled):
         prepare_asset(context, pid, ASSET, store, app.extensions["cutroom_settings"])
-    assert store.load(pid)["assets"][ASSET]["status"] == "cancelled"
+    assert store.load(pid)["assets"][ASSET]["status"] == ("ready" if ready else "cancelled")
+    if ready:
+        assert store.state_path(pid).read_bytes() == before
 
 
 @pytest.mark.parametrize("kind,suffix,input_args", [

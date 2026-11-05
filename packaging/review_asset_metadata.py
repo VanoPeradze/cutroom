@@ -39,11 +39,20 @@ def _identifier(value: object) -> bool:
 
 
 def expected_assets(record: dict) -> dict[str, dict]:
-    """Return the fixed 1.2 Beta review naming convention and its raw-byte pins."""
+    """Return exact review names for the matching, pinned 1.2 or 1.3 Beta builds."""
+    versions = set()
+    for platform in ("windows", "combined"):
+        build_id = record[platform]["build_id"]
+        match = (re.fullmatch(r"CUTROOM-(1\.[23])-beta-[A-Za-z0-9.-]+", build_id)
+                 if isinstance(build_id, str) else None)
+        _require(match is not None, "Review asset naming requires a pinned 1.2 or 1.3 Beta build ID")
+        versions.add(match[1])
+    _require(len(versions) == 1, "Windows and combined review build versions differ")
+    version = versions.pop()
     short = record["source"]["commit"][:7]
     return {
-        f"CUTROOM-1.2-Beta-Windows-review-{short}.zip": record["windows"],
-        f"CUTROOM-1.2-Beta-combined-review-{short}.zip": record["combined"],
+        f"CUTROOM-{version}-Beta-Windows-review-{short}.zip": record["windows"],
+        f"CUTROOM-{version}-Beta-combined-review-{short}.zip": record["combined"],
         f"SOURCE-{short}.zip": {
             "bytes": record["source"]["archive_bytes"],
             "sha256": record["source"]["archive_sha256"],

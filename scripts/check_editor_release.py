@@ -136,7 +136,8 @@ def inspect_ffmpeg() -> dict:
         return result.stdout
     filters = output([ffmpeg, "-nostdin", "-hide_banner", "-filters"])
     required = {"vidstabdetect", "vidstabtransform", "chromakey", "overlay", "split", "drawbox", "format", "scale", "crop", "setsar", "setpts"}
-    found = set(re.findall(r"^\s*[.TSC]{3}\s+(\w+)\s+", filters, re.MULTILINE))
+    # FFmpeg 8+ prints two filter flags; older releases print three.
+    found = set(re.findall(r"^\s*[.TSC]{2,3}\s+(\w+)\s+", filters, re.MULTILINE))
     if not {"vidstabdetect", "vidstabtransform"} <= found:
         raise RuntimeError("This release runner lacks required vidstab filters; real stabilization tests must not skip")
     if missing := required - found:

@@ -27,6 +27,7 @@ def fixture():
     plan = {"slots": [{"purpose": role, "chapter_ids": [f"c{i}"], "required_context_chapter_ids": ["c1"]}
                       for i, role in enumerate(ROLES, 1)]}
     brief = {"goal": "short", "target_duration": 20, "performance_mode": "balanced",
+             "instruction": "Structure: " + " -> ".join(ROLES),
              "style_profile": {"selection_policy": {"story_structure": list(ROLES)}}}
     catalog = build_story_evidence_catalog(beats, segments)
     choices = list(intelligence._story_evidence_choice_catalog(catalog))
@@ -158,10 +159,68 @@ def test_no_fit_needs_no_fabricated_anchors_and_is_not_extractively_eligible(mon
         select(monkeypatch, reply)
     failure = caught.value
     assert failure.diagnostic["reason"] == "precision_no_fit"
+    assert failure.diagnostic["outcome"] == "editorial_no_fit"
+    assert failure.diagnostic["applied_to_timeline"] is False
     assert failure.diagnostic["precision"]["missing_purposes"] == ["result"]
     beats, segments, chapters, plan, brief, _, _ = fixture()
     brief["allow_extractive_rough_cut"] = True
     assert intelligence._extractive_rough_cut_decision({}, beats, segments, chapters, plan, brief, failure) is None
+
+
+@pytest.mark.parametrize("instruction", [
+    "Keep the qualified result; exclude participation.",
+    "\u05e9\u05de\u05d5\u05e8 \u05e2\u05dc \u05d4\u05e1\u05ea\u05d9\u05d9\u05d2\u05d5\u05ea; \u05d0\u05dc \u05ea\u05db\u05dc\u05d5\u05dc \u05d4\u05e9\u05ea\u05ea\u05e4\u05d5\u05ea.",
+])
+def test_precision_receives_exact_bilingual_instruction(monkeypatch, instruction):
+    *_, reply = fixture()
+    (_, _), calls = select(monkeypatch, reply, mutate=lambda _plan, brief: brief.update(instruction=instruction))
+    assert len(calls) == 1
+    assert json.loads(calls[0]["messages"][1]["content"])["brief"]["instruction"] == instruction
+
+
+@pytest.mark.parametrize("language", ["en", "he"])
+def test_neutral_two_beat_anchor_contract_keeps_earlier_support_and_rejects_opening_anchor(language):
+    """Regression for the actual live EN control: fit was rejected at its early anchor.
+
+    These are mechanical decoder controls, not a simulated semantic acceptance.
+    The Hebrew counterpart independently protects exact Unicode source choices.
+    """
+    texts = (["I missed my bus because I left late.",
+              "The next day I left ten minutes earlier and arrived on time."] if language == "en" else
+             ["פספסתי את האוטובוס כי יצאתי מאוחר.",
+              "למחרת יצאתי עשר דקות מוקדם יותר והגעתי בזמן."])
+    segments = [{"id": f"s{i}", "start": (i-1)*10., "end": i*10., "text": text}
+                for i, text in enumerate(texts, 1)]
+    beats = intelligence.build_story_beats(segments, language, target_seconds=20)
+    chapters = intelligence.build_story_chapters(beats, max_chapters=1)
+    brief = {"goal": "short", "target_duration": 20, "duration_mode": "target",
+             "language": language, "instruction": "Choose one coherent self-contained idea."}
+    plan = {"slots": [{"purpose": intelligence.SINGLE_PASSAGE_PURPOSE,
+                       "chapter_ids": [chapters[0]["id"]], "required_context_chapter_ids": []}]}
+    payload, catalog = intelligence._precision_story_payload(
+        beats, segments, chapters, [], {}, plan, brief, "fixture", "balanced", 20)
+    choices = list(intelligence._story_evidence_choice_catalog(catalog))
+    assert len(beats) == len(choices) == 2
+    # The prompt describes the existing validator contract; source and schema remain authoritative.
+    assert "latest source end" in payload["messages"][0]["content"]
+    assert json.loads(payload["messages"][1]["content"])["source_utterances"] == segments
+    role = {"primary_anchor_choice": choices[-1], "additional_primary_evidence_choices": [choices[0]],
+            "context_evidence_choices_by_chapter": {}}
+    reply = {"verdict": "fit", "role_selections": {intelligence.SINGLE_PASSAGE_PURPOSE: role},
+             "highlight_beat_ids": [], "title": "Unverified", "summary": "Unverified"}
+    clean = intelligence._decode_precision_story_selection(reply, catalog, beats, segments, chapters, plan, brief)
+    assert clean["keep_beat_ids"] == [row["id"] for row in beats]
+    assert clean["semantic_mapping_verified"] is False
+    assert clean["semantic_review_status"] == "provisional_precision_selection"
+    original = copy.deepcopy(reply)
+    role.update(primary_anchor_choice=choices[0], additional_primary_evidence_choices=[choices[-1]])
+    with pytest.raises(intelligence.StoryPlanningError, match="invalid precision source assignments"):
+        intelligence._decode_precision_story_selection(reply, catalog, beats, segments, chapters, plan, brief)
+    # A fabricated last-quote cannot repair the early-anchor defect.
+    forged = copy.deepcopy(original)
+    forged["role_selections"][intelligence.SINGLE_PASSAGE_PURPOSE]["primary_anchor_choice"] = "Invented outcome [b0002:s2:f99]"
+    with pytest.raises(intelligence.StoryPlanningError):
+        intelligence._decode_precision_story_selection(forged, catalog, beats, segments, chapters, plan, brief)
 
 
 def test_precision_refusal_stops_hierarchy_before_critic_final_or_decision(monkeypatch):

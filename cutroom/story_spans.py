@@ -89,7 +89,7 @@ def _indexed_source(candidates: Any, segments: Any):
     return candidate_by_id, segment_by_id
 
 
-def _complete_source_unit(candidate, segment_by_id, all_segments):
+def _complete_source_unit(candidate, segment_by_id, all_segments, *, complete_continuation=False):
     start, end = _bounds(candidate)
     source = [segment_by_id[value] for value in candidate["segment_ids"]]
     ordered = sorted(source, key=lambda row: (*_bounds(row), row["id"]))
@@ -106,7 +106,7 @@ def _complete_source_unit(candidate, segment_by_id, all_segments):
     text = " ".join(row["text"] for row in source)
     if (not isinstance(candidate.get("text"), str)
             or normalize_text(candidate["text"]) != normalize_text(text)
-            or not _SENTENCE_END.search(text.strip())):
+            or (not _SENTENCE_END.search(text.strip()) and not complete_continuation)):
         raise ValueError("A retained source unit must preserve complete source text and ending.")
     return ordered
 
@@ -158,9 +158,27 @@ def build_source_span_constraints(
         raise ValueError("Rejected source units cannot supply retained source spans.")
     selected.sort(key=lambda value: (*_bounds(candidate_by_id[value]), value))
     utterances, approved, exact_source = [], [], []
-    for identifier in selected:
+    positions = {row["id"]: i for i, row in enumerate(segments)}
+    for selected_index, identifier in enumerate(selected):
         candidate = candidate_by_id[identifier]
-        source = _complete_source_unit(candidate, segment_by_id, segments)
+        # Completeness belongs to a retained consecutive ASR group, not a
+        # storage-unit boundary. Every intermediate canonical row must remain;
+        # a disconnected later sentence cannot repair an unfinished prefix.
+        continuation = False
+        previous_last = candidate["segment_ids"][-1]
+        for following_id in selected[selected_index + 1:]:
+            following = candidate_by_id[following_id]
+            if (not candidate.get("entry_owner_id")
+                    or candidate.get("entry_policy") != "complete-asr-entry-2026-10-21-v1"
+                    or following.get("entry_owner_id") != candidate["entry_owner_id"]
+                    or following.get("entry_policy") != candidate["entry_policy"]
+                    or positions[following["segment_ids"][0]] != positions[previous_last] + 1):
+                break
+            if _SENTENCE_END.search(str(following.get("text") or "").strip()):
+                continuation = True
+                break
+            previous_last = following["segment_ids"][-1]
+        source = _complete_source_unit(candidate, segment_by_id, segments, complete_continuation=continuation)
         start, end = _bounds(candidate)
         if approved and start < approved[-1]["end"] - 1e-9:
             raise ValueError("Retained source units must be chronological without overlap.")
@@ -173,7 +191,9 @@ def build_source_span_constraints(
             # equivalence was checked above; only the actual ASR wording owns
             # the fingerprint, including its exact whitespace and punctuation.
             "unit": {key: candidate[key] for key in ("start", "end", "segment_ids")}
-                    | {"text": " ".join(segment["text"] for segment in source)},
+                    | {"text": " ".join(segment["text"] for segment in source)}
+                    | ({key:candidate[key] for key in ("entry_policy","entry_owner_id")}
+                       if candidate.get("entry_owner_id") else {}),
             "beat_id": identifier,
             "segments": [{key: segment[key] for key in ("id", "start", "end", "text")}
                          | {"words_present": "words" in segment, "words": segment.get("words"),

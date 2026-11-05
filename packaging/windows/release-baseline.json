@@ -1,14 +1,12 @@
 {
-  "version": "1.2-beta",
-  "filename": "CUTROOM-1.2-Beta-Windows-20261019.zip",
-  "bytes": 2955433,
-  "sha256": "24fc4767c7c80547308f03484c043d58e81c2592dcfdce6288e96cd3a98ccb89",
-  "url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261019/CUTROOM-1.2-Beta-Windows-20261019.zip",
-  "mirrors": [
-    "https://cutroom-studio.expo.app/downloads/CUTROOM-1.2-Beta-Windows-20261019.zip"
-  ],
-  "build_id": "CUTROOM-1.2-beta-20261019-111922",
-  "manifest_sha256": "71ca49c2dd3b2d74a51cf9cd4ec62a7b78cbdd1f83b1c2dcf87e4085eed4d5ae",
-  "source_commit": "7019b6423ce9d66531e933ee5cac42968f9e96e7",
-  "note": "Qualified source-bound beta; fresh Windows installation remains pending. Historical validation pins are preserved."
+  "filename": "CUTROOM-1.3-Beta-Windows-6263f19.zip",
+  "bytes": 3560896,
+  "sha256": "4bfc6cf9878cb88f823778ab4027868bc9691350197f32d6df2fd0147a5ac7ee",
+  "build_id": "CUTROOM-1.3-beta-20261104-090726",
+  "url": "https://cutroom-studio--8ju7ir0fmm.expo.app/downloads/CUTROOM-1.3-Beta-Windows-6263f19.zip",
+  "mirrors": [],
+  "version": "1.3-beta",
+  "manifest_sha256": "f6c968bac094e383aea9089ce1e772399977b4ffab3174a92bafd38ef46dcc74",
+  "source_commit": "6263f192054c2335158b8e0a88d7edfec3d18e98",
+  "note": "Exact Windows runner-tested candidate. Configured synthetic tests passed; clean-OS, physical-device and human acceptance remain unverified. Historical validation pins are unchanged."
 }
