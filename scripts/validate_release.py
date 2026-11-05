@@ -41,7 +41,7 @@ def run(name: str, command: list[str], timeout: int = 600, env: dict[str, str] |
 def static_checks() -> list[dict]:
     checks: list[dict] = []
     required = [
-        "server.py", "config.json", "requirements.txt", "tests/requirements.txt", "run_windows.bat", "repair_windows.bat", "setup_windows.ps1", "scripts/verify_windows_installer.ps1", "scripts/preflight.py",
+        "server.py", "config.json", "requirements.txt", "tests/requirements.txt", "run_windows.bat", "repair_windows.bat", "setup_windows.ps1", "scripts/verify_windows_installer.ps1", "scripts/preflight.py", "scripts/windows_runtime.py",
         "run_linux.sh", "setup_linux.sh", "web/index.html", "web/styles.css", "web/app.js", "web/i18n.js", "web/timeline.js", "web/audio-meter.js",
         "cutroom/config.py", "cutroom/projects.py", "cutroom/media.py", "cutroom/jobs.py", "cutroom/transcription.py",
         "cutroom/intelligence.py", "cutroom/sync.py", "cutroom/vision.py", "cutroom/composition.py", "cutroom/editing.py", "cutroom/director.py", "cutroom/render.py", "cutroom/audio.py", "cutroom/captions.py", "cutroom/effects.py",
@@ -136,7 +136,12 @@ def static_checks() -> list[dict]:
         ".runtime-paths.cmd" in launcher_source,
         "setup-last-error.txt" in launcher_source,
         "Gyan.FFmpeg" in setup_source,
-        "Ollama.Ollama" in setup_source,
+        'Resolve-Executable -Name "ollama.exe"' in setup_source,
+        "Start-OllamaServerIfNeeded" in setup_source,
+        'Install-WingetPackage -PackageId "Ollama.Ollama"' not in setup_source,
+        "CUTROOM_RUNTIME_PATHS_B64" in setup_source,
+        "Restore-SavedRuntimePaths" in setup_source,
+        "scripts\\windows_runtime.py" in launcher_source,
     ))
     checks.append({"name": "windows_installer_guards", "ok": windows_guard_ok, "details": None})
 
@@ -231,6 +236,8 @@ def static_checks() -> list[dict]:
 
     run_windows = windows_launchers["run_windows.bat"].decode("ascii", errors="replace")
     verifier = windows_launchers["scripts/verify_windows_installer.ps1"].decode("ascii", errors="replace")
+    runtime_path = ROOT / "scripts/windows_runtime.py"
+    runtime = runtime_path.read_text(encoding="utf-8") if runtime_path.is_file() else ""
     checks.append({
         "name": "windows_setup_guards",
         "ok": all(
@@ -239,7 +246,7 @@ def static_checks() -> list[dict]:
                 'if not exist ".setup-complete"',
                 'if not exist ".venv\\Scripts\\python.exe"',
                 "scripts\\verify_windows_installer.ps1",
-                "scripts\\preflight.py",
+                "scripts\\windows_runtime.py",
             )
         ) and all(
             marker in verifier
@@ -248,6 +255,9 @@ def static_checks() -> list[dict]:
                 "setup_windows.ps1",
                 "$errors.Count",
             )
+        ) and all(
+            marker in runtime
+            for marker in ('"preflight": ROOT / "scripts" / "preflight.py"', '"server": ROOT / "server.py"')
         ),
         "details": None,
     })

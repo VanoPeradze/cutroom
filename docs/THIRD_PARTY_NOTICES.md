@@ -13,7 +13,7 @@ CUTROOM AI is distributed under the MIT License. It can interoperate with the fo
 - OpenAI Whisper model weights — transcription; review the model card and license before redistribution.
 - uv by Astral — checksum-verified Windows bootstrap and private Python runtime management; dual-licensed under MIT or Apache-2.0.
 
-CUTROOM does not bundle Python, uv, FFmpeg, Ollama or model weights inside this source ZIP. Setup scripts obtain them from their respective distributors. Redistributors are responsible for preserving applicable notices and complying with the licenses of the exact binaries and models they ship.
+CUTROOM does not bundle Python, uv, FFmpeg, Ollama or model weights inside this source ZIP. Setup may obtain Python, uv and FFmpeg from their respective distributors. Ollama and model weights are separate downloads. Redistributors are responsible for preserving applicable notices and complying with the licenses of the exact binaries and models they ship.
 
 ## ivrit.ai Hebrew Whisper Large v3 Turbo CT2
 
