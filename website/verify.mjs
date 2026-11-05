@@ -37,11 +37,11 @@ assert.equal(JSON.parse(readFileSync(resolve(root,'package.json'),'utf8')).versi
 assert.ok(html.includes('WINDOWS + MAC · 1.3 BETA'), 'The download must display both platforms and 1.3 Beta');
 assertPublishable(release);
 assert.equal(release.release_state, 'beta');
-assert.equal(release.source_commit, 'bd62ec2a6857aeb2c0bd7ed55ef8f717bd83bbf6');
-assert.equal(release.filename, 'CUTROOM-1.3-Beta-combined-review-bd62ec2.zip');
-assert.equal(release.platforms.windows.filename, 'CUTROOM-1.3-Beta-Windows-review-bd62ec2.zip');
-assert.equal(release.platforms.mac.filename, 'CUTROOM-1.3-Beta-combined-review-bd62ec2.zip');
-assert.equal(release.source_archive.filename, 'SOURCE-bd62ec2.zip');
+assert.equal(release.source_commit, '3caa23d2119e3963c044fc3281615227b2bea8e0');
+assert.equal(release.filename, 'CUTROOM-1.3-Beta-combined-3caa23d.zip');
+assert.equal(release.platforms.windows.filename, 'CUTROOM-1.3-Beta-Windows-3caa23d.zip');
+assert.equal(release.platforms.mac.filename, 'CUTROOM-1.3-Beta-combined-3caa23d.zip');
+assert.equal(release.source_archive.filename, 'SOURCE-3caa23d.zip');
 assert.equal(downloadEntries(release).length,3,'Three exact public archives must be prepared');
 assert.equal(release.platforms.mac.filename, release.filename);
 assert.equal(release.platforms.mac.folder,'mac','Mac uses the shared combined archive mac folder');
@@ -53,12 +53,18 @@ assert.ok(html.includes('/downloads/'+zip+'.sha256"'), 'The checksum link must m
 assert.ok(!html.includes('5.6.1'), 'Stale application version on the public page');
 assert.match(release.sha256, /^[a-f0-9]{64}$/);
 assert.ok(Number.isSafeInteger(release.bytes) && release.bytes > 0);
-assert.equal(release.github_release.tag, 'v1.3-beta-20261025-audiofix1');
-assert.equal(release.github_release.previous_public_tag, 'v1.2-beta-20261024-update1');
+assert.equal(release.github_release.tag, 'v1.3-beta-20261103-ui2');
+assert.equal(release.github_release.previous_public_tag, 'v1.3-beta-20261102-ui1');
 assert.equal(release.github_release.tag_commit, release.source_commit);
 const releaseBase = `https://github.com/VanoPeradze/cutroom/releases/download/${release.github_release.tag}/`;
 const retained = JSON.parse(readFileSync(resolve(root,'retained-downloads.json'),'utf8'));
 const retainedTags = new Map([
+  ['CUTROOM-1.3-Beta-Windows-538eef2.zip','v1.3-beta-20261102-ui1'],
+  ['CUTROOM-1.3-Beta-combined-538eef2.zip','v1.3-beta-20261102-ui1'],
+  ['SOURCE-538eef2.zip','v1.3-beta-20261102-ui1'],
+  ['CUTROOM-1.3-Beta-combined-review-bd62ec2.zip','v1.3-beta-20261025-audiofix1'],
+  ['CUTROOM-1.3-Beta-Windows-review-bd62ec2.zip','v1.3-beta-20261025-audiofix1'],
+  ['SOURCE-bd62ec2.zip','v1.3-beta-20261025-audiofix1'],
   ['CUTROOM-1.2-Beta-Windows-review-ad3259b.zip','v1.2-beta-20261024-update1'],
   ['CUTROOM-1.2-Beta-combined-review-ad3259b.zip','v1.2-beta-20261024-update1'],
   ['SOURCE-ad3259b.zip','v1.2-beta-20261024-update1'],
@@ -72,7 +78,7 @@ const retainedTags = new Map([
   ...['CUTROOM-1.2-Beta-Windows-review-fe35453.zip','CUTROOM-1.2-Beta-combined-review-fe35453.zip','SOURCE-fe35453.zip'].map(filename=>[filename,'v1.2-beta-20261018']),
   ...['CUTROOM-1.2-Beta-20261019.zip','CUTROOM-1.2-Beta-Windows-20261019.zip','CUTROOM-1.2-Beta-Mac-20261019.zip','SOURCE-20261019.zip'].map(filename=>[filename,'v1.2-beta-20261019']),
 ]);
-assert.deepEqual(retained.map(entry=>entry.filename).sort(),[...retainedTags.keys()].sort(),'Preserve all24 historical archives including the preceding public beta');
+assert.deepEqual(retained.map(entry=>entry.filename).sort(),[...retainedTags.keys()].sort(),'Preserve all 30 historical archives including the preceding public beta');
 uniqueDownloadEntries([...downloadEntries(release), ...retained]);
 for (const entry of downloadEntries(release)) {
   assert.equal(entry.url, releaseBase + entry.filename);

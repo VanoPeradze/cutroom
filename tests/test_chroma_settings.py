@@ -99,7 +99,8 @@ def test_shared_preview_export_nodes_reject_invalid_geometry_clock_or_graph_name
         build_chroma_key_nodes("[0:v]", "[output]", {**DEFAULT, "enabled": True}, **arguments)
 
 
-def test_capability_is_cached_by_existing_binary_identity_and_gracefully_reports_missing_filter(tmp_path, monkeypatch):
+@pytest.mark.parametrize("flags", ["...", ".."])
+def test_capability_is_cached_by_existing_binary_identity_and_gracefully_reports_missing_filter(tmp_path, monkeypatch, flags):
     from cutroom import effects, media
     executable = tmp_path / "existing-ffmpeg.exe"
     executable.write_bytes(b"synthetic capability test marker; never executed")
@@ -109,7 +110,7 @@ def test_capability_is_cached_by_existing_binary_identity_and_gracefully_reports
     def inspect(args, **kwargs):
         calls.append(args)
         assert args == [str(executable), "-nostdin", "-hide_banner", "-filters"]
-        return SimpleNamespace(stdout="\n".join(f" ... {name} V->V" for name in names))
+        return SimpleNamespace(stdout="\n".join(f" {flags} {name} V->V" for name in names))
     monkeypatch.setattr(media, "run_command", inspect)
     _chroma_filters.cache_clear()
     settings = SimpleNamespace(ffmpeg=str(executable))
