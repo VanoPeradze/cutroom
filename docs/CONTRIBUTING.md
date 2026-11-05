@@ -29,7 +29,7 @@ Clone the repository using your existing access, or fork it if repository permis
 
 ### Windows
 
-Run `run_windows.bat` from the repository root. The launcher performs initial setup when needed and opens the editor. Setup uses Python 3.12 (an existing installation or a private download), creates `.venv`, installs Python dependencies, and checks FFmpeg/FFprobe. It may download runtimes and attempt to install Ollama. Read the [setup guide](TEST_ON_ANOTHER_PC.md) for installation behavior and troubleshooting.
+Run `run_windows.bat` from the repository root. The launcher performs initial setup when needed and opens the editor. Setup uses Python 3.12 (an existing installation or a private download), creates `.venv`, installs Python dependencies, and checks FFmpeg/FFprobe. It may download runtimes. Ollama is optional and is installed separately for local Story AI. Read the [setup guide](TEST_ON_ANOTHER_PC.md) for installation behavior and troubleshooting.
 
 Keep the launcher console open while using the editor. Local AI models are separate downloads; manual editing does not require them or an AI account. See [AI connections](AI_CONNECTIONS.md) and [models](MODELS.md) before testing AI-specific changes.
 

@@ -4,7 +4,7 @@ $repositoryRoot = Split-Path -Parent $PSScriptRoot
 Set-Location -LiteralPath $repositoryRoot
 
 $required = @(
-    "setup_windows.ps1", "requirements.txt", "config.json", "server.py", "scripts\preflight.py",
+    "setup_windows.ps1", "requirements.txt", "config.json", "server.py", "scripts\preflight.py", "scripts\windows_runtime.py",
     "cutroom\__init__.py", "cutroom\director.py", "cutroom\render.py",
     "web\index.html", "web\styles.css", "web\app.js"
 )
@@ -40,12 +40,15 @@ $requiredMarkers = @(
     '$script:UvVersion = "0.12.5"',
     'UV_PYTHON_INSTALL_DIR',
     'UV_SYSTEM_CERTS',
+    'CUTROOM_RUNTIME_PATHS_B64',
+    'Restore-SavedRuntimePaths',
     'Get-FileHash',
     'uv-x86_64-pc-windows-msvc.zip',
     'uv-aarch64-pc-windows-msvc.zip',
     'uv-i686-pc-windows-msvc.zip',
     'Gyan.FFmpeg',
-    'Ollama.Ollama'
+    'Resolve-Executable -Name "ollama.exe"',
+    'Start-OllamaServerIfNeeded'
 )
 foreach ($marker in $requiredMarkers) {
     if (-not $sourceText.Contains($marker)) {
@@ -56,7 +59,8 @@ foreach ($marker in $requiredMarkers) {
 $prohibitedMarkers = @(
     'UV_PYTHON_PREFERENCE = "only-managed"',
     '--managed-python',
-    'UV_NATIVE_TLS = "true"'
+    'UV_NATIVE_TLS = "true"',
+    'Install-WingetPackage -PackageId "Ollama.Ollama"'
 )
 foreach ($marker in $prohibitedMarkers) {
     if ($sourceText.Contains($marker)) {

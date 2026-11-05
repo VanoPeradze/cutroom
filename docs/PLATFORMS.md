@@ -19,7 +19,7 @@ Choose the **Windows** or **Mac** download. Each ZIP contains its launcher, **ST
 3. Let setup finish, then keep its console open while editing. Open `http://127.0.0.1:8765` if the browser does not open automatically.
 4. Start with **Manual edit**, import a short recording, export it and watch the MP4 outside CUTROOM.
 
-Setup accepts an existing Python 3.12 or downloads a private Python 3.12 runtime, then installs the Python dependencies. FFmpeg and FFprobe are required; setup can attempt installation through Windows Package Manager. It may also attempt to install/start Ollama, but manual editing does not require it. Dependencies and local AI models are not bundled. See [Windows setup and troubleshooting](TEST_ON_ANOTHER_PC.md) for download behavior and diagnostics.
+Setup accepts an existing Python 3.12 or downloads a private Python 3.12 runtime, then installs the Python dependencies. FFmpeg and FFprobe are required; setup can attempt installation through Windows Package Manager. Setup can start an existing Ollama service but does not install it. For local Story AI, use AI connection to get Ollama separately; manual editing does not require it. Dependencies and local AI models are not bundled. See [Windows setup and troubleshooting](TEST_ON_ANOTHER_PC.md) for download behavior and diagnostics.
 
 For a GitHub source checkout, run **`run_windows.bat` from the repository root**. Do not rearrange an existing working installation to match the ZIP: its runtime paths and Python environment can depend on its current folder. To receive this editor revision, download a fresh copy and extract it separately. Back up projects before migration; the manifest records each build's ID and checksums.
 
