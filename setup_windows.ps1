@@ -474,17 +474,8 @@ try {
 
     $ollamaPath = Resolve-Executable -Name "ollama.exe"
     if (-not $ollamaPath) {
-        $wingetPath = Get-WingetPath
-        if ($wingetPath) {
-            try {
-                Install-WingetPackage -PackageId "Ollama.Ollama" -DisplayName "Ollama"
-                $ollamaPath = Resolve-Executable -Name "ollama.exe"
-            } catch {
-                Write-Warning "Ollama installation did not finish. CUTROOM can still start with deterministic editing. Details: $($_.Exception.Message)"
-            }
-        } else {
-            Write-Warning "winget is unavailable, so Ollama was not installed automatically. CUTROOM can still start with deterministic editing."
-        }
+        Write-Host "Optional Story AI is not installed. CUTROOM will start without it."
+        Write-Host "To set it up later, open AI Connection in the editor."
     }
     if ($ollamaPath) {
         Add-ProcessPath -Directory (Split-Path -Parent $ollamaPath)
