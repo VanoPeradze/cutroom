@@ -57,7 +57,8 @@ test("creator frame applies the camera role on top without changing YouTube outp
   const { run } = app();
   run(`
     state.project.sources.B = { duration: 20, has_audio: true };
-    state.project.manual = { source_mixer: { screen_slot: "B", camera_slot: "A" } };
+    state.project.manual = { source_mixer: { screen_slot: "B", camera_slot: "A", screen_fit: "contain" } };
+    state.manualSelection = { start: 3, end: 8 };
     state.project.draft = { keep_ranges: [{ start: 0, end: 20 }] };
     state.project.settings = { goal: "youtube", aspect: "16:9", target_duration: 120 };
     elements.aspectSelect.value = "16:9";
@@ -71,6 +72,7 @@ test("creator frame applies the camera role on top without changing YouTube outp
   await run("applyCreatorFrame()");
   assert.equal(run("savedFrame.first_slot"), "A");
   assert.equal(run("savedFrame.stack_fit"), "cover");
+  assert.equal(run("savedFrame.screen_fit"), "cover");
   assert.equal(run("savedFrame.primary_role"), "screen");
   assert.equal(run("elements.aspectSelect.value"), "16:9");
   assert.equal(run("state.project.settings.goal"), "youtube");
@@ -132,11 +134,15 @@ function app() {
     querySelector(selector) { return this.querySelectorAll(selector)[0] || null; },
     createElement: node, addEventListener() {},
   };
-  const context = vm.createContext({ document, console, dictionaries: { en: {} }, setTimeout, clearTimeout, window: {addEventListener() {}}, requestAnimationFrame: (callback) => callback() });
+  const context = vm.createContext({ document, console, dictionaries: { en: {} }, setTimeout, clearTimeout, window: {addEventListener() {}}, requestAnimationFrame: (callback) => callback(),
+    // These workflow tests simulate explicit request-review confirmation. The
+    // actual review dialog/check/cancel contract has its own dedicated suite.
+    reviewEditingRequest: async ({settings}) => settings });
   const run = (code) => vm.runInContext(code, context);
   run(fs.readFileSync(path.join(__dirname, "../web/keyboard.js"), "utf8").replace(/^export /gm, ""));
   run(fs.readFileSync(path.join(__dirname, "../web/source-tracks.js"), "utf8").replace(/^export /gm, ""));
   run(fs.readFileSync(path.join(__dirname, "../web/timeline.js"), "utf8").replace(/^export /gm, ""));
+  run(fs.readFileSync(path.join(__dirname, "../web/caption-alternatives.js"), "utf8").replace(/^export /gm, ""));
   run(source);
   run(`cacheElements();
     state.project = { id: "p", sources: { A: { duration: 100 } }, settings: { goal: "short" }, draft: { goal: "short", keep_ranges: [{ start: 0, end: 10 }] } };
@@ -387,6 +393,18 @@ test("export submits the selected frame rate after saving", async () => {
   assert.equal(run("renderBody.fps"), 60);
 });
 
+for (const code of ["layout_coverage_incomplete", "other_export_problem"]) {
+  test(`export recovery shows source timing action only for ${code}`, async () => {
+    const {run,nodes}=settingsApp();
+    run(`pauseAllMedia=()=>{};flushProjectSaves=async()=>{};
+      api=async()=>{const error=new Error('Camera coverage needs review');error.payload={error:${JSON.stringify(code)}};throw error;};`);
+    await run('startExport()');
+    assert.equal(nodes.get('reviewExportLayout').hidden,code!=='layout_coverage_incomplete');
+    assert.equal(run('elements.exportProgress.hidden'),true);
+    assert.equal(run('state.jobStartLocks.size'),0);
+  });
+}
+
 test("style radios support arrow and boundary keys without consuming modified shortcuts", () => {
   const { run, nodes } = app();
   const radios = ["smart", "reaction_burst", "clean_vod"].map(value => {
@@ -510,7 +528,10 @@ test("generation reads the current brief after saving and preflights that same g
   const { context, run } = settingsApp();
   run(`
     renderReadiness = renderReelCandidates = pauseAllMedia = showAnalysis = () => {};
-    flushProjectSaves = () => new Promise((resolve) => { globalThis.finishSave = resolve; });
+    // The real queue can be flushed again after review; only its first pending
+    // save is deferred. Later flushes reuse that completed operation.
+    const pendingSave = new Promise((resolve) => { globalThis.finishSave = resolve; });
+    flushProjectSaves = () => pendingSave;
     ensureStoryAIReady = async (goal) => { globalThis.preparedGoal = goal; };
     api = async (_url, options) => { globalThis.submittedBrief = JSON.parse(options.body); return {job:{id:"new"}}; };
     pollJob = async () => {};

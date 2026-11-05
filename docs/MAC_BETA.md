@@ -1,8 +1,8 @@
-# CUTROOM 1.2 Beta for Mac
+# CUTROOM 1.3 Beta for Mac
 
 The same free, MIT-licensed editor, with a separate Mac setup and launcher.
 The separate Mac ZIP contains **START CUTROOM.command**, **START HERE.html**, and **App**. The compatible combined download still contains exactly two folders: **windows** and **mac**.
-**1.2 Beta** updates the shared application in both folders: editable caption
+**1.3 Beta** updates the shared application in both folders: editable caption
 items, the mixer with typed values and an export limiter, gameplay-moment
 corrections, text templates and the export check. It has a new build ID and
 checksums; it is not a documentation-only refresh.

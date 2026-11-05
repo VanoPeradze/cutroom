@@ -8,6 +8,8 @@ from array import array
 
 import pytest
 
+from cutroom.ffmpeg_compat import export_capabilities
+
 from cutroom.render import (
     _caption_transcript, _effective_audio_slot, _frame_aligned_plan,
     _render_input_fingerprint, _render_plan, _validate_caption_timeline, build_filter_graph,
@@ -119,7 +121,7 @@ def test_real_ffmpeg_tracks_move_remove_stack_and_audio_gap(tmp_path, media, fps
     script.write_text(graph, encoding="utf-8")
     output = tmp_path / "output.mp4"
     result = subprocess.run([ffmpeg, "-v", "error", "-y", "-i", str(paths[0]), "-i", str(paths[1]),
-                            "-filter_complex_script", str(script), *maps, "-c:v", "libx264", "-preset", "ultrafast",
+                            *export_capabilities(ffmpeg).graph_file_args(script), *maps, "-c:v", "libx264", "-preset", "ultrafast",
                             "-c:a", "aac", "-r", str(fps), "-t", "4", str(output)], capture_output=True, timeout=25)
     assert result.returncode == 0, result.stderr.decode(errors="replace")
     metadata = json.loads(subprocess.check_output([ffprobe, "-v", "error", "-show_streams", "-of", "json", str(output)]))
@@ -167,7 +169,7 @@ def test_real_ffmpeg_moved_b_and_all_empty_tracks_finish(tmp_path, media, empty)
     script.write_text(graph, encoding="utf-8")
     output = tmp_path / "b-output.mp4"
     result = subprocess.run([ffmpeg, "-v", "error", "-y", "-i", str(paths[0]), "-i", str(paths[1]),
-                             "-filter_complex_script", str(script), *maps, "-c:v", "libx264", "-preset", "ultrafast",
+                             *export_capabilities(ffmpeg).graph_file_args(script), *maps, "-c:v", "libx264", "-preset", "ultrafast",
                              "-c:a", "aac", "-r", "60", "-t", "1", str(output)], capture_output=True, timeout=20)
     assert result.returncode == 0, result.stderr.decode(errors="replace")
     pixel = subprocess.check_output([ffmpeg, "-v", "error", "-ss", "0.5", "-i", str(output), "-an",

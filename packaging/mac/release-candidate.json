@@ -1,17 +1,15 @@
 {
-  "version": "1.2-beta",
+  "filename": "CUTROOM-1.3-Beta-combined-6263f19.zip",
+  "bytes": 7168334,
+  "sha256": "ff68e1332382bc41056491c5aaccdf8c9111fc57e63ad21719f31f0c36ad8a83",
+  "build_id": "CUTROOM-1.3-beta-mac-20261104-090926",
+  "url": "https://cutroom-studio--64anzq1ubd.expo.app/downloads/CUTROOM-1.3-Beta-combined-6263f19.zip",
+  "mirrors": [],
+  "version": "1.3-beta",
   "layout": "windows-mac-folders-v1",
-  "filename": "CUTROOM-1.2-Beta-20261019.zip",
-  "bytes": 5946045,
-  "sha256": "bccfea9d1fbbe7f562313c586f9ccc2bb0e6cb71ceff09b3fc852a00cfed8773",
-  "url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261019/CUTROOM-1.2-Beta-20261019.zip",
-  "mirrors": [
-    "https://cutroom-studio.expo.app/downloads/CUTROOM-1.2-Beta-20261019.zip"
-  ],
-  "build_id": "CUTROOM-1.2-beta-mac-20261019-111923",
-  "manifest_sha256": "ceeefa809b0104adec834f1ef4d737637c8654d759bbcb1865bc4d56a30b76d3",
-  "source_commit": "7019b6423ce9d66531e933ee5cac42968f9e96e7",
-  "native_validation_url": "https://github.com/VanoPeradze/cutroom/actions/runs/39244037429",
-  "native_validation_commit": "b28561c7a3d277e90381d2e720eb50ab2fe001fb",
-  "note": "Exact native-tested combined archive; separate Mac download is its verified App/launcher projection. No physical or model acceptance is implied."
+  "manifest_sha256": "a1f34cb7066d4becbda25581e8a8a7fa6c9bbe8bc6bceb4e678cbdce3dcd85dc",
+  "source_commit": "6263f192054c2335158b8e0a88d7edfec3d18e98",
+  "native_validation_url": "https://github.com/VanoPeradze/cutroom/actions/runs/41804756142",
+  "native_validation_commit": "efe4e10ea2484cbdd134e789080cb7c9227d92ba",
+  "note": "The exact combined candidate passed native ARM64 and Intel synthetic review; physical, human and model acceptance are not implied."
 }

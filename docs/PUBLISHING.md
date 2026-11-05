@@ -68,7 +68,7 @@ builds and their CI downloads continue to use the current baseline by default.
 ### Approved product releases
 
 An application change is a product release, even if the user-facing version (now
-`1.2 Beta`) stays the same. Freeze the reviewed application, launchers, tests and guides; run the
+`1.3 Beta`) stays the same. Freeze the reviewed application, launchers, tests and guides; run the
 relevant regression and synthetic-media checks on that source. Build and verify a
 fresh Windows archive:
 

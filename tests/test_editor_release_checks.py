@@ -158,7 +158,7 @@ def test_missing_media_tool_fails_before_any_subprocess(monkeypatch, missing):
         checks.inspect_ffmpeg()
 
 
-@pytest.mark.parametrize("filters", ["", " ... vidstabdetect V->V detect", " ... vidstabtransform V->V transform"])
+@pytest.mark.parametrize("filters", ["", " ... vidstabdetect V->V detect", " ... vidstabtransform V->V transform", " .. vidstabdetect V->V detect", " .. vidstabtransform V->V transform"])
 def test_real_stabilization_cannot_be_silently_skipped_without_both_filters(monkeypatch, filters):
     monkeypatch.setattr(checks.shutil, "which", lambda name: name)
     monkeypatch.setattr(checks.subprocess, "run", lambda *args, **kwargs: SimpleNamespace(stdout=filters))
@@ -166,13 +166,14 @@ def test_real_stabilization_cannot_be_silently_skipped_without_both_filters(monk
         checks.inspect_ffmpeg()
 
 
-def test_available_filter_inventory_records_the_actual_runtime(monkeypatch):
+@pytest.mark.parametrize("flags", ["...", ".."])
+def test_available_filter_inventory_records_the_actual_runtime(monkeypatch, flags):
     monkeypatch.setattr(checks.shutil, "which", lambda name: name)
     def run(command, **kwargs):
         assert kwargs["encoding"] == "utf-8" and kwargs["check"] is True
         assert kwargs["timeout"] == 20
         names = ("vidstabdetect", "vidstabtransform", "chromakey", "overlay", "split", "drawbox", "format", "scale", "crop", "setsar", "setpts")
-        text = "".join(f" ... {name} V->V reviewed\n" for name in names) if "-filters" in command else f"{command[0]} version reviewed\n"
+        text = "".join(f" {flags} {name} V->V reviewed\n" for name in names) if "-filters" in command else f"{command[0]} version reviewed\n"
         return SimpleNamespace(stdout=text)
     monkeypatch.setattr(checks.subprocess, "run", run)
     result = checks.inspect_ffmpeg()

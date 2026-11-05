@@ -186,7 +186,15 @@ def test_youtube_instruction_with_sparse_transcript_preserves_structure_with_aud
     )
 
     assert result["engine"] == "audio_cleanup"
-    assert saved["draft"]["status"] == "ready"
+    # Sparse ASR/audio cleanup cannot establish the requested result-first
+    # narrative. Preserve the usable fallback without claiming verification.
+    assert saved["draft"]["status"] == "requires_review"
+    assert saved["draft"]["review_required"] is True
+    assert saved["draft"]["generative_approved"] is False
+    contract = saved["draft"]["instruction_contract"]
+    assert contract["instruction"] == "פתח בתוצאה ושמור את ההסבר"
+    assert contract["verification_status"] == "unverified"
+    assert any(row["status"] == "unverified" for row in contract["requirements"])
     assert saved["draft"]["partial_ai"] is True
     assert all(row["camera"] == "A" for row in saved["draft"]["camera_plan"])
     assert saved["analysis"]["segments"] == []

@@ -90,7 +90,8 @@ def build_chroma_key_nodes(
 def _chroma_filters(executable: str, size: int, modified_ns: int) -> bool:
     from .media import run_command
     result = run_command([executable, "-nostdin", "-hide_banner", "-filters"], timeout=10)
-    filters = set(re.findall(r"^\s*[.TSC]{3}\s+(\w+)\s+", result.stdout, re.MULTILINE))
+    # FFmpeg 8+ prints two filter flags; older releases print three.
+    filters = set(re.findall(r"^\s*[.TSC]{2,3}\s+(\w+)\s+", result.stdout, re.MULTILINE))
     return {"chromakey", "overlay", "split", "drawbox", "format", "scale", "crop", "setsar", "setpts"}.issubset(filters)
 
 

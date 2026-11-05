@@ -13,6 +13,7 @@ import pytest
 
 from cutroom.jobs import Job, JobContext
 from cutroom.config import DEFAULTS, Settings
+from cutroom.ffmpeg_compat import export_capabilities
 from cutroom.media_render import library_input_args
 from cutroom.projects import ProjectStore
 from cutroom.render import _dimensions, _render_input_fingerprint, _run_ffmpeg_process, build_filter_graph, render_project
@@ -107,7 +108,7 @@ def render(value, media, tmp_path, dimensions=(160, 90)):
     output = tmp_path / "output.mp4"
     context = JobContext(Job("library-test", "render", "test"), threading.Lock())
     code, error = _run_ffmpeg_process(context, [ffmpeg, "-v", "error", "-y", "-i", str(source), *library_input_args(value, root),
-                                               "-filter_complex_script", str(graph_path), *maps, "-c:v", "libx264", "-preset", "ultrafast",
+                                               *export_capabilities(ffmpeg).graph_file_args(graph_path), *maps, "-c:v", "libx264", "-preset", "ultrafast",
                                                "-c:a", "aac", "-threads", "2", "-t", "3", "-progress", "pipe:1", str(output)], 3)
     assert code == 0, error
     return output
@@ -281,7 +282,7 @@ def test_real_ffmpeg_high_resolution_all_aspects(media, tmp_path, resolution, as
     script = tmp_path / "high-resolution.txt"
     script.write_text(graph, encoding="utf-8")
     output = tmp_path / "high-resolution.mp4"
-    subprocess.run([media[1], "-v", "error", "-y", "-i", str(media[3]), "-filter_complex_script", str(script), *maps,
+    subprocess.run([media[1], "-v", "error", "-y", "-i", str(media[3]), *export_capabilities(media[1]).graph_file_args(script), *maps,
                     "-c:v", "libx264", "-preset", "ultrafast", "-threads", "2", "-t", str(2 / 30), str(output)], check=True, capture_output=True, timeout=30)
     streams = json.loads(subprocess.check_output([media[2], "-v", "error", "-show_streams", "-of", "json", str(output)]))["streams"]
     assert (streams[0]["width"], streams[0]["height"]) == dims

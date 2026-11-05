@@ -29,6 +29,7 @@ import re
 from typing import Any
 
 from .captions import CAPTION_POSITION_CHOICES, CAPTION_SCALE_RANGE, CAPTION_STYLE_CHOICES, HIGHLIGHT_WORDS_PER_CAPTION
+from .caption_alternatives import caption_transcript
 from .source_tracks import has_sequence, has_source_tracks, source_track_clips
 
 CAPTION_ACTION_FIELDS: dict[str, set[str]] = {
@@ -124,7 +125,7 @@ def _analyzed_audio_source(project: dict[str, Any]) -> str:
 
 def effective_transcript(project: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
     """The transcript with source corrections applied, and the stale correction keys."""
-    return apply_corrections((project.get("analysis") or {}).get("transcript"), corrections(project))
+    return apply_corrections(caption_transcript(project), corrections(project))
 
 
 def apply_corrections(transcript: Any, fixes: dict[str, dict[str, Any]]) -> tuple[dict[str, Any], list[str]]:
@@ -363,7 +364,7 @@ def caption_items(project: dict[str, Any], *, slot: str | None, offset: float = 
                   keeps: list[dict[str, Any]] | None = None, duration: float | None = None,
                   include_hidden: bool = True) -> list[dict[str, Any]]:
     """Automatic captions on the edit clock, with corrections and overrides applied."""
-    original = (project.get("analysis") or {}).get("transcript") or {}
+    original = caption_transcript(project)
     originals = {segment_key(segment, index): segment
                  for index, segment in enumerate(original.get("segments") or []) if isinstance(segment, dict)}
     transcript, stale = effective_transcript(project)
@@ -375,6 +376,36 @@ def caption_items(project: dict[str, Any], *, slot: str | None, offset: float = 
     source_identity = hashlib.sha256(json.dumps([analyzed, identity], sort_keys=True, ensure_ascii=False,
                                                separators=(",", ":")).encode("utf-8")).hexdigest()
     items = _natural_items(transcript, _pieces(project, slot, offset, keeps), originals, source_identity)
+    from .caption_alternatives import status as alternative_status
+    active=alternative_status(project)["active_id"]
+    saved=(project.get("caption_alternatives") or {}).get(active) or {}
+    if saved.get("scope"):
+        left,right=saved["scope"]["timeline_range"]
+        pieces=_pieces(project,slot,offset,keeps);inside=[];outside=[]
+        for a,b,c,d,origins in pieces:
+            for x,y,target in [(a,min(b,left),outside),(max(a,left),min(b,right),inside),(max(a,right),b,outside)]:
+                if y>x:target.append((x,y,c+x-a,c+y-a,origins))
+        # Keep unrelated item IDs/anchors exactly, including saved manual overrides.
+        untouched=[r for r in items if r["end"]<=left or r["start"]>=right]
+        crossing=[r for r in items if r["start"]<left<r["end"] or r["start"]<right<r["end"]]
+        fragments=[]
+        for old in crossing:
+            for n,(a,b) in enumerate(((old["start"],min(old["end"],left)),(max(old["start"],right),old["end"]))):
+                if b<=a:continue
+                row=copy.deepcopy(old)
+                row.update(id=f"{old['id']}:outside:{n}",start=a,end=b,natural_start=a,natural_end=b,
+                    source_start=old["source_start"]+a-old["start"],source_end=old["source_end"]+b-old["end"])
+                row["words"]=[{**w,"start":max(a,w["start"]),"end":min(b,w["end"])} for w in old["words"] if w["start"]<b and w["end"]>a]
+                if old["words"]:
+                    if not row["words"]:continue
+                    row["text"]=" ".join(w["word"] for w in row["words"])
+                for span in row["_caption_anchor"]["spans"]:
+                    span["start"]=max(span["start"],row["source_start"]);span["end"]=min(span["end"],row["source_end"])
+                fragments.append(row)
+        alt=copy.deepcopy(saved["transcript"])
+        for row in alt["segments"]:row["id"]=f"alt:{active[:16]}:{row['id']}"
+        alt_originals={str(row["id"]):row for row in alt["segments"]}
+        items=untouched+fragments+_natural_items(alt,inside,alt_originals,source_identity)
     anchors = _override_anchors(project)
     for item in items:
         item["corrected"] = item["segment_id"] in fixes and item["segment_id"] not in stale
