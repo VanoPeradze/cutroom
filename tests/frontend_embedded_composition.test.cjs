@@ -23,7 +23,7 @@ function element() {
 }
 
 function app() {
-  const scope = vm.createContext({console, dictionaries: {en: {}}, document: {}, window: {}, setTimeout, clearTimeout, element,
+  const scope = vm.createContext({console, dictionaries: {en: {}}, document: {getElementById:()=>null}, window: {}, setTimeout, clearTimeout, element,
     formatTime: value => `${value.toFixed(2)}s`});
   const run = code => vm.runInContext(code, scope);
   run(fs.readFileSync(path.join(__dirname, '../web/source-tracks.js'), 'utf8').replace(/^export /gm, ''));

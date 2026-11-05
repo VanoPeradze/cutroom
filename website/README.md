@@ -7,13 +7,35 @@ This folder is the maintained website source inside the public [CUTROOM reposito
 It does not run the editor, receive footage, process video, or handle user API keys.
 The previous separate website checkout is not needed for future updates.
 
+## 1.3 beta - 3 November 2026
+
+Product source is `3caa23d2119e3963c044fc3281615227b2bea8e0` and the release tag is `v1.3-beta-20261103-ui2`. The exact Windows and combined archives passed automated candidate checks in [run 41710068813](https://github.com/VanoPeradze/cutroom/actions/runs/41710068813). The combined archive supplies the `mac/` folder; there is no separate Mac rebuild.
+
+Windows setup and synthetic exports were tested on a configured hosted runner. Clean-OS and packaged batch-launcher testing, physical devices, human listening, Finder/Gatekeeper and model/transcription acceptance remain pending.
+
+## Previous 1.3 beta - 2 November 2026 (history)
+
+Product source is `538eef2adc6cad2ca60b20679fbf027dea142826` and the release tag is `v1.3-beta-20261102-ui1`. The exact Windows and combined archives were tested in [run 41441683099](https://github.com/VanoPeradze/cutroom/actions/runs/41441683099). The combined archive supplies the `mac/` folder; there is no separate Mac rebuild. The source, Windows and combined ZIP hashes are preserved in `retained-downloads.json`.
+
+Windows direct setup and synthetic portrait export were tested on a configured hosted runner, but clean-OS installation and the batch launcher remain untested. Physical-device, human listening, Gatekeeper and model/transcription acceptance remain untested.
+
+## Previous 1.3 beta - 25 October 2026 (history)
+
+The exact product source is `bd62ec2a6857aeb2c0bd7ed55ef8f717bd83bbf6`, tree `16c2fdd875f1f173494e591def1842650b0f2d8c`. The release is [v1.3-beta-20261025-audiofix1](https://github.com/VanoPeradze/cutroom/releases/tag/v1.3-beta-20261025-audiofix1). Exact Mac ARM64 and Intel automated qualification passed in [run40189484448](https://github.com/VanoPeradze/cutroom/actions/runs/40189484448), tied to qualification head `6bbdb8f6b7476d9a7aace4b9d7788a8f38eb18cd` and the frozen combined archive. Both architectures passed empty-App installation, missing-pip recovery, synthetic exports and application restart/persistence. Physical UI, human listening and model transcription were not performed. Publication remains a separate action.
+
+Windows uses `CUTROOM-1.3-Beta-Windows-review-bd62ec2.zip`. Mac uses the exact combined `CUTROOM-1.3-Beta-combined-review-bd62ec2.zip` and its `mac/` folder; there is no standalone Mac publication. `SOURCE-bd62ec2.zip` is the matching source archive. Old public downloads and mirrors remain available.
+
+The update gives newly added videos their source sound by default when present, adds explicit layer sound/volume/mute controls, and keeps saved silent overlays unchanged. The AI draft length notice is compact and expandable, retains actual/target information and remains outside the preview.
+
+Windows clean-install/export/restart/persistence qualification is **incomplete**, not passed. The earlier 50843dd candidate's one clean Windows attempt ended in a resource abort; it does not qualify these changed bytes. The 1.3 beta relies on separately recorded decoded export/API/UI/path checks and disclosed limits, with exact Mac evidence pinned in `release.json`. Hebrew accuracy, automatic speaker-linked framing and physical-device/manual acceptance remain unfinished.
+
 ## What belongs here
 
 - `public/`: the English/Hebrew page, styling, scripts and generated copies of the real product screenshots and user guides.
 - `app.json`: the existing Expo website project identity, not a credential.
-- `release.json`: exact filenames, sizes, checksums and provenance for the Windows, standalone Mac, combined and source ZIPs, their tag-specific GitHub URLs and retained Expo mirrors.
+- `release.json`: exact filenames, sizes, checksums and provenance for Windows, the shared Mac/combined archive and the source ZIP, their tag-specific GitHub URLs and retained Expo mirrors.
 - `prepare-download.mjs`: restores those approved artifacts locally without committing ZIPs to Git. A shared Mac/combined artifact is verified once; conflicting shared metadata is rejected.
-- `retained-downloads.json`: historical 1.1 and previous 1.2 archives that remain verified and deployed at their original mirror paths, including on a fresh checkout.
+- `retained-downloads.json`: historical 1.1, 1.2 and previous 1.3 archives that remain verified and deployed at their original mirror paths, including on a fresh checkout.
 - `prepare-assets.mjs`: copies exactly six canonical repository files into `public/`, entirely offline.
 
 Edit screenshots in `docs/images/{welcome,editor,ai-options}.png`, user guides in
@@ -23,7 +45,7 @@ Git. The helper checks all source and destination paths before writing, rejects 
 links, preserves the exact bytes, and leaves already-matching copies untouched.
 The favicon and approved ZIP checksum sidecar remain maintained website files.
 
-The Windows and Mac downloads each have their own platform launcher beside `App/` and `START HERE.html`. The optional combined ZIP has exactly two top-level folders: `windows/` and `mac/`. Each has its platform launcher, `START HERE.html`, and `App/`. Both contain the same approved application source; Mac adds its own setup/help files. Never remove or rename `App` independently of its launcher. The combined builder preserves the complete Windows ZIP selected by `packaging/windows/release-baseline.json`. A product update therefore needs a newly built and reviewed Windows baseline; a documentation refresh changes no application or launcher payload. See the distinct release paths below and [Mac validation](../docs/MAC_BETA.md).
+The Windows ZIP has its launcher beside `App/` and `START HERE.html`. Mac uses the `mac/` folder in the exact combined archive; its launcher, `START HERE.html` and `App/` remain together. The combined ZIP has exactly two top-level folders: `windows/` and `mac/`. Both contain the same approved application source, with platform-specific setup/help files. Never remove or rename `App` independently of its launcher. The combined builder preserves the complete Windows ZIP selected by `packaging/windows/release-baseline.json`. A product update needs a newly built and reviewed Windows baseline; a documentation refresh changes no application or launcher payload. See the distinct release paths below and [Mac validation](../docs/MAC_BETA.md).
 
 The marketing page uses an original editorial studio design informed by public video-editor website references; see DESIGN.md and PRODUCT.md.
 The maintained hero image is `public/assets/studio-edit.png`, refreshed on 19 October 2026. It and the other five `studio-*.png` images are untouched browser captures of the current local editor, using an original eight-second STUDIO SESSION title card and procedural audio in a disposable demonstration project. No third-party footage, real person, private source recording or project data is included. Recapture them whenever the editor's layout changes. The hero is a still image, enlarged on demand. The three canonical documentation screenshots are copied byte-for-byte by prepare-assets.mjs.
@@ -88,7 +110,7 @@ provide the already-approved local archive instead:
 node prepare-download.mjs PATH_TO_APPROVED_COMBINED_ZIP
 ```
 
-The optional local path restores the combined ZIP; restore the Windows, standalone Mac and source files
+The optional local path restores the combined ZIP; restore the Windows and source files
 from their exact local approved archives or listed URLs into `public/downloads/` as needed, then run the normal
 checks. Mirror use never bypasses the pinned size/SHA-256 checks.
 

@@ -30,6 +30,35 @@ def _command_ready(command: str) -> bool:
     return result.returncode == 0
 
 
+def _check_ffmpeg(command: str) -> None:
+    """Check export codecs and execute the renderer's file-graph/CFR probe."""
+    from cutroom.ffmpeg_compat import export_capabilities
+
+    capabilities = {}
+    for name in ("filters", "encoders"):
+        result = subprocess.run(
+            [command, "-hide_banner", f"-{name}"],
+            stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace",
+            timeout=15, check=False,
+        )
+        if result.returncode:
+            raise RuntimeError(f"-{name} exited with code {result.returncode}: {result.stdout[-1200:].strip()}")
+        capabilities[name] = {
+            fields[1] for line in result.stdout.splitlines()
+            if len(fields := line.split()) >= 2
+        }
+    missing = []
+    if "subtitles" not in capabilities["filters"]:
+        missing.append("libass subtitles filter")
+    for encoder in ("libx264", "aac"):
+        if encoder not in capabilities["encoders"]:
+            missing.append(f"{encoder} encoder")
+    if missing:
+        raise RuntimeError("missing " + ", ".join(missing))
+    export_capabilities(command)
+
+
 def _check_audio_decoder() -> None:
     """Exercise Whisper's actual media reader without loading an ASR model."""
     sample = io.BytesIO()
@@ -68,9 +97,12 @@ def main() -> int:
         from cutroom.config import load_settings
 
         settings = load_settings()
-        for label, command in (("FFmpeg", settings.ffmpeg), ("FFprobe", settings.ffprobe)):
-            if not _command_ready(command):
-                failures.append(f"{label} is unavailable at: {command}")
+        try:
+            _check_ffmpeg(settings.ffmpeg)
+        except (OSError, subprocess.SubprocessError, RuntimeError) as exc:
+            failures.append(f"FFmpeg rendering at {settings.ffmpeg}: {exc}")
+        if not _command_ready(settings.ffprobe):
+            failures.append(f"FFprobe is unavailable at: {settings.ffprobe}")
 
         probe = settings.cache_dir / f".preflight-{os.getpid()}"
         try:

@@ -14,6 +14,12 @@
 .media-fields label,.mixer-channel label { display:flex; flex-direction:column; gap:5px; color:var(--paper-dim); font-size:11px; min-width:0; }
 .media-fields input:not([type=checkbox]),.media-fields select { width:100%; min-width:0; }
 .media-fields input[type=checkbox] { width:16px; }
+.media-audio-choice { padding:10px; margin-block:0 12px; border:1px solid var(--line-strong); border-radius:6px; background:var(--surface-chrome); }
+.media-audio-toggle { display:flex; align-items:center; gap:8px; font-size:12px; font-weight:600; }
+.media-audio-toggle input { width:16px; height:16px; margin:0; accent-color:var(--cyan); }
+.media-audio-status { margin:6px 0 0; color:var(--muted); font-size:11px; line-height:1.5; overflow-wrap:anywhere; }
+.media-clip-audio { margin-block:10px; }
+.media-clip-audio > summary { cursor:pointer; font-size:12px; font-weight:600; margin-bottom:10px; }
 .media-placement summary,.audio-mixer summary { cursor:pointer; font-size:13px; margin-block:10px; }
 .media-actions { display:flex; flex-wrap:wrap; gap:6px; }
 .audio-mixer { margin-top:12px; border:1px solid var(--line-strong); border-radius:9px; padding:0 10px; background:var(--surface-chrome); }
@@ -238,3 +244,20 @@
   #studioPanelAudio .audio-mixer :is(.mixer-fader-rail,.mixer-fader-travel) { display:none; }
   #studioPanelAudio .audio-mixer .mixer-channel input[type=range] { opacity:1 !important; appearance:auto; -webkit-appearance:auto; }
 }
+
+.library-shot-review { width:min(880px,calc(100vw - 28px)); max-height:calc(100dvh - 28px); overflow:auto; padding:22px; color:var(--paper); background:var(--surface-chrome); border:1px solid var(--line-strong); border-radius:10px; }
+.library-shot-review::backdrop { background:rgba(0,0,0,.6); }
+.library-shot-review p,.library-shot-review h3 { overflow-wrap:anywhere; }
+.library-shot-name { font-weight:700; }
+.library-shot-review video { width:100%; max-height:36dvh; background:#000; }
+.library-shot-range { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; margin-block:12px; }
+.library-shot-range label { display:grid; min-width:0; gap:4px; }
+.library-shot-range input { width:100%; min-width:0; }
+.library-shot-actions { display:flex; flex-wrap:wrap; gap:8px; grid-column:1/-1; }
+.library-shot-review button { min-height:36px; padding:7px 10px; white-space:normal; overflow-wrap:anywhere; color:var(--paper); background:var(--surface-selected); border:1px solid var(--line-strong); border-radius:5px; }
+@media(max-width:560px) { .library-shot-range { grid-template-columns:minmax(0,1fr); } }
+
+/* Each library action owns a row; the compact shelf previously put every button in row4. */
+#studioShelfMedia .media-asset > button { grid-column:1 / -1; grid-row:auto; justify-self:stretch; white-space:normal; overflow-wrap:anywhere; }
+
+.library-shot-insert-help { grid-column:1/-1; }

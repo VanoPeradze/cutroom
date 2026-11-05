@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import sys
 import traceback
+import time
 from pathlib import Path
 from typing import Any
 
@@ -29,6 +30,15 @@ def run(request_path: Path, result_path: Path, progress_path: Path) -> int:
         request = json.loads(request_path.read_text(encoding="utf-8"))
         if not isinstance(request, dict):
             raise ValueError("Transcription worker request must be an object")
+        gate = request.get("owned_start_gate")
+        if gate is not None:
+            if not isinstance(gate, str) or Path(gate).parent.resolve() != request_path.parent.resolve():
+                raise ValueError("Invalid worker ownership gate")
+            deadline = time.monotonic() + 10.
+            while not Path(gate).is_file():
+                if time.monotonic() >= deadline:
+                    raise RuntimeError("CUTROOM worker ownership was not established; no model was loaded")
+                time.sleep(.02)
         settings_payload = request.get("settings")
         if not isinstance(settings_payload, dict):
             raise ValueError("Transcription worker settings are missing")

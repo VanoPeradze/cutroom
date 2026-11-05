@@ -27,7 +27,7 @@ function assertLocalized(link) {
   assert.match(link[0], />[^<>]*[A-Za-z][^<>]*</, 'The default link text must be English');
 }
 
-test('Windows and Mac have separate archives with an optional combined download and exact source', () => {
+test('the 1.3 beta uses exact Windows, shared Mac/combined and source downloads', () => {
   const release = JSON.parse(readFileSync(new URL('./release.json', import.meta.url), 'utf8'));
   const buttons = [...html.matchAll(/<a\b[^>]*class="[^"]*\bbutton\b[^"]*"[^>]*>/g)];
   assert.equal(buttons.length, 2);
@@ -39,36 +39,42 @@ test('Windows and Mac have separate archives with an optional combined download 
     assert.match(links[0][1], /\bdownload-link\b/);
     assert.doesNotMatch(links[0][1], /\sdownload(?:\s|=|$)/, 'Cross-origin downloads rely on GitHub attachment headers');
     assertLocalized(links[0]);
-    const mirror = linksTo(region('details', 'install-help'), `/downloads/${entry.filename}`);
+    const mirror = linksTo(region('details', 'install-help'), `/downloads/${entry.filename}`).filter(link => link[2].includes(platform === 'mac' ? 'Mac mirror' : 'Windows mirror'));
     assert.equal(mirror.length, 1);
     assertLocalized(mirror[0]);
     assert.match(mirror[0][2], /mirror/i);
     assert.ok(linksTo(html, `/downloads/${entry.filename}.sha256`).length >= 1);
   }
-  assert.equal(release.filename, 'CUTROOM-1.2-Beta-20261019.zip');
-  assert.equal(release.platforms.windows.filename, 'CUTROOM-1.2-Beta-Windows-20261019.zip');
-  assert.equal(release.platforms.mac.filename, 'CUTROOM-1.2-Beta-Mac-20261019.zip');
-  assert.notEqual(release.platforms.mac.filename, release.filename);
-  assert.ok(!release.platforms.mac.folder, 'The standalone Mac launcher is beside App, without a mac subfolder');
-  assert.equal(linksTo(html, release.url).length, 1); // Optional combined ZIP help link, separate from the Mac button.
-  assert.equal(linksTo(html, `/downloads/${release.filename}`).length, 1);
-  assert.equal(linksTo(html, `/downloads/${release.filename}.sha256`).length, 1);
-  assert.match(html, /Mac has its own ZIP\. Extract it and run START CUTROOM\.command beside App\./);
+  assert.equal(release.filename, 'CUTROOM-1.3-Beta-combined-3caa23d.zip');
+  assert.equal(release.platforms.windows.filename, 'CUTROOM-1.3-Beta-Windows-3caa23d.zip');
+  assert.equal(release.platforms.mac.filename, 'CUTROOM-1.3-Beta-combined-3caa23d.zip');
+  assert.equal(release.platforms.mac.filename, release.filename);
+  assert.equal(release.platforms.mac.folder,'mac', 'Mac uses the shared combined archive mac folder');
+  assert.equal(linksTo(html, release.url).length, 2); // Optional combined ZIP help link, separate from the Mac button.
+  assert.equal(linksTo(html, `/downloads/${release.filename}`).length, 2);
+  assert.equal(linksTo(html, `/downloads/${release.filename}.sha256`).length, 2);
+  assert.match(html, /Mac uses the combined ZIP\. Extract it, open mac, then run START CUTROOM\.command beside App\./);
   assert.match(region('details', 'install-help'), /The optional combined ZIP has exactly two folders: windows and mac/);
   const source = release.source_archive;
-  assert.equal(source.filename, 'SOURCE-20261019.zip');
+  assert.equal(source.filename, 'SOURCE-3caa23d.zip');
   for (const url of [source.url, `/downloads/${source.filename}`, `/downloads/${source.filename}.sha256`]) assert.equal(linksTo(html,url).length,1);
-  assert.equal(downloadEntries(release).length,4);
+  assert.equal(downloadEntries(release).length,3);
+  assert.match(html, /1\.3 Beta · Workspace &amp; sound/);
+  const update = region('details', 'update-status');
+  assert.match(update, /Saved silent overlays stay silent until you turn their sound on\./);
+  assert.match(update, /It still flags a draft shorter than requested/);
+  assert.match(update, /Layer sound plays at normal speed from Source in\./);
+  assert.doesNotMatch(html, /In review|public 1\.2 beta until|not in the downloads yet/i);
   assert.doesNotMatch(html, /href="[^"]*Linux[^"\n]*\.zip/i);
   assert.ok(linksTo(html, `${repository}/blob/master/docs/PLATFORMS.md#linux-source-based-development-path`).length);
 });
 
 test('download metadata pins a dated release and preserves Expo mirrors and provenance', () => {
   const release = JSON.parse(readFileSync(new URL('./release.json', import.meta.url), 'utf8'));
-  assert.equal(release.github_release.tag, 'v1.2-beta-20261019');
-  assert.equal(release.github_release.previous_public_tag, 'v1.2-beta-20261018');
+  assert.equal(release.github_release.tag, 'v1.3-beta-20261103-ui2');
+  assert.equal(release.github_release.previous_public_tag, 'v1.3-beta-20261102-ui1');
   assert.equal(release.github_release.tag_commit, release.source_commit);
-  assert.equal(release.github_release.package_bytes_changed, false);
+  assert.equal(release.github_release.package_bytes_changed, true);
   assert.equal(release.github_release.url, `${repository}/releases/tag/${release.github_release.tag}`);
   for (const entry of downloadEntries(release)) {
     assert.equal(entry.url, `${repository}/releases/download/${release.github_release.tag}/${entry.filename}`);
@@ -81,27 +87,56 @@ test('public beta retains exact automated native provenance and visible pending 
   assertPublishable(release);
   assert.equal(release.release_state,'beta');
   assert.equal(release.full_release_qualified,false);
-  assert.equal(release.source_commit,'7019b6423ce9d66531e933ee5cac42968f9e96e7');
-  assert.equal(release.github_release.tag,'v1.2-beta-20261019');
-  assert.equal(release.native_validation.run_id,39244037429);
-  assert.equal(release.validated_pr_head,'b28561c7a3d277e90381d2e720eb50ab2fe001fb');
+  assert.equal(release.source_commit,'3caa23d2119e3963c044fc3281615227b2bea8e0');
+  assert.equal(release.github_release.tag,'v1.3-beta-20261103-ui2');
+  assert.equal(release.native_validation.run_id,41710068813);
+  assert.equal(release.validated_pr_head,'ac2044d980c2a73e085a9315f49de605b777f135');
+  assert.equal(release.native_validation.head_commit,release.validated_pr_head);
+  assert.equal(release.native_validation.application_source_commit,release.source_commit);
   assert.equal(release.native_validation.transcription_run,false);
   for (const architecture of ['arm64','x64']) {
     const checks = release.native_validation.architectures[architecture];
-    assert.equal(checks.offline_checks_passed,69);
-    assert.equal(checks.feature_tests_passed,348);
+    assert.equal(checks.status,'passed');
+    assert.equal(checks.offline_checks_passed,7);
+    assert.equal(checks.offline_checks_scope,'seven named smoke groups, not a count of individual assertions');
+    assert.equal(checks.feature_tests_passed,357);
     assert.equal(checks.required_cases_passed,50);
     assert.equal(checks.skipped,0);
+    assert.equal(checks.source_audio_and_caption_checks,'passed');
+    assert.equal(checks.job_id,architecture === 'arm64' ? 126178971414 : 126178971353);
+    for (const gate of ['fresh_app_install','missing_pip_recovery','restart_persistence']) assert.equal(checks[gate],'passed');
+    assert.equal(checks.combined_archive_sha256,release.sha256);
   }
   assert.match(html,/Public beta\./);
   assert.match(html,/Windows requires WinGet and Microsoft Visual C\+\+ x64 runtime first\./);
   assert.match(html,/The required Visual C\+\+ runtime is not installed by the launcher\./);
-  assert.equal(release.windows_fresh_install_acceptance,'pending-new-source');
-  assert.equal(release.windows_fresh_install.result,'not_run');
+  assert.equal(release.windows_fresh_install_acceptance,'not-completed-user-accepted-beta-gap');
+  assert.equal(release.windows_fresh_install.result,'not_performed_for_revised_package');
+  assert.equal(release.windows_fresh_install.status,'not_verified');
+  assert.equal(release.windows_fresh_install.guest_report_received,false);
+  assert.equal(release.windows_fresh_install.beta_gate_waiver,'explicitly-accepted-not-passed');
   assert.equal(release.windows_fresh_install.application_source_commit,release.source_commit);
   assert.equal(release.windows_fresh_install.archive_sha256,release.platforms.windows.sha256);
-  assert.equal(release.windows_fresh_install.prerequisite_installed_by_launcher,false);
-  for(const field of ['physical_device_acceptance','restart_acceptance','ui_acceptance']) assert.equal(release.windows_fresh_install[field],'pending');
+  const installedWindows = release.windows_installed_validation;
+  assert.equal(installedWindows.application_source_commit,release.source_commit);
+  assert.equal(installedWindows.archive_sha256,release.platforms.windows.sha256);
+  assert.equal(installedWindows.packaged_batch_launcher,'not_run');
+  assert.equal(installedWindows.model_inference,'not_run');
+  assert.equal(installedWindows.clean_os_installation,'not_run');
+  assert.equal(installedWindows.human_listening,'not_performed');
+  for (const gate of ['portrait_720x1280','two_source_stacked_30_70_pixels','selected_source_b_audio_detected','full_decode','direct_unmodified_setup_without_ollama','saved_project_and_export_after_server_restart']) assert.equal(installedWindows[gate],'passed');
+  const resourceAbort = release.historical_windows_validation.find(entry=>entry.application_source_commit==='50843dd178282cf7d55846aad7ec1d8de61aeed7');
+  assert.ok(resourceAbort,'Preserve the earlier candidate resource abort without qualifying the revised package');
+  assert.equal(resourceAbort.archive_sha256,'4a9fa16ad1894d9837f53f163d41ce25cf852262321ae8f727d7982ef48cb95e');
+  assert.equal(resourceAbort.windows_fresh_install.result,'resource_abort');
+  assert.equal(resourceAbort.windows_fresh_install.guest_report_received,true);
+  assert.equal(resourceAbort.windows_fresh_install.passed_stages,7);
+  assert.equal(resourceAbort.windows_fresh_install.resource_aborted_stages,1);
+  assert.equal(resourceAbort.windows_fresh_install.not_run_stages,4);
+  assert.equal(resourceAbort.windows_fresh_install.export_restart_persistence,'not_completed');
+  assert.equal(resourceAbort.windows_fresh_install.attempt_consumed,true);
+  assert.match(html,/Windows clean-install qualification for this ZIP is incomplete/);
+  assert.match(html,/Hebrew accuracy and automatic speaker framing remain unfinished/);
   assert.equal(release.windows_conditional_setup,undefined,'Previous Windows results must not qualify the new downloads');
   const previous = release.historical_windows_validation.find(entry=>entry.release_tag==='v1.2-beta-20261018');
   assert.ok(previous,'Preserve the previous Windows validation as history');
@@ -120,6 +155,18 @@ test('public beta retains exact automated native provenance and visible pending 
   assert.equal(previous.windows_conditional_setup.configuration.before_sha256,previous.windows_conditional_setup.configuration.after_sha256);
   for(const field of ['physical_device_acceptance','restart_acceptance','ui_acceptance']) assert.equal(previous.windows_conditional_setup[field],'pending');
   assert.deepEqual(previous.windows_conditional_setup.health.models,[]);
+  const preceding = release.historical_windows_validation.find(entry=>entry.release_tag==='v1.2-beta-20261019');
+  assert.ok(preceding,'Preserve the exact preceding package regression as history');
+  assert.equal(preceding.application_source_commit,'7019b6423ce9d66531e933ee5cac42968f9e96e7');
+  assert.equal(preceding.archive_sha256,'24fc4767c7c80547308f03484c043d58e81c2592dcfdce6288e96cd3a98ccb89');
+  const regression=preceding.subsequent_exact_package_validation;
+  assert.equal(regression.source_commit,preceding.application_source_commit);
+  assert.equal(regression.archive_sha256,preceding.archive_sha256);
+  assert.equal(regression.status,'blocked_or_failed');
+  assert.equal(regression.observed_error,"Unrecognized option 'filter_complex_script'");
+  assert.equal(regression.observed_ffmpeg,'Gyan.FFmpeg 9.0.2');
+  assert.equal(regression.actual_results.completed_export_count,0);
+  assert.match(regression.scope,/Historical regression only; does not qualify the hotfix/);
   const runtimeHelp=linksTo(region('details','install-help'),'https://aka.ms/vc14/vc_redist.x64.exe');
   assert.equal(runtimeHelp.length,1);
   assertLocalized(runtimeHelp[0]);
@@ -151,10 +198,12 @@ test('language switching preserves links, images and actionable controls', () =>
   }
   assert.match(html, /<html\b[^>]*lang="en"[^>]*dir="ltr"/);
   const languageLink = linksTo(html, '?lang=he');
-  assert.equal(languageLink.length, 1);
-  assert.match(languageLink[0][1], /lang="he"/);
-  assert.match(languageLink[0][2], /[\u0590-\u05ff]/);
-  assert.doesNotMatch(languageLink[0][1], /aria-label=/, 'The visible language name is the accessible name');
+  assert.equal(languageLink.length, 2);
+  for (const link of languageLink) {
+    assert.match(link[1], /lang="he"/);
+    assert.match(link[2], /[\u0590-\u05ff]/);
+    assert.doesNotMatch(link[1], /aria-label=/, 'The visible language name is the accessible name');
+  }
 });
 
 test('the concise introduction shows an authentic bilingual dark editor preview', () => {
@@ -344,4 +393,97 @@ test('website resources remain local with no tracking or browser-storage APIs', 
       assert.doesNotMatch(source, /document\s*\.\s*cookie\b|\bcookieStore\b|\blocalStorage\b|\bsessionStorage\b|\bindexedDB\b|\bsendBeacon\b|\bfetch\s*\(|\bXMLHttpRequest\b|\bWebSocket\b|\bEventSource\b|\bserviceWorker\b/, filename);
     }
   }
+});
+
+test('mobile navigation keeps section links available without script', () => {
+  const menu = region('details', 'mobileNav');
+  assert.match(menu, /<summary\b[^>]*id="mobileNavToggle"/);
+  for (const target of ['#start', '#workspaces', '#ai', '#guide']) {
+    const links = linksTo(menu, target);
+    assert.equal(links.length, 1, `Missing mobile link to ${target}`);
+    if (target !== "#ai") assertLocalized(links[0]);
+    else assert.match(links[0][0], /data-he="AI"/);
+  }
+  assert.match(css, /@media\s*\(max-width:\s*767px\)[\s\S]*?\.mobile-nav\s*\{\s*display:\s*block/);
+  assert.match(css, /\.mobile-nav-menu\s*\{[^}]*max-height:[^}]*overflow-y:\s*auto/);
+});
+
+test('cached pages without the mobile menu do not break site initialization', async () => {
+  const {runInNewContext} = await import('node:vm');
+  const block = script.slice(script.indexOf('  // Native details keeps section navigation'), script.indexOf('  // Workspace tour:'));
+  assert.ok(block.includes('mobileNav'));
+  assert.doesNotThrow(() => runInNewContext(block, {document:{getElementById:()=>null},window:{}}));
+});
+
+test('mobile navigation restores focus after its element is hidden on resize', async () => {
+  const {runInNewContext} = await import('node:vm');
+  const block = script.slice(script.indexOf('  // Native details keeps section navigation'), script.indexOf('  // Workspace tour:'));
+  const listeners={}, documentListeners={}; let mediaChange, focused=false;
+  const menu={open:true,addEventListener:(name,fn)=>{listeners[name]=fn;},contains:()=>false};
+  const summary={focus(){}};
+  const document={getElementById:id=>id==='mobileNav'?menu:summary,addEventListener:(name,fn)=>{documentListeners[name]=fn;},hasFocus:()=>true,activeElement:{}};
+  const window={matchMedia:()=>({addEventListener:(name,fn)=>{mediaChange=fn;}})};
+  const languageSwitch={focus:()=>{focused=true;}};
+  runInNewContext(block,{document,window,languageSwitch});
+  listeners.focusin();
+  mediaChange({matches:false});
+  assert.equal(menu.open,false);
+  assert.equal(focused,true);
+});
+
+test('background animation controls stay synchronized and respect device motion settings', async () => {
+  const {runInNewContext} = await import('node:vm');
+  const start = script.indexOf("  const motionToggle = document.getElementById('motionToggle');");
+  const end = script.indexOf('  let language = new URL(location.href)', start);
+  assert.ok(start >= 0 && end > start);
+  const block = script.slice(start, end);
+  const createControl = () => {
+    const state={textContent:''}, attributes={}, listeners={};
+    return {state,attributes,listeners,disabled:false,
+      querySelector:selector=>selector==='[data-motion-state]' ? state : null,
+      setAttribute:(name,value)=>{attributes[name]=value;},
+      addEventListener:(name,fn)=>{listeners[name]=fn;}};
+  };
+  const desktop=createControl(),mobile=createControl(), preference={matches:false};
+  preference.addEventListener=(name,fn)=>{preference[name]=fn;};
+  const document={documentElement:{dataset:{}},getElementById:id=>id==='motionToggle'?desktop:mobile};
+  const window={matchMedia:()=>preference};
+  runInNewContext("let language='he';\n"+block+'\nrenderMotion();',{document,window});
+  assert.equal(document.documentElement.dataset.motion,'running');
+  assert.equal(desktop.attributes['aria-pressed'],'true');
+  assert.equal(mobile.state.textContent,'פעיל');
+  mobile.listeners.click();
+  assert.equal(document.documentElement.dataset.motion,'paused');
+  assert.equal(desktop.attributes['aria-pressed'],'false');
+  assert.equal(mobile.state.textContent,'כבוי');
+  desktop.listeners.click();
+  assert.equal(document.documentElement.dataset.motion,'running');
+  preference.matches=true; preference.change();
+  assert.equal(document.documentElement.dataset.motion,'paused');
+  assert.equal(desktop.disabled,true);
+  assert.equal(mobile.disabled,true);
+  assert.match(mobile.state.textContent,/הגדרות המכשיר/);
+  mobile.listeners.click();
+  assert.equal(document.documentElement.dataset.motion,'paused');
+  preference.matches=false; preference.change();
+  assert.equal(mobile.disabled,false);
+  assert.equal(document.documentElement.dataset.motion,'paused');
+});
+
+test('an older cached page retains a working legacy motion control', async () => {
+  const {runInNewContext} = await import('node:vm');
+  const start=script.indexOf("  const motionToggle = document.getElementById('motionToggle');");
+  const end=script.indexOf('  let language = new URL(location.href)',start);
+  const block=script.slice(start,end), attrs={}, listeners={}, span={textContent:''}, path={d:'',setAttribute:(key,value)=>{path[key]=value;}};
+  const legacy={disabled:false,setAttribute:(name,value)=>{attrs[name]=value;},
+    querySelector:selector=>selector==='span'?span:selector==='path'?path:null,
+    addEventListener:(name,fn)=>{listeners[name]=fn;}};
+  const preference={matches:false,addEventListener(){}};
+  const document={documentElement:{dataset:{}},getElementById:id=>id==='motionToggle'?legacy:null};
+  runInNewContext("let language='en';\n"+block+'\nrenderMotion();',{document,window:{matchMedia:()=>preference}});
+  assert.equal(attrs['aria-label'],'Pause motion');
+  assert.equal(document.documentElement.dataset.motion,'running');
+  listeners.click();
+  assert.equal(attrs['aria-label'],'Play motion');
+  assert.equal(document.documentElement.dataset.motion,'paused');
 });

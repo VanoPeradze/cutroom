@@ -590,7 +590,7 @@ def _load_model(settings: Settings, device: str | None = None, compute: str | No
                 from faster_whisper import WhisperModel
             except ImportError as exc:
                 raise RuntimeError("faster-whisper is not installed. Run setup again or install requirements-ai.txt") from exc
-            _MODEL_CACHE[key] = WhisperModel(model_name, device=device, compute_type=compute)
+            _MODEL_CACHE[key] = WhisperModel(model_name, device=device, compute_type=compute, **({"local_files_only": True} if settings.ai.get("whisper_local_files_only") else {}))
     return _MODEL_CACHE[key], model_name, device, compute
 
 
@@ -1510,6 +1510,8 @@ def _run_transcription_worker(
 ) -> dict[str, Any]:
     """Run Faster-Whisper outside the server so cancellation can preempt native code."""
 
+    from .owned_process import OwnedProcessTree
+
     ai = (raw_override or settings.raw).get("ai", {})
     try:
         stall_seconds = max(10.0, float(ai.get("whisper_worker_stall_seconds", 120.0)))
@@ -1530,12 +1532,14 @@ def _run_transcription_worker(
         result_path = temp_dir / "result.json"
         progress_path = temp_dir / "progress.json"
         stderr_path = temp_dir / "worker-stderr.log"
+        start_gate = temp_dir / "owned-worker-may-start"
         atomic_write_json(request_path, {
             "media_path": str(media_path),
             "settings": _worker_settings_payload(settings, raw_override),
             "language": language,
             "performance_mode": performance_mode,
             "duration": float(duration or 0.0),
+            "owned_start_gate": str(start_gate),
         })
         command = [
             sys.executable,
@@ -1548,8 +1552,11 @@ def _run_transcription_worker(
         environment = os.environ.copy()
         environment["CUTROOM_TRANSCRIPTION_WORKER"] = "1"
         environment["PYTHONUTF8"] = "1"
+        if ai.get("whisper_local_files_only"):
+            environment.update(HF_HUB_OFFLINE="1", TRANSFORMERS_OFFLINE="1")
         creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
         process: subprocess.Popen[Any] | None = None
+        owned_tree = OwnedProcessTree()
         try:
             with stderr_path.open("w", encoding="utf-8") as stderr_handle:
                 process = subprocess.Popen(
@@ -1560,7 +1567,12 @@ def _run_transcription_worker(
                     stderr=stderr_handle,
                     env=environment,
                     creationflags=creationflags,
+                    **({"start_new_session": True} if os.name != "nt" else {}),
                 )
+                # Worker cannot load a model or spawn FFmpeg until ownership is
+                # attached. Assignment failure never falls back to uncontained work.
+                owned_tree.attach(process)
+                start_gate.write_text("start", encoding="ascii")
                 started = time.monotonic()
                 last_progress_at = started
                 last_marker: tuple[int, int] | None = None
@@ -1627,8 +1639,11 @@ def _run_transcription_worker(
                 _stop_process(process)
             raise
         finally:
-            if process is not None:
-                _stop_process(process)
+            try:
+                owned_tree.close()  # includes descendants even if Python exited
+            finally:
+                if process is not None:
+                    _stop_process(process)
 
 
 def _transcribe_isolated(

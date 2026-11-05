@@ -121,6 +121,28 @@ def test_new_editorial_instruction_replans_without_retranscription(semantic_proj
     assert calls == {"transcribe": 1, "plan": 2}
 
 
+def test_unverified_request_coverage_is_persisted_without_relabelling_a_completed_draft_as_ai_failure(semantic_project):
+    store, settings, project_id, calls, context = semantic_project
+    instruction = "Focus on the final explanation and preserve its qualification."
+    result = director.analyze_project(context(), project_id, store, settings, {"instruction": instruction})
+    project = store.load(project_id)
+    report = project["draft"]["instruction_contract"]
+    assert report["instruction"] == instruction
+    assert report["verification_scope"] == "proposed_director_draft"
+    assert report["verification_status"] == "unverified"
+    assert project["draft"]["review_required"] is True
+    assert project["draft"]["status"] == "requires_review"
+    assert project["analysis"]["instruction_contract"] == report == result["instruction_contract"]
+    assert "Story AI did not produce a valid edit" not in result["message"]
+    assert "instruction coverage remains unverified" in result["message"]
+    assert sum(item.get("type") == "instruction_coverage" for item in project["analysis"]["warnings"]) == 1
+    calls_before = copy.deepcopy(calls)
+    repeated = director.analyze_project(context(), project_id, store, settings)
+    assert calls == calls_before
+    assert repeated["instruction_contract"]["instruction"] == instruction
+    assert repeated["instruction_contract"]["verification_status"] == "unverified"
+
+
 @pytest.mark.parametrize("reuse_context", [False, True])
 @pytest.mark.parametrize("availability", [False, None, "true"])
 def test_rebuild_retries_failed_camera_profiles_without_reusing_failure(
@@ -334,7 +356,7 @@ def _with_story_roles(editorial, purposes):
 
 
 @pytest.mark.parametrize("complete", [False, True], ids=["premise_only", "all_roles_one_source_beat"])
-def test_required_style_roles_are_independently_mapped_before_commit(semantic_project, monkeypatch, complete):
+def test_explicit_user_roles_are_independently_mapped_before_commit(semantic_project, monkeypatch, complete):
     from cutroom.story_budget import StoryBudgetError
 
     store, settings, project_id, _calls, context = semantic_project
@@ -343,7 +365,7 @@ def test_required_style_roles_are_independently_mapped_before_commit(semantic_pr
                                   roles if complete else roles[:1])
     _install_story_editorial(monkeypatch, store, project_id, editorial, "ollama_hierarchical_story")
     before = store.state_path(project_id).read_bytes()
-    patch = {"instruction": "Keep each configured story role", "edit_style": "stream_story",
+    patch = {"instruction": "Structure: " + " -> ".join(roles), "edit_style": "stream_story",
              "duration_mode": "target", "target_duration": 20}
 
     if complete:
@@ -923,8 +945,13 @@ def test_saved_commentary_keeps_planned_anchors_with_truthful_review(semantic_pr
     ]
     assert saved["draft"]["output_duration"] == pytest.approx(17.48)
     assert saved["draft"]["partial_ai"] is True
-    assert saved["draft"]["quality_review"]["needs_review"] is True
-    assert [row["type"] for row in saved["draft"]["quality_review"]["warnings"]] == ["style_moment_constraint"]
+    warning_types = [row["type"] for row in saved["draft"]["quality_review"]["warnings"]]
+    # Complete source anchors do not violate an advisory preset count. This
+    # legacy fixture remains partial AI; absence of a style warning is no proof
+    # of generative approval. The clipped-anchor case below must still warn.
+    assert saved["draft"]["generative_approved"] is False
+    assert "style_moment_constraint" not in warning_types
+    assert "story_anchor_missing" not in warning_types
 
     store.update(project_id, lambda current: current["settings"].update({"target_duration": 15.0}))
     director.analyze_project(context(), project_id, store, settings)
@@ -1090,8 +1117,10 @@ def test_preset_rebuild_reports_preserved_manual_timeline_and_keeps_undo(semanti
     store.update(project_id, lambda current: apply_manual_edit(current, {"action": "sequence_reset"}))
     applied = editor_sequence_snapshot(store.load(project_id))
     assert applied["active"] is False
-    assert applied["duration"] == 30.0
-    assert applied["duration"] != before_timeline["duration"]
+    assert applied["duration"] == after["draft"]["output_duration"] == 60.0
+    # Applying the proposal removes the manual split, while both complete
+    # passages survive. Duration alone cannot prove a changed projection.
+    assert applied["source_tracks"] != before_timeline["source_tracks"]
     store.update(project_id, lambda current: apply_manual_edit(current, {"action": "undo"}))
     assert editor_sequence_snapshot(store.load(project_id)) == before_timeline
     store.update(project_id, lambda current: apply_manual_edit(current, {"action": "redo"}))

@@ -30,6 +30,24 @@ def _final_evidence_response(payload):
                           "context_evidence_choices": context}
         keep.update(by_id[choice_to_id[choice]]["beat_id"] for choice in primary + context)
     keep.update(source["sticky_critic_context_beat_ids"])
+    # This transport fixture must nominate enough whole source units after a
+    # coarse beat becomes several fine choices. It does not approve meaning.
+    units = {row["id"]: row for row in source["source_units"]}
+    seconds = sum(units[value]["end"] - units[value]["start"] for value in keep)
+    for purpose, requirement in source["role_requirements"].items():
+        for chapter_id in requirement["allowed_primary_chapter_ids"]:
+            for identifier in source["evidence_ids_by_chapter"][chapter_id]:
+                value = by_id[identifier]["beat_id"]
+                duration = units[value]["end"] - units[value]["start"]
+                if value not in keep and seconds < source["minimum_target_seconds"] and seconds + duration <= source["target_seconds"] + .05:
+                    roles[purpose]["additional_primary_evidence_choices"].append(id_to_choice[identifier])
+                    keep.add(value)
+                    seconds += duration
+        role = roles[purpose]
+        primary = [role["primary_anchor_choice"], *role["additional_primary_evidence_choices"]]
+        primary.sort(key=lambda choice: units[by_id[choice_to_id[choice]]["beat_id"]]["end"])
+        role["primary_anchor_choice"] = primary[-1]
+        role["additional_primary_evidence_choices"] = primary[:-1]
     return {"verdict": "fit", "keep_beat_ids": sorted(keep),
             "released_optional_beat_ids": [value for value in source["current_selected_beat_ids"] if value not in keep],
             "role_selections": roles}
@@ -512,6 +530,8 @@ def test_story_hierarchy_cache_reuses_chapters_and_outline(monkeypatch):
         "must_keep_chapter_ids": [], "optional_chapter_ids": [], "dependency_pairs": [],
     }
     brief = {"goal": "short", "duration_mode": "style", "target_duration": 180, "language": "en", "performance_mode": "balanced"}
+    # Production hashes the enriched brief, including its instruction contract.
+    brief = intelligence.enrich_brief_with_style(brief)
     cache = {
         "cache_fingerprint": intelligence.story_cache_fingerprint(enriched, brief, "qwen3.5:4b"),
         "cache_pipeline": intelligence.STORY_CACHE_PIPELINE,

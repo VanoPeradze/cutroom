@@ -18,8 +18,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_public_beta_version_is_consistent_across_package_and_setup():
     payload = collect_payload(ROOT)
-    assert __version__ == "1.2-beta"
-    assert __version_label__ == "1.2 Beta"
+    assert __version__ == "1.3-beta"
+    assert __version_label__ == "1.3 Beta"
     assert f"CUTROOM {__version_label__}" in payload["START_TESTING.txt"].decode("ascii")
     assert "public beta" in payload["START_TESTING.txt"].decode("ascii")
     for name in ("run_windows.bat", "repair_windows.bat", "setup_windows.ps1",
