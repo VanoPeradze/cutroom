@@ -7,11 +7,11 @@ This folder is the maintained website source inside the public [CUTROOM reposito
 It does not run the editor, receive footage, process video, or handle user API keys.
 The previous separate website checkout is not needed for future updates.
 
-## 1.3 beta - 4 November 2026
+## 1.3 beta - 5 November 2026
 
-Product source is `6263f192054c2335158b8e0a88d7edfec3d18e98` and the release tag is `v1.3-beta-20261104-perf1`. The exact Windows and combined archives passed automated candidate checks in [run 41804756142](https://github.com/VanoPeradze/cutroom/actions/runs/41804756142). The combined archive supplies the `mac/` folder.
+Product source is `7a14fc0923e2efa6587553fefbb4b3a38b326464`; the public release is [v1.3-beta-20261105-installfix1](https://github.com/VanoPeradze/cutroom/releases/tag/v1.3-beta-20261105-installfix1). Windows setup no longer waits for an automatic Ollama installation; optional local AI can be configured after opening the editor. The Mac download uses the `mac/` folder in the exact combined archive.
 
-Windows setup and synthetic exports were tested on a configured hosted runner. Clean-OS and packaged batch-launcher testing, physical devices, human listening, Finder/Gatekeeper and model/transcription acceptance remain pending.
+The exact Windows and combined archives passed automated checks on configured hosted Windows, Apple Silicon and Intel runners. Clean Windows installation, the packaged batch launcher, physical-device UI, Mac Finder/Gatekeeper, human listening, model inference and transcription acceptance remain unverified.
 
 ## Previous 1.3 beta - 3 November 2026 (history)
 

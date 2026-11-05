@@ -1,5 +1,6 @@
 @echo off
-setlocal EnableExtensions
+setlocal EnableExtensions DisableDelayedExpansion
+set "CUTROOM_RUNTIME_PATHS_B64="
 cd /d "%~dp0"
 title CUTROOM 1.3 Beta Repair
 

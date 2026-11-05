@@ -50,7 +50,7 @@ def exercise_server(app: Path, env: dict[str, str], project_id: str, export_name
     server_env = dict(env, CUTROOM_PORT=str(port))
     base = f"http://127.0.0.1:{port}"
     for attempt in range(2):
-        proc = subprocess.Popen([sys.executable, "-B", str(app / "server.py")], cwd=app,
+        proc = subprocess.Popen([sys.executable, "-B", str(app / "scripts" / "windows_runtime.py"), "server"], cwd=app,
                                 env=server_env, stdin=subprocess.DEVNULL,
                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         try:
