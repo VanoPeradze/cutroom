@@ -244,6 +244,22 @@ jobs:
           ref: ${{ github.event.pull_request.head.ref }}
           fetch-depth: 0
           persist-credentials: false
+      - name: Wait for the exact candidate review record
+        shell: bash
+        run: |
+          set -euo pipefail
+          record="packaging/review-candidates/ci-${TESTED_HEAD_SHA:0:7}.json"
+          for attempt in $(seq 1 12); do
+            git fetch --no-tags origin "${{ github.event.pull_request.head.ref }}"
+            head="$(git rev-parse FETCH_HEAD)"
+            if [[ "$head" != "$TESTED_HEAD_SHA" ]] && git cat-file -e "$head:$record" 2>/dev/null; then
+              echo "Review record found; its exact bytes and ancestry are checked in the next step."
+              exit 0
+            fi
+            echo "Waiting for the private review record ($attempt/12)."
+            sleep 10
+          done
+          echo "Review record not available; native review remains pending."
       - name: Download this run's immutable review inputs
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
@@ -255,7 +271,7 @@ jobs:
         run: |
           set -euo pipefail
           record="packaging/review-candidates/ci-${TESTED_HEAD_SHA:0:7}.json"
-          head="$(git rev-parse HEAD)"
+          head="$(git rev-parse FETCH_HEAD)"
           if [[ "$head" == "$TESTED_HEAD_SHA" && ! -e "$record" ]]; then
             echo 'ready=false' >> "$GITHUB_OUTPUT"
             echo 'The exact private review record has not been committed yet; native review is pending.'
@@ -263,7 +279,7 @@ jobs:
           fi
           git merge-base --is-ancestor "$TESTED_HEAD_SHA" "$head"
           [[ "$(git diff --name-only "$TESTED_HEAD_SHA" "$head")" == "$record" ]]
-          git show "HEAD:$record" | cmp - "$RUNNER_TEMP/cutroom-private-review/review-record.json"
+          git show "$head:$record" | cmp - "$RUNNER_TEMP/cutroom-private-review/review-record.json"
           echo 'ready=true' >> "$GITHUB_OUTPUT"
           echo "record_commit=$head" >> "$GITHUB_OUTPUT"
 

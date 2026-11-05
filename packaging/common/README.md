@@ -14,7 +14,7 @@ Extract the entire Windows or Mac ZIP into a writable folder. Its launcher, **ST
 
 On Mac, FFmpeg needs libass subtitles, libx264, AAC and the command options used by this beta. `ffmpeg@7` is the documented compatible Homebrew choice. CUTROOM does not install Homebrew; use its [official installation instructions](https://docs.brew.sh/Installation) if needed. Python 3.13+ is not supported by these setup scripts. The Mac launcher checks native architecture and uses separate Python dependency constraints. If macOS blocks the launcher, consult **START HERE.html** and record the message; do not disable Gatekeeper or remove quarantine globally.
 
-The ZIP contains source and launchers, **not** bundled runtimes or model weights. Setup downloads dependencies. Windows setup may also attempt to install/start Ollama, but manual editing does not require it. Keep the console or Terminal open while editing; closing the browser alone does not stop the server. The editor normally opens at **http://127.0.0.1:8765**; open that address yourself if necessary. On Mac, use **Control-C** in Terminal to stop CUTROOM.
+The ZIP contains source and launchers, **not** bundled runtimes or model weights. Setup downloads dependencies. Windows setup can start an existing Ollama installation but does not install it. For local Story AI, use AI connection to get Ollama separately; manual editing does not require it. Keep the console or Terminal open while editing; closing the browser alone does not stop the server. The editor normally opens at **http://127.0.0.1:8765**; open that address yourself if necessary. On Mac, use **Control-C** in Terminal to stop CUTROOM.
 
 ## Make the first edit
 
