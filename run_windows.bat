@@ -1,5 +1,6 @@
 @echo off
-setlocal EnableExtensions
+setlocal EnableExtensions DisableDelayedExpansion
+set "CUTROOM_RUNTIME_PATHS_B64="
 cd /d "%~dp0"
 title CUTROOM 1.3 Beta
 
@@ -39,7 +40,7 @@ if errorlevel 1 (
 if exist ".runtime-paths.cmd" call ".\.runtime-paths.cmd"
 
 :verify
-".venv\Scripts\python.exe" "scripts\preflight.py" >nul 2>&1
+".venv\Scripts\python.exe" "scripts\windows_runtime.py" preflight >nul 2>&1
 if errorlevel 1 (
   echo CUTROOM found an incomplete environment and will repair it.
   del /q ".setup-complete" >nul 2>&1
@@ -51,7 +52,7 @@ if errorlevel 1 (
     exit /b 1
   )
   if exist ".runtime-paths.cmd" call ".\.runtime-paths.cmd"
-  ".venv\Scripts\python.exe" "scripts\preflight.py"
+  ".venv\Scripts\python.exe" "scripts\windows_runtime.py" preflight
   if errorlevel 1 (
     echo.
     echo Repair completed but the local runtime is still unavailable.
@@ -61,7 +62,7 @@ if errorlevel 1 (
   )
 )
 
-".venv\Scripts\python.exe" server.py
+".venv\Scripts\python.exe" "scripts\windows_runtime.py" server
 if errorlevel 1 (
   echo.
   echo CUTROOM stopped with an error.
