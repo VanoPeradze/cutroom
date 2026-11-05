@@ -13,7 +13,7 @@ concurrency:
 
 jobs:
   scope:
-    if: ${{ github.event.pull_request.head.repo.full_name == 'VanoPeradze/cutroom' && github.event.pull_request.head.ref == 'codex/cutroom-ui-20261101' }}
+    if: ${{ github.event.pull_request.head.repo.full_name == 'VanoPeradze/cutroom' && github.event.pull_request.head.ref == 'codex/cutroom-install-hang-20261105' }}
     runs-on: ubuntu-latest
     outputs:
       build_candidate: ${{ steps.scope.outputs.build_candidate }}
@@ -104,14 +104,19 @@ jobs:
         run: |
           & (Join-Path $env:CUTROOM_EXTRACTED_APP 'scripts\verify_windows_installer.ps1')
           if ($LASTEXITCODE -ne 0) { throw 'Packaged installer source validation failed' }
-      - name: Run unmodified setup only when it cannot install or start Ollama
+      - name: Test optional AI and the packaged installer verifier
+        shell: pwsh
+        run: |
+          node --test (Join-Path $env:CUTROOM_EXTRACTED_APP 'tests\windows_installer.test.cjs')
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged installer regression tests failed' }
+      - name: Run unmodified setup only when it cannot start Ollama
         timeout-minutes: 15
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
           $setup = Join-Path $env:CUTROOM_EXTRACTED_APP 'setup_windows.ps1'
           $setupHash = (Get-FileHash -LiteralPath $setup -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($setupHash -ne '7dff875f5ded0bdd78cef3560941c02188457cd6a9ef9befeca9d44e275ba633') { throw 'Setup changed since its optional installs were reviewed' }
+          if ($setupHash -ne 'e1ee6a2be1a4b9e5c1bd3bde7b53631b52affe730a1192fd54301a56d39a377a') { throw 'Setup changed since its optional installs were reviewed' }
           $config = Get-Content -LiteralPath (Join-Path $env:CUTROOM_EXTRACTED_APP 'config.json') -Raw | ConvertFrom-Json
           if ($config.ai.download_models_on_setup) { throw 'Model downloads must remain disabled' }
           if ((Get-Command ffmpeg.exe).Source -ne $env:CUTROOM_EXPECTED_FFMPEG) { throw 'Unexpected FFmpeg on PATH' }
@@ -136,9 +141,9 @@ jobs:
             return $false
           }
           $result = Join-Path $env:RUNNER_TEMP 'cutroom-setup-result.txt'
-          if ((Test-SetupExecutable 'winget.exe') -or (Test-SetupExecutable 'ollama.exe')) {
-            'not_run_optional_ollama_could_be_installed_or_started' | Set-Content -LiteralPath $result -Encoding utf8
-            Write-Host 'Setup not run because it could install or start an unapproved optional service.'
+          if (Test-SetupExecutable 'ollama.exe') {
+            'not_run_optional_ollama_could_be_started' | Set-Content -LiteralPath $result -Encoding utf8
+            Write-Host 'Setup not run because it could start an unapproved optional service.'
           } else {
             python -c 'import sys; assert sys.version_info[:2] == (3,12)'
             if ($LASTEXITCODE -ne 0) { throw 'Expected Python 3.12 is unavailable' }
