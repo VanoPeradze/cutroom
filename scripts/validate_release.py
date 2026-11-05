@@ -236,6 +236,8 @@ def static_checks() -> list[dict]:
 
     run_windows = windows_launchers["run_windows.bat"].decode("ascii", errors="replace")
     verifier = windows_launchers["scripts/verify_windows_installer.ps1"].decode("ascii", errors="replace")
+    runtime_path = ROOT / "scripts/windows_runtime.py"
+    runtime = runtime_path.read_text(encoding="utf-8") if runtime_path.is_file() else ""
     checks.append({
         "name": "windows_setup_guards",
         "ok": all(
@@ -244,7 +246,7 @@ def static_checks() -> list[dict]:
                 'if not exist ".setup-complete"',
                 'if not exist ".venv\\Scripts\\python.exe"',
                 "scripts\\verify_windows_installer.ps1",
-                "scripts\\preflight.py",
+                "scripts\\windows_runtime.py",
             )
         ) and all(
             marker in verifier
@@ -253,6 +255,9 @@ def static_checks() -> list[dict]:
                 "setup_windows.ps1",
                 "$errors.Count",
             )
+        ) and all(
+            marker in runtime
+            for marker in ('"preflight": ROOT / "scripts" / "preflight.py"', '"server": ROOT / "server.py"')
         ),
         "details": None,
     })

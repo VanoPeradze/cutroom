@@ -151,8 +151,9 @@ test('generated runtime paths survive a Hebrew folder and reach the launched pro
   });
   assert.ifError(repair.error);
   assert.equal(repair.status, 0, repair.stdout + repair.stderr);
-  const repairToolDir = fs.readFileSync(repairPath, 'utf8').replace(/^\ufeff/, '').split(path.delimiter)[0];
-  assert.equal(path.basename(path.dirname(repairToolDir)), '\u05e9\u05dc\u05d5\u05dd');
+  const repairSegments = fs.readFileSync(repairPath, 'utf8').replace(/^\ufeff/, '').split(path.delimiter);
+  const repairToolDir = repairSegments.find(segment => path.basename(path.dirname(segment)) === '\u05e9\u05dc\u05d5\u05dd');
+  assert.ok(repairToolDir, `Tool directory missing during repair; stdout=${repair.stdout} stderr=${repair.stderr}`);
   assert.equal(fs.readFileSync(path.join(repairToolDir, 'fixture-identity.txt'), 'utf8'), 'synthetic tool directory');
 
   const launch = path.join(root, 'launch-fixture.cmd');

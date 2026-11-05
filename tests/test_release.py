@@ -108,7 +108,10 @@ def test_windows_launcher_checks_setup_marker_environment_and_real_parser():
     assert 'CUTROOM AI 1.3 Beta setup completed' in launcher
     assert 'if not exist ".venv\\Scripts\\python.exe"' in launcher
     assert r'scripts\verify_windows_installer.ps1' in launcher
-    assert '"scripts\\preflight.py"' in launcher
+    assert '"scripts\\windows_runtime.py" preflight' in launcher
+    runtime = (ROOT / "scripts" / "windows_runtime.py").read_text(encoding="utf-8")
+    assert '"preflight": ROOT / "scripts" / "preflight.py"' in runtime
+    assert '"server": ROOT / "server.py"' in runtime
     for dependency in ("flask", "waitress", "faster_whisper", "cutroom", "FFmpeg", "FFprobe"):
         assert dependency in preflight
     assert "System.Management.Automation.Language.Parser" in verifier
