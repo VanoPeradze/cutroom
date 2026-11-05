@@ -14,7 +14,8 @@ def test_upload_is_a_foreground_operation_with_a_real_abort_path():
     assert "upload.xhr?.abort()" in APP
     assert 'xhr.addEventListener("abort"' in APP
     assert "state.activeJob || state.activeUploads.size" in APP
-    assert 'xhr.setRequestHeader("X-Cutroom-Upload-Token", uploadToken)' in APP
+    # Each chunk uses its owning upload state, not an unrelated in-flight token.
+    assert 'xhr.setRequestHeader("X-Cutroom-Upload-Token", upload.uploadToken)' in APP
     assert "/uploads/${encodeURIComponent(upload.uploadToken)}/cancel" in APP
     assert "requestUploadCancellation(upload)" in APP
     assert "await uploadState.cancelPromise" in APP

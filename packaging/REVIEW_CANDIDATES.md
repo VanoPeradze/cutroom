@@ -28,8 +28,37 @@ recovery. The orchestration head is `b28561c7a3d277e90381d2e720eb50ab2fe001fb`;
 the App source remains `7019b64`. The private record itself remains review only.
 Public beta metadata records the separately authorized promotion and pending
 Windows fresh-install, physical-device, human, model and real A/B acceptance.
-The manual review workflow selects this record and accepts exactly its three private ZIPs.
+That manual run selected this record and accepted exactly its three private ZIPs.
 No model download or transcription is enabled by default.
+
+The October 19 FFmpeg hotfix candidate is anchored by [8542cfb.json](review-candidates/8542cfb.json)
+for source `8542cfb38275dcfacf2ad98788331ed8815a63f8`. The prior public Windows
+package installed and opened in a fresh Windows Sandbox, but its first real
+export failed after setup selected FFmpeg 9.0.2. The hotfix checks graph-file/CFR
+capabilities and uses working modern or legacy options. Local synthetic exports
+passed on FFmpeg 7.1.1 and 9.0.2; 346 relevant regressions passed without skips.
+These configured-host checks do not replace exact-package native qualification.
+That intermediate manual review selects this hotfix record and exactly its three
+private ZIPs. Fresh Windows Sandbox exports/restart and both native Mac jobs
+remain pending. Public downloads and historical validation pins are unchanged.
+
+The final hotfix record is [0c28168.json](review-candidates/0c28168.json), source
+`0c28168999f3500092d1954b9a17419400648684`. It also includes the English/Hebrew
+README links for the hotfix downloads; the renderer and compatibility helper are
+unchanged from the tested intermediate source. The manual workflow selects this
+final record and its three exact private ZIPs. Its fresh Windows 10 Sandbox test
+passed installation with documented WinGet/VC++ prerequisites, both encoded
+exports and same-port application-process restart with saved state/output hashes
+preserved. No operating-system reboot or physical Windows 11 claim is made.
+Native run [39251933403](https://github.com/VanoPeradze/cutroom/actions/runs/39251933403)
+passed ARM and Intel at orchestration head `f7925c9be4f05adcc2a88b2698a1971b71be0083`:
+each ran 69 offline checks, 348 extracted feature tests and all 50 required cases
+with no skips, plus fresh installation, restart and missing-pip recovery. No
+models or transcription were requested. Intermediate reports do not qualify
+this final archive identity. The exact copies were published as
+[v1.2-beta-20261019-hotfix1](https://github.com/VanoPeradze/cutroom/releases/tag/v1.2-beta-20261019-hotfix1);
+the record itself stays a private-review source anchor, not a full-release or
+human/physical/AI acceptance claim. Earlier releases and historical pins remain.
 
 The command uses Python's standard library and local Git objects only. It never
 imports or executes application or builder code, installs dependencies, downloads
@@ -169,3 +198,20 @@ Native Intel/Apple Silicon execution of the exact candidate, required setup and
 restart checks, `tiny.en` transcription, clean-machine Windows installation,
 Finder/Gatekeeper/Safari checks, and human editing/listening acceptance remain
 separate evidence. Keep model downloads pending when they are not authorized.
+
+The browser-container maintenance candidate is anchored by
+[203d164.json](review-candidates/203d164.json), source
+`203d164d04ef9d610cc9aedf55fe640b99f19f85`. The unchanged Git archive was used
+for a canonical-byte rebuild: one test file previously differed only in LF/CRLF.
+Strict full source, payload, defaults and privacy qualification then passed.
+The exact Windows archive passed 365 extracted feature cases without skips.
+Native run [39723914568](https://github.com/VanoPeradze/cutroom/actions/runs/39723914568)
+passed on ARM and Intel at orchestration head
+`39d319c832a079dd55600df233bfa77e98bdc518`: each ran 69 offline checks, 348
+extracted feature cases (all 50 required, zero skips), fresh installation,
+restart persistence and missing-pip recovery. The exact Windows ZIP also passed
+fresh Windows 10 Sandbox setup with WinGet/VC++ prerequisites, two encoded
+exports and application-process restart preserving saved state/output hashes.
+No model or transcription was requested. Physical-device, human listening and
+Hebrew semantic/ASR acceptance remain pending. The record itself stays review
+only; public beta promotion is represented separately by release metadata.

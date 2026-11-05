@@ -180,6 +180,7 @@ function directorFixture() {
   const nodes=new Map(), get=id=>{if(!nodes.has(id)){const node=new Element();node.id=id;nodes.set(id,node);}return nodes.get(id);};
   get('aiDraftNotice').append(new Element('p'));get('aiDraftApplyDialog').open=false;
   const header=new Element();header.className='studio-header';get('advancedPanel').append(header);
+  const inspector=new Element();inspector.className='advanced-content';get('advancedPanel').append(inspector);
   const calls=[],toasts=[],context=vm.createContext({console,document:{getElementById:get},window:{addEventListener(){}},dictionaries:{en:{aiDraftKept:'New draft ready; manual timeline kept',aiDraftApply:'Apply new AI draft',aiDraftApplied:'New draft applied; Undo available'}},setTimeout,clearTimeout});
   const app=fs.readFileSync('web/app.js','utf8').replace(/^import .*;\r?\n/gm,'').replace(/\nboot\(\)\.catch\(\(error\) => \{[\s\S]*?\n\}\);/,'');
   vm.runInContext(app+`\nforegroundBusy=()=>false;flushCurrentProjectSaves=async()=>true;toast=(...args)=>globalThis.toasts.push(args);
@@ -205,7 +206,8 @@ test('new preset disposition is truthful for current manual timelines and guarde
 test('draft notice keeps a single accessible action in overview and Studio and disappears after project or draft changes',()=>{
   const f=directorFixture();f.ui.rememberDirectorResult(f.job());
   assert.equal(f.get('aiDraftNotice').parentElement,f.get('resultPanel'));
-  f.ui.state.studio.open=true;f.ui.renderAiDraftNotice();assert.equal(f.get('aiDraftNotice').parentElement,f.get('advancedPanel').children[0]);
+  f.ui.state.studio.open=true;f.ui.renderAiDraftNotice();assert.equal(f.get('aiDraftNotice').parentElement,f.get('advancedPanel').querySelector('.advanced-content'));
+  assert.equal(f.get('advancedPanel').querySelector('.studio-header').children.length,0,'preview header never receives a wrapping notice');
   f.ui.state.project={...f.ui.state.project,draft:{engine:'newer'}};f.ui.renderAiDraftNotice();assert.equal(f.get('aiDraftNotice').hidden,true);
 });
 
@@ -421,10 +423,22 @@ test('short draft duration review is visible in overview and Studio with exact n
   const before=JSON.stringify(ui.state.project);ui.renderDurationReview();
   assert.equal(notice.hidden,false);assert.match(notice.querySelector('p').textContent,/12s \/ 90s maximum.*1 moments/);
   assert.equal(notice.parentElement,get('resultPanel'));ui.state.studio.open=true;ui.renderAiDraftNotice();
-  assert.equal(notice.parentElement.className,'studio-header');assert.equal(JSON.stringify(ui.state.project),before);assert.equal(f.calls.length,0);
+  assert.equal(notice.parentElement.className,'advanced-content');assert.equal(JSON.stringify(ui.state.project),before);assert.equal(f.calls.length,0);
   ui.state.project.draft.duration_review={reason:'source_shorter',requested_seconds:90,selected_seconds:73.833,available_source_seconds:73.833};ui.renderDurationReview();assert.match(notice.querySelector('p').textContent,/73.8s/);
   ui.state.project.draft.duration_review.reason='near_target';ui.renderDurationReview();assert.equal(notice.hidden,true);
   ui.state.project=null;ui.renderDurationReview();assert.equal(notice.hidden,true);
+});
+
+test('duration disclosure keeps target shortfall concise while preserving the full diagnostic behind it',()=>{
+  const f=directorFixture(),{ui,get}=f,notice=get('durationReview');
+  const summary=new Element('summary'),label=new Element('span');label.className='duration-review-summary';summary.append(label);notice.append(summary,new Element('p'));
+  Object.assign(ui.state.dictionary,{durationDraftTargetSummary:'AI draft: {selected}s / target {requested}s.',durationEvidenceLimit:'Review source ranges.',durationChain:'Length review:'});
+  ui.state.project.draft.duration_review={reason:'limited_selection',duration_mode:'target',selected_seconds:59,requested_seconds:90,chain:[{stage:'source',seconds:120},{stage:'selected',seconds:70},{stage:'final',seconds:59}]};
+  ui.state.studio.open=true;ui.renderDurationReview();
+  assert.equal(notice.open,false);assert.equal(label.textContent,'AI draft: 59s / target 90s.');
+  assert.match(notice.querySelector('p').textContent,/Review source ranges.*Length review:.*120s.*70s.*59s/);
+  assert.equal(notice.parentElement.className,'advanced-content');
+  notice.open=true;ui.renderDurationReview();assert.equal(notice.open,true,'ordinary renders preserve the reader\'s expanded state');
 });
 
 test('reopening chooses a saved keyed Media video and green defaults recover excessive tolerance without silently saving',async()=>{

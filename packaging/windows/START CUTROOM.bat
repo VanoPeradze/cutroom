@@ -1,6 +1,6 @@
 @echo off
 setlocal EnableExtensions DisableDelayedExpansion
-title CUTROOM 1.2 Beta
+title CUTROOM 1.3 Beta
 
 if not exist "%~dp0App\run_windows.bat" (
   echo CUTROOM could not find its App folder.

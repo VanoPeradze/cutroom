@@ -17,6 +17,10 @@ MINIMUM_REMOVABLE_PAUSE_SECONDS = .12
 class StoryPlanningError(RuntimeError):
     """The Story AI answered, but a safe coherent plan could not be produced."""
 
+    def __init__(self, message: str, diagnostic: dict[str, Any] | None = None):
+        super().__init__(message)
+        self.diagnostic = copy.deepcopy(diagnostic or {})
+
 
 class StoryBudgetError(StoryPlanningError):
     """No complete required story was validated within the requested budget."""

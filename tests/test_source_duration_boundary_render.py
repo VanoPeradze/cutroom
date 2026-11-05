@@ -9,6 +9,7 @@ from types import SimpleNamespace
 import pytest
 
 from cutroom.editing import apply_manual_edit
+from cutroom.ffmpeg_compat import export_capabilities
 from cutroom.media import probe_media
 from cutroom.media_render import library_input_args
 from cutroom.render import _frame_aligned_plan, build_filter_graph
@@ -59,7 +60,7 @@ def test_real_eight_ms_secondary_eof_music_export_keeps_frames_audio_and_source_
     script, output = tmp_path / "graph.txt", tmp_path / "boundary.mp4"
     script.write_text(graph, encoding="utf-8")
     result = subprocess.run([ffmpeg, "-v", "error", "-y", "-i", str(paths[0]), "-i", str(paths[1]),
-                             *library_input_args(value, tmp_path), "-filter_complex_script", str(script), *maps,
+                             *library_input_args(value, tmp_path), *export_capabilities(ffmpeg).graph_file_args(script), *maps,
                              "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac", "-r", str(fps), str(output)],
                             capture_output=True, timeout=25)
     assert result.returncode == 0, result.stderr.decode(errors="replace")

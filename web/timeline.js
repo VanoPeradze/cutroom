@@ -85,6 +85,7 @@ export function sequenceBlocks(project, getTrackClips) {
 
 export function sequenceGaps(project, getTrackClips, slot = null) {
   const clips = (slot ? getTrackClips(project, slot) : ["A", "B"].flatMap(s => project?.sources?.[s] ? getTrackClips(project,s) : []))
+    .concat(slot ? [] : [...(project?.manual?.media_clips || []), ...(project?.manual?.text_clips || [])])
     .slice().sort((a,b)=>a.start-b.start);
   const gaps = []; let cursor = 0;
   for (const clip of clips) {
@@ -93,6 +94,13 @@ export function sequenceGaps(project, getTrackClips, slot = null) {
   }
   if (timelineDuration(project) > cursor + 1e-6) gaps.push({start:cursor,end:timelineDuration(project)});
   return gaps;
+}
+
+export function sequenceGapClosureIssue(project, gaps, slot = null) {
+  const layers = [...(project?.manual?.media_clips || []), ...(project?.manual?.text_clips || [])];
+  return !slot && layers.some(row => gaps.some(gap => row.end > gap.start + 1e-6))
+    ? "Closing these gaps would shift added media or text. Move or remove those layers before closing gaps across the whole edit."
+    : "";
 }
 
 export function rippleMoveStart(project, start, end, at, slot = null, getTrackClips = null) {
@@ -143,6 +151,8 @@ export class TimelineView {
     this.playhead = 0;
     this.hoverTime = null;
     this.images = [];
+    this.imageUrls = [];
+    this.imageLoadGeneration = 0;
     this.scrubbing = false;
     this.selecting = false;
     this.selectionAnchor = null;
@@ -151,6 +161,7 @@ export class TimelineView {
     this.tool = "select";
     this.gesture = null;
     this.raf = null;
+    this.afterDraw = null;
     this.resizeObserver = new ResizeObserver(() => this.scheduleDraw());
     this.resizeObserver.observe(scroll);
     canvas.addEventListener("pointerdown", (event) => this.pointerDown(event));
@@ -170,11 +181,18 @@ export class TimelineView {
   }
 
   setProject(project) {
+    const previousProjectId = this.project?.id;
     this.snapGuide = null;
     this.zoomFocusPending = false;
+    this.afterDraw = null;
     this.cancelGesture(false);
     this.cancelPendingCut();
     this.project = project;
+    if (previousProjectId !== project?.id) {
+      this.images = [];
+      this.imageUrls = [];
+      this.mediaImages = new Map();
+    }
     // A caption keeps its selection across edits while it is still on the timeline.
     if (this.captionSelection && !this.captionItems()?.some(item => item.id === this.captionSelection)) this.selectCaption(null, true);
     if (!this.hasTrackLanes() || (this.editTarget !== "edit" && !project?.sources?.[this.editTarget])) this.setEditTarget("edit");
@@ -297,6 +315,7 @@ export class TimelineView {
     const oldZoom = this.zoom;
     this.zoom = Math.max(1, Math.min(16, Number(value) || 1));
     if (Math.abs(oldZoom - this.zoom) < .001) return;
+    this.afterDraw = null;
     // All zoom controls target the playhead, not the mouse or the
     // viewport's old left edge. Apply after canvas sizing, even if playback
     // or pointer events replace this scheduled frame before it is painted.
@@ -306,6 +325,7 @@ export class TimelineView {
 
   fit() {
     this.zoomFocusPending = false;
+    this.afterDraw = null;
     this.zoom = 1;
     this.scroll.scrollLeft = 0;
     this.scheduleDraw();
@@ -382,24 +402,40 @@ export class TimelineView {
   }
 
   async loadImages() {
-    const urls = this.project?.sources?.A?.thumbnail_urls || this.project?.analysis?.thumbnail_urls?.A || [];
-    const token = this.project?.id;
+    const project = this.project;
+    const urls = project?.sources?.A?.thumbnail_urls || project?.analysis?.thumbnail_urls?.A || [];
+    const token = project?.id;
+    const generation = ++this.imageLoadGeneration;
+    if (urls.length !== this.imageUrls.length || urls.some((url, index) => url !== this.imageUrls[index])) this.images = [];
+    this.imageUrls = [...urls];
+
+    // Other lanes need not wait for all source A images to finish loading.
+    this.mediaImages ||= new Map();
+    const mediaImages = this.mediaImages;
+    const extraUrls = [...(project?.sources?.B?.thumbnail_urls || []),
+      ...Object.values(project?.assets || {}).map(asset => asset.thumbnail_url).filter(Boolean)];
+    for (const url of extraUrls) if (!mediaImages.has(url)) {
+      mediaImages.set(url, null);
+      const image = new Image();
+      image.onload = () => {
+        if (this.mediaImages !== mediaImages) return;
+        mediaImages.set(url, image);
+        this.scheduleDraw();
+      };
+      image.src = url;
+    }
+
     const images = await Promise.all(urls.map((url) => new Promise((resolve) => {
       const image = new Image();
       image.onload = () => resolve(image);
       image.onerror = () => resolve(null);
       image.src = url;
     })));
-    if (this.project?.id === token) {
+    // A project can be refreshed without changing its ID. Only the most
+    // recent request is allowed to replace its visible filmstrip.
+    if (this.imageLoadGeneration === generation && this.project?.id === token) {
       this.images = images;
       this.scheduleDraw();
-    }
-    this.mediaImages ||= new Map();
-    const extraUrls = [...(this.project?.sources?.B?.thumbnail_urls || []),
-      ...Object.values(this.project?.assets || {}).map(asset => asset.thumbnail_url).filter(Boolean)];
-    for (const url of extraUrls) if (!this.mediaImages.has(url)) {
-      this.mediaImages.set(url, null);
-      const image = new Image(); image.onload = () => { this.mediaImages.set(url,image); this.scheduleDraw(); }; image.src = url;
     }
   }
 
@@ -704,10 +740,15 @@ export class TimelineView {
   }
 
   scheduleDraw(after = null) {
-    if (this.raf) cancelAnimationFrame(this.raf);
+    // Preserve the latest explicit post-draw focus while coalescing playhead,
+    // pointer, resize, and image updates into the already scheduled frame.
+    if (after) this.afterDraw = after;
+    if (this.raf !== null) return;
     this.raf = requestAnimationFrame(() => {
       this.raf = null;
       this.draw();
+      const after = this.afterDraw;
+      this.afterDraw = null;
       after?.();
     });
   }

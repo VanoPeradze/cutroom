@@ -162,8 +162,13 @@ def test_explicit_opt_in_preserves_custom_instruction_without_claiming_coverage(
     ("requested_added", ["b3", "b3"]), ("requested_removed", "b1"),
     ("requested_added", [{}]),
 ])
-def test_malformed_or_unknown_critic_scope_cannot_enable_fallback(field, value):
+@pytest.mark.parametrize("authority", [None, "proposal", "final"])
+def test_malformed_or_unknown_critic_scope_cannot_enable_fallback(field, value, authority):
     fixture = source_fixture()
+    if authority is not None:
+        fixture[0]["critic"].update(action_authority=authority, accepted_added=[], accepted_removed=[])
+    if authority == "final":
+        field = field.replace("requested_", "accepted_")
     fixture[0]["critic"][field] = value
 
     assert rough_cut(fixture) is None
