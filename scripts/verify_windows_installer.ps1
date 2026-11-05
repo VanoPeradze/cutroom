@@ -41,6 +41,7 @@ $requiredMarkers = @(
     'UV_PYTHON_INSTALL_DIR',
     'UV_SYSTEM_CERTS',
     'CUTROOM_RUNTIME_PATHS_B64',
+    'Restore-SavedRuntimePaths',
     'Get-FileHash',
     'uv-x86_64-pc-windows-msvc.zip',
     'uv-aarch64-pc-windows-msvc.zip',

@@ -116,7 +116,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $setup = Join-Path $env:CUTROOM_EXTRACTED_APP 'setup_windows.ps1'
           $setupHash = (Get-FileHash -LiteralPath $setup -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($setupHash -ne 'a61573132662ee34a5a7c2f741b7b4f6fa3cba33378a8ae58272612d018afa4d') { throw 'Setup changed since its optional installs were reviewed' }
+          if ($setupHash -ne 'f9c296c602112f4aa6fa4c637dea51e171961459844639167522f9d2545eb942') { throw 'Setup changed since its optional installs were reviewed' }
           $config = Get-Content -LiteralPath (Join-Path $env:CUTROOM_EXTRACTED_APP 'config.json') -Raw | ConvertFrom-Json
           if ($config.ai.download_models_on_setup) { throw 'Model downloads must remain disabled' }
           if ((Get-Command ffmpeg.exe).Source -ne $env:CUTROOM_EXPECTED_FFMPEG) { throw 'Unexpected FFmpeg on PATH' }

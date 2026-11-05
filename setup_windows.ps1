@@ -28,6 +28,29 @@ function Add-ProcessPath {
     }
 }
 
+function Restore-SavedRuntimePaths {
+    $encoded = [string]$env:CUTROOM_RUNTIME_PATHS_B64
+    if (-not $encoded) { return }
+    try {
+        if ($encoded.Length -gt 32768) { throw "Saved tool paths are too long." }
+        $json = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($encoded))
+        if (-not $json.TrimStart().StartsWith("[") -or -not $json.TrimEnd().EndsWith("]")) {
+            throw "Saved tool paths must be a list."
+        }
+        $paths = @(ConvertFrom-Json -InputObject $json)
+        foreach ($directory in $paths) {
+            if ($directory -isnot [string] -or -not [IO.Path]::IsPathRooted($directory) -or $directory.Contains(";")) {
+                throw "Saved tool paths must be absolute directories."
+            }
+        }
+        for ($index = $paths.Count - 1; $index -ge 0; $index--) {
+            Add-ProcessPath -Directory $paths[$index]
+        }
+    } catch {
+        Write-Warning "Saved tool paths could not be read. CUTROOM will look for installed tools again."
+    }
+}
+
 function Refresh-ProcessPath {
     $machinePath = [Environment]::GetEnvironmentVariable("Path", "Machine")
     $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
@@ -445,6 +468,7 @@ try {
     }
 
     Remove-Item -LiteralPath ".setup-complete" -Force -ErrorAction SilentlyContinue
+    Restore-SavedRuntimePaths
     Refresh-ProcessPath
 
     Write-Host "CUTROOM AI $($script:CutroomVersion) - local setup" -ForegroundColor White

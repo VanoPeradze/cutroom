@@ -99,6 +99,7 @@ test('generated runtime paths survive a Hebrew folder and reach the launched pro
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const toolDir = path.join(root, '\u05e9\u05dc\u05d5\u05dd', 'bin');
   fs.mkdirSync(toolDir, { recursive: true });
+  fs.writeFileSync(path.join(toolDir, 'fixture-identity.txt'), 'synthetic tool directory');
   fs.mkdirSync(path.join(root, 'scripts'));
   fs.copyFileSync(path.join(app, 'scripts', 'windows_runtime.py'), path.join(root, 'scripts', 'windows_runtime.py'));
   const resultPath = path.join(root, 'result.json');
@@ -129,7 +130,30 @@ test('generated runtime paths survive a Hebrew folder and reach the launched pro
   assert.equal(generated.status, 0, generated.stdout + generated.stderr);
   const saved = fs.readFileSync(path.join(root, '.runtime-paths.cmd'));
   assert.ok([...saved].every(byte => byte < 128), 'Batch runtime file must remain ASCII-safe');
-  assert.match(saved.toString('ascii'), /CUTROOM_RUNTIME_PATHS_B64=/);
+  const encoded = saved.toString('ascii').match(/CUTROOM_RUNTIME_PATHS_B64=([A-Za-z0-9+/=]+)/)?.[1];
+  assert.ok(encoded, 'Encoded runtime paths missing');
+
+  // Repair and upgrade also need to rediscover these paths before setup runs.
+  const addStart = source.indexOf('function Add-ProcessPath {');
+  const restoreStart = source.indexOf('function Restore-SavedRuntimePaths {', addStart);
+  const restoreEnd = source.indexOf('function Refresh-ProcessPath {', restoreStart);
+  assert.ok(addStart >= 0 && restoreStart > addStart && restoreEnd > restoreStart, 'Repair path restoration missing');
+  const restoreScript = [
+    source.slice(addStart, restoreEnd),
+    'Restore-SavedRuntimePaths',
+    '[IO.File]::WriteAllText($env:CUTROOM_TEST_REPAIR_RESULT, $env:PATH, [Text.Encoding]::UTF8)',
+  ].join('\r\n');
+  const repairPath = path.join(root, 'repair-path.txt');
+  const repair = spawnSync('powershell.exe', ['-NoLogo', '-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(restoreScript, 'utf16le').toString('base64')], {
+    cwd: root,
+    env: { ...fixtureEnv, CUTROOM_RUNTIME_PATHS_B64: encoded, CUTROOM_TEST_REPAIR_RESULT: repairPath },
+    encoding: 'utf8', timeout: 15000, windowsHide: true,
+  });
+  assert.ifError(repair.error);
+  assert.equal(repair.status, 0, repair.stdout + repair.stderr);
+  const repairToolDir = fs.readFileSync(repairPath, 'utf8').replace(/^\ufeff/, '').split(path.delimiter)[0];
+  assert.equal(path.basename(path.dirname(repairToolDir)), '\u05e9\u05dc\u05d5\u05dd');
+  assert.equal(fs.readFileSync(path.join(repairToolDir, 'fixture-identity.txt'), 'utf8'), 'synthetic tool directory');
 
   const launch = path.join(root, 'launch-fixture.cmd');
   fs.writeFileSync(launch, '@echo off\r\nsetlocal EnableExtensions DisableDelayedExpansion\r\ncall ".runtime-paths.cmd"\r\npython "scripts\\windows_runtime.py" preflight\r\nexit /b %errorlevel%\r\n');
@@ -139,7 +163,9 @@ test('generated runtime paths survive a Hebrew folder and reach the launched pro
   assert.ifError(result.error);
   assert.equal(result.status, 17, result.stdout + result.stderr);
   let payload = JSON.parse(fs.readFileSync(resultPath, 'utf8'));
-  assert.equal(payload.path.split(path.delimiter)[0], toolDir);
+  const restoredToolDir = payload.path.split(path.delimiter)[0];
+  assert.equal(path.basename(path.dirname(restoredToolDir)), '\u05e9\u05dc\u05d5\u05dd');
+  assert.equal(fs.readFileSync(path.join(restoredToolDir, 'fixture-identity.txt'), 'utf8'), 'synthetic tool directory');
   assert.ok(payload.argv[0].endsWith('preflight.py'));
 
   // An older install without encoded paths keeps its inherited environment.

@@ -140,6 +140,7 @@ def static_checks() -> list[dict]:
         "Start-OllamaServerIfNeeded" in setup_source,
         'Install-WingetPackage -PackageId "Ollama.Ollama"' not in setup_source,
         "CUTROOM_RUNTIME_PATHS_B64" in setup_source,
+        "Restore-SavedRuntimePaths" in setup_source,
         "scripts\\windows_runtime.py" in launcher_source,
     ))
     checks.append({"name": "windows_installer_guards", "ok": windows_guard_ok, "details": None})

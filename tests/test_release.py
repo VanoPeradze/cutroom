@@ -213,6 +213,7 @@ def test_windows_installer_is_ascii_safe_and_self_validating():
     assert "Start-OllamaServerIfNeeded" in setup_text
     assert 'Install-WingetPackage -PackageId "Ollama.Ollama"' not in setup_text
     assert "CUTROOM_RUNTIME_PATHS_B64" in setup_text
+    assert "Restore-SavedRuntimePaths" in setup_text
     assert b"scripts\\windows_runtime.py" in launcher
     assert 'UV_PYTHON_PREFERENCE = "only-managed"' not in setup_text
     assert "--managed-python" not in setup_text
