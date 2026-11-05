@@ -37,7 +37,9 @@ function Restore-SavedRuntimePaths {
         if (-not $json.TrimStart().StartsWith("[") -or -not $json.TrimEnd().EndsWith("]")) {
             throw "Saved tool paths must be a list."
         }
-        $paths = @(ConvertFrom-Json -InputObject $json)
+        # Windows PowerShell 5.1 returns JSON arrays as one pipeline object.
+        $decodedPaths = ConvertFrom-Json -InputObject $json
+        $paths = @($decodedPaths)
         foreach ($directory in $paths) {
             if ($directory -isnot [string] -or -not [IO.Path]::IsPathRooted($directory) -or $directory.Contains(";")) {
                 throw "Saved tool paths must be absolute directories."
@@ -47,7 +49,7 @@ function Restore-SavedRuntimePaths {
             Add-ProcessPath -Directory $paths[$index]
         }
     } catch {
-        Write-Warning "Saved tool paths could not be read. CUTROOM will look for installed tools again."
+        Write-Warning "Saved tool paths could not be read. CUTROOM will look for installed tools again. Details: $($_.Exception.Message)"
     }
 }
 
