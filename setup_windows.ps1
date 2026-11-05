@@ -28,6 +28,31 @@ function Add-ProcessPath {
     }
 }
 
+function Restore-SavedRuntimePaths {
+    $encoded = [string]$env:CUTROOM_RUNTIME_PATHS_B64
+    if (-not $encoded) { return }
+    try {
+        if ($encoded.Length -gt 32768) { throw "Saved tool paths are too long." }
+        $json = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($encoded))
+        if (-not $json.TrimStart().StartsWith("[") -or -not $json.TrimEnd().EndsWith("]")) {
+            throw "Saved tool paths must be a list."
+        }
+        # Windows PowerShell 5.1 returns JSON arrays as one pipeline object.
+        $decodedPaths = ConvertFrom-Json -InputObject $json
+        $paths = @($decodedPaths)
+        foreach ($directory in $paths) {
+            if ($directory -isnot [string] -or -not [IO.Path]::IsPathRooted($directory) -or $directory.Contains(";")) {
+                throw "Saved tool paths must be absolute directories."
+            }
+        }
+        for ($index = $paths.Count - 1; $index -ge 0; $index--) {
+            Add-ProcessPath -Directory $paths[$index]
+        }
+    } catch {
+        Write-Warning "Saved tool paths could not be read. CUTROOM will look for installed tools again. Details: $($_.Exception.Message)"
+    }
+}
+
 function Refresh-ProcessPath {
     $machinePath = [Environment]::GetEnvironmentVariable("Path", "Machine")
     $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
@@ -419,11 +444,10 @@ function Write-RuntimePaths {
             $unique.Add($clean)
         }
     }
-    $prefix = $unique -join ";"
-    $lines = @("@echo off")
-    if ($prefix) {
-        $lines += "set `"PATH=$prefix;%PATH%`""
-    }
+    # Store UTF-8 paths as ASCII-safe data for cmd.exe and restore them in Python.
+    $json = ConvertTo-Json -InputObject ($unique.ToArray()) -Compress
+    $encoded = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($json))
+    $lines = @("@echo off", "set `"CUTROOM_RUNTIME_PATHS_B64=$encoded`"")
     $payload = ($lines -join "`r`n") + "`r`n"
     [System.IO.File]::WriteAllText((Join-Path $PSScriptRoot ".runtime-paths.cmd"), $payload, [System.Text.Encoding]::ASCII)
 }
@@ -446,6 +470,7 @@ try {
     }
 
     Remove-Item -LiteralPath ".setup-complete" -Force -ErrorAction SilentlyContinue
+    Restore-SavedRuntimePaths
     Refresh-ProcessPath
 
     Write-Host "CUTROOM AI $($script:CutroomVersion) - local setup" -ForegroundColor White
@@ -474,17 +499,8 @@ try {
 
     $ollamaPath = Resolve-Executable -Name "ollama.exe"
     if (-not $ollamaPath) {
-        $wingetPath = Get-WingetPath
-        if ($wingetPath) {
-            try {
-                Install-WingetPackage -PackageId "Ollama.Ollama" -DisplayName "Ollama"
-                $ollamaPath = Resolve-Executable -Name "ollama.exe"
-            } catch {
-                Write-Warning "Ollama installation did not finish. CUTROOM can still start with deterministic editing. Details: $($_.Exception.Message)"
-            }
-        } else {
-            Write-Warning "winget is unavailable, so Ollama was not installed automatically. CUTROOM can still start with deterministic editing."
-        }
+        Write-Host "Optional Story AI is not installed. CUTROOM will start without it."
+        Write-Host "To set it up later, open AI Connection in the editor."
     }
     if ($ollamaPath) {
         Add-ProcessPath -Directory (Split-Path -Parent $ollamaPath)
