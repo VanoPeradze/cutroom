@@ -29,6 +29,17 @@ class SourceTrackError(ValueError):
     """A source-track operation could not be applied without losing media."""
 
 
+class TimelineVersionError(SourceTrackError):
+    """An opaque future timeline must never be interpreted as legacy footage."""
+
+
+def validate_sequence_version(project: dict[str, Any]) -> None:
+    sequence = (project.get("manual") or {}).get("sequence")
+    if sequence is not None and (not isinstance(sequence, dict)
+                                 or type(sequence.get("version")) is not int or sequence["version"] != 1):
+        raise TimelineVersionError("This timeline version is not supported. Open it in a compatible CUTROOM version.")
+
+
 def _finite(value: Any, default: float = 0.0) -> float:
     try:
         result = float(value)
@@ -58,6 +69,7 @@ def has_sequence(project: dict[str, Any]) -> bool:
 
 
 def timeline_duration(project: dict[str, Any]) -> float:
+    validate_sequence_version(project)
     if has_sequence(project):
         return max(0.0, min(MAX_SEQUENCE_SECONDS, _finite(project["manual"]["sequence"].get("duration"))))
     return _duration(project, "A")
@@ -172,6 +184,7 @@ def source_track_clips(project: dict[str, Any], slot: str) -> list[dict[str, Any
     Corrupt explicit data fails closed: malformed/overlapping clips are omitted,
     never replaced with footage the user may intentionally have removed.
     """
+    validate_sequence_version(project)
     slot = str(slot).upper()
     if slot not in {"A", "B"} or not _duration(project, slot):
         return []

@@ -377,3 +377,43 @@ html[data-theme="light"] .home-hub .art-tag { color:#675e73; }
   .project-library-tools { grid-template-columns:minmax(0,1fr); }
   .dialog-project-row .dialog-project { grid-template-columns:minmax(0,1fr); gap:8px; }
 }
+/* One source workflow, reusing the existing edit/save controls and theme tokens. */
+#sourceMixerBody .source-workflow-step { display:grid; gap:12px; min-width:0; padding-block:16px; border-block-end:1px solid var(--line-strong); }
+#sourceMixerBody .source-workflow-step > header { display:flex; align-items:center; gap:10px; }
+#sourceMixerBody .source-workflow-step > header > span { display:grid; place-items:center; width:28px; height:28px; border:1px solid var(--line-strong); border-radius:50%; color:var(--cyan-text); font-weight:700; }
+#sourceMixerBody .source-workflow-step h4 { margin:0; font-size:15px; line-height:1.4; }
+#sourceMixerBody .source-workflow-step > p { margin:0; color:var(--paper-dim); font-size:13px; line-height:1.5; overflow-wrap:anywhere; }
+#sourceMixerBody .source-timing-choices { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+#sourceMixerBody .source-timing-choices button { display:flex; flex-direction:column; align-items:flex-start; justify-content:center; min-height:64px; white-space:normal; text-align:start; gap:5px; padding:10px 12px; }
+#sourceMixerBody .source-timing-choices small { font-size:12px; line-height:1.4; color:var(--paper-dim); font-weight:400; }
+#sourceMixerBody .source-workflow-step :is(select,input,label,.source-role-grid,.source-routing-grid) { min-width:0; max-width:100%; }
+#sourceMixerBody #sharedSourceTimingDetails { padding:10px; border:1px solid var(--line); border-radius:6px; }
+#sourceMixerBody #sharedSourceTimingDetails > summary { cursor:pointer; min-height:32px; font-size:13px; }
+#sourceMixerBody #sharedSourceTimingDetails[open] > summary { margin-block-end:12px; }
+#sourceMixerBody #sourceBCoverage { display:block; font-size:13px; line-height:1.5; overflow-wrap:anywhere; }
+#layoutCoverageAlert { flex-wrap:wrap; margin-block:8px; }
+#layoutCoverageAlert p { min-width:0; flex-basis:220px; overflow-wrap:anywhere; }
+#layoutCoverageAlert button { min-height:44px; white-space:normal; }
+#creatorInsetControls[hidden] { display:none; }
+#creatorInsetControls:not([hidden]) { display:grid; gap:10px; }
+@media (max-width:760px) { #sourceMixerBody .source-timing-choices { grid-template-columns:1fr; } }
+
+/* These controls now live outside Advanced: retain their narrow-panel layout. */
+#sourceMixerBody { container-type:inline-size; }
+#sourceMixerBody .source-workflow-step > header > span { flex:0 0 28px; }
+#sourceMixerBody .source-workflow-step h4 { min-width:0; overflow-wrap:anywhere; }
+#sourceMixerBody .source-timing-choices :is(b,small) { min-width:0; max-width:100%; overflow-wrap:anywhere; }
+#sourceMixerBody .source-sync-control { display:grid; grid-template-columns:minmax(0,1fr); min-width:0; }
+#sourceMixerBody .source-sync-control :is(details,label) { min-width:0; max-width:100%; }
+#sourceMixerBody .source-sync-control label { display:grid; grid-template-columns:minmax(0,1fr); }
+#sourceMixerBody .source-sync-control input { grid-column:1; grid-row:auto; }
+#sourceMixerBody .source-sync-control :is(p,small,button,summary) { overflow-wrap:anywhere; white-space:normal; }
+#sourceRolesStep :is(#screenSourceName,#cameraSourceName) { display:none; }
+#podcastFraming[hidden] { display:none; }
+@container (max-width:420px) {
+  #sourceRolesStep .source-role-pair { grid-template-columns:minmax(0,1fr); align-items:stretch; }
+  #sourceRolesStep .source-swap { justify-self:center; min-height:44px; padding-inline:14px; }
+}
+@container (max-width:320px) {
+  #sourceMixerBody .source-timing-choices { grid-template-columns:minmax(0,1fr); }
+}

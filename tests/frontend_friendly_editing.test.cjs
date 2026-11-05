@@ -17,6 +17,7 @@ function app() {
       addEventListener(key,callback){this.listeners[key]=callback;},
       querySelector(key){if(!children.has(key))children.set(key,element(key));return children.get(key);},
       querySelectorAll(){return [];}, append(){}, focus(){}, scrollIntoView(){},
+      replaceChildren(...nodes){this.children=nodes;},
       showModal(){this.open=true;this.shown=(this.shown||0)+1;},
     };
   };

@@ -169,7 +169,12 @@ def test_header_and_progress_share_one_stack_and_theme_initializes_before_styles
 
 def test_layout_keeps_recovery_and_extra_monitors_in_disclosures():
     html = (ROOT / "web/index.html").read_text(encoding="utf-8")
-    assert html.index('id="sourceSetupDisclosure"') < html.index('id="creatorFramePreset"') < html.index('id="sourceIdentityCards"')
+    source_cards = html.index('id="sourceIdentityCards"')
+    advanced_framing = html.index('id="sourceSetupDisclosure"')
+    restore_preset = html.index('id="creatorFramePreset"')
+    advanced_framing_end = html.index('</details>', advanced_framing)
+    # Primary source identities stay visible before the advanced reset disclosure.
+    assert source_cards < advanced_framing < restore_preset < advanced_framing_end
     assert '<details class="embedded-camera-editor"' in html
     assert '<details class="framing-source-preview"><summary>Original source preview</summary>' in html
     assert 'Restore 30/70 stack' in html

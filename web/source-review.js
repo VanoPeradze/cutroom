@@ -1,4 +1,4 @@
-import { TimelineView, formatTime } from "./timeline.js?v=1.2-beta-20261019";
+import { TimelineView, formatTime } from "./timeline.js?v=1.2-beta-20261024-insertgaps1";
 
 // Project current edit clips onto the original recording, including copies.
 // The original draft's keep mask is intentionally not authoritative anymore.
@@ -29,6 +29,13 @@ export function reviewSelectionStats(ranges, selection) {
   return {kept,removed:Math.max(0,selection.end-selection.start-kept)};
 }
 
+function analysisOffset(analysis, slot) {
+  if (slot !== "B") return 0;
+  const value=analysis?.audio_timeline_offset;
+  if (value == null || (typeof value !== "number" && typeof value !== "string") || (typeof value === "string" && !value.trim())) return NaN;
+  return Number(value);
+}
+
 export function sourceReviewAudio(project, slot) {
   if (project?.sources?.[slot]?.has_audio === false) return null;
   // Preparation is measured on the original A/B clocks before AI analysis.
@@ -38,7 +45,7 @@ export function sourceReviewAudio(project, slot) {
   const analysis=project?.analysis || {};
   const audioSlot=String(analysis.audio_source || project?.draft?.audio_source || "A").toUpperCase();
   if (audioSlot!==slot || !analysis.audio) return null;
-  const offset=slot==="B" ? Number(analysis.audio_timeline_offset || 0) : 0;
+  const offset=analysisOffset(analysis,slot);
   if (!Number.isFinite(offset)) return null;
   const duration=Number(project.sources[slot].duration);
   const remap=rows=>(rows || []).map(row=>({...row,start:Math.max(0,row.start-offset),end:Math.min(duration,row.end-offset)})).filter(row=>row.end>row.start);
@@ -54,6 +61,7 @@ export class SourceReview {
     this.timeline = new TimelineView(n.canvas,n.scroll,time => this.seek(time),range => this.select(range),null,{sourceReview:true,canEdit:()=>!this.busy});
     n.close.onclick = () => this.dialog.close();
     this.dialog.addEventListener("close", () => { n.video.pause(); this.timeline.cancelGesture(); n.video.removeAttribute("src"); n.video.load(); });
+    n.retry.onclick = () => { if (this.loadPreview({ resume: true })) n.canvas.focus(); };
     n.slot.onchange = () => { this.slot=n.slot.value; this.selection=null; this.refresh(true); };
     n.scope.onchange = () => this.updateControls();
     n.restore.onclick = () => this.edit("sequence_source_restore");
@@ -66,8 +74,20 @@ export class SourceReview {
     n.zoomOut.onclick = () => this.timeline.setZoom(this.timeline.zoom/1.5);
     n.exact.onclick = () => { this.dialog.close(); this.exactInsert(); };
     n.video.addEventListener("timeupdate", () => { this.timeline.setPlayhead(n.video.currentTime); this.updateQuote(); });
-    n.video.addEventListener("loadedmetadata", () => this.seek(this.selection?.start || 0));
-    n.video.addEventListener("error", () => { if (this.dialog.open && n.video.getAttribute("src")) n.status.textContent="This source could not be played. Try closing and reopening the project."; });
+    n.video.addEventListener("loadedmetadata", () => {
+      if (!this.dialog.open) return;
+      this.seek(this.resumePreviewAt ?? this.selection?.start ?? 0);
+      this.resumePreviewAt=null;
+      if (this.previewState === "loading" || this.previewState === "error") {
+        n.status.textContent="Preview ready. Click a section or drag to select a range.";
+      }
+      this.previewState="ready"; n.retry.hidden=true;
+    });
+    n.video.addEventListener("error", () => {
+      if (!this.dialog.open || !n.video.getAttribute("src")) return;
+      this.previewState="error"; n.retry.hidden=false;
+      n.status.textContent="Preview could not load. Check that the source file is available and CUTROOM is running, then retry. Your edit and selection have not changed.";
+    });
     this.dialog.addEventListener("keydown", event => {
       if (event.code !== "Space" || event.target.closest("input,select,button,video")) return;
       event.preventDefault(); event.stopPropagation();
@@ -97,13 +117,23 @@ export class SourceReview {
     this.timeline.setProject({id:`${p.id}:${this.slot}`,__sourceReview:true,settings:p.settings,sources:{A:{...p.sources[this.slot],thumbnail_urls:p.sources[this.slot].thumbnail_urls || p.analysis?.thumbnail_urls?.[this.slot]}},
       analysis:{audio:waveform},draft:{keep_ranges:this.ranges.keeps,cuts:this.ranges.removed,camera_plan:[]}});
     if (sourceChanged) {
-      n.video.src=this.mediaUrl(p.sources[this.slot]); n.video.load();
+      this.loadPreview();
       this.timeline.fit();
       const first=this.ranges.removed[0];
       this.selection=first ? {...first} : null;
     }
     if (this.selection) this.timeline.setSelection(this.selection,false,true);
     this.updateControls();
+  }
+
+  loadPreview({ resume = false } = {}) {
+    const p=this.getProject(),n=this.nodes;
+    if (!this.dialog.open || this.busy || p?.id !== this.projectId || !p.sources?.[this.slot]) return false;
+    this.resumePreviewAt=resume ? Number(n.video.currentTime ?? this.selection?.start ?? 0) : null;
+    this.previewState="loading"; n.retry.hidden=true;
+    n.status.textContent="Loading original preview. Your edit stays unchanged.";
+    n.video.src=this.mediaUrl(p.sources[this.slot]); n.video.load();
+    return true;
   }
 
   select(range) {
@@ -130,8 +160,9 @@ export class SourceReview {
     const p=this.getProject(),n=this.nodes;
     // Transcript timestamps belong to their audio source, never the other lane.
     const audioSlot=String(p?.analysis?.audio_source || p?.draft?.audio_source || "A").toUpperCase();
-    const time=n.video.currentTime + (audioSlot === "B" ? Number(p?.analysis?.audio_timeline_offset) : 0);
-    const segment=audioSlot===this.slot ? p.analysis?.transcript?.segments?.find(s=>time>=s.start&&time<s.end) : null;
+    const offset=analysisOffset(p?.analysis,audioSlot);
+    const time=n.video.currentTime + offset;
+    const segment=audioSlot===this.slot && Number.isFinite(offset) ? p.analysis?.transcript?.segments?.find(s=>time>=s.start&&time<s.end) : null;
     n.quote.textContent=segment?.text || "Preview the original footage here. Your edited preview stays separate.";
   }
 
@@ -170,7 +201,9 @@ export class SourceReview {
       const detail=action === "undo" ? {} : {slot:this.slot,scope:this.nodes.scope.value === "edit" ? "edit" : this.slot,source_start:this.selection.start,source_end:this.selection.end};
       const result=await this.applyEdit(action,detail);
       this.refresh();
-      this.nodes.status.textContent=result ? (action === "undo" ? "Undone." : action === "sequence_source_restore" ? "Footage restored. Already-kept footage was not duplicated." : "Selection removed from the edit. The original is still here.") : "The edit was not changed. Select the section again and retry.";
+      this.nodes.status.textContent=result ? (action === "undo" ? "Undone." : action === "sequence_source_restore" ? "Footage restored. Already-kept footage was not duplicated." : "Selection removed from the edit. The original is still here.") : "The edit was not confirmed. Check the current project before trying again.";
+    } catch (error) {
+      this.nodes.status.textContent="Could not confirm whether the edit changed. Close and reopen the project to check it before trying again.";
     } finally { this.busy=false; this.updateControls(); }
   }
 }

@@ -9,6 +9,7 @@ from array import array
 import pytest
 
 from cutroom import render
+from cutroom.ffmpeg_compat import export_capabilities
 from cutroom.editing import ManualEditError, apply_manual_edit
 from cutroom.sequence import editor_sequence_snapshot, materialize_sequence
 from cutroom.source_tracks import source_track_clips, timeline_duration, track_at
@@ -233,7 +234,7 @@ def test_real_ripple_export_keeps_both_media_clocks_audio_gaps_and_caption_timin
     script.write_text(graph, encoding="utf-8")
     output = tmp_path / "linked-ripple.mp4"
     result = subprocess.run([ffmpeg, "-v", "error", "-y", "-i", str(paths[0]), "-i", str(paths[1]),
-                             "-filter_complex_script", str(script), *maps, "-c:v", "libx264", "-preset", "ultrafast",
+                             *export_capabilities(ffmpeg).graph_file_args(script), *maps, "-c:v", "libx264", "-preset", "ultrafast",
                              "-c:a", "aac", "-r", str(fps), "-t", "3", str(output)], capture_output=True, timeout=20)
     assert result.returncode == 0, result.stderr.decode(errors="replace")
     streams = json.loads(subprocess.check_output([ffprobe, "-v", "error", "-show_streams", "-of", "json", str(output)]))["streams"]

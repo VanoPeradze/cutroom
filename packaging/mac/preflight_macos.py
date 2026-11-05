@@ -16,7 +16,15 @@ import sys
 import traceback
 
 ROOT = Path(__file__).resolve().parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 REQUIRED_MODULES = ("flask", "waitress", "numpy", "cv2", "faster_whisper", "cutroom")
+
+
+def _check_export_options(command: str) -> None:
+    from cutroom.ffmpeg_compat import export_capabilities
+
+    export_capabilities(command)
 
 
 def _capture(command: str, *arguments: str) -> str:
@@ -51,13 +59,7 @@ def check_system(*, only_overrides: bool = False) -> list[str]:
                 for encoder in ("libx264", "aac"):
                     if encoder not in encoders:
                         failures.append(f"FFmpeg at {command} lacks the {encoder} encoder.")
-                # The frozen application uses these options. FFmpeg 9 removed
-                # them, so codec support alone cannot establish compatibility.
-                help_text = _capture(command, "-hide_banner", "-h", "full")
-                options = set(re.findall(r"(?m)^\s*(-[A-Za-z0-9_]+)(?=\s|$)", help_text))
-                for option in ("-filter_complex_script", "-vsync"):
-                    if option not in options:
-                        failures.append(f"FFmpeg at {command} lacks {option}, required by this beta; use ffmpeg@7.")
+                _check_export_options(command)
         except (OSError, subprocess.SubprocessError, RuntimeError) as exc:
             failures.append(f"{label} at {command}: {exc}")
     return failures
