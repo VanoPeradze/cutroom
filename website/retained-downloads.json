@@ -202,5 +202,23 @@
     "bytes": 5573201,
     "sha256": "9527d231ee60bd3c2cf24df3d318f90699f96a3e3dd22551d9f33d186f299887",
     "url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.3-beta-20261102-ui1/SOURCE-538eef2.zip"
+  },
+  {
+    "filename": "CUTROOM-1.3-Beta-Windows-3caa23d.zip",
+    "bytes": 3557356,
+    "sha256": "04d3f59f916c9b5409ae1cdc3346f6c948093419744d51bdd80176ac6e175e99",
+    "url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.3-beta-20261103-ui2/CUTROOM-1.3-Beta-Windows-3caa23d.zip"
+  },
+  {
+    "filename": "CUTROOM-1.3-Beta-combined-3caa23d.zip",
+    "bytes": 7161102,
+    "sha256": "199cc6f1823c4bbced4558de0979ab458f3375901c74cfda6ff8449140747087",
+    "url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.3-beta-20261103-ui2/CUTROOM-1.3-Beta-combined-3caa23d.zip"
+  },
+  {
+    "filename": "SOURCE-3caa23d.zip",
+    "bytes": 5576142,
+    "sha256": "c9099dde5034716358ae934201d1f78cf57b1fd173d4114caa6cf216e3fa5e9e",
+    "url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.3-beta-20261103-ui2/SOURCE-3caa23d.zip"
   }
 ]
