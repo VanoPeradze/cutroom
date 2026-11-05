@@ -45,7 +45,8 @@ $requiredMarkers = @(
     'uv-aarch64-pc-windows-msvc.zip',
     'uv-i686-pc-windows-msvc.zip',
     'Gyan.FFmpeg',
-    'Ollama.Ollama'
+    'Resolve-Executable -Name "ollama.exe"',
+    'Start-OllamaServerIfNeeded'
 )
 foreach ($marker in $requiredMarkers) {
     if (-not $sourceText.Contains($marker)) {
@@ -56,7 +57,8 @@ foreach ($marker in $requiredMarkers) {
 $prohibitedMarkers = @(
     'UV_PYTHON_PREFERENCE = "only-managed"',
     '--managed-python',
-    'UV_NATIVE_TLS = "true"'
+    'UV_NATIVE_TLS = "true"',
+    'Install-WingetPackage -PackageId "Ollama.Ollama"'
 )
 foreach ($marker in $prohibitedMarkers) {
     if ($sourceText.Contains($marker)) {
