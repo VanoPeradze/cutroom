@@ -16,7 +16,7 @@ def download(release_path: Path, destination: Path, *, windows_baseline: Path | 
     release = json.loads(release_path.read_text(encoding="utf-8"))
     if (release.get("layout") != "windows-mac-folders-v1"
             or not isinstance(release.get("bytes"), int)
-            or not 0 < release["bytes"] <= 10 * 1024 * 1024
+            or not 0 < release["bytes"] <= 16 * 1024 * 1024
             or not re.fullmatch(r"[a-f0-9]{64}", release.get("sha256", ""))
             or not release.get("url", "").startswith("https://")):
         raise ValueError("Invalid published release metadata")
