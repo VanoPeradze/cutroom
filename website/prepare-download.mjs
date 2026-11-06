@@ -4,6 +4,11 @@ import {dirname, resolve, basename} from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 
 const root = dirname(fileURLToPath(import.meta.url));
+const maximumReleaseBytes = 16 * 1024 * 1024;
+
+export function assertArchiveSize(size) {
+  if (!Number.isSafeInteger(size) || size <= 0 || size > maximumReleaseBytes) throw new Error('Invalid release size');
+}
 
 function assertArchiveFilename(filename) {
   if (typeof filename !== 'string' || filename !== filename.trim() || basename(filename) !== filename
@@ -11,6 +16,7 @@ function assertArchiveFilename(filename) {
 }
 
 export function verifyArchive(bytes, release) {
+  assertArchiveSize(release.bytes);
   assertArchiveFilename(release.filename);
   if (bytes.length !== release.bytes) throw new Error('Release size mismatch; nothing was written');
   if (createHash('sha256').update(bytes).digest('hex') !== release.sha256) throw new Error('Release checksum mismatch; nothing was written');
@@ -74,7 +80,7 @@ export function assertPublishable(release) {
 }
 
 async function prepareOne(release, localPath) {
-  if (!Number.isSafeInteger(release.bytes) || release.bytes <= 0 || release.bytes > 10 * 1024 * 1024) throw new Error('Invalid release size');
+  assertArchiveSize(release.bytes);
   // Validate the filename before using it as a filesystem path.
   assertArchiveFilename(release.filename);
   const destination = resolve(root, 'public/downloads', release.filename);

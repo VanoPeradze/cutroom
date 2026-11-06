@@ -13,7 +13,9 @@ concurrency:
 
 jobs:
   scope:
-    if: ${{ github.event.pull_request.head.repo.full_name == 'VanoPeradze/cutroom' && (github.event.pull_request.head.ref == 'codex/cutroom-ui-20261101' || github.event.pull_request.head.ref == 'codex/cutroom-probe-recovery-20261106') }}
+    # The bounded probe-recovery candidate passed run 42291275917. Its exact
+    # bytes now use the normal pinned release gates; do not rebuild on promotion.
+    if: ${{ github.event.pull_request.head.repo.full_name == 'VanoPeradze/cutroom' && github.event.pull_request.head.ref == 'codex/cutroom-ui-20261101' }}
     runs-on: ubuntu-latest
     outputs:
       build_candidate: ${{ steps.scope.outputs.build_candidate }}

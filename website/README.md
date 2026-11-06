@@ -7,9 +7,11 @@ This folder is the maintained website source inside the public [CUTROOM reposito
 It does not run the editor, receive footage, process video, or handle user API keys.
 The previous separate website checkout is not needed for future updates.
 
-## 1.3 beta - 5 November 2026
+## 1.3 beta - 6 November 2026
 
-Product source is `7a14fc0923e2efa6587553fefbb4b3a38b326464`; the public release is [v1.3-beta-20261105-installfix1](https://github.com/VanoPeradze/cutroom/releases/tag/v1.3-beta-20261105-installfix1). Windows setup no longer waits for an automatic Ollama installation; optional local AI can be configured after opening the editor. The Mac download uses the `mac/` folder in the exact combined archive.
+Product source is `34113eb3ce3d30c4b66976c6ee9c51c9a1ac85c3`; the public release is [v1.3-beta-20261106-stability1](https://github.com/VanoPeradze/cutroom/releases/tag/v1.3-beta-20261106-stability1). Windows setup no longer waits for an automatic Ollama installation; optional local AI can be configured after opening the editor. The Mac download uses the `mac/` folder in the exact combined archive.
+
+Unavailable FFprobe now produces a repair-and-retry message instead of a misleading missing-project error. Failed replacements preserve saved source media and edits. The source-bound packages include the reviewed showcase artwork; no new editor design or Desktop rewrite is included.
 
 The exact Windows and combined archives passed automated checks on configured hosted Windows, Apple Silicon and Intel runners. Clean Windows installation, the packaged batch launcher, physical-device UI, Mac Finder/Gatekeeper, human listening, model inference and transcription acceptance remain unverified.
 
