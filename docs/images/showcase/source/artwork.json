@@ -1,0 +1,146 @@
+[
+  {
+    "id": "cover",
+    "n": "01",
+    "label": "THE LOCAL EDITING STUDIO",
+    "title": [
+      "Every cut.",
+      "Your call."
+    ],
+    "copy": [
+      "Video. Sound. Captions.",
+      "One place to shape your story."
+    ],
+    "accent": "#30d7c8",
+    "shot": "edit",
+    "detail": "FREE · OPEN SOURCE · 1.3 BETA"
+  },
+  {
+    "id": "home",
+    "n": "02",
+    "label": "START WITH YOUR FOOTAGE",
+    "title": [
+      "A story",
+      "starts here."
+    ],
+    "copy": [
+      "Shorts, YouTube or a manual edit.",
+      "Choose how you want to begin."
+    ],
+    "accent": "#c8bbec",
+    "shot": "home",
+    "detail": "YOUR PROJECT · YOUR PACE"
+  },
+  {
+    "id": "media",
+    "n": "03",
+    "label": "MEDIA WORKSPACE",
+    "title": [
+      "Your footage.",
+      "Within reach."
+    ],
+    "copy": [
+      "Recordings, music and voiceover.",
+      "Bring the pieces together."
+    ],
+    "accent": "#30d7c8",
+    "shot": "media",
+    "detail": "IMPORT · ORGANIZE · FIND"
+  },
+  {
+    "id": "edit",
+    "n": "04",
+    "label": "EDIT WORKSPACE",
+    "title": [
+      "Find the",
+      "right rhythm."
+    ],
+    "copy": [
+      "Trim clips. Shape the sequence.",
+      "Keep your timeline in view."
+    ],
+    "accent": "#30d7c8",
+    "shot": "edit",
+    "detail": "TRIM · ARRANGE · REFINE"
+  },
+  {
+    "id": "layout",
+    "n": "05",
+    "label": "LAYOUT WORKSPACE",
+    "title": [
+      "Frame it",
+      "your way."
+    ],
+    "copy": [
+      "Camera, screen or both.",
+      "Build the composition you need."
+    ],
+    "accent": "#b9b0e5",
+    "shot": "layout",
+    "detail": "COMPOSE · CROP · REFRAME"
+  },
+  {
+    "id": "audio",
+    "n": "06",
+    "label": "AUDIO WORKSPACE",
+    "title": [
+      "Give every",
+      "track space."
+    ],
+    "copy": [
+      "Balance voice, music and sound.",
+      "Keep the mix in your hands."
+    ],
+    "accent": "#61dcb6",
+    "shot": "audio",
+    "detail": "LEVELS · FADES · MIX"
+  },
+  {
+    "id": "captions",
+    "n": "07",
+    "label": "CAPTIONS WORKSPACE",
+    "title": [
+      "Make every",
+      "word count."
+    ],
+    "copy": [
+      "Edit the text. Adjust the style.",
+      "Let the story come through."
+    ],
+    "accent": "#c8bbec",
+    "shot": "captions",
+    "detail": "TEXT · TIMING · STYLE"
+  },
+  {
+    "id": "output",
+    "n": "08",
+    "label": "OUTPUT WORKSPACE",
+    "title": [
+      "The right",
+      "final frame."
+    ],
+    "copy": [
+      "Choose your format and quality.",
+      "Review your cut before sharing."
+    ],
+    "accent": "#e3c38d",
+    "shot": "output",
+    "detail": "FORMAT · QUALITY · EXPORT"
+  },
+  {
+    "id": "ai",
+    "n": "09",
+    "label": "OPTIONAL AI ASSISTANCE",
+    "title": [
+      "A helping hand.",
+      "You decide."
+    ],
+    "copy": [
+      "Local or compatible cloud options.",
+      "Manual editing is always available."
+    ],
+    "accent": "#c8bbec",
+    "shot": "ai",
+    "detail": "OPTIONAL · EDITABLE · YOUR CHOICE"
+  }
+]

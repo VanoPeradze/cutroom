@@ -12,6 +12,9 @@ const pairs = [
   ['LICENSE', 'website/public/downloads/LICENSE'],
   ['docs/USER_GUIDE_EN.md', 'website/public/downloads/USER_GUIDE_EN.md'],
   ['docs/USER_GUIDE_HE.md', 'website/public/downloads/USER_GUIDE_HE.md'],
+  ...['cover', 'home', 'media', 'edit', 'layout', 'audio', 'captions', 'output', 'ai', 'social'].map(name => [
+    `docs/images/showcase/${name}-20261106.jpg`, `website/public/assets/showcase/${name}-20261106.jpg`,
+  ]),
 ];
 
 async function fixture(t) {
@@ -38,23 +41,23 @@ async function listFiles(root, relative = '') {
   return files.sort();
 }
 
-test('copies only the six approved files byte-for-byte and is idempotent', async t => {
+test('copies only the approved files byte-for-byte and is idempotent', async t => {
   const root = await fixture(t);
   await put(root, 'docs/images/unapproved.png', 'not public');
   await put(root, 'private.txt', 'not public');
   const untouched = ['website/public/assets/favicon.svg', 'website/public/downloads/release.zip', 'website/public/downloads/release.zip.sha256'];
   for (const path of untouched) await put(root, path, 'untouched');
   await put(root, pairs[0][1], 'stale generated screenshot');
-  assert.deepEqual(await prepareAssets(root), {copied: 6, unchanged: 0});
+  assert.deepEqual(await prepareAssets(root), {copied: pairs.length, unchanged: 0});
   for (const [source, destination] of pairs) {
     assert.deepEqual(await readFile(join(root, destination)), await readFile(join(root, source)));
   }
   for (const path of untouched) assert.equal(await readFile(join(root, path), 'utf8'), 'untouched');
   assert.deepEqual(await listFiles(join(root, 'website/public')), [...pairs.map(([, path]) => path.replace('website/public/', '')), ...untouched.map(path => path.replace('website/public/', ''))].sort());
   const timestamps = await Promise.all(pairs.map(([, path]) => lstat(join(root, path)).then(info => info.mtimeMs)));
-  assert.deepEqual(await prepareAssets(root), {copied: 0, unchanged: 6});
+  assert.deepEqual(await prepareAssets(root), {copied: 0, unchanged: pairs.length});
   assert.deepEqual(await Promise.all(pairs.map(([, path]) => lstat(join(root, path)).then(info => info.mtimeMs))), timestamps);
-  assert.deepEqual(await prepareAssets(root, {check: true}), {copied: 0, unchanged: 6});
+  assert.deepEqual(await prepareAssets(root, {check: true}), {copied: 0, unchanged: pairs.length});
 });
 
 test('check mode reports missing or stale assets without creating or changing them', async t => {

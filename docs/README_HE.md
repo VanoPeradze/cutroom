@@ -8,9 +8,9 @@
 
 [האתר](https://cutroom-studio.expo.app/) · [הורדה ל־Windows](https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261019-hotfix1/CUTROOM-1.2-Beta-Windows-20261019-hotfix1.zip) · [הורדה ל־Mac](https://github.com/VanoPeradze/cutroom/releases/download/v1.2-beta-20261019-hotfix1/CUTROOM-1.2-Beta-Mac-20261019-hotfix1.zip) · [English](../README.md)
 
-[![עורך CUTROOM עם חומר הדגמה מקורי](images/readme/studio-edit-20261019.png)](images/readme/studio-edit-20261019.png)
+[![CUTROOM — תצוגת מוצר עם צילום העורך האמיתי](images/showcase/cover-20261106.jpg)](images/readme/studio-edit-20261019.png)
 
-צילום אמיתי של העורך מ־**19 באוקטובר 2026**, עם כותרת STUDIO SESSION ואודיו שנוצרו במיוחד להדגמה. הוא מציג את הממשק, ולא מוכיח איכות עריכת AI.
+תמונת המוצר ממסגרת צילום מקורי של העורך מ־**19 באוקטובר 2026**, עם כותרת STUDIO SESSION ואודיו שנוצרו במיוחד להדגמה. לחיצה פותחת את צילום המסך המקורי. זו תצוגת ממשק, לא הוכחה לאיכות עריכת AI. [מקור התמונות](images/showcase/README.md)
 
 ## מה יש בעורך?
 
