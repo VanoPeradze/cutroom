@@ -29,6 +29,8 @@ foreach ($row in $artRows) {
   $graphics.DrawImage($artBackground,0,0,1600,900)
   $veil=[Drawing.SolidBrush]::new([Drawing.Color]::FromArgb(110,10,17,20));$graphics.FillRectangle($veil,0,0,1600,900);$veil.Dispose()
   Logo 64 56
+  $headlineFont=[Drawing.Font]::new('Segoe UI',72,[Drawing.FontStyle]::Bold,[Drawing.GraphicsUnit]::Pixel)
+  try { foreach($line in $row.title) { if($graphics.MeasureString($line,$headlineFont,[Drawing.PointF]::Empty,[Drawing.StringFormat]::GenericTypographic).Width -gt 520) { throw "Headline overlaps screenshot: $($row.id) / $line" } } } finally { $headlineFont.Dispose() }
   Text 'CUTROOM' 116 49 31 '#f3f1e9' $true
   Text ('THE WORKSPACE SERIES / '+$row.n) 1210 59 14 '#a8b9bb'
   Rect 64 213 26 3 $row.accent
