@@ -104,14 +104,19 @@ jobs:
         run: |
           & (Join-Path $env:CUTROOM_EXTRACTED_APP 'scripts\verify_windows_installer.ps1')
           if ($LASTEXITCODE -ne 0) { throw 'Packaged installer source validation failed' }
-      - name: Run unmodified setup only when it cannot install or start Ollama
+      - name: Test optional AI and the packaged installer verifier
+        shell: pwsh
+        run: |
+          node --test (Join-Path $env:CUTROOM_EXTRACTED_APP 'tests\windows_installer.test.cjs')
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged installer regression tests failed' }
+      - name: Run unmodified setup only when it cannot start Ollama
         timeout-minutes: 15
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
           $setup = Join-Path $env:CUTROOM_EXTRACTED_APP 'setup_windows.ps1'
           $setupHash = (Get-FileHash -LiteralPath $setup -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($setupHash -ne '7dff875f5ded0bdd78cef3560941c02188457cd6a9ef9befeca9d44e275ba633') { throw 'Setup changed since its optional installs were reviewed' }
+          if ($setupHash -ne '2aa086a4b1e4922f85c27023e3053cd46a79a0a64d5bbaebf3aeb230b77fae3e') { throw 'Setup changed since its optional installs were reviewed' }
           $config = Get-Content -LiteralPath (Join-Path $env:CUTROOM_EXTRACTED_APP 'config.json') -Raw | ConvertFrom-Json
           if ($config.ai.download_models_on_setup) { throw 'Model downloads must remain disabled' }
           if ((Get-Command ffmpeg.exe).Source -ne $env:CUTROOM_EXPECTED_FFMPEG) { throw 'Unexpected FFmpeg on PATH' }
@@ -136,9 +141,9 @@ jobs:
             return $false
           }
           $result = Join-Path $env:RUNNER_TEMP 'cutroom-setup-result.txt'
-          if ((Test-SetupExecutable 'winget.exe') -or (Test-SetupExecutable 'ollama.exe')) {
-            'not_run_optional_ollama_could_be_installed_or_started' | Set-Content -LiteralPath $result -Encoding utf8
-            Write-Host 'Setup not run because it could install or start an unapproved optional service.'
+          if (Test-SetupExecutable 'ollama.exe') {
+            'not_run_optional_ollama_could_be_started' | Set-Content -LiteralPath $result -Encoding utf8
+            Write-Host 'Setup not run because it could start an unapproved optional service.'
           } else {
             python -c 'import sys; assert sys.version_info[:2] == (3,12)'
             if ($LASTEXITCODE -ne 0) { throw 'Expected Python 3.12 is unavailable' }
@@ -163,6 +168,8 @@ jobs:
           Set-Location -LiteralPath $env:CUTROOM_EXTRACTED_APP
           & $env:CUTROOM_TEST_PYTHON scripts/preflight.py
           if ($LASTEXITCODE -ne 0) { throw 'Packaged runtime preflight failed' }
+          & $env:CUTROOM_TEST_PYTHON scripts/windows_runtime.py preflight
+          if ($LASTEXITCODE -ne 0) { throw 'Windows launcher runtime preflight failed' }
       - name: Run frontend tests from the extracted package
         timeout-minutes: 5
         shell: pwsh
@@ -244,6 +251,22 @@ jobs:
           ref: ${{ github.event.pull_request.head.ref }}
           fetch-depth: 0
           persist-credentials: false
+      - name: Wait for the exact candidate review record
+        shell: bash
+        run: |
+          set -euo pipefail
+          record="packaging/review-candidates/ci-${TESTED_HEAD_SHA:0:7}.json"
+          for attempt in $(seq 1 12); do
+            git fetch --no-tags origin "${{ github.event.pull_request.head.ref }}"
+            head="$(git rev-parse FETCH_HEAD)"
+            if [[ "$head" != "$TESTED_HEAD_SHA" ]] && git cat-file -e "$head:$record" 2>/dev/null; then
+              echo "Review record found; its exact bytes and ancestry are checked in the next step."
+              exit 0
+            fi
+            echo "Waiting for the private review record ($attempt/12)."
+            sleep 10
+          done
+          echo "Review record not available; native review remains pending."
       - name: Download this run's immutable review inputs
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
@@ -255,7 +278,7 @@ jobs:
         run: |
           set -euo pipefail
           record="packaging/review-candidates/ci-${TESTED_HEAD_SHA:0:7}.json"
-          head="$(git rev-parse HEAD)"
+          head="$(git rev-parse FETCH_HEAD)"
           if [[ "$head" == "$TESTED_HEAD_SHA" && ! -e "$record" ]]; then
             echo 'ready=false' >> "$GITHUB_OUTPUT"
             echo 'The exact private review record has not been committed yet; native review is pending.'
@@ -263,7 +286,7 @@ jobs:
           fi
           git merge-base --is-ancestor "$TESTED_HEAD_SHA" "$head"
           [[ "$(git diff --name-only "$TESTED_HEAD_SHA" "$head")" == "$record" ]]
-          git show "HEAD:$record" | cmp - "$RUNNER_TEMP/cutroom-private-review/review-record.json"
+          git show "$head:$record" | cmp - "$RUNNER_TEMP/cutroom-private-review/review-record.json"
           echo 'ready=true' >> "$GITHUB_OUTPUT"
           echo "record_commit=$head" >> "$GITHUB_OUTPUT"
 
