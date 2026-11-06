@@ -11,7 +11,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from .media import VIDEO_EXTENSIONS, run_command
+from .media import VIDEO_EXTENSIONS, MediaProbeUnavailableError, run_command
 from .jobs import JobCancelled
 from .sequence import editor_sequence_snapshot, materialize_sequence
 from .source_tracks import MAX_SEQUENCE_SECONDS
@@ -96,10 +96,13 @@ def safe_asset_path(project_dir: Path, relative: Any) -> Path:
 
 
 def probe_asset(path: Path, kind: str, settings, *, cancel_check=None, include_codecs=False) -> dict[str, Any]:
-    result = run_command([
-        settings.ffprobe, "-v", "error", "-protocol_whitelist", "file,pipe", "-show_format", "-show_streams",
-        "-print_format", "json", str(path),
-    ], timeout=30, **({"cancel_check": cancel_check} if cancel_check is not None else {}))
+    try:
+        result = run_command([
+            settings.ffprobe, "-v", "error", "-protocol_whitelist", "file,pipe", "-show_format", "-show_streams",
+            "-print_format", "json", str(path),
+        ], timeout=30, **({"cancel_check": cancel_check} if cancel_check is not None else {}))
+    except (FileNotFoundError, PermissionError) as exc:
+        raise MediaProbeUnavailableError() from exc
     data = json.loads(result.stdout)
     streams = data.get("streams") or []
     video = next((row for row in streams if row.get("codec_type") == "video" and not (row.get("disposition") or {}).get("attached_pic")), None)

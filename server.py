@@ -61,7 +61,7 @@ from cutroom.captions import (
 )
 from cutroom.jobs import JobAdmissionError, JobCancelled, JobContext, JobManager
 from cutroom.frame_rates import validate_export_fps, validate_export_resolution
-from cutroom.media import VIDEO_EXTENSIONS, UploadTooLargeError, copy_upload, create_proxy, extract_thumbnails, probe_media
+from cutroom.media import VIDEO_EXTENSIONS, MediaProbeUnavailableError, UploadTooLargeError, copy_upload, create_proxy, extract_thumbnails, probe_media
 from cutroom.media_library import (
     ASSET_ID_RE, MAX_ASSETS, MEDIA_ACTION_FIELDS, MediaLibraryError,
     asset_kind, asset_size_limit, prepare_asset, probe_asset, safe_asset_path,
@@ -923,6 +923,13 @@ def create_app(settings: Settings | None = None) -> Flask:
             "message": str(error),
             "active_job_id": error.active_job_id,
         }), status
+
+    @app.errorhandler(MediaProbeUnavailableError)
+    def handle_unavailable_media_probe(error: MediaProbeUnavailableError):
+        return jsonify({
+            "error": "media_probe_unavailable",
+            "message": str(error),
+        }), 503
 
     @app.errorhandler(FileNotFoundError)
     def handle_missing_local_resource(error: FileNotFoundError):
