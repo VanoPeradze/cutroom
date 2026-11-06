@@ -21,6 +21,16 @@ BROWSER_VIDEO_CODECS = {"h264", "vp8", "vp9", "av1"}
 BROWSER_AUDIO_CODECS = {"aac", "mp3", "opus", "vorbis"}
 
 
+class MediaProbeUnavailableError(RuntimeError):
+    """The metadata reader could not start, rather than a user file disappearing."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "FFprobe is unavailable. Check the installation guide, repair CUTROOM, "
+            "then restart it and retry the import."
+        )
+
+
 def _stop_process(process: subprocess.Popen) -> None:
     if process.poll() is not None:
         return
@@ -117,7 +127,12 @@ def probe_media(path: Path, settings: Settings, *, original_filename: str | None
     command = [
         settings.ffprobe, "-v", "error", "-show_streams", "-show_format", "-of", "json", str(path)
     ]
-    result = run_command(command, timeout=45)
+    try:
+        result = run_command(command, timeout=45)
+    except (FileNotFoundError, PermissionError) as exc:
+        # Only launch failures belong here; invalid media and missing input files
+        # still follow ffprobe's nonzero-exit path.
+        raise MediaProbeUnavailableError() from exc
     payload = json.loads(result.stdout)
     streams = payload.get("streams", [])
     video = next((stream for stream in streams if stream.get("codec_type") == "video"), None)

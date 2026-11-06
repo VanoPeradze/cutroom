@@ -1,13 +1,28 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
-import {verifyArchive, downloadEntries, assertPublishable} from './prepare-download.mjs';
+import {verifyArchive, downloadEntries, assertPublishable, assertArchiveSize} from './prepare-download.mjs';
 
 const bytes = Buffer.from('synthetic archive fixture');
 const release = {filename: 'CUTROOM-test.zip', bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex')};
 test('accepts the exact approved bytes', () => assert.equal(verifyArchive(bytes, release), bytes));
 test('rejects wrong size', () => assert.throws(() => verifyArchive(Buffer.alloc(1), release), /size mismatch/));
 test('rejects same-size corruption', () => assert.throws(() => verifyArchive(Buffer.alloc(bytes.length), release), /checksum mismatch/));
+test('showcase-size packages retain exact size and checksum verification', () => {
+  const largerBytes = Buffer.alloc(10 * 1024 * 1024 + 1, 0x5a);
+  const largerRelease = {...release, bytes: largerBytes.length, sha256: createHash('sha256').update(largerBytes).digest('hex')};
+  assert.equal(verifyArchive(largerBytes, largerRelease), largerBytes);
+  largerBytes[largerBytes.length - 1] ^= 1;
+  assert.throws(() => verifyArchive(largerBytes, largerRelease), /checksum mismatch/);
+  assert.throws(() => verifyArchive(largerBytes.subarray(1), largerRelease), /size mismatch/);
+});
+test('release sizes remain bounded to 16 MiB before reading or downloading', () => {
+  assert.doesNotThrow(() => assertArchiveSize(16 * 1024 * 1024));
+  for (const size of [16 * 1024 * 1024 + 1, 0, -1, 1.5, NaN, Infinity, '1024', undefined]) {
+    assert.throws(() => assertArchiveSize(size), /Invalid release size/);
+    assert.throws(() => verifyArchive(bytes, {...release, bytes: size}), /Invalid release size/);
+  }
+});
 test('rejects unsafe release paths', () => {
   for (const filename of ['../CUTROOM-test.zip', '/CUTROOM-test.zip', '..\\CUTROOM-test.zip', 'CUTROOM-..\\test.zip', 'SOURCE-../test.zip', 'other.zip']) {
     assert.throws(() => verifyArchive(bytes, {...release, filename}), /filename/);
