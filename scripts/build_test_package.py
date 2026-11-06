@@ -37,6 +37,7 @@ DOC_FILES = (
     "docs/CONTRIBUTING.md", "docs/AI_CONNECTIONS.md", "docs/PUBLISHING.md", "docs/PLATFORMS.md",
     "docs/EDITOR_ROADMAP.md", "docs/STABILIZATION.md", "docs/CHROMA_KEY.md",
     "docs/USER_GUIDE_EN.md", "docs/USER_GUIDE_HE.md", "docs/SHOWCASE_EN.md", "docs/SHOWCASE_HE.md",
+    "docs/images/showcase/README.md",
 )
 # Only reviewed, purpose-made app screenshots belong in the tester package.
 # Missing captures fail the build rather than silently shipping broken guide links.
@@ -51,6 +52,16 @@ IMAGE_FILES = (
     "docs/images/readme/studio-audio-20261019.png",
     "docs/images/readme/studio-captions-20261019.png",
     "docs/images/readme/studio-output-20261019.png",
+    "docs/images/showcase/cover-20261106.jpg",
+    "docs/images/showcase/edit-20261106.jpg",
+    "docs/images/showcase/home-20261106.jpg",
+    "docs/images/showcase/media-20261106.jpg",
+    "docs/images/showcase/layout-20261106.jpg",
+    "docs/images/showcase/audio-20261106.jpg",
+    "docs/images/showcase/captions-20261106.jpg",
+    "docs/images/showcase/output-20261106.jpg",
+    "docs/images/showcase/ai-20261106.jpg",
+    "docs/images/showcase/social-20261106.jpg",
 )
 PACKAGING_FILES = (
     "packaging/windows/START CUTROOM.bat",
