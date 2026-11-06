@@ -11,6 +11,9 @@ const assets = [
   ['LICENSE', 'website/public/downloads/LICENSE'],
   ['docs/USER_GUIDE_EN.md', 'website/public/downloads/USER_GUIDE_EN.md'],
   ['docs/USER_GUIDE_HE.md', 'website/public/downloads/USER_GUIDE_HE.md'],
+  ...['cover', 'home', 'media', 'edit', 'layout', 'audio', 'captions', 'output', 'ai', 'social'].map(name => [
+    `docs/images/showcase/${name}-20261106.jpg`, `website/public/assets/showcase/${name}-20261106.jpg`,
+  ]),
 ];
 
 async function inspectPath(root, relative, optional = false) {

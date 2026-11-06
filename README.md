@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/images/readme-banner.svg" alt="CUTROOM — Hours of footage. Minutes to a great clip." width="960">
+  <a href="docs/images/readme/studio-edit-20261019.png"><img src="docs/images/showcase/cover-20261106.jpg" alt="CUTROOM — Every cut. Your call. Video, sound and captions, in one local editing studio." width="1200"></a>
 </p>
 
 <p align="center">
@@ -24,11 +24,7 @@
   <a href="docs/README_HE.md">Hebrew README</a>
 </p>
 
-<p align="center">
-  <a href="docs/images/readme/studio-edit-20261019.png"><img src="docs/images/readme/studio-edit-20261019.png" alt="CUTROOM studio: media library, preview with transport controls, Edit tools and a timeline with track headers" width="1200"></a>
-</p>
-
-Captured on **19 October 2026**, the screenshots show the actual editor with an original generated STUDIO SESSION demo and procedural audio. They demonstrate the interface, not AI editing quality.
+The workspace artwork frames **unaltered screenshots captured on 19 October 2026**, with an original STUDIO SESSION demo and procedural audio. Select any image to open the original screenshot. These images demonstrate the interface, not AI editing quality. [Artwork and provenance](docs/images/showcase/README.md)
 
 ## Contents
 
@@ -62,24 +58,24 @@ CUTROOM 1.3 Beta gives added videos their detected source sound by default and e
 
 <table>
   <tr>
-    <td width="50%"><a href="docs/images/readme/studio-home-20261019.png"><img src="docs/images/readme/studio-home-20261019.png" alt="Home: start a Short or Reel, a YouTube video or a manual edit"></a></td>
-    <td width="50%"><a href="docs/images/readme/studio-media-20261019.png"><img src="docs/images/readme/studio-media-20261019.png" alt="Media workspace: source recordings and project media in the actual editor"></a></td>
+    <td width="50%"><a href="docs/images/readme/studio-home-20261019.png"><img src="docs/images/showcase/home-20261106.jpg" alt="Home: start a Short or Reel, a YouTube video or a manual edit"></a></td>
+    <td width="50%"><a href="docs/images/readme/studio-media-20261019.png"><img src="docs/images/showcase/media-20261106.jpg" alt="Media workspace: source recordings and project media in the actual editor"></a></td>
   </tr>
   <tr>
     <td align="center"><sub>Home</sub></td>
     <td align="center"><sub>Media</sub></td>
   </tr>
   <tr>
-    <td><a href="docs/images/readme/studio-layout-20261019.png"><img src="docs/images/readme/studio-layout-20261019.png" alt="Layout workspace: composition and framing controls"></a></td>
-    <td><a href="docs/images/readme/studio-audio-20261019.png"><img src="docs/images/readme/studio-audio-20261019.png" alt="Audio workspace: aligned channel faders, gain values and live meters"></a></td>
+    <td><a href="docs/images/readme/studio-layout-20261019.png"><img src="docs/images/showcase/layout-20261106.jpg" alt="Layout workspace: composition and framing controls"></a></td>
+    <td><a href="docs/images/readme/studio-audio-20261019.png"><img src="docs/images/showcase/audio-20261106.jpg" alt="Audio workspace: aligned channel faders, gain values and live meters"></a></td>
   </tr>
   <tr>
     <td align="center"><sub>Layout</sub></td>
     <td align="center"><sub>Audio</sub></td>
   </tr>
   <tr>
-    <td><a href="docs/images/readme/studio-captions-20261019.png"><img src="docs/images/readme/studio-captions-20261019.png" alt="Captions workspace: editable text and caption style controls"></a></td>
-    <td><a href="docs/images/readme/studio-output-20261019.png"><img src="docs/images/readme/studio-output-20261019.png" alt="Output workspace: output presets, resolution, frame rate and quality"></a></td>
+    <td><a href="docs/images/readme/studio-captions-20261019.png"><img src="docs/images/showcase/captions-20261106.jpg" alt="Captions workspace: editable text and caption style controls"></a></td>
+    <td><a href="docs/images/readme/studio-output-20261019.png"><img src="docs/images/showcase/output-20261106.jpg" alt="Output workspace: output presets, resolution, frame rate and quality"></a></td>
   </tr>
   <tr>
     <td align="center"><sub>Captions</sub></td>

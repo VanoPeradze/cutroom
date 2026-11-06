@@ -14,23 +14,23 @@ Local AI needs model downloads and suitable computer resources. Optional online 
 
 ## A look inside
 
-These are real screenshots of the beta interface. Editor imagery is demonstration footage, not a claim about AI-generated editorial quality.
+These showcase cards frame unaltered screenshots of the beta interface. Select a card to open its original screenshot. The decorative background is generated artwork; the interface is not AI-redrawn. Editor imagery is demonstration footage, not a claim about AI editing quality. [Image provenance](images/showcase/README.md)
 
 ### A clear starting point
 
-![CUTROOM welcome screen with guided editing choices](images/welcome.png)
+[![CUTROOM welcome screen with guided editing choices](images/showcase/home-20261106.jpg)](images/welcome.png)
 
 Choose the video you want to make, understand the process, and return to saved projects.
 
 ### An edit you can make your own
 
-![CUTROOM editor showing sample footage, editable clips and video controls](images/editor.png)
+[![CUTROOM editor showing sample footage, editable clips and video controls](images/showcase/edit-20261106.jpg)](images/editor.png)
 
 Split, move, trim and restore clips. Control the layout of camera and screen, then check the final video before sharing.
 
 ### AI with a choice
 
-![CUTROOM AI connection panel with local and optional cloud choices](images/ai-options.png)
+[![CUTROOM AI connection panel with local and optional cloud choices](images/showcase/ai-20261106.jpg)](images/ai-options.png)
 
 See what local AI needs, or connect your own supported cloud account. CUTROOM stays free and open source; third-party services have their own terms.
 

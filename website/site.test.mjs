@@ -216,14 +216,13 @@ test('the concise introduction shows an authentic bilingual dark editor preview'
   lines.forEach(line => { assert.match(line[1], /data-he="[^"]*[\u0590-\u05ff]/); assert.match(line[2], /[A-Za-z]/); });
   const image = hero.match(/<img\b[^>]*id="editorImage"[^>]*>/)?.[0];
   assert.ok(image, 'The first section must show the editor');
-  assert.match(image, /src="\/assets\/studio-edit\.png\?v=[a-zA-Z0-9-]+"/);
+  assert.match(image, /src="\/assets\/showcase\/cover-20261106\.jpg"/);
   assert.match(image, /width="1600" height="900"/);
   assert.match(image, /alt="[^"]+"/);
   assert.match(image, /data-he-alt="[^"]*[\u0590-\u05ff]/);
   assert.match(image, /fetchpriority="high"/);
-  const imageUrl = image.match(/src="([^"]+)"/)[1];
-  assert.ok(region('dialog', 'imageDialog').includes(`src="${imageUrl}"`), 'Enlargement must show the same real screenshot');
-  assert.match(hero, /Actual editor · Captured 19 October 2026/);
+  assert.ok(region('dialog', 'imageDialog').includes('src="/assets/studio-edit.png?v=20261019"'), 'Enlargement preserves the original screenshot, without artwork framing');
+  assert.match(hero, /Interface captured 19 October 2026/);
   assert.match(hero, /No third-party footage or real person is shown\./);
   assert.doesNotMatch(html, /(?:welcome|ai-options)\.png|\bdata-shot=|<table\b/);
 });
@@ -332,7 +331,11 @@ test('each workspace has a local, full-size, bilingual product screenshot', () =
   const shots = [...html.matchAll(/<img\b[^>]*class="workspace-shot"[^>]*>/g)];
   assert.equal(shots.length, 6);
   for (const [index, name] of ['media', 'edit', 'layout', 'audio', 'captions', 'output'].entries()) {
-    assert.ok(shots[index][0].includes(`/assets/studio-${name}.png?`));
+    assert.ok(shots[index][0].includes(`/assets/showcase/${name}-20261106.jpg`));
+    assert.equal(linksTo(html, `/assets/studio-${name}.png?v=20261019`).length, 1, 'Keep a full-size original available');
+    const artwork = readFileSync(new URL(`./public/assets/showcase/${name}-20261106.jpg`, import.meta.url));
+    assert.equal(artwork.readUInt16BE(0), 0xffd8);
+    assert.ok(artwork.length < 300_000, 'Keep thumbnails lightweight');
     assert.match(shots[index][0], /data-he-alt="[^"]*[\u0590-\u05ff]/);
     assert.match(shots[index][0], /loading="lazy"/);
     const png = readFileSync(new URL(`./public/assets/studio-${name}.png`, import.meta.url));
@@ -341,6 +344,30 @@ test('each workspace has a local, full-size, bilingual product screenshot', () =
     assert.equal(png.readUInt32BE(20), 900);
   }
   assert.doesNotMatch(html, /class="(?:art|panel-art)\b/);
+});
+
+test('sharing metadata points to the actual lightweight 1200 by 630 image', () => {
+  const url = 'https://cutroom-studio.expo.app/assets/showcase/social-20261106.jpg';
+  assert.match(html, /name="twitter:card" content="summary_large_image"/);
+  for (const field of ['property="og:image"', 'name="twitter:image"']) {
+    assert.ok(html.includes(`${field} content="${url}"`));
+  }
+  assert.match(html, /property="og:image:width" content="1200"/);
+  assert.match(html, /property="og:image:height" content="630"/);
+  const bytes = readFileSync(new URL('./public/assets/showcase/social-20261106.jpg', import.meta.url));
+  assert.equal(bytes.readUInt16BE(0), 0xffd8);
+  let dimensions;
+  for (let offset = 2; offset + 8 < bytes.length;) {
+    assert.equal(bytes[offset], 0xff);
+    const marker = bytes[offset + 1], length = bytes.readUInt16BE(offset + 2);
+    if ([0xc0, 0xc1, 0xc2].includes(marker)) {
+      dimensions = [bytes.readUInt16BE(offset + 7), bytes.readUInt16BE(offset + 5)];
+      break;
+    }
+    offset += 2 + length;
+  }
+  assert.deepEqual(dimensions, [1200, 630]);
+  assert.ok(bytes.length < 200_000, 'Social preview should stay lightweight');
 });
 
 test('inline styles stay out of the strict CSP', () => {

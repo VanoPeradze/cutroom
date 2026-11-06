@@ -177,6 +177,8 @@ h2{font-family:var(--display);font-size:clamp(34px,4vw,56px);line-height:1.07;fo
 html[dir=rtl] .eyebrow{letter-spacing:0}
 html[dir=rtl] h1{font-size:clamp(52px,5.8vw,88px);letter-spacing:-.045em;line-height:1.12}
 html[dir=rtl] h2{letter-spacing:-.02em}
+.workspace-image-link{display:block;line-height:0;border-radius:8px}
+.workspace-image-link .workspace-shot{display:block}
 .workspace-shot,.shot-button img,.image-dialog img{direction:ltr}
 @media(min-width:1536px){.hero{padding-top:64px}.hero-lead{gap:112px}.hero-action{max-width:460px}}
 @media(max-width:1023px){
