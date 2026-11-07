@@ -264,14 +264,14 @@ jobs:
         run: |
           set -euo pipefail
           record="packaging/review-candidates/ci-${TESTED_HEAD_SHA:0:7}.json"
-          for attempt in $(seq 1 12); do
+          for attempt in $(seq 1 36); do
             git fetch --no-tags origin "${{ github.event.pull_request.head.ref }}"
             head="$(git rev-parse FETCH_HEAD)"
             if [[ "$head" != "$TESTED_HEAD_SHA" ]] && git cat-file -e "$head:$record" 2>/dev/null; then
               echo "Review record found; its exact bytes and ancestry are checked in the next step."
               exit 0
             fi
-            echo "Waiting for the private review record ($attempt/12)."
+            echo "Waiting for the private review record ($attempt/36)."
             sleep 10
           done
           echo "Review record not available; native review remains pending."

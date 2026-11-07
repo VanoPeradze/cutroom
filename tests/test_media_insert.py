@@ -116,17 +116,38 @@ def test_real_gap_before_independent_layers_closes_without_desynchronizing(unloc
         from cutroom.sequence import _slice_rows
         for slot,rows in p['manual']['source_tracks'].items():
             p['manual']['source_tracks'][slot]=[
-                *_slice_rows(rows,0.,1.,slot=slot),*_slice_rows(rows,2.,16.25,at=2.,slot=slot)]
+                # Leave the edited 1–2s caption owned by its source clip.
+                *_slice_rows(rows,0.,3.,slot=slot),*_slice_rows(rows,4.,16.25,at=4.,slot=slot)]
     store.update(pid,add_gap)
     before=store.load(pid)
+    captions=project_caption_items(before,aligned=False)
+    assert captions[0]['text']=='Local caption wording'
     result=close_gaps(unlocked)
     assert result.status_code==200,result.get_json()
     after=store.load(pid)
+    assert project_caption_items(after,aligned=False)==captions
     assert after['manual']['sequence']['duration']==15.25
     assert after['manual']['media_clips']==[
         {**row,'start':row['start']-1,'end':row['end']-1}
         for row in before['manual']['media_clips']]
     assert after['sources']==before['sources'] and after['analysis']==before['analysis']
+
+
+def test_gap_with_orphaned_caption_edit_rejects_without_changing_layers(unlocked):
+    _,_,store,pid=unlocked
+    assert insert(unlocked).status_code==200
+    def remove_caption_owner(p):
+        from cutroom.sequence import _slice_rows
+        # Direct fixture mutation removes the speech but leaves its reviewed edit.
+        for slot,rows in p['manual']['source_tracks'].items():
+            p['manual']['source_tracks'][slot]=[
+                *_slice_rows(rows,0.,1.,slot=slot),*_slice_rows(rows,2.,16.25,at=2.,slot=slot)]
+    store.update(pid,remove_caption_owner)
+    before=store.state_path(pid).read_bytes()
+    result=close_gaps(unlocked)
+    assert result.status_code==400,result.get_json()
+    assert 'uncertain ownership' in result.get_json()['message']
+    assert store.state_path(pid).read_bytes()==before
 
 
 def test_empty_tail_after_independent_layers_can_still_close(unlocked):
