@@ -58,8 +58,11 @@ function hasBetaNativeProvenance(release) {
     && ['arm64', 'x64'].every(architecture => {
       const checks = native.architectures?.[architecture];
       return checks?.status === 'passed' && checks.skipped === 0
-        && ['offline_checks_passed', 'feature_tests_passed', 'required_cases_passed'].every(key => Number.isSafeInteger(checks[key]) && checks[key] > 0)
-        && ['fresh_app_install', 'missing_pip_recovery', 'restart_persistence'].every(key => checks[key] === 'passed');
+        && ['feature_tests_passed', 'required_cases_passed'].every(key => Number.isSafeInteger(checks[key]) && checks[key] > 0)
+        && ['fresh_app_install', 'missing_pip_recovery', 'restart_persistence'].every(key => checks[key] === 'passed')
+        && ["status", "launcher_health_and_api", "restart_persistence", "repeat_launch", "different_data_port_collision", "source_audio_and_caption_checks", "offline_ready_setup", "installed_packages_unchanged"].every(key => checks.installation_checks?.[key] === 'passed')
+        && checks.installation_checks?.unicode_and_spaces_path === true
+        && checks.combined_archive_sha256 === release.sha256;
     });
 }
 

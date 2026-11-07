@@ -13,9 +13,10 @@ concurrency:
 
 jobs:
   scope:
-    # Qualify this bounded editor/Chrome/gallery candidate on hosted runners.
-    # Preserve the exact resulting archives for subsequent release promotion.
-    if: ${{ github.event.pull_request.head.repo.full_name == 'VanoPeradze/cutroom' && github.event.pull_request.head.ref == 'codex/editor-gallery-candidate-20261107' }}
+    # Candidate 2dacba3 passed Windows and both native Mac architectures in run 42406800822.
+    # Freeze those exact artifacts; metadata-only promotion must not create a new candidate.
+    # The ordinary repository, security and macOS release gates remain enabled.
+    if: ${{ false }}
     runs-on: ubuntu-latest
     outputs:
       build_candidate: ${{ steps.scope.outputs.build_candidate }}

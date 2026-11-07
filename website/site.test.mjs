@@ -45,9 +45,9 @@ test('the 1.3 beta uses exact Windows, shared Mac/combined and source downloads'
     assert.match(mirror[0][2], /mirror/i);
     assert.ok(linksTo(html, `/downloads/${entry.filename}.sha256`).length >= 1);
   }
-  assert.equal(release.filename, 'CUTROOM-1.3-Beta-combined-34113eb.zip');
-  assert.equal(release.platforms.windows.filename, 'CUTROOM-1.3-Beta-Windows-34113eb.zip');
-  assert.equal(release.platforms.mac.filename, 'CUTROOM-1.3-Beta-combined-34113eb.zip');
+  assert.equal(release.filename, 'CUTROOM-1.3-Beta-combined-2dacba3.zip');
+  assert.equal(release.platforms.windows.filename, 'CUTROOM-1.3-Beta-Windows-2dacba3.zip');
+  assert.equal(release.platforms.mac.filename, 'CUTROOM-1.3-Beta-combined-2dacba3.zip');
   assert.equal(release.platforms.mac.filename, release.filename);
   assert.equal(release.platforms.mac.folder,'mac', 'Mac uses the shared combined archive mac folder');
   assert.equal(linksTo(html, release.url).length, 2); // Optional combined ZIP help link, separate from the Mac button.
@@ -56,7 +56,7 @@ test('the 1.3 beta uses exact Windows, shared Mac/combined and source downloads'
   assert.match(html, /Mac uses the combined ZIP\. Extract it, open mac, then run START CUTROOM\.command beside App\./);
   assert.match(region('details', 'install-help'), /The optional combined ZIP has exactly two folders: windows and mac/);
   const source = release.source_archive;
-  assert.equal(source.filename, 'SOURCE-34113eb.zip');
+  assert.equal(source.filename, 'SOURCE-2dacba3.zip');
   for (const url of [source.url, `/downloads/${source.filename}`, `/downloads/${source.filename}.sha256`]) assert.equal(linksTo(html,url).length,1);
   assert.equal(downloadEntries(release).length,3);
   assert.match(html, /1\.3 Beta · Workspace &amp; sound/);
@@ -73,8 +73,8 @@ test('the 1.3 beta uses exact Windows, shared Mac/combined and source downloads'
 
 test('download metadata pins a dated release and preserves Expo mirrors and provenance', () => {
   const release = JSON.parse(readFileSync(new URL('./release.json', import.meta.url), 'utf8'));
-  assert.equal(release.github_release.tag, 'v1.3-beta-20261106-stability1');
-  assert.equal(release.github_release.previous_public_tag, 'v1.3-beta-20261105-installfix1');
+  assert.equal(release.github_release.tag, 'v1.3-beta-20261107-editor1');
+  assert.equal(release.github_release.previous_public_tag, 'v1.3-beta-20261106-stability1');
   assert.equal(release.github_release.tag_commit, release.source_commit);
   assert.equal(release.github_release.package_bytes_changed, true);
   assert.equal(release.github_release.url, `${repository}/releases/tag/${release.github_release.tag}`);
@@ -89,23 +89,25 @@ test('public beta retains exact automated native provenance and visible pending 
   assertPublishable(release);
   assert.equal(release.release_state,'beta');
   assert.equal(release.full_release_qualified,false);
-  assert.equal(release.source_commit,'34113eb3ce3d30c4b66976c6ee9c51c9a1ac85c3');
-  assert.equal(release.github_release.tag,'v1.3-beta-20261106-stability1');
-  assert.equal(release.native_validation.run_id,42291275917);
-  assert.equal(release.validated_pr_head,'34113eb3ce3d30c4b66976c6ee9c51c9a1ac85c3');
+  assert.equal(release.source_commit,'2dacba3cdc83b3be21e7223d6aa9fba0f36f72fe');
+  assert.equal(release.github_release.tag,'v1.3-beta-20261107-editor1');
+  assert.equal(release.native_validation.run_id,42406800822);
+  assert.equal(release.validated_pr_head,'2dacba3cdc83b3be21e7223d6aa9fba0f36f72fe');
   assert.equal(release.native_validation.head_commit,release.validated_pr_head);
   assert.equal(release.native_validation.application_source_commit,release.source_commit);
   assert.equal(release.native_validation.transcription_run,false);
+  assert.equal(release.native_validation.review_record_commit,'99bdbf22d82336d7492161b9d15593d2d0c036ca');
   for (const architecture of ['arm64','x64']) {
     const checks = release.native_validation.architectures[architecture];
     assert.equal(checks.status,'passed');
-    assert.equal(checks.offline_checks_passed,7);
-    assert.equal(checks.offline_checks_scope,'seven named smoke groups, not a count of individual assertions');
+    assert.equal(checks.offline_checks_passed,undefined);
+    for (const key of ["status", "launcher_health_and_api", "restart_persistence", "repeat_launch", "different_data_port_collision", "source_audio_and_caption_checks", "offline_ready_setup", "installed_packages_unchanged"]) assert.equal(checks.installation_checks[key],'passed');
+    assert.equal(checks.installation_checks.unicode_and_spaces_path,true);
     assert.equal(checks.feature_tests_passed,357);
     assert.equal(checks.required_cases_passed,50);
     assert.equal(checks.skipped,0);
     assert.equal(checks.source_audio_and_caption_checks,'passed');
-    assert.equal(checks.job_id,architecture === 'arm64' ? 128148051828 : 128148051817);
+    assert.equal(checks.job_id,architecture === 'arm64' ? 128507047775 : 128507047636);
     for (const gate of ['fresh_app_install','missing_pip_recovery','restart_persistence']) assert.equal(checks[gate],'passed');
     assert.equal(checks.combined_archive_sha256,release.sha256);
   }
@@ -576,5 +578,19 @@ test('archived supplemental views and undated AI setup are labeled honestly', ()
   for (const id of ['projects', 'export']) {
     const panel = html.slice(html.indexOf(`id="panel-${id}"`));
     assert.match(panel.slice(0, panel.indexOf('class="original-link"')), /Archived interface from 15 October 2026/);
+  }
+});
+
+
+test('current release discloses archival screenshots and preserves preceding Nov6 provenance', () => {
+  const release = JSON.parse(readFileSync(new URL('./release.json', import.meta.url),'utf8'));
+  assert.ok(release.known_limitations.some(text => text.includes('Fresh current-version screenshots were not captured')));
+  assert.match(html, /fresh current-version screenshots were not captured/);
+  assert.equal(release.historical_native_validation.find(row=>row.release_tag==='v1.3-beta-20261106-stability1').native_validation.run_id,42291275917);
+  const retained = JSON.parse(readFileSync(new URL('./retained-downloads.json', import.meta.url),'utf8'));
+  assert.equal(retained.length,39);
+  for (const entry of retained) {
+    assert.equal(entry.url,`https://cutroom-studio--cfqtj1cb86.expo.app/downloads/${entry.filename}`);
+    assert.ok(entry.github_url.startsWith('https://github.com/VanoPeradze/cutroom/releases/download/'));
   }
 });
