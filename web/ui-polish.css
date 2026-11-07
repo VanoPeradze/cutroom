@@ -318,3 +318,54 @@ html[data-theme="light"] .result-panel .verdict-block { background:transparent; 
   #setupPanel .readiness span { flex:0 0 8px; width:8px; height:8px; }
   #setupPanel .director-button { width:100%; min-height:52px; }
 }
+
+
+/* The monitor's free row owns the composition's size. In particular, a
+   missing-source notice must never push portrait footage over the transport. */
+#previewColumn > .preview-viewport { display:contents; }
+:is(.studio-preview-dock #previewColumn, #previewColumn.video-expanded, #previewColumn:fullscreen) > .preview-viewport {
+  container: preview-viewport / size;
+  display:grid; place-items:center; min-width:0; min-height:0;
+  width:100%; height:100%; overflow:hidden;
+}
+:is(.studio-preview-dock #previewColumn, #previewColumn.video-expanded, #previewColumn:fullscreen) > .preview-viewport > #previewStage {
+  width:min(100cqw,calc(100cqh * var(--frame-ratio,1.777778))) !important;
+  height:auto !important; max-width:100%; max-height:100% !important;
+  aspect-ratio:var(--frame-ratio,1.777778); box-sizing:border-box;
+  margin:0 !important; align-self:center;
+}
+#previewColumn.video-expanded > .preview-viewport,
+#previewColumn:fullscreen > .preview-viewport { flex:1 1 0; height:auto; }
+#previewColumn > .preview-viewport > #previewStage[data-aspect="9:16"] { --frame-ratio:.5625; }
+#previewColumn > .preview-viewport > #previewStage[data-aspect="1:1"] { --frame-ratio:1; }
+#previewColumn > .preview-viewport > #previewStage[data-aspect="4:5"] { --frame-ratio:.8; }
+
+/* Real view controls only change shelf presentation; existing card actions,
+   filtering, playback and selection stay on their original nodes. */
+#studioShelfMedia .library-view { display:flex; gap:4px; }
+#studioShelfMedia .library-view button { flex:1; min-height:30px; padding:4px 8px; }
+#studioShelfMedia .library-view button[aria-pressed="true"] { color:var(--cyan-text); border-color:var(--cyan); background:var(--surface-selected); }
+#studioShelfMedia[data-library-view] :is(.source-library,.media-library) { grid-template-columns:minmax(0,1fr); gap:6px; }
+#studioShelfMedia[data-library-view] :is(.source-library-card,.media-asset) {
+  grid-template-columns:64px minmax(0,1fr); grid-template-rows:auto auto;
+  gap:3px 8px; min-height:54px; padding:6px; min-width:0;
+}
+#studioShelfMedia[data-library-view] :is(.source-library-card,.media-asset) > .library-thumb { grid-column:1; grid-row:1 / 3; width:64px; height:42px; aspect-ratio:auto; }
+#studioShelfMedia[data-library-view] :is(.source-library-card,.media-asset) > span:not(.library-thumb) { grid-column:2; grid-row:1; min-width:0; font-size:12px; line-height:1.4; overflow-wrap:anywhere; }
+#studioShelfMedia[data-library-view] :is(.source-library-card,.media-asset) > small { grid-column:2; grid-row:2; font-size:11px; }
+#studioShelfMedia[data-library-view] .media-asset > button { grid-column:1 / -1; grid-row:auto; justify-self:stretch; }
+#studioShelfMedia[data-library-view="grid"] :is(.source-library,.media-library) { grid-template-columns:repeat(auto-fit,minmax(min(100%,112px),1fr)); }
+#studioShelfMedia[data-library-view="grid"] :is(.source-library-card,.media-asset) { grid-template-columns:minmax(0,1fr); }
+#studioShelfMedia[data-library-view="grid"] :is(.source-library-card,.media-asset) > .library-thumb { grid-column:1; grid-row:1; width:100%; height:auto; aspect-ratio:16 / 9; }
+#studioShelfMedia[data-library-view="grid"] :is(.source-library-card,.media-asset) > span:not(.library-thumb) { grid-column:1; grid-row:2; }
+#studioShelfMedia[data-library-view="grid"] :is(.source-library-card,.media-asset) > small { grid-column:1; grid-row:3; }
+
+/* Distinguish workspace navigation from the selected workspace's tool groups. */
+#advancedPanel.studio-workspace > .advanced-tabs button.active {
+  color:var(--cyan-text); background:var(--surface-selected);
+  box-shadow:inset 0 3px var(--cyan); font-weight:700;
+}
+#advancedPanel.studio-workspace > .advanced-tabs button.active span { font-weight:700; }
+#advancedPanel.studio-workspace > .advanced-tabs button:focus-visible,
+#studioShelfMedia .library-view button:focus-visible { outline:2px solid var(--cyan); outline-offset:-3px; }
+#studioInspector .studio-tool-intro { border-bottom:1px solid var(--line); padding-bottom:12px; margin-bottom:12px; }

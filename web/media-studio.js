@@ -77,6 +77,61 @@ export function libraryShotRange(asset,start,end) {
   return{source_start:start,source_end:end};
 }
 
+// One reusable source selection per imported asset, local to this browser.
+// Project/asset IDs isolate equal filenames and re-imports; metadata changes
+// invalidate marks. This is not a content hash for externally replaced files.
+// These preferences never alter project JSON, timeline history or source media.
+export function libraryShotMarkIdentity(project, assetId) {
+  const asset=project?.assets?.[assetId];
+  if(typeof project?.id!=="string" || !project.id || project.id.length>160
+    || typeof assetId!=="string" || !assetId || assetId.length>160 || asset?.id!==assetId) {
+    throw new Error("The project video identity is unavailable.");
+  }
+  libraryShotRange(asset,0,Number(asset.duration));
+  if(![asset.width,asset.height].every(n=>Number.isFinite(n)&&n>0))throw new Error("The project video dimensions are unavailable.");
+  return JSON.stringify([1,project.id,assetId,Number(asset.duration),asset.width,asset.height,asset.kind]);
+}
+
+function libraryShotMarkStorage() {
+  try{return globalThis.localStorage || null;}catch{return null;}
+}
+
+function libraryShotMarkKey(project,assetId) {
+  return `cutroom.library-source-marks.v1:${JSON.stringify([project.id,assetId])}`;
+}
+
+export function readLibraryShotMarks(project,assetId,storage=libraryShotMarkStorage()) {
+  try {
+    const identity=libraryShotMarkIdentity(project,assetId);
+    if(!storage)return {state:"unavailable",range:null};
+    let raw;
+    try{raw=storage.getItem(libraryShotMarkKey(project,assetId));}
+    catch{return {state:"unavailable",range:null};}
+    if(raw===null)return {state:"empty",range:null};
+    if(typeof raw!=="string" || raw.length>2048)return {state:"invalid",range:null};
+    const saved=JSON.parse(raw);
+    if(saved?.identity!==identity)return {state:"stale",range:null};
+    const range=libraryShotRange(project.assets[assetId],saved.source_start,saved.source_end);
+    return {state:"saved",range};
+  }catch{return {state:"invalid",range:null};}
+}
+
+export function saveLibraryShotMarks(project,assetId,range,storage=libraryShotMarkStorage()) {
+  const identity=libraryShotMarkIdentity(project,assetId);
+  const selected=libraryShotRange(project.assets[assetId],range?.source_start,range?.source_end);
+  if(!storage)throw new Error("This browser cannot save source marks. Your selection is still available for this review.");
+  try{storage.setItem(libraryShotMarkKey(project,assetId),JSON.stringify({identity,...selected}));}
+  catch{throw new Error("Source marks could not be saved in this browser. Your selection is still available for this review.");}
+  return selected;
+}
+
+export function clearLibraryShotMarks(project,assetId,storage=libraryShotMarkStorage()) {
+  libraryShotMarkIdentity(project,assetId);
+  if(!storage)throw new Error("This browser cannot clear saved source marks. The current selection is unchanged.");
+  try{storage.removeItem(libraryShotMarkKey(project,assetId));}
+  catch{throw new Error("Saved source marks could not be cleared. The current selection is unchanged.");}
+}
+
 export function libraryInsertReadiness(project,at) {
   const duration=Number(project?.editor_sequence?.duration ?? project?.draft?.output_duration);
   if(!Number.isFinite(at)||at<0||!Number.isFinite(duration)||at>duration)return 'Choose a playhead inside the edited timeline.';
@@ -369,64 +424,182 @@ export class MediaStudio {
     if(this.options.busy() || this.uploading)return;
     const projectId=this.project()?.id;
     this.options.pause();
-    if(!(await this.flush()) || this.project()?.id!==projectId || this.options.busy())return;
+    if(!(await this.flush()) || this.project()?.id!==projectId || this.options.busy() || this.uploading)return;
     const project=this.project(),asset=project?.assets?.[assetId];
     const at=Number(this.options.time?.()),insertReason=libraryInsertReadiness(project,at);
     libraryShotRange(asset,0,Number(asset?.duration));
+    const remembered=readLibraryShotMarks(project,assetId);
+    let savedRange=remembered.range;
     this.shotReview?.close();
+    let closed=false;
     const revision=project.revision,identity=JSON.stringify([asset.id,asset.url,asset.duration,asset.kind,asset.status,asset.width,asset.height]);
-    const current=()=>{const p=this.project(),a=p?.assets?.[assetId];return p?.id===projectId && p.revision===revision && !!a && JSON.stringify([a.id,a.url,a.duration,a.kind,a.status,a.width,a.height])===identity;};
+    const current=()=>{const p=this.project(),a=p?.assets?.[assetId];return !closed && dialog.open && this.shotReview===dialog && p?.id===projectId && p.revision===revision && !!a && JSON.stringify([a.id,a.url,a.duration,a.kind,a.status,a.width,a.height])===identity;};
     const make=(tag,text)=>{const node=document.createElement(tag);if(text!=null)node.textContent=text;return node;};
     const dialog=make('dialog');dialog.className='library-shot-review';dialog.setAttribute('aria-labelledby','libraryShotTitle');
     const title=make('h3','Review source shot');title.id='libraryShotTitle';
     const name=make('p',asset.name);name.dir='auto';name.className='library-shot-name';
     const explanation=make('p','Mark source In / Out, then insert at the edited playhead or append after the edit. Insertion shifts supported downstream items; unsupported crossings are blocked. Original file unchanged; Undo is available.');
-    const video=make('video');video.controls=true;video.playsInline=true;video.preload='metadata';video.src=asset.url;
+    const video=make('video');video.controls=true;video.playsInline=true;video.preload='metadata';video.src=asset.url;video.setAttribute('aria-label',`Source preview: ${asset.name}`);
     const form=make('form');form.className='library-shot-range';
-    const fields={};
-    for(const [key,label,value]of [['in','Source In (seconds)',0],['out','Source Out (seconds)',asset.duration]]){
-      const row=make('label',label),input=make('input');input.type='number';input.required=true;input.min='0';input.max=String(asset.duration);input.step='.001';input.value=String(value);input.dataset.shotPoint=key;row.append(input);form.append(row);fields[key]=input;
+    const fields={},markButtons={},jumpButtons={},listeners=[];
+    const listen=(target,type,handler)=>{target.addEventListener(type,handler);listeners.push(()=>target.removeEventListener(type,handler));};
+    for(const [key,label,value]of [['in','Source In (seconds)',savedRange?.source_start??0],['out','Source Out (seconds)',savedRange?.source_end??asset.duration]]){
+      const row=make('label',label),input=make('input');input.type='number';input.required=true;input.min='0';input.max=String(asset.duration);input.step='any';input.value=String(value);input.dataset.shotPoint=key;row.append(input);form.append(row);fields[key]=input;
       const mark=make('button',key==='in'?'Set In at playhead':'Set Out at playhead');mark.type='button';mark.dataset.shotMark=key;
-      mark.addEventListener('click',()=>{input.value=String(Math.round(video.currentTime*1000)/1000);update();});form.append(mark);
+      mark.setAttribute('aria-keyshortcuts',key==='in'?'I':'O');markButtons[key]=mark;
+      listen(mark,'click',()=>markAtPlayhead(key));
+      const jump=make('button',key==='in'?'Jump to In':'Jump to Out');jump.type='button';jump.dataset.shotJump=key;jumpButtons[key]=jump;
+      listen(jump,'click',()=>{
+        if(!sourceReady())return;
+        try{const selected=range();stopPreview();video.currentTime=key==='in'?selected.source_start:selected.source_end;update();}
+        catch(error){status.textContent=error.message;}
+      });
+      const controls=make('div');controls.className='library-shot-point-actions';controls.append(mark,jump);form.append(controls);
     }
     const status=make('p','Loading source preview…');status.setAttribute('role','status');status.className='library-shot-status';
     const preview=make('button','Play selected shot');preview.type='button';preview.dataset.shotPreview='true';
+    const monitorHelp=make('p','Source monitor shortcuts: I sets In; O sets Out, outside text fields. Jumping or changing marks pauses playback. Preview timing follows the browser, not frame-accurate stepping.');monitorHelp.className='library-shot-insert-help';
     const append=make('button','Append selected shot to end');append.type='submit';append.dataset.shotAppend='true';append.disabled=true;
     const insert=make('button',Number.isFinite(at)?`Insert at edit playhead (${at.toFixed(3)} s)`:'Insert at edit playhead');insert.type='submit';insert.dataset.shotInsert='true';insert.disabled=true;
     const insertHelp=make('p',insertReason||'Insert shifts downstream A/B footage, framing and non-crossing media/text. Unsupported overlaps are blocked.');insertHelp.className='library-shot-insert-help';
     const close=make('button','Keep current edit');close.type='button';close.dataset.shotKeep='true';
-    let metadata=false,busy=false,stopAt=Infinity;
-    const range=()=>libraryShotRange(asset,Number(fields.in.value),Number(fields.out.value));
-    const update=()=>{
-      try{const selected=range();status.textContent=`${(selected.source_end-selected.source_start).toFixed(3)} s selected · source ${selected.source_start.toFixed(3)}–${selected.source_end.toFixed(3)} · manual shot selection`;append.disabled=busy||!metadata||!current();insert.disabled=busy||!metadata||!current()||!!insertReason;preview.disabled=busy||!metadata;}
-      catch(error){status.textContent=error.message;append.disabled=true;insert.disabled=true;preview.disabled=true;}
+    const saveMarks=make('button','Save source marks');saveMarks.type='button';saveMarks.dataset.shotSaveMarks='true';saveMarks.disabled=true;
+    const resetMarks=make('button','Clear saved marks');resetMarks.type='button';resetMarks.dataset.shotResetMarks='true';
+    const marksStatus=make('p');marksStatus.className='library-shot-insert-help';marksStatus.dataset.shotMarksStatus='true';marksStatus.setAttribute('role','status');
+    const localScope='Stored only in this browser, not inside the project. Saving marks does not change the edit.';
+    marksStatus.textContent=remembered.state==='saved'?`Saved source marks restored. ${localScope}`
+      : remembered.state==='stale'||remembered.state==='invalid'?`Saved marks do not match this source or are unreadable. Review the full source and save new marks. ${localScope}`
+      : remembered.state==='unavailable'?`Browser storage is unavailable; source marks cannot be remembered. Your selection still works for this review.`:localScope;
+    let metadata=false,seenMetadata=false,metadataError='',busy=false,selectedPlayback=null,playPending=false,playRequest=0,busyRefreshTimer=null;
+    const blocked=()=>closed||!dialog.open||busy||this.options.busy()||this.uploading||!current();
+    const metadataMatches=()=>Number.isFinite(video.duration)&&Math.abs(video.duration-Number(asset.duration))<=.25;
+    const range=()=>{
+      if(!fields.in.value.trim()||!fields.out.value.trim())throw new Error('Enter both source In and Out before using this selection.');
+      return libraryShotRange(asset,Number(fields.in.value),Number(fields.out.value));
     };
-    video.addEventListener('loadedmetadata',()=>{
-      if(!Number.isFinite(video.duration) || Math.abs(video.duration-Number(asset.duration))>.25){status.textContent='Preview duration does not match source metadata. Reload the asset before appending.';return;}
-      metadata=true;update();
+    const playbackLabel=()=>{
+      const playing=playPending||!video.paused;
+      preview.textContent=playing?(selectedPlayback?'Pause selected shot':'Pause source preview'):selectedPlayback?'Resume selected shot':'Play selected shot';
+      let valid=true;try{range();}catch{valid=false;}
+      // Even an invalid range must leave a playing native preview pausable.
+      preview.disabled=blocked()||!metadata||!metadataMatches()||(!valid&&!playing);
+    };
+    const stopPreview=()=>{++playRequest;playPending=false;selectedPlayback=null;video.pause();playbackLabel();};
+    const watchBusy=()=>{
+      clearTimeout(busyRefreshTimer);busyRefreshTimer=null;
+      if(busy||!current()||!(this.options.busy()||this.uploading))return;
+      // The host exposes busy as a getter, not a subscription. Only watch an
+      // observed busy period; paused controls must recover without a new load.
+      const recheck=()=>{
+        busyRefreshTimer=null;if(closed||!dialog.open)return;
+        if(current()&&(this.options.busy()||this.uploading))busyRefreshTimer=setTimeout(recheck,250);
+        else update();
+      };
+      busyRefreshTimer=setTimeout(recheck,250);
+    };
+    const update=()=>{
+      if(closed)return;
+      const unavailable=blocked(),sourceUnavailable=unavailable||!metadata||!metadataMatches();
+      if(sourceUnavailable&&(!video.paused||playPending||selectedPlayback))stopPreview();
+      resetMarks.disabled=unavailable;close.disabled=busy;video.controls=!sourceUnavailable;
+      for(const key of ['in','out']){fields[key].disabled=sourceUnavailable;markButtons[key].disabled=sourceUnavailable;}
+      let valid=false;
+      try{const selected=range();valid=true;status.textContent=`${(selected.source_end-selected.source_start).toFixed(3)} s selected · source ${selected.source_start.toFixed(3)}–${selected.source_end.toFixed(3)} · manual shot selection`;}
+      catch(error){status.textContent=error.message;}
+      append.disabled=saveMarks.disabled=sourceUnavailable||!valid;insert.disabled=append.disabled||!!insertReason;
+      for(const jump of Object.values(jumpButtons))jump.disabled=sourceUnavailable||!valid;
+      if(!current())status.textContent='The edit or source changed. Close and review the current version; nothing was added.';
+      else if(busy||this.options.busy()||this.uploading)status.textContent='The edit is busy. Source controls are paused until it finishes.';
+      else if(!metadata||!metadataMatches())status.textContent=metadataError||'Loading source preview…';
+      playbackLabel();watchBusy();
+    };
+    const sourceReady=()=>{
+      if(!blocked()&&metadata&&metadataMatches())return true;
+      if(metadata&&!metadataMatches()){metadata=false;metadataError='Preview duration does not match source metadata. Reload the asset before using this selection.';}
+      stopPreview();update();return false;
+    };
+    const checkMetadata=()=>{
+      if(closed||!dialog.open)return;
+      metadata=metadataMatches();metadataError=metadata?'':'Preview duration does not match source metadata. Reload the asset before using this selection.';
+      if(!metadata)stopPreview();update();
+    };
+    listen(video,'loadedmetadata',()=>{seenMetadata=true;checkMetadata();});
+    listen(video,'durationchange',()=>{if(seenMetadata)checkMetadata();});
+    listen(video,'emptied',()=>{metadata=false;seenMetadata=false;metadataError='';stopPreview();update();});
+    listen(video,'error',()=>{metadata=false;metadataError='Source preview is unavailable. Keep the edit and check this media file.';stopPreview();update();});
+    const checkPlayback=()=>{
+      if(!sourceReady())return;
+      if(selectedPlayback&&(video.currentTime>=selectedPlayback.source_end||video.currentTime<selectedPlayback.source_start)){
+        const end=selectedPlayback.source_end,atEnd=video.currentTime>=end;
+        stopPreview();if(atEnd)video.currentTime=Math.min(end,video.duration);
+      }
+      playbackLabel();
+    };
+    for(const type of ['play','playing','timeupdate','seeking'])listen(video,type,checkPlayback);
+    listen(video,'ended',()=>{if(sourceReady()){stopPreview();update();}});
+    listen(video,'pause',()=>{if(video.paused){if(playPending)++playRequest;playPending=false;playbackLabel();}});
+    const marksChanged=()=>{stopPreview();update();marksStatus.textContent=`Selection changed; use Save source marks to remember it. ${localScope}`;};
+    const markAtPlayhead=key=>{
+      if(!sourceReady()||!Number.isFinite(video.currentTime))return false;
+      fields[key].value=String(Math.min(Number(asset.duration),Math.max(0,Math.round(video.currentTime*1000)/1000)));marksChanged();return true;
+    };
+    listen(fields.in,'input',marksChanged);listen(fields.out,'input',marksChanged);
+    listen(dialog,'keydown',event=>{
+      if(event.defaultPrevented||event.repeat||event.isComposing||event.keyCode===229||event.altKey||event.ctrlKey||event.metaKey||event.shiftKey||event.getModifierState?.('AltGraph'))return;
+      const target=event.composedPath?.()[0]||event.target;
+      if(target?.isContentEditable||target?.closest?.('input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"], [role="combobox"]'))return;
+      const key=String(event.key||'').toLowerCase();
+      if((key==='i'||key==='o')&&markAtPlayhead(key==='i'?'in':'out')){event.preventDefault();event.stopPropagation();}
     });
-    video.addEventListener('error',()=>{metadata=false;append.disabled=true;insert.disabled=true;preview.disabled=true;status.textContent='Source preview is unavailable. Keep the edit and check this media file.';});
-    video.addEventListener('timeupdate',()=>{if(video.currentTime>=stopAt)video.pause();});
-    fields.in.addEventListener('input',update);fields.out.addEventListener('input',update);
-    preview.addEventListener('click',async()=>{try{const selected=range();stopAt=selected.source_end;video.currentTime=selected.source_start;await video.play();}catch(error){status.textContent=error.message;}});
-    form.addEventListener('submit',async event=>{
-      event.preventDefault();if(busy || !metadata || this.options.busy() || !form.reportValidity())return;
-      if(!current()){status.textContent='The edit or source changed. Close and review the current version; nothing was appended.';append.disabled=true;return;}
+    const marksCurrent=()=>{
+      if(current())return true;
+      update();marksStatus.textContent='The edit or source changed. Close and review the current version; saved marks are unchanged.';return false;
+    };
+    listen(saveMarks,'click',()=>{
+      if(!marksCurrent()||!sourceReady()||!form.reportValidity())return;
+      try{savedRange=saveLibraryShotMarks(project,assetId,range());marksStatus.textContent=`Source marks saved: ${savedRange.source_start.toFixed(3)}–${savedRange.source_end.toFixed(3)} s. ${localScope}`;}
+      catch(error){marksStatus.textContent=error.message;}
+    });
+    listen(resetMarks,'click',()=>{
+      if(!marksCurrent()||blocked())return;
+      try{clearLibraryShotMarks(project,assetId);savedRange=null;fields.in.value='0';fields.out.value=String(asset.duration);stopPreview();update();marksStatus.textContent=`Saved marks cleared. Full source selected. ${localScope}`;}
+      catch(error){marksStatus.textContent=error.message;}
+    });
+    listen(preview,'click',async()=>{
+      if(!sourceReady())return;
+      if(playPending||!video.paused){++playRequest;playPending=false;video.pause();playbackLabel();return;}
+      let request;
+      try{
+        const selected=range();
+        const resume=selectedPlayback&&video.currentTime>=selected.source_start&&video.currentTime<selected.source_end;
+        selectedPlayback=selected;request=++playRequest;playPending=true;
+        if(!resume)video.currentTime=selected.source_start;
+        playbackLabel();await video.play();
+        if(request!==playRequest)return;
+        playPending=false;if(!sourceReady())return;checkPlayback();
+      }catch(error){if((request===undefined||request===playRequest)&&!closed){stopPreview();update();status.textContent=`Source preview could not play: ${error.message}`;}}
+    });
+    listen(form,'submit',async event=>{
+      event.preventDefault();if(!sourceReady()||!form.reportValidity())return;
       const inserting=event.submitter===insert;
       if(inserting && insertReason){status.textContent=insertReason;return;}
-      busy=true;append.disabled=true;insert.disabled=true;preview.disabled=true;video.pause();
+      let selected;
+      try{selected=range();}catch(error){status.textContent=error.message;return;}
+      busy=true;stopPreview();update();let failure='';
       try{
-        const result=await this.options.edit(inserting?'media_insert':'media_append',{asset_id:assetId,...range(),...(inserting?{start:at}:{})},{isCurrent:current});
+        const result=await this.options.edit(inserting?'media_insert':'media_append',{asset_id:assetId,...selected,...(inserting?{start:at}:{})},{isCurrent:current});
         if(!result)throw new Error('The edit changed or is busy. Close and review again; nothing was appended.');
-        if(this.project()?.id===projectId && result.id===projectId){this.selected=result.manual?.media_clips?.at(-1)?.id;this.render();dialog.close();}
-      }catch(error){status.textContent=error.message;}
-      finally{busy=false;append.disabled=!current();insert.disabled=!current()||!!insertReason;preview.disabled=!metadata;}
+        if(!closed && dialog.open && this.project()?.id===projectId && result.id===projectId){this.selected=result.manual?.media_clips?.at(-1)?.id;this.render();dialog.close();}
+      }catch(error){failure=error.message;}
+      finally{busy=false;update();if(failure&&!closed&&dialog.open)status.textContent=failure;}
     });
-    close.addEventListener('click',()=>{if(!busy)dialog.close();});
-    dialog.addEventListener('cancel',event=>{if(busy)event.preventDefault();});
-    dialog.addEventListener('close',()=>{video.pause();video.removeAttribute('src');video.load();dialog.remove();if(this.shotReview===dialog)this.shotReview=null;});
-    const actions=make('div');actions.className='library-shot-actions';actions.append(preview,close,append,insert);form.append(actions,insertHelp);
-    dialog.append(title,name,explanation,video,form,status);document.body.append(dialog);this.shotReview=dialog;dialog.showModal();
+    listen(close,'click',()=>{if(!busy)dialog.close();});
+    listen(dialog,'cancel',event=>{if(busy)event.preventDefault();});
+    listen(dialog,'close',()=>{closed=true;clearTimeout(busyRefreshTimer);busyRefreshTimer=null;for(const remove of listeners)remove();stopPreview();video.removeAttribute('src');video.load();dialog.remove();if(this.shotReview===dialog)this.shotReview=null;});
+    const markActions=make('div');markActions.className='library-shot-actions';markActions.append(saveMarks,resetMarks);form.append(markActions,marksStatus);
+    const monitorActions=make('div');monitorActions.className='library-shot-actions';monitorActions.append(preview);form.append(monitorActions,monitorHelp);
+    const actions=make('div');actions.className='library-shot-actions';actions.append(close,append,insert);form.append(actions,insertHelp);
+    dialog.append(title,name,explanation,video,form,status);document.body.append(dialog);this.shotReview=dialog;dialog.showModal();update();
   }
   select(id) { this.selected = id; this.render(); }
   render() {

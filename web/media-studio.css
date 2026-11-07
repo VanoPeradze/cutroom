@@ -253,6 +253,7 @@
 .library-shot-range { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; margin-block:12px; }
 .library-shot-range label { display:grid; min-width:0; gap:4px; }
 .library-shot-range input { width:100%; min-width:0; }
+.library-shot-point-actions { display:flex; align-items:end; flex-wrap:wrap; gap:8px; }
 .library-shot-actions { display:flex; flex-wrap:wrap; gap:8px; grid-column:1/-1; }
 .library-shot-review button { min-height:36px; padding:7px 10px; white-space:normal; overflow-wrap:anywhere; color:var(--paper); background:var(--surface-selected); border:1px solid var(--line-strong); border-radius:5px; }
 @media(max-width:560px) { .library-shot-range { grid-template-columns:minmax(0,1fr); } }

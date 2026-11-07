@@ -109,7 +109,7 @@ def test_close_gaps_never_erases_time_occupied_by_an_inserted_shot(unlocked):
     assert after['manual']['media_clips'][0]['start']==5.
 
 
-def test_real_gap_before_independent_layers_rejects_atomically_instead_of_desynchronizing(unlocked):
+def test_real_gap_before_independent_layers_closes_without_desynchronizing(unlocked):
     _,_,store,pid=unlocked
     assert insert(unlocked).status_code==200
     def add_gap(p):
@@ -118,11 +118,15 @@ def test_real_gap_before_independent_layers_rejects_atomically_instead_of_desync
             p['manual']['source_tracks'][slot]=[
                 *_slice_rows(rows,0.,1.,slot=slot),*_slice_rows(rows,2.,16.25,at=2.,slot=slot)]
     store.update(pid,add_gap)
-    before=store.state_path(pid).read_bytes()
+    before=store.load(pid)
     result=close_gaps(unlocked)
-    assert result.status_code==400,result.get_json()
-    assert 'shift added media or text' in str(result.get_json())
-    assert store.state_path(pid).read_bytes()==before
+    assert result.status_code==200,result.get_json()
+    after=store.load(pid)
+    assert after['manual']['sequence']['duration']==15.25
+    assert after['manual']['media_clips']==[
+        {**row,'start':row['start']-1,'end':row['end']-1}
+        for row in before['manual']['media_clips']]
+    assert after['sources']==before['sources'] and after['analysis']==before['analysis']
 
 
 def test_empty_tail_after_independent_layers_can_still_close(unlocked):

@@ -46,6 +46,12 @@ Current gate: exercise pointer, keyboard and API mutation routes, locked-lane hi
 
 Still pending in this round: visible ripple-participation controls for A/B, added-media and custom-text layers, with a shared transaction that plans all affected clips, layouts, captions and audio before committing. Specify fixed music, spanning overlays, gaps and locked clips. Each mixed-layer ripple must commit completely or leave state unchanged. Retain the existing rejection of shortening that would strand added media or text until its replacement is implemented and tested. Stable track IDs, ordering and arbitrary user-created lanes come afterward, with a versioned migration; A/B locks and text layers do not complete that work.
 
+### Scoped increment — all-layer empty-space removal (unreleased)
+
+Together → Close gaps now translates downstream added video/audio/images and custom text together with A/B and layout. Occupancy is the union of all these layers, including muted clips, so spanning clips are never cut and inserted shots are never mistaken for gaps. Local source times, clip IDs, fades and other settings stay unchanged. Source-only behavior, protection, revision checks and one-step Undo/Redo are preserved. The implementation follows the interaction principle of Kdenlive’s [Remove Space in All Tracks](https://docs.kdenlive.org/en/user_interface/menu/sequence_menu.html#remove-space-remove-space-in-all-tracks), without using Kdenlive code or changing CUTROOM’s stack.
+
+This completes only safe empty-space removal, not general mixed-layer ripple moves, trims or deletion. Active saved caption alternatives, independently retimed transcript captions and caption edits with uncertain ownership or source spans that would merge block Together gap closure rather than silently reverting the reviewed captions. Ordinary source-linked wording corrections and custom text/caption layers are supported. No-op closures remain available. User-selectable participation, fixed-time layers, arbitrary track creation, and crossing-clip policies remain pending. Library Insert already shifts wholly downstream layers and rejects ambiguous crossing content; it is not a new capability in this increment.
+
 ## Round 3 — explicit trim modes
 
 Add one mode per delivery with named controls and numeric feedback. Adobe's [ripple](https://helpx.adobe.com/premiere/desktop/edit-projects/trim-clips/perform-ripple-edits.html) changes downstream timing; [roll](https://helpx.adobe.com/premiere/desktop/edit-projects/trim-clips/perform-rolling-edits.html) moves a shared cut while preserving combined length; [slip](https://helpx.adobe.com/premiere/desktop/edit-projects/trim-clips/perform-slip-edits.html) changes the source interval while retaining timeline placement; [slide](https://helpx.adobe.com/premiere/desktop/edit-projects/trim-clips/perform-slide-edits.html) moves a clip and compensates in its neighbors.
@@ -56,7 +62,9 @@ Gate: source handles and neighbor constraints bound every operation; roll/slide 
 
 ## Round 4 — source assembly and organization
 
-Build on Original footage: remembered source In/Out marks, explicit Insert/Overwrite at the sequence playhead, and Match frame back to the original. Label source time and sequence time independently. Offer a docked source/program arrangement on large screens and a clear switcher on small screens. Add searchable names and bins after clip identity and relinking rules are stable.
+Build on Original footage: project-portable source In/Out marks, explicit Insert/Overwrite at the sequence playhead, and Match frame back to the original. Label source time and sequence time independently. Offer a docked source/program arrangement on large screens and a clear switcher on small screens. Add searchable names and bins after clip identity and relinking rules are stable.
+
+The unreleased source-review increment adds one explicit browser-local saved In/Out selection per imported library video, reusing its existing Insert/Append workflow. This is a smaller step than portable project bins or named subclips. Import IDs and metadata are validated; an external same-ID/same-metadata file replacement is not fingerprinted. See [source marks](SOURCE_MARKS.md).
 
 Gate: repeated use of the same source never confuses marks; Insert shifts only declared participants; Overwrite affects only its declared interval; restoration still avoids unintended duplicates. Test reordered footage, negative/positive A/B sync offsets, empty edits, keyboard focus, and save/reopen.
 

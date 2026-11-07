@@ -8,6 +8,12 @@ const assets = [
   ['docs/images/welcome.png', 'website/public/assets/welcome.png'],
   ['docs/images/editor.png', 'website/public/assets/editor.png'],
   ['docs/images/ai-options.png', 'website/public/assets/ai-options.png'],
+  ...['home', 'media', 'edit', 'layout', 'audio', 'captions', 'output'].map(name => [
+    `docs/images/readme/studio-${name}-20261019.png`, `website/public/assets/studio-${name}.png`,
+  ]),
+  ...['projects', 'export-dialog'].map(name => [
+    `docs/images/readme/studio-${name}-20261015.png`, `website/public/assets/studio-${name}.png`,
+  ]),
   ['LICENSE', 'website/public/downloads/LICENSE'],
   ['docs/USER_GUIDE_EN.md', 'website/public/downloads/USER_GUIDE_EN.md'],
   ['docs/USER_GUIDE_HE.md', 'website/public/downloads/USER_GUIDE_HE.md'],

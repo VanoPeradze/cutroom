@@ -339,11 +339,23 @@ def _placement_time(payload: dict[str, Any], key: str = "to") -> float:
 
 
 def _close_sequence_gaps(value: dict[str, Any], slot: str | None = None) -> dict[str, Any] | None:
-    """Close only empty time in the requested scope, in one undoable action."""
+    """Close empty time, preserving every participating layer's relative timing.
+
+    Together uses the union of source, media/audio and custom-text coverage.
+    Therefore no attached clip crosses a removed interval: translation is
+    sufficient and never changes its local source time, fades or identity.
+    Source-only closing deliberately leaves independent layer clocks alone.
+    """
     manual, duration = value["manual"], timeline_duration(value)
     clips = manual["source_tracks"][slot] if slot else [clip for rows in manual["source_tracks"].values() for clip in rows]
     attached = [*(manual.get("media_clips") or []), *(manual.get("text_clips") or [])]
     if not slot:
+        for row in attached:
+            if not isinstance(row, dict) or any(type(row.get(key)) not in (int, float) for key in ("start", "end")):
+                raise SourceTrackError("Added media or text has invalid timing. Repair it before closing gaps.")
+            start, end = _number(row.get("start"), "layer start"), _number(row.get("end"), "layer end")
+            if start < 0 or end <= start or end > duration + EPSILON:
+                raise SourceTrackError("Added media or text extends outside the edit. Repair it before closing gaps.")
         # Independent shots/audio/titles occupy edit time too. In particular,
         # a library insert deliberately leaves A/B empty beneath its footage.
         clips = [*clips, *attached]
@@ -356,10 +368,6 @@ def _close_sequence_gaps(value: dict[str, Any], slot: str | None = None) -> dict
         gaps.append((cursor, duration))
     if not gaps:
         return None
-    if not slot and any(row["end"] > start + EPSILON for row in attached for start, _end in gaps):
-        # This source-track operation cannot ripple independent layer clocks.
-        # Reject before mutation instead of leaving those layers misaligned.
-        raise SourceTrackError("Closing these gaps would shift added media or text. Move or remove those layers before closing gaps across the whole edit.")
     before = copy.deepcopy(manual)
     for start, end in reversed(gaps):
         if slot:
@@ -368,6 +376,10 @@ def _close_sequence_gaps(value: dict[str, Any], slot: str | None = None) -> dict
                 *_slice_rows(rows, end, duration, at=start, slot=slot)]
         else:
             _remove_time(manual, start, end)
+            for row in attached:
+                if row["start"] >= end - EPSILON:
+                    row["start"] = round(row["start"] - (end - start), 9)
+                    row["end"] = round(row["end"] - (end - start), 9)
     if slot:
         # Do not shorten another recording. Only genuinely empty output tail
         # can go; its layout rows must shrink with the sequence duration.
@@ -376,6 +388,53 @@ def _close_sequence_gaps(value: dict[str, Any], slot: str | None = None) -> dict
         manual["sequence"]["camera_plan"] = _slice_rows(manual["sequence"]["camera_plan"], 0, end)
     _finish(value)
     return manual if manual != before else None
+
+
+def _gap_caption_anchor(item: dict[str, Any]) -> dict[str, Any]:
+    """Ignore only contiguous same-origin subdivisions, not changed speech."""
+    anchor = item["_caption_anchor"]
+    spans = []
+    for span in anchor["spans"]:
+        if (spans and spans[-1]["origin"] == span["origin"]
+                and abs(spans[-1]["end"] - span["start"]) <= EPSILON):
+            spans[-1]["end"] = span["end"]
+        else:
+            spans.append(dict(span))
+    return {**anchor, "spans": spans}
+
+
+def _validate_gap_caption_state(project: dict[str, Any], staged_manual: dict[str, Any]) -> None:
+    """Do not silently expire or reassign a reviewed transcript-caption layer.
+
+    Custom text has an independent edit clock and is translated above. Ordinary
+    transcript wording follows its source via the existing ownership remap;
+    independently retimed or uncertain transcript captions need a later policy.
+    """
+    from .caption_alternatives import status as caption_status
+    from .render import project_caption_items
+    if caption_status(project)["active_id"] != "original":
+        raise SourceTrackError("An alternative caption version is active. Switch back to original captions before closing gaps together; no layers were changed.")
+    manual = project.get("manual") or {}
+    if manual.get("caption_dormant_overrides"):
+        raise SourceTrackError("Some caption edits have uncertain ownership. Resolve them before closing gaps together; no layers were changed.")
+    overrides = manual.get("caption_overrides") or {}
+    if overrides:
+        items = {row["id"]: row for row in project_caption_items(project, aligned=False)}
+        if not isinstance(overrides, dict) or any(key not in items for key in overrides):
+            raise SourceTrackError("Some caption edits have uncertain ownership. Resolve them before closing gaps together; no layers were changed.")
+        for edit in overrides.values():
+            if not isinstance(edit, dict) or any(_number(edit.get(key, 0), key) != 0 for key in ("start_delta", "end_delta")):
+                raise SourceTrackError("A transcript caption has custom timing. Reset that caption's timing before closing gaps together; no layers were changed.")
+        after_items = project_caption_items({**project, "manual": staged_manual}, aligned=False)
+        for key in overrides:
+            # Closing a gap can join two adjacent pieces of one sentence into
+            # one caption. A partial wording/style edit must not spread to the
+            # whole sentence or displace another edit into dormant history.
+            # Materializing a legacy sequence can subdivide a source span at
+            # camera/B-track boundaries without changing its caption lineage.
+            anchor = _gap_caption_anchor(items[key])
+            if sum(_gap_caption_anchor(row) == anchor for row in after_items) != 1:
+                raise SourceTrackError("Closing these gaps would merge or change an edited transcript caption. Keep those gaps or resolve the caption edits first; no layers were changed.")
 
 
 def _ripple_move(value: dict[str, Any], start: float, end: float, at: float, slot: str | None = None) -> dict[str, Any] | None:
@@ -554,7 +613,25 @@ def prepare_sequence_edit(project: dict[str, Any], payload: dict[str, Any]) -> d
         else:
             manual.pop("source_tracks", None)
         return manual
-    value, duration = materialize_sequence(project)
+    preparation_project = project
+    if (action == "sequence_close_gaps" and not payload.get("slot")
+            and not has_sequence(project)
+            and (project.get("manual") or {}).get("caption_overrides")):
+        # The first validation pass precedes editing.py's provenance annotation.
+        # Preserve legacy caption lineage on a detached copy before virtual
+        # sequence IDs replace clip IDs; a rejected/no-op edit stays untouched.
+        preparation_project = copy.deepcopy(project)
+        prepared_manual = preparation_project.setdefault("manual", {})
+        prepared_tracks = prepared_manual.get("source_tracks")
+        if not isinstance(prepared_tracks, dict):
+            prepared_tracks = prepared_manual["source_tracks"] = {}
+        for slot in ("A", "B"):
+            if slot not in prepared_tracks:
+                prepared_tracks[slot] = source_track_clips(project, slot)
+            for clip in prepared_tracks[slot] if isinstance(prepared_tracks[slot], list) else []:
+                if isinstance(clip, dict) and "id" in clip:
+                    clip.setdefault("caption_origin", clip["id"])
+    value, duration = materialize_sequence(preparation_project)
     manual = value["manual"]
     if action == "sequence_podcast_frame":
         from .podcast_framing import podcast_crop
@@ -569,7 +646,12 @@ def prepare_sequence_edit(project: dict[str, Any], payload: dict[str, Any]) -> d
         slot = payload.get("slot")
         if "slot" in payload and (not isinstance(slot, str) or slot not in {"A", "B"} or _duration(value, slot) <= 0):
             raise SourceTrackError("Choose an existing source track A or B")
-        return _close_sequence_gaps(value, slot)
+        result = _close_sequence_gaps(value, slot)
+        if result is not None and not slot:
+            # Check the original selection before materialization can change
+            # its geometry. A no-op must remain available without new history.
+            _validate_gap_caption_state(project, result)
+        return result
     if action in {"sequence_source_restore", "sequence_source_remove"}:
         from .source_review import prepare_source_review
         return prepare_source_review(value, payload)

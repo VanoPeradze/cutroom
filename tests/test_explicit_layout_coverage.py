@@ -1,4 +1,4 @@
-"""A requested split is not fulfilled by a playable single-source fallback."""
+"""Missing B uses available A explicitly; unsafe layout gaps still reject."""
 import copy
 
 import pytest
@@ -28,9 +28,8 @@ def test_missing_camera_is_reported_before_safe_fallback_erases_requested_layout
     assert {row["camera"] for row in _render_plan(p)} == {"A"}
     report = composition_layout_coverage(p)
     assert report["requested_seconds"] == report["missing_seconds"] == 180.
-    assert report["export_blocked"] and report["clock"] == "edit"
-    with pytest.raises(LayoutCoverageError, match="independently recorded"):
-        require_layout_coverage(p)
+    assert not report["export_blocked"] and report["fallback_available"] and report["clock"] == "edit"
+    assert require_layout_coverage(p)["missing_seconds"] == 180.
     assert p == original
 
 
@@ -40,7 +39,7 @@ def test_independent_camera_mapping_is_explicit_and_never_repeats_the_short_sour
     assert result
     report = composition_layout_coverage(p)
     assert report["missing_seconds"] == pytest.approx(21.666667, abs=.04)
-    assert report["export_blocked"]
+    assert not report["export_blocked"] and report["fallback_available"]
     assert p["manual"]["source_tracks"]["B"][0]["source_start"] == 0.
     assert p["settings"]["target_duration"] == 180
 
@@ -54,7 +53,7 @@ def test_explicit_independent_ranges_can_meet_the_split_without_changing_source_
     assert {row["camera"] for row in _render_plan(p)} == {"stacked"}
     assert p["manual"]["source_tracks"]["A"][0]["source_start"] == 245.
     apply_manual_edit(p, {"action": "undo"})
-    assert composition_layout_coverage(p)["export_blocked"]
+    assert composition_layout_coverage(p)["fallback_available"]
     apply_manual_edit(p, {"action": "redo"})
     require_layout_coverage(p)
 
@@ -65,15 +64,16 @@ def test_synchronized_source_ranges_remain_valid_only_inside_actual_coverage():
     p["draft"]["camera_plan"] = [{"start": 10., "end": 20., "camera": "stacked"}]
     require_layout_coverage(p)
     p["manual"]["source_mixer"]["sync_offset"] = -155.
-    assert composition_layout_coverage(p)["export_blocked"]
+    assert composition_layout_coverage(p)["fallback_available"]
 
 
 @pytest.mark.parametrize("instruction", ["One game explainer, camera above gameplay, three minutes.",
                                          "סרטון הסבר אחד על המשחק, מצלמה מעל המשחק, שלוש דקות."])
-def test_actual_api_rejects_missing_layout_before_creating_job_and_preserves_request(api, monkeypatch, instruction):
+def test_actual_api_rejects_unsafe_layout_before_creating_job_and_preserves_request(api, monkeypatch, instruction):
     _, client, store, pid = api
     p = store.load(pid); example = project()
     p.update(copy.deepcopy(example)); p["id"] = pid
+    p["manual"]["source_tracks"]["A"] = []
     p["sources"]["A"].update(relative_path="media/source-A.mp4", generation="a-v1", has_audio=True)
     p["sources"]["B"].update(relative_path="media/source-B.mp4", generation="b-v1", has_audio=True)
     p["settings"]["instruction"] = instruction
@@ -86,6 +86,37 @@ def test_actual_api_rejects_missing_layout_before_creating_job_and_preserves_req
     assert response.get_json()["layout_coverage"]["missing_seconds"] == 180.
     assert store.state_path(pid).read_bytes() == before
     assert store.load(pid)["settings"]["instruction"] == instruction
+
+
+def test_actual_api_accepts_safe_automatic_fallback_and_returns_warning_without_editing(api, monkeypatch):
+    from cutroom.jobs import Job
+    app, client, store, pid = api
+    p = store.load(pid); p.update(copy.deepcopy(project())); p["id"] = pid
+    store.save(p)
+    before = store.state_path(pid).read_bytes()
+    submitted = []
+    monkeypatch.setattr("server.ensure_render_storage", lambda *a, **k: {"volumes": []})
+    monkeypatch.setattr(app.extensions["cutroom_jobs"], "submit", lambda *args, **kwargs:
+                        submitted.append((args, kwargs)) or Job("test-fallback", "render", pid))
+    response = client.post(f"/api/projects/{pid}/render", json={"fps": 60})
+    assert response.status_code == 202, response.get_json()
+    assert response.get_json()["layout_fallback"]["missing_seconds"] == 180.
+    assert response.get_json()["layout_fallback"]["mode"] == "available_A"
+    assert len(submitted) == 1
+    assert submitted[0][0][-1]["_require_layout_coverage"] is True
+    assert store.state_path(pid).read_bytes() == before
+
+
+def test_actual_api_revalidates_fallback_after_initial_preflight(api, monkeypatch):
+    _, client, store, pid = api
+    p = store.load(pid); p.update(copy.deepcopy(project())); p["id"] = pid; store.save(p)
+    def changed(*args, **kwargs):
+        store.update(pid, lambda current: current["manual"]["source_tracks"].update(A=[]))
+        return {"volumes": []}
+    monkeypatch.setattr("server.ensure_render_storage", changed)
+    response = client.post(f"/api/projects/{pid}/render", json={"fps": 30})
+    assert response.status_code == 409, response.get_json()
+    assert response.get_json()["error"] == "layout_coverage_incomplete"
 
 
 def test_automatic_layout_fallback_is_reported_but_not_mislabelled_explicit():
@@ -107,6 +138,6 @@ def test_single_source_role_requires_its_actual_mapped_source_without_blocking_a
     p["manual"]["source_mixer"].update(screen_slot="B", camera_slot="A", default_layout="screen")
     p["settings"]["layout"] = "screen"
     p["draft"]["camera_plan"][0]["camera"] = "screen"
-    assert composition_layout_coverage(p)["export_blocked"]
+    assert composition_layout_coverage(p)["fallback_available"]
     p["draft"]["camera_plan"][0]["camera"] = "camera"
     require_layout_coverage(p)

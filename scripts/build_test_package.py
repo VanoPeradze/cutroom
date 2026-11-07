@@ -17,6 +17,7 @@ ROOT_FILES = (
     ".gitignore", ".gitattributes", "server.py", "requirements.txt", "pytest.ini",
     "run_windows.bat", "repair_windows.bat", "setup_windows.ps1", "PUBLISH.bat",
     "run_linux.sh", "setup_linux.sh", "README.md", "CHANGELOG.md", "LICENSE",
+    "START CUTROOM DESKTOP.cmd",
 )
 # Explicit support files stay in their source locations inside App as well.
 SUPPORT_FILES = (
@@ -28,16 +29,16 @@ SOURCE_TREES = {
     "scripts": {".py"}, "tests": {".py", ".cjs"},
 }
 DOC_FILES = (
-    "docs/README.md", "docs/README_HE.md", "docs/START_HERE_HE.txt",
+    "docs/README.md", "docs/README_HE.md", "docs/START_HERE_HE.txt", "docs/GALLERY.md",
     "docs/THIRD_PARTY_NOTICES.md", "docs/UPGRADE_HE.md",
     "docs/KEYBOARD_SHORTCUTS.md", "docs/KEYBOARD_PROFILES.md", "docs/UI_LAYOUT_QA.md",
     "docs/CREATOR_EDITING_RESEARCH.md", "docs/TEST_ON_ANOTHER_PC.md",
     "docs/TRANSCRIPT_EVALUATION.md", "docs/QUALITY_AND_LIMITS.md", "docs/UIUX_SKILL_CSS.md",
     "docs/INDEPENDENT_TRACKS.md", "docs/BETA_FEEDBACK.md", "docs/BETA_STATUS.md", "docs/MODELS.md",
     "docs/CONTRIBUTING.md", "docs/AI_CONNECTIONS.md", "docs/PUBLISHING.md", "docs/PLATFORMS.md",
-    "docs/EDITOR_ROADMAP.md", "docs/STABILIZATION.md", "docs/CHROMA_KEY.md",
+    "docs/EDITOR_ROADMAP.md", "docs/STABILIZATION.md", "docs/CHROMA_KEY.md", "docs/SOURCE_MARKS.md",
     "docs/USER_GUIDE_EN.md", "docs/USER_GUIDE_HE.md", "docs/SHOWCASE_EN.md", "docs/SHOWCASE_HE.md",
-    "docs/images/showcase/README.md",
+    "docs/images/showcase/README.md", "docs/DESKTOP_APP.md",
 )
 # Only reviewed, purpose-made app screenshots belong in the tester package.
 # Missing captures fail the build rather than silently shipping broken guide links.
@@ -52,6 +53,8 @@ IMAGE_FILES = (
     "docs/images/readme/studio-audio-20261019.png",
     "docs/images/readme/studio-captions-20261019.png",
     "docs/images/readme/studio-output-20261019.png",
+    "docs/images/readme/studio-projects-20261015.png",
+    "docs/images/readme/studio-export-dialog-20261015.png",
     "docs/images/showcase/cover-20261106.jpg",
     "docs/images/showcase/edit-20261106.jpg",
     "docs/images/showcase/home-20261106.jpg",
