@@ -13,9 +13,9 @@ concurrency:
 
 jobs:
   scope:
-    # The bounded probe-recovery candidate passed run 42291275917. Its exact
-    # bytes now use the normal pinned release gates; do not rebuild on promotion.
-    if: ${{ github.event.pull_request.head.repo.full_name == 'VanoPeradze/cutroom' && github.event.pull_request.head.ref == 'codex/cutroom-ui-20261101' }}
+    # Qualify this bounded editor/Chrome/gallery candidate on hosted runners.
+    # Preserve the exact resulting archives for subsequent release promotion.
+    if: ${{ github.event.pull_request.head.repo.full_name == 'VanoPeradze/cutroom' && github.event.pull_request.head.ref == 'codex/editor-gallery-candidate-20261107' }}
     runs-on: ubuntu-latest
     outputs:
       build_candidate: ${{ steps.scope.outputs.build_candidate }}
@@ -182,12 +182,18 @@ jobs:
           node --test @tests
           if ($LASTEXITCODE -ne 0) { throw 'Packaged frontend tests failed' }
       - name: Verify media-probe recovery from the extracted stability candidate
-        if: ${{ github.event.pull_request.head.ref == 'codex/cutroom-probe-recovery-20261106' }}
+        if: ${{ github.event.pull_request.head.ref == 'codex/editor-gallery-candidate-20261107' }}
         shell: pwsh
         run: |
           Set-Location -LiteralPath $env:CUTROOM_EXTRACTED_APP
           & $env:CUTROOM_TEST_PYTHON -m unittest discover -s tests -p test_media_probe_recovery.py -v
           if ($LASTEXITCODE -ne 0) { throw 'Packaged media-probe recovery failed' }
+      - name: Test the reviewed editor and Chrome desktop update
+        shell: pwsh
+        run: |
+          Set-Location -LiteralPath $env:CUTROOM_EXTRACTED_APP
+          & $env:CUTROOM_TEST_PYTHON -m unittest tests.test_desktop_launcher_stdlib tests.test_all_layer_gap_closure tests.test_layout_fallback_export
+          if ($LASTEXITCODE -ne 0) { throw 'New editor and desktop regressions failed' }
       - name: Test synthetic portrait, audio and process restart
         timeout-minutes: 12
         shell: pwsh
