@@ -7,7 +7,6 @@
   const mobileLanguageSwitch = document.getElementById('mobileLanguageSwitch');
   const languageSwitches = [languageSwitch, mobileLanguageSwitch].filter(Boolean);
   const dialog = document.getElementById('imageDialog');
-  const screenshotButton = document.getElementById('expandShot');
   let screenshotOpener = null;
   const motionToggle = document.getElementById('motionToggle');
   const mobileMotionToggle = document.getElementById('mobileMotionToggle');
@@ -79,11 +78,42 @@
       }
     }
   }));
-  screenshotButton.addEventListener('click', event => {
-    screenshotOpener = event.currentTarget;
-    dialog.showModal();
+  const screenshotLinks = [...document.querySelectorAll('#expandShot, [data-screenshot]')];
+  const expandedImage = document.getElementById('expandedImage');
+  const originalImage = document.getElementById('originalImage');
+  const imageCounter = document.getElementById('imageCounter');
+  let screenshotIndex = 0;
+  function showScreenshot(index) {
+    screenshotIndex = (index + screenshotLinks.length) % screenshotLinks.length;
+    const link = screenshotLinks[screenshotIndex];
+    const image = link.querySelector('img');
+    expandedImage.src = link.href;
+    expandedImage.alt = image.alt;
+    expandedImage.width = image.naturalWidth || image.width;
+    expandedImage.height = image.naturalHeight || image.height;
+    originalImage.href = link.href;
+    imageCounter.textContent = `${screenshotIndex + 1} / ${screenshotLinks.length}`;
+  }
+  screenshotLinks.forEach((link, index) => {
+    link.setAttribute('aria-haspopup', 'dialog');
+    link.setAttribute('aria-controls', 'imageDialog');
+    link.addEventListener('click', event => {
+      if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || event.button !== 0 || !dialog.showModal) return;
+      event.preventDefault();
+      screenshotOpener = link;
+      showScreenshot(index);
+      dialog.showModal();
+    });
   });
+  document.getElementById('previousImage').addEventListener('click', () => showScreenshot(screenshotIndex - 1));
+  document.getElementById('nextImage').addEventListener('click', () => showScreenshot(screenshotIndex + 1));
   document.getElementById('closeImage').addEventListener('click', () => dialog.close());
+  dialog.addEventListener('keydown', event => {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+    event.preventDefault();
+    const forward = document.documentElement.dir === 'rtl' ? 'ArrowLeft' : 'ArrowRight';
+    showScreenshot(screenshotIndex + (event.key === forward ? 1 : -1));
+  });
   dialog.addEventListener('click', event => { if (event.target === dialog) dialog.close(); });
   dialog.addEventListener('close', () => {
     screenshotOpener?.focus({preventScroll: true});

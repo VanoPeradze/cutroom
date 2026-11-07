@@ -67,7 +67,8 @@ test('missing B in a requested split is visible beside preview without rewriting
     renderSourceBCoverage();`);
   assert.equal(nodes.get('layoutCoverageAlert').hidden,false);
   assert.match(nodes.get('layoutCoverageAlertText').textContent,/0\.00 of 6\.00/);
-  assert.match(nodes.get('layoutCoverageAlertText').textContent,/does not fulfil the requested layout/);
+  assert.match(nodes.get('layoutCoverageAlertText').textContent,/automatically uses mapped A picture/);
+  assert.match(nodes.get('layoutCoverageAlertText').textContent,/B\/split layout is absent/);
   assert.equal(run('JSON.stringify(state.project)===beforeCoverage'),true);
   run(`state.project.editor_sequence.source_tracks.B=[{id:'independent-b',start:0,end:6,source_start:0}];renderSourceBCoverage();`);
   assert.equal(nodes.get('layoutCoverageAlert').hidden,true);

@@ -1,11 +1,11 @@
 import { applyTranslations, dictionaries } from "./i18n.js?v=1.2-beta";
-import { TimelineView, formatTime, editableClips, timelineDuration, sequenceBlocks, sequenceGaps, sequenceGapClosureIssue, rippleMoveStart } from "./timeline.js?v=1.2-beta-20261024-insertgaps1";
-import { MediaStudio } from "./media-studio.js?v=1.3-beta-20261101-ui1";
+import { TimelineView, formatTime, editableClips, timelineDuration, sequenceBlocks, sequenceGaps, sequenceGapClosureIssue, rippleMoveStart } from "./timeline.js?v=1.3-beta-20261107-all-layer1";
+import { MediaStudio } from "./media-studio.js?v=1.3-beta-20261107-source-marks1";
 import { StabilizationStudio } from "./stabilization-studio.js?v=1.2-beta";
 import { ChromaStudio } from "./chroma-studio.js?v=1.2-beta";
 import { ChromaPreview } from "./chroma-preview.js?v=1.2-beta";
 import { SourceReview } from "./source-review.js?v=1.3-beta-20261101-ui8";
-import { initWorkspace } from "./workspace.js?v=1.2-beta-20261019";
+import { initWorkspace } from "./workspace.js?v=1.3-beta-20261107-monitor1";
 import { KEYBOARD_PROFILES, resolveEditorShortcut, isEditorTransportSpace, shortcutRows } from "./keyboard.js?v=1.2-beta";
 import { AudioThresholdView } from "./audio-meter.js?v=1.2-beta";
 import { initWelcome, workflowSettings, cloudProviderName } from "./welcome.js?v=1.2-beta";
@@ -4205,7 +4205,7 @@ function renderSourceBCoverage(mixer = sourceMixerSettings(), preview = null) {
   if (layoutAlert && hasEdit && layoutCoverage.duration > 0 && !layoutCoverage.full) {
     layoutAlert.hidden = false;
     const message = document.getElementById("layoutCoverageAlertText");
-    if (message) message.textContent = `Requested layout needs B, but only ${layoutCoverage.covered.toFixed(2)} of ${layoutCoverage.duration.toFixed(2)} required edit seconds have mapped B footage. The A-only fallback does not fulfil the requested layout. Review source timing before export.`;
+    if (message) message.textContent = `Requested layout needs B, but only ${layoutCoverage.covered.toFixed(2)} of ${layoutCoverage.duration.toFixed(2)} required edit seconds have mapped B footage. Export automatically uses mapped A picture where it safely covers missing B, and reports the substitution. The B/split layout is absent there. If no safe replacement exists, review source timing.`;
   }
   const busy = sourceMixerControlBusy();
   const shared = document.getElementById("reviewSharedSourceTiming"); if (shared) shared.disabled = busy;
@@ -7150,7 +7150,7 @@ function renderManualControls() {
     gapButton.hidden = !gaps.length;
     gapButton.disabled = !available || busy || Boolean(gapIssue);
     gapButton.textContent = `Close gaps (${gaps.length})`;
-    gapButton.title = gapIssue || (target === "edit" ? "Remove only time with no source footage or added media/text. Downstream timing stays protected. Undo available." : `Close empty spaces on ${target} only. The other track stays still. Undo available.`);
+    gapButton.title = gapIssue || (target === "edit" ? "Remove time empty on every layer. Later sources, added media/audio and text move together. Spanning clips stay intact. One Undo restores all layers." : `Close empty spaces on ${target} only. The other track and added layers stay still. Undo available.`);
   }
   elements.manualDelete.textContent = target === "edit" ? "Remove from video" : `Remove from ${target}`;
   elements.manualSplit.textContent = uiCopy("פצל", "Split");
@@ -7964,6 +7964,7 @@ function formatDate(value) {
 }
 
 function openExportDialog({ progress = false } = {}) {
+  showExportLayoutWarning(null);
   const previousStorageInfo=document.getElementById("exportStorageInfo");
   if(previousStorageInfo){previousStorageInfo.textContent="";previousStorageInfo.hidden=true;}
   if (state.project?.editor_sequence?.error) {
@@ -7999,6 +8000,7 @@ function openExportDialog({ progress = false } = {}) {
   // The backend keeps exports newest-first so the default download must never
   // silently point to an older render after a project has multiple exports.
   const latestExport = !progress && Array.isArray(state.project.exports) ? state.project.exports[0] : null;
+  if (latestExport?.layout_fallback) showExportLayoutWarning(latestExport.layout_fallback, "Previous export: ");
   if (latestExport?.url && latestExport?.name) {
     elements.downloadExport.href = latestExport.url;
     elements.downloadExport.download = latestExport.name;
@@ -8010,6 +8012,14 @@ function openExportDialog({ progress = false } = {}) {
   elements.confirmExport.disabled = foregroundBusy();
   renderExportReview(progress ? null : latestExport?.review, "Checks of the previous export");
   if (!elements.exportDialog.open) elements.exportDialog.showModal();
+}
+
+function showExportLayoutWarning(fallback, prefix = "") {
+  const target = document.getElementById("exportLayoutWarning");
+  if (!target) return;
+  const warning = typeof fallback?.warning === "string" ? fallback.warning : "";
+  target.textContent = warning ? `${prefix}${warning}` : "";
+  target.hidden = !warning;
 }
 
 // The bounded check run after each export: advice, never a block.
@@ -8041,6 +8051,7 @@ async function startExport() {
   if (liveEmbeddedCameraRequest() && (!(await flushEmbeddedCameraSave(projectId)) || state.project?.id !== projectId)) return;
   const lock = acquireJobStartLock("render", projectId);
   if (!lock) { toast(uiCopy("כבר מתבצעת עבודה", "Another job is already running")); return; }
+  showExportLayoutWarning(null);
   elements.exportActions.hidden = true;
   elements.exportProgress.hidden = false;
   elements.exportFrameRateField.hidden = true;
@@ -8053,6 +8064,7 @@ async function startExport() {
     assertJobStartNotCancelled();
     if (state.project?.id !== projectId) throw new Error("Cancelled");
     const payload = await api(`/api/projects/${encodeURIComponent(projectId)}/render`, { method: "POST", body: JSON.stringify({ quality: elements.qualitySelect.value, fps: selectedFrameRate() }) });
+    if (state.project?.id === projectId) showExportLayoutWarning(payload.layout_fallback);
     if(storageInfo){const estimate=payload.storage_estimate;
       storageInfo.textContent=estimate?storagePlanText({filesystems:estimate.volumes.map(row=>({...row,required_bytes:row.working_bytes,disk_free_bytes:row.free_bytes,reserved_bytes:0,available_bytes:Math.max(0,row.free_bytes-row.reserve_bytes)}))}):"";
       storageInfo.hidden=!storageInfo.textContent;
@@ -8062,6 +8074,7 @@ async function startExport() {
     await completeExportJob(job, projectId);
   } catch (error) {
     if (state.project?.id === projectId) {
+      showExportLayoutWarning(null);
       if (reviewLayout) reviewLayout.hidden = error.payload?.error !== "layout_coverage_incomplete";
       if(storageInfo){storageInfo.textContent=storagePlanText(error.payload?.storage_plan);storageInfo.hidden=!storageInfo.textContent;}
       elements.exportActions.hidden = false;
@@ -8138,6 +8151,7 @@ async function completeExportJob(job, projectId) {
     if (result?.url && result?.export?.name) {
       elements.exportTitle.textContent = "Your video is ready";
       elements.exportDescription.textContent = `Exported at ${result.export.fps || state.project.settings?.fps || 30} FPS. Download the finished video below.`;
+      showExportLayoutWarning(result.export.layout_fallback);
       elements.downloadExport.href = result.url;
       elements.downloadExport.download = result.export.name;
       elements.downloadExport.textContent = `Download video (${result.export.fps || state.project.settings?.fps || 30} FPS)`;

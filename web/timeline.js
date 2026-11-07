@@ -97,9 +97,15 @@ export function sequenceGaps(project, getTrackClips, slot = null) {
 }
 
 export function sequenceGapClosureIssue(project, gaps, slot = null) {
+  if (slot || !gaps.length) return "";
+  const activeCaption = project?.caption_alternative_status?.active_id;
+  if (activeCaption && activeCaption !== "original") return "An alternative caption version is active. Switch back to original captions before closing gaps together.";
+  if (Object.values(project?.manual?.caption_overrides || {}).some(edit => Number(edit?.start_delta || 0) !== 0 || Number(edit?.end_delta || 0) !== 0)) {
+    return "A transcript caption has custom timing. Reset that caption's timing before closing gaps together.";
+  }
   const layers = [...(project?.manual?.media_clips || []), ...(project?.manual?.text_clips || [])];
-  return !slot && layers.some(row => gaps.some(gap => row.end > gap.start + 1e-6))
-    ? "Closing these gaps would shift added media or text. Move or remove those layers before closing gaps across the whole edit."
+  return layers.some(row => gaps.some(gap => row.start < gap.end - 1e-6 && row.end > gap.start + 1e-6))
+    ? "This space contains added media or text. Only time empty on every layer can be closed together."
     : "";
 }
 

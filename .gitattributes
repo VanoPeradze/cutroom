@@ -4,4 +4,5 @@
 *.sh text eol=lf
 *.command text eol=lf
 *.bat -text
+*.cmd -text
 *.ps1 -text

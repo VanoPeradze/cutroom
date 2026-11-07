@@ -11,6 +11,8 @@
 - [AI connections](AI_CONNECTIONS.md): manual editing, local models, optional cloud accounts and privacy.
 - [Models and download sizes](MODELS.md): what each AI option needs.
 
+- [Screen gallery and capture coverage](GALLERY.md): real interface images and the complete window inventory.
+
 ## Take control of the edit
 
 - [Timeline and independent A/B tracks](INDEPENDENT_TRACKS.md).

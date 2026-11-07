@@ -29,7 +29,7 @@ function assertLocalized(link) {
 
 test('the 1.3 beta uses exact Windows, shared Mac/combined and source downloads', () => {
   const release = JSON.parse(readFileSync(new URL('./release.json', import.meta.url), 'utf8'));
-  const buttons = [...html.matchAll(/<a\b[^>]*class="[^"]*\bbutton\b[^"]*"[^>]*>/g)];
+  const buttons = [...html.matchAll(/<a\b[^>]*class="(?:button|[^"]* button)(?: [^"]*)?"[^>]*>/g)];
   assert.equal(buttons.length, 2);
   assert.equal(new Set(buttons.map(row => row[0].match(/href="([^"]+)"/)[1])).size, 2);
   for (const platform of ['windows', 'mac']) {
@@ -45,9 +45,9 @@ test('the 1.3 beta uses exact Windows, shared Mac/combined and source downloads'
     assert.match(mirror[0][2], /mirror/i);
     assert.ok(linksTo(html, `/downloads/${entry.filename}.sha256`).length >= 1);
   }
-  assert.equal(release.filename, 'CUTROOM-1.3-Beta-combined-34113eb.zip');
-  assert.equal(release.platforms.windows.filename, 'CUTROOM-1.3-Beta-Windows-34113eb.zip');
-  assert.equal(release.platforms.mac.filename, 'CUTROOM-1.3-Beta-combined-34113eb.zip');
+  assert.equal(release.filename, 'CUTROOM-1.3-Beta-combined-2dacba3.zip');
+  assert.equal(release.platforms.windows.filename, 'CUTROOM-1.3-Beta-Windows-2dacba3.zip');
+  assert.equal(release.platforms.mac.filename, 'CUTROOM-1.3-Beta-combined-2dacba3.zip');
   assert.equal(release.platforms.mac.filename, release.filename);
   assert.equal(release.platforms.mac.folder,'mac', 'Mac uses the shared combined archive mac folder');
   assert.equal(linksTo(html, release.url).length, 2); // Optional combined ZIP help link, separate from the Mac button.
@@ -56,7 +56,7 @@ test('the 1.3 beta uses exact Windows, shared Mac/combined and source downloads'
   assert.match(html, /Mac uses the combined ZIP\. Extract it, open mac, then run START CUTROOM\.command beside App\./);
   assert.match(region('details', 'install-help'), /The optional combined ZIP has exactly two folders: windows and mac/);
   const source = release.source_archive;
-  assert.equal(source.filename, 'SOURCE-34113eb.zip');
+  assert.equal(source.filename, 'SOURCE-2dacba3.zip');
   for (const url of [source.url, `/downloads/${source.filename}`, `/downloads/${source.filename}.sha256`]) assert.equal(linksTo(html,url).length,1);
   assert.equal(downloadEntries(release).length,3);
   assert.match(html, /1\.3 Beta · Workspace &amp; sound/);
@@ -73,8 +73,8 @@ test('the 1.3 beta uses exact Windows, shared Mac/combined and source downloads'
 
 test('download metadata pins a dated release and preserves Expo mirrors and provenance', () => {
   const release = JSON.parse(readFileSync(new URL('./release.json', import.meta.url), 'utf8'));
-  assert.equal(release.github_release.tag, 'v1.3-beta-20261106-stability1');
-  assert.equal(release.github_release.previous_public_tag, 'v1.3-beta-20261105-installfix1');
+  assert.equal(release.github_release.tag, 'v1.3-beta-20261107-editor1');
+  assert.equal(release.github_release.previous_public_tag, 'v1.3-beta-20261106-stability1');
   assert.equal(release.github_release.tag_commit, release.source_commit);
   assert.equal(release.github_release.package_bytes_changed, true);
   assert.equal(release.github_release.url, `${repository}/releases/tag/${release.github_release.tag}`);
@@ -89,23 +89,25 @@ test('public beta retains exact automated native provenance and visible pending 
   assertPublishable(release);
   assert.equal(release.release_state,'beta');
   assert.equal(release.full_release_qualified,false);
-  assert.equal(release.source_commit,'34113eb3ce3d30c4b66976c6ee9c51c9a1ac85c3');
-  assert.equal(release.github_release.tag,'v1.3-beta-20261106-stability1');
-  assert.equal(release.native_validation.run_id,42291275917);
-  assert.equal(release.validated_pr_head,'34113eb3ce3d30c4b66976c6ee9c51c9a1ac85c3');
+  assert.equal(release.source_commit,'2dacba3cdc83b3be21e7223d6aa9fba0f36f72fe');
+  assert.equal(release.github_release.tag,'v1.3-beta-20261107-editor1');
+  assert.equal(release.native_validation.run_id,42406800822);
+  assert.equal(release.validated_pr_head,'2dacba3cdc83b3be21e7223d6aa9fba0f36f72fe');
   assert.equal(release.native_validation.head_commit,release.validated_pr_head);
   assert.equal(release.native_validation.application_source_commit,release.source_commit);
   assert.equal(release.native_validation.transcription_run,false);
+  assert.equal(release.native_validation.review_record_commit,'99bdbf22d82336d7492161b9d15593d2d0c036ca');
   for (const architecture of ['arm64','x64']) {
     const checks = release.native_validation.architectures[architecture];
     assert.equal(checks.status,'passed');
-    assert.equal(checks.offline_checks_passed,7);
-    assert.equal(checks.offline_checks_scope,'seven named smoke groups, not a count of individual assertions');
+    assert.equal(checks.offline_checks_passed,undefined);
+    for (const key of ["status", "launcher_health_and_api", "restart_persistence", "repeat_launch", "different_data_port_collision", "source_audio_and_caption_checks", "offline_ready_setup", "installed_packages_unchanged"]) assert.equal(checks.installation_checks[key],'passed');
+    assert.equal(checks.installation_checks.unicode_and_spaces_path,true);
     assert.equal(checks.feature_tests_passed,357);
     assert.equal(checks.required_cases_passed,50);
     assert.equal(checks.skipped,0);
     assert.equal(checks.source_audio_and_caption_checks,'passed');
-    assert.equal(checks.job_id,architecture === 'arm64' ? 128148051828 : 128148051817);
+    assert.equal(checks.job_id,architecture === 'arm64' ? 128507047775 : 128507047636);
     for (const gate of ['fresh_app_install','missing_pip_recovery','restart_persistence']) assert.equal(checks[gate],'passed');
     assert.equal(checks.combined_archive_sha256,release.sha256);
   }
@@ -218,15 +220,15 @@ test('the concise introduction shows an authentic bilingual dark editor preview'
   lines.forEach(line => { assert.match(line[1], /data-he="[^"]*[\u0590-\u05ff]/); assert.match(line[2], /[A-Za-z]/); });
   const image = hero.match(/<img\b[^>]*id="editorImage"[^>]*>/)?.[0];
   assert.ok(image, 'The first section must show the editor');
-  assert.match(image, /src="\/assets\/showcase\/cover-20261106\.jpg"/);
+  assert.match(image, /src="\/assets\/studio-edit\.png\?v=20261019"/);
   assert.match(image, /width="1600" height="900"/);
   assert.match(image, /alt="[^"]+"/);
   assert.match(image, /data-he-alt="[^"]*[\u0590-\u05ff]/);
   assert.match(image, /fetchpriority="high"/);
   assert.ok(region('dialog', 'imageDialog').includes('src="/assets/studio-edit.png?v=20261019"'), 'Enlargement preserves the original screenshot, without artwork framing');
   assert.match(hero, /Interface captured 19 October 2026/);
-  assert.match(hero, /No third-party footage or real person is shown\./);
-  assert.doesNotMatch(html, /(?:welcome|ai-options)\.png|\bdata-shot=|<table\b/);
+  assert.match(hero, /Screenshots show an earlier interface, not a new downloadable build\./);
+  assert.doesNotMatch(html, /src="[^"]*showcase|<table\b/);
 });
 
 test('platform download help remains readable and localized', () => {
@@ -265,7 +267,7 @@ test('keyboard focus, reduced motion and screenshot enlargement remain available
   assert.match(reducedMotion, /html\s*\{scroll-behavior:auto\}/);
   assert.match(reducedMotion, /transition:none!important/);
   assert.match(reducedMotion, /animation:none!important/);
-  assert.match(html, /<button\b[^>]*id="expandShot"[^>]*aria-label="[^"]+"/);
+  assert.match(html, /<a\b[^>]*id="expandShot"[^>]*aria-label="[^"]+"/);
   assert.match(html, /<dialog\b[^>]*id="imageDialog"[^>]*aria-labelledby="imageDialogTitle"[^>]*aria-describedby="imageDialogHelp"/);
   assert.match(html, /<button\b[^>]*id="closeImage"/);
 });
@@ -314,7 +316,7 @@ test('theme text and dual focus colors retain readable contrast', () => {
 
 test('the workspace tour follows the editor order and stays readable without script', () => {
   const tabs = [...html.matchAll(/<button\b[^>]*class="tour-tab"[^>]*id="tab-([a-z]+)"[^>]*aria-controls="panel-\1"[^>]*>([\s\S]*?)<\/button>/g)];
-  assert.deepEqual(tabs.map(tab => tab[1]), ['media', 'edit', 'layout', 'audio', 'captions', 'output']);
+  assert.deepEqual(tabs.map(tab => tab[1]), ['home', 'media', 'edit', 'layout', 'audio', 'captions', 'output', 'settings', 'projects', 'export']);
   for (const [, id, label] of tabs) {
     assert.match(label, /<span\b[^>]*data-he="[^"]*[֐-׿]/, `${id} tab needs a Hebrew label`);
     const panel = html.match(new RegExp(`<div\\b[^>]*id="panel-${id}"[^>]*>`))?.[0];
@@ -329,47 +331,39 @@ test('the workspace tour follows the editor order and stays readable without scr
   for (const key of ['ArrowLeft', 'ArrowRight', 'Home', 'End']) assert.match(script, new RegExp(`'${key}'`));
 });
 
-test('each workspace has a local, full-size, bilingual product screenshot', () => {
-  const shots = [...html.matchAll(/<img\b[^>]*class="workspace-shot"[^>]*>/g)];
-  assert.equal(shots.length, 6);
-  for (const [index, name] of ['media', 'edit', 'layout', 'audio', 'captions', 'output'].entries()) {
-    assert.ok(shots[index][0].includes(`/assets/showcase/${name}-20261106.jpg`));
-    assert.equal(linksTo(html, `/assets/studio-${name}.png?v=20261019`).length, 1, 'Keep a full-size original available');
-    const artwork = readFileSync(new URL(`./public/assets/showcase/${name}-20261106.jpg`, import.meta.url));
-    assert.equal(artwork.readUInt16BE(0), 0xffd8);
-    assert.ok(artwork.length < 300_000, 'Keep thumbnails lightweight');
-    assert.match(shots[index][0], /data-he-alt="[^"]*[\u0590-\u05ff]/);
-    assert.match(shots[index][0], /loading="lazy"/);
-    const png = readFileSync(new URL(`./public/assets/studio-${name}.png`, import.meta.url));
-    assert.equal(png.subarray(1, 4).toString(), 'PNG');
-    assert.equal(png.readUInt32BE(16), 1600);
-    assert.equal(png.readUInt32BE(20), 900);
+test('every gallery image links to the exact same full-resolution PNG', () => {
+  const links = [...html.matchAll(/<a class="workspace-image-link"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g)];
+  assert.equal(links.length, 10);
+  for (const [, href, contents] of links) {
+    const src = contents.match(/src="([^"]+)"/)[1];
+    assert.equal(src, href);
+    assert.match(contents, /loading="lazy"/);
+    assert.match(contents, /data-he-alt="[^"]*[\u0590-\u05ff]/);
+    const bytes = readFileSync(new URL('./public' + src.split('?')[0], import.meta.url));
+    assert.equal(bytes.subarray(1, 4).toString(), 'PNG');
+    assert.equal(bytes.readUInt32BE(16), src.includes('20261015') ? 1440 : 1600);
+    assert.ok(contents.includes(`width="${bytes.readUInt32BE(16)}"`));
+    assert.equal(bytes.readUInt32BE(20), 900);
   }
-  assert.doesNotMatch(html, /class="(?:art|panel-art)\b/);
+  assert.match(css, /\.workspace-shot, \.shot-button img \{ aspect-ratio:auto/);
+  assert.match(html, /Additional windows are not yet pictured here/);
 });
 
-test('sharing metadata points to the actual lightweight 1200 by 630 image', () => {
-  const url = 'https://cutroom-studio.expo.app/assets/showcase/social-20261106.jpg';
-  assert.match(html, /name="twitter:card" content="summary_large_image"/);
-  for (const field of ['property="og:image"', 'name="twitter:image"']) {
-    assert.ok(html.includes(`${field} content="${url}"`));
-  }
-  assert.match(html, /property="og:image:width" content="1200"/);
-  assert.match(html, /property="og:image:height" content="630"/);
-  const bytes = readFileSync(new URL('./public/assets/showcase/social-20261106.jpg', import.meta.url));
-  assert.equal(bytes.readUInt16BE(0), 0xffd8);
-  let dimensions;
-  for (let offset = 2; offset + 8 < bytes.length;) {
-    assert.equal(bytes[offset], 0xff);
-    const marker = bytes[offset + 1], length = bytes.readUInt16BE(offset + 2);
-    if ([0xc0, 0xc1, 0xc2].includes(marker)) {
-      dimensions = [bytes.readUInt16BE(offset + 7), bytes.readUInt16BE(offset + 5)];
-      break;
-    }
-    offset += 2 + length;
-  }
-  assert.deepEqual(dimensions, [1200, 630]);
-  assert.ok(bytes.length < 200_000, 'Social preview should stay lightweight');
+test('sharing metadata uses the actual editor PNG without artwork', () => {
+  const url = 'https://cutroom-studio.expo.app/assets/studio-edit.png';
+  for (const field of ['property="og:image"', 'name="twitter:image"']) assert.ok(html.includes(`${field} content="${url}"`));
+  assert.match(html, /property="og:image:type" content="image\/png"/);
+  assert.match(html, /property="og:image:width" content="1600"/);
+  assert.match(html, /property="og:image:height" content="900"/);
+});
+
+test('gallery has progressive enhancement, original links and keyboard controls', () => {
+  assert.match(html, /<a id="expandShot" href="\/assets\/studio-edit.png\?v=20261019"/);
+  for (const id of ['previousImage', 'nextImage', 'originalImage', 'imageCounter']) assert.ok(html.includes(`id="${id}"`));
+  assert.match(script, /event.ctrlKey \|\| event.metaKey/);
+  assert.match(script, /expandedImage.src = link.href/);
+  assert.match(script, /originalImage.href = link.href/);
+  assert.match(script, /screenshotOpener\?\.focus/);
 });
 
 test('inline styles stay out of the strict CSP', () => {
@@ -536,4 +530,67 @@ test('preceding public release validation remains historical', () => {
   assert.equal(windows?.windows_fresh_install?.status,'not_verified');
   assert.equal(mac?.source_commit,'3caa23d2119e3963c044fc3281615227b2bea8e0');
   assert.equal(mac?.native_validation?.run_id,41710068813);
+});
+
+test('screenshot dialog follows the selected original, wraps, respects modifiers and restores focus', async () => {
+  const {runInNewContext} = await import('node:vm');
+  const start = script.indexOf('  const screenshotLinks =');
+  const end = script.indexOf('  // Native details', start);
+  const element = () => ({events:{}, addEventListener(type, fn) {this.events[type] = fn;}, setAttribute() {}});
+  const links = ['home', 'edit', 'settings'].map(name => ({...element(), href:`/assets/${name}.png`,
+    querySelector:() => ({alt:name, naturalWidth:1600, naturalHeight:900, width:400, height:225}),
+    focus(){this.focused=true;}}));
+  const ids = Object.fromEntries(['expandedImage', 'originalImage', 'imageCounter', 'previousImage', 'nextImage', 'closeImage'].map(id => [id, element()]));
+  const dialog = {...element(), open:false, showModal(){this.open=true;}, close(){this.open=false;this.events.close();}};
+  const document = {querySelectorAll:()=>links, getElementById:id=>ids[id], documentElement:{dir:'ltr'}};
+  runInNewContext('let screenshotOpener = null;\n'+script.slice(start,end), {document,dialog});
+  const click = (link, modifiers={}) => {
+    const event={button:0, preventDefault(){this.prevented=true;}, ...modifiers}; link.events.click(event); return event;
+  };
+  assert.equal(click(links[1],{ctrlKey:true}).prevented,undefined);
+  assert.equal(dialog.open,false);
+  assert.equal(click(links[1]).prevented,true);
+  assert.equal(dialog.open,true);
+  assert.equal(ids.expandedImage.src,links[1].href);
+  assert.equal(ids.originalImage.href,links[1].href);
+  assert.equal(ids.expandedImage.width,1600);
+  ids.nextImage.events.click();
+  assert.equal(ids.expandedImage.alt,'settings');
+  ids.nextImage.events.click();
+  assert.equal(ids.expandedImage.alt,'home');
+  dialog.events.keydown({key:'ArrowLeft',preventDefault(){}});
+  assert.equal(ids.expandedImage.alt,'settings');
+  document.documentElement.dir='rtl';
+  dialog.events.keydown({key:'ArrowLeft',preventDefault(){}});
+  assert.equal(ids.expandedImage.alt,'home');
+  ids.closeImage.events.click();
+  assert.equal(dialog.open,false);
+  assert.equal(links[1].focused,true);
+  click(links[0]);
+  dialog.events.click({target:dialog});
+  assert.equal(dialog.open,false);
+  assert.equal(links[0].focused,true);
+});
+
+test('archived supplemental views and undated AI setup are labeled honestly', () => {
+  assert.match(html, /The AI setup capture date was not recorded/);
+  assert.match(html, /These are archived originals, not new captures/);
+  for (const id of ['projects', 'export']) {
+    const panel = html.slice(html.indexOf(`id="panel-${id}"`));
+    assert.match(panel.slice(0, panel.indexOf('class="original-link"')), /Archived interface from 15 October 2026/);
+  }
+});
+
+
+test('current release discloses archival screenshots and preserves preceding Nov6 provenance', () => {
+  const release = JSON.parse(readFileSync(new URL('./release.json', import.meta.url),'utf8'));
+  assert.ok(release.known_limitations.some(text => text.includes('Fresh current-version screenshots were not captured')));
+  assert.match(html, /fresh current-version screenshots were not captured/);
+  assert.equal(release.historical_native_validation.find(row=>row.release_tag==='v1.3-beta-20261106-stability1').native_validation.run_id,42291275917);
+  const retained = JSON.parse(readFileSync(new URL('./retained-downloads.json', import.meta.url),'utf8'));
+  assert.equal(retained.length,39);
+  for (const entry of retained) {
+    assert.equal(entry.url,`https://cutroom-studio--cfqtj1cb86.expo.app/downloads/${entry.filename}`);
+    assert.ok(entry.github_url.startsWith('https://github.com/VanoPeradze/cutroom/releases/download/'));
+  }
 });

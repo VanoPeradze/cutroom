@@ -1252,6 +1252,13 @@ def _apply_manual_edit(project: dict[str, Any], payload: dict[str, Any]) -> dict
                     manual[key] = sequence_edit[key]
                 else:
                     manual.pop(key, None)
+            if action == "sequence_close_gaps" and not payload.get("slot"):
+                # Commit the staged all-layer translation in the same history
+                # entry as source timing. Other sequence edits keep their
+                # existing independent-layer behavior.
+                for key in ("media_clips", "text_clips"):
+                    if key in sequence_edit:
+                        manual[key] = sequence_edit[key]
             project["draft"]["edited_at"] = now_iso()
             project["draft"]["status"] = "ready"
         elif action in TRACK_ACTIONS:

@@ -1,6 +1,10 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {baselineRequests, collectDownloads, expoBaseline, githubApi, installationZip, publishBadge, updateBadge} from './update_download_badge.mjs';
+import {baselineRequests, collectDownloads as collectWithHistory, expoBaseline, githubApi, installationZip, publishBadge, updateBadge as updateWithHistory, githubSnapshot, snapshotAssets} from './update_download_badge.mjs';
+
+const emptySnapshot = {...githubSnapshot, assets: []};
+const collectDownloads = (api, baseline = expoBaseline) => collectWithHistory(api, baseline, emptySnapshot);
+const updateBadge = (api, publish = false) => updateWithHistory(api, publish, emptySnapshot);
 
 const release = (id, draft = false) => ({id, draft, prerelease: true, published_at: draft ? null : '2026-10-11T12:00:00Z'});
 const asset = (id, name, count) => ({id, name, download_count: count, state: 'uploaded'});
@@ -34,13 +38,13 @@ test('paginates both releases and assets and avoids duplicate asset counts', asy
   assert.equal(calls.length, 5);
 });
 
-test('counts the exact promoted review pair while excluding its draft, source and unrelated reviews', async () => {
+test('counts public review installation names while excluding drafts, source and malformed reviews', async () => {
   const promotedWindows = 'CUTROOM-1.2-Beta-Windows-review-fe35453.zip';
   const promotedCombined = 'CUTROOM-1.2-Beta-combined-review-fe35453.zip';
   for (const name of [promotedWindows, promotedCombined]) assert.equal(installationZip.test(name), true);
   for (const name of ['SOURCE-fe35453.zip', promotedWindows + '.sha256', promotedCombined + '.sha256',
-    'CUTROOM-1.2-Beta-Mac-review-fe35453.zip', 'CUTROOM-1.2-Beta-Windows-review-31ebfd0.zip',
-    'CUTROOM-1.2-Beta-combined-review-31ebfd0.zip', 'CUTROOM-1.2-Beta-Windows-review-fe35453-tests.zip',
+    'CUTROOM-1.2-Beta-Mac-review-fe35453.zip', 'CUTROOM-1.2-Beta-Windows-review-notahash.zip',
+    'CUTROOM-1.2-Beta-combined-review-notahash.zip', 'CUTROOM-1.2-Beta-Windows-review-fe35453-tests.zip',
     'CUTROOM-1.2-Beta-Windows-review-fe35453.zip.extra']) {
     assert.equal(installationZip.test(name), false, name);
   }
@@ -51,7 +55,7 @@ test('counts the exact promoted review pair while excluding its draft, source an
     assert.ok(path.startsWith('releases/1/assets?'), 'Private draft assets must never be queried');
     return [asset(11, promotedWindows, 7), asset(12, promotedCombined, 4),
       asset(11, promotedWindows, 7), asset(13, 'SOURCE-fe35453.zip', 80),
-      asset(14, 'CUTROOM-1.2-Beta-combined-review-31ebfd0.zip', 90)];
+      asset(14, 'CUTROOM-1.2-Beta-combined-review-notahash.zip', 90)];
   };
   assert.equal((await collectDownloads(api)).message, '174'); // 163 observed Expo + 11 published ZIP requests.
   assert.equal(calls.length, 2);
@@ -132,4 +136,86 @@ test('a confirmed empty GitHub result keeps the baseline; errors never publish a
   assert.equal((await collectDownloads(async () => [])).message, '163');
   await assert.rejects(updateBadge(async () => { throw new Error('GitHub unavailable'); }, true), /GitHub unavailable/);
   await assert.rejects(collectDownloads(async () => ({message: 'API error'})), /Invalid GitHub list/);
+});
+
+test('versioned published install naming includes dated, hash and review builds but excludes non-install files', () => {
+  for (const name of ['CUTROOM-1.2-Beta-20261019.zip', 'CUTROOM-1.2-Beta-Mac-20261022-maintenance1.zip',
+    'CUTROOM-1.3-Beta-Windows-63be0c8.zip', 'CUTROOM-1.3-Beta-combined-34113eb.zip',
+    'CUTROOM-1.3-Beta-combined-review-bd62ec2.zip', 'CUTROOM-1.2-Beta-Windows-review-ad3259b.zip']) {
+    assert.equal(installationZip.test(name), true, name);
+  }
+  for (const name of ['SOURCE-63be0c8.zip', 'CUTROOM-1.3-Beta-tests.zip', 'CUTROOM-1.3-Beta-Windows-tests.zip',
+    'CUTROOM-1.3-Beta-Windows-63be0c8.zip.sha256', 'CUTROOM-1.3-Beta-source.zip',
+    'CUTROOM-1.3-Beta-Windows-review-unapproved.zip', '../CUTROOM-1.3-Beta.zip']) {
+    assert.equal(installationZip.test(name), false, name);
+  }
+});
+
+const savedSnapshot = {...emptySnapshot, assets: [{asset_id: 91, release_id: 1, tag: 'v1.1-beta-20261011',
+  name: windows, download_count: 20, published_at: '2026-10-11T12:00:00Z'}]};
+
+test('draft-hiding preserves public historical counts without querying private assets', async () => {
+  const api = async path => {
+    assert.equal(path, 'releases?per_page=100&page=1');
+    return [release(1, true), release(2, true)];
+  };
+  assert.equal((await collectWithHistory(api, expoBaseline, savedSnapshot)).message, '183');
+  assert.equal((await collectWithHistory(async () => [], expoBaseline, savedSnapshot)).message, '183');
+});
+
+test('republished and repeated live assets use max(live, snapshot) exactly once', async () => {
+  for (const count of [10, 20, 30]) {
+    const api = async path => path.startsWith('releases?') ? [release(1), release(1)]
+      : [asset(91, windows, count), asset(91, windows, count), asset(92, windows, 3)];
+    const expected = String(163 + Math.max(20, count) + 3);
+    assert.equal((await collectWithHistory(api, expoBaseline, savedSnapshot)).message, expected);
+    assert.equal((await collectWithHistory(api, expoBaseline, savedSnapshot)).message, expected);
+  }
+});
+
+test('matching names on distinct asset IDs count independently, identity reuse is rejected', async () => {
+  const good = async path => path.startsWith('releases?') ? [release(1)] : [asset(92, windows, 3)];
+  assert.equal((await collectWithHistory(good, expoBaseline, savedSnapshot)).message, '186');
+  const renamed = async path => path.startsWith('releases?') ? [release(1)] : [asset(91, 'CUTROOM-1.1-Beta-Mac.zip', 30)];
+  await assert.rejects(collectWithHistory(renamed, expoBaseline, savedSnapshot), /identity mismatch/);
+  const moved = async path => path.startsWith('releases?') ? [release(2)] : [asset(91, windows, 30)];
+  await assert.rejects(collectWithHistory(moved, expoBaseline, savedSnapshot), /identity mismatch/);
+});
+
+test('new public versioned downloads count while private draft counts are never requested', async () => {
+  const api = async path => {
+    if (path.startsWith('releases?')) return [release(2), release(3, true)];
+    assert.ok(path.startsWith('releases/2/assets?'));
+    return [asset(101, 'CUTROOM-1.3-Beta-Windows-63be0c8.zip', 5),
+      asset(102, 'CUTROOM-1.3-Beta-combined-63be0c8.zip', 7), asset(103, 'SOURCE-63be0c8.zip', 900)];
+  };
+  assert.equal((await collectWithHistory(api, expoBaseline, savedSnapshot)).message, '195');
+});
+
+test('malformed or duplicate snapshot facts fail closed', () => {
+  for (const snapshot of [{...savedSnapshot, observed_at: 'unknown'}, {...savedSnapshot, source: 'unverified'},
+    {...savedSnapshot, assets: [...savedSnapshot.assets, ...savedSnapshot.assets]}]) {
+    assert.throws(() => snapshotAssets(snapshot), /Invalid historical/);
+  }
+  for (const change of [{download_count: -1}, {download_count: '20'}, {asset_id: 0}, {release_id: null},
+    {published_at: 'unknown'}, {name: 'SOURCE-63be0c8.zip'}]) {
+    assert.throws(() => snapshotAssets({...savedSnapshot, assets: [{...savedSnapshot.assets[0], ...change}]}), /Invalid historical/);
+  }
+});
+
+test('snapshot presence does not permit partial API results to overwrite the last good badge', async () => {
+  const api = async (path, options) => {
+    assert.equal(options, undefined);
+    if (path.startsWith('releases?')) return [release(1), release(2)];
+    if (path.startsWith('releases/1/')) return [asset(91, windows, 30)];
+    throw new Error('later page failed');
+  };
+  await assert.rejects(updateWithHistory(api, true, savedSnapshot), /later page failed/);
+});
+
+test('checked-in snapshot consists of public installation facts and retains the independent Expo baseline', async () => {
+  const assets = snapshotAssets(githubSnapshot);
+  assert.ok(assets.size > 0);
+  const sum = [...assets.values()].reduce((total, row) => total + row.download_count, 0);
+  assert.equal((await collectWithHistory(async () => [], expoBaseline)).message, (163 + sum).toLocaleString('en-US'));
 });

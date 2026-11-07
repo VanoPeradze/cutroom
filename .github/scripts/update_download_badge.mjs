@@ -1,13 +1,15 @@
-// Fixed observed Expo requests plus current GitHub ZIP counts; publish only after all reads succeed.
+// Fixed Expo requests plus the asset-ID union of public GitHub history and live counts.
+// Refresh the public snapshot immediately before hiding releases; never count private draft activity.
 import {readFileSync} from 'node:fs';
 import {pathToFileURL} from 'node:url';
 import {resolve} from 'node:path';
 
 export const repository = 'VanoPeradze/cutroom';
 export const statsBranch = 'download-stats';
-// The approved source-pinned review pair keeps its original names on promotion.
-// Do not broaden this exception to arbitrary review, source or test archives.
-export const installationZip = /^(?:CUTROOM-\d+\.\d+(?:\.\d+)?(?:-Beta)?(?:-(?:Windows|Mac))?|CUTROOM-1\.2-Beta-(?:Windows|combined)-review-fe35453)\.zip$/;
+// Only installation naming families, never SOURCE, checksums, tests or arbitrary review labels.
+// Drafts are excluded before matching; a public review-named installation is still a download.
+export const installationZip = /^CUTROOM-\d+\.\d+(?:\.\d+)?(?:-Beta)?(?:(?:-(?:Windows|Mac|combined))?(?:-(?:\d{8}(?:-(?:hotfix|maintenance|update|ui|installfix|stability|perf|editor)\d+)?|[a-f0-9]{7,40}))?|-(?:Windows|combined)-review-[a-f0-9]{7,40})\.zip$/;
+export const githubSnapshot = JSON.parse(readFileSync(new URL('../download-request-github-history.json', import.meta.url), 'utf8'));
 export const expoBaseline = JSON.parse(readFileSync(new URL('../download-request-baseline.json', import.meta.url), 'utf8'));
 
 export function baselineRequests(baseline) {
@@ -55,30 +57,54 @@ async function* pages(api, path) {
   }
 }
 
-export async function collectDownloads(api, baseline = expoBaseline) {
+export function snapshotAssets(snapshot) {
+  if (snapshot.schema_version !== 1 || snapshot.source !== `https://api.github.com/repos/${repository}/releases`
+    || typeof snapshot.observed_at !== 'string' || !Number.isFinite(Date.parse(snapshot.observed_at))
+    || !Array.isArray(snapshot.assets)) throw new Error('Invalid historical GitHub snapshot');
+  const assets = new Map();
+  for (const asset of snapshot.assets) {
+    if (!Number.isSafeInteger(asset.asset_id) || asset.asset_id <= 0
+      || !Number.isSafeInteger(asset.release_id) || asset.release_id <= 0
+      || typeof asset.name !== 'string' || !installationZip.test(asset.name)
+      || typeof asset.tag !== 'string' || !/^v\d+\.\d+/.test(asset.tag)
+      || typeof asset.published_at !== 'string' || !Number.isFinite(Date.parse(asset.published_at))
+      || !Number.isSafeInteger(asset.download_count) || asset.download_count < 0
+      || assets.has(asset.asset_id)) throw new Error('Invalid historical GitHub asset');
+    assets.set(asset.asset_id, {...asset});
+  }
+  return assets;
+}
+
+export async function collectDownloads(api, baseline = expoBaseline, snapshot = githubSnapshot) {
   const historicalRequests = baselineRequests(baseline);
-  let total = 0;
+  const assets = snapshotAssets(snapshot);
   const releases = new Set();
-  const assets = new Set();
   for await (const release of pages(api, 'releases')) {
     if (!Number.isSafeInteger(release.id) || typeof release.draft !== 'boolean') throw new Error('Invalid release data');
-    // Include published betas, but never drafts visible to an authenticated maintainer.
+    // Never query private drafts. Formerly public assets retain only their recorded public count.
     if (release.draft || releases.has(release.id)) continue;
     if (!release.published_at) throw new Error('Release is missing its publication date');
     releases.add(release.id);
-    // Paginate assets separately: the embedded release.assets list may be incomplete.
     for await (const asset of pages(api, `releases/${release.id}/assets`)) {
       if (typeof asset.name !== 'string' || !Number.isSafeInteger(asset.id)) throw new Error('Invalid asset data');
-      if (!installationZip.test(asset.name) || assets.has(asset.id)) continue;
+      if (!installationZip.test(asset.name)) continue;
       if (asset.state !== 'uploaded' || !Number.isSafeInteger(asset.download_count) || asset.download_count < 0) {
         throw new Error('Invalid installation asset count or upload state');
       }
-      assets.add(asset.id);
-      total += asset.download_count;
-      if (!Number.isSafeInteger(total)) throw new Error('Download total exceeds safe integer range');
+      const previous = assets.get(asset.id);
+      if (previous && (previous.name !== asset.name || previous.release_id !== release.id)) {
+        throw new Error('Historical or repeated asset identity mismatch');
+      }
+      assets.set(asset.id, {asset_id: asset.id, release_id: release.id, name: asset.name,
+        download_count: Math.max(previous?.download_count ?? 0, asset.download_count)});
     }
   }
-  // Recompute from independent sources every time; never add to the previous badge value.
+  // Union by asset ID, not filename or old badge total; live counts replace rather than add to history.
+  let total = 0;
+  for (const asset of assets.values()) {
+    total += asset.download_count;
+    if (!Number.isSafeInteger(total)) throw new Error('Download total exceeds safe integer range');
+  }
   const requests = historicalRequests + total;
   if (!Number.isSafeInteger(requests)) throw new Error('Combined request total exceeds safe integer range');
   return {schemaVersion: 1, label: 'download requests', message: requests.toLocaleString('en-US'), color: '1bd9ce'};
@@ -108,9 +134,9 @@ export async function publishBadge(api, badge) {
   return true;
 }
 
-export async function updateBadge(api, publish = false) {
+export async function updateBadge(api, publish = false, snapshot = githubSnapshot) {
   // Any failure above publication leaves the last good public JSON untouched.
-  const badge = await collectDownloads(api);
+  const badge = await collectDownloads(api, expoBaseline, snapshot);
   if (publish) await publishBadge(api, badge);
   return badge;
 }

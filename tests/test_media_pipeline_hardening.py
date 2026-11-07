@@ -318,14 +318,31 @@ def test_negative_b_offset_trims_b_once_then_uses_a_timeline_ranges():
     assert has_audio is True
 
 
-def test_missing_b_audio_falls_back_to_a_audio_without_referencing_b_audio_stream():
+def test_missing_implicit_b_audio_falls_back_to_a_audio_without_referencing_b_audio_stream():
     value = _project(b_audio=False, audio_slot="B")
+    # A draft preference may fall back; an explicit user route must not switch recordings.
+    value["manual"]["source_mixer"].pop("audio_slot")
 
-    graph, _, has_audio = render.build_filter_graph(value, 1280, 720)
+    graph, maps, has_audio = render.build_filter_graph(value, 1280, 720)
 
     assert "[0:a]asetpts=PTS-STARTPTS,apad,atrim=duration=10.000000" in graph
     assert "[1:a]" not in graph
+    assert maps == ["-map", "[vout]", "-map", "[aceiling]"]
     assert has_audio is True
+
+
+@pytest.mark.parametrize("selection", ["manual", "settings"])
+def test_missing_explicit_b_audio_never_substitutes_a_recording(selection):
+    value = _project(b_audio=False, audio_slot="B")
+    if selection == "settings":
+        value["manual"]["source_mixer"].pop("audio_slot")
+        value["settings"]["audio_source"] = "B"
+
+    graph, maps, has_audio = render.build_filter_graph(value, 1280, 720)
+
+    assert "[0:a]" not in graph and "[1:a]" not in graph
+    assert maps == ["-map", "[vout]"]
+    assert has_audio is False
 
 
 def test_audio_only_b_can_supply_sound_while_video_layout_safely_falls_back_to_a():

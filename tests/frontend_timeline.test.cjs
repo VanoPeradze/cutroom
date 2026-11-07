@@ -19,11 +19,25 @@ for (const field of ['media_clips','text_clips']) {
   });
 }
 
-test('gap cleanup reports unsupported downstream layer ripple, but permits empty tail',()=>{
+test('gap cleanup permits downstream layers, but never removes occupied layer time',()=>{
   const h=sequenceFixture(),p={manual:{media_clips:[{start:5,end:6.25}]}};
-  assert.match(h.scope.sequenceGapClosureIssue(p,[{start:1,end:2}]),/shift added media or text/);
+  assert.equal(h.scope.sequenceGapClosureIssue(p,[{start:1,end:2}]),'');
+  assert.match(h.scope.sequenceGapClosureIssue(p,[{start:5.5,end:6}]),/empty on every layer/);
   assert.equal(h.scope.sequenceGapClosureIssue(p,[{start:16.25,end:17.25}]),'');
   assert.equal(h.scope.sequenceGapClosureIssue(p,[{start:1,end:2}],'A'),'');
+});
+
+test('gap cleanup preserves reviewed and independently timed transcript captions',()=>{
+  const h=sequenceFixture(),gaps=[{start:1,end:2}],p={manual:{}};
+  p.caption_alternative_status={active_id:'saved-alternative'};
+  assert.match(h.scope.sequenceGapClosureIssue(p,gaps),/alternative caption/);
+  assert.equal(h.scope.sequenceGapClosureIssue(p,[]),'');
+  assert.equal(h.scope.sequenceGapClosureIssue(p,gaps,'A'),'');
+  p.caption_alternative_status={active_id:'original'};
+  p.manual.caption_overrides={caption:{text:'Retain this',start_delta:2,end_delta:2}};
+  assert.match(h.scope.sequenceGapClosureIssue(p,gaps),/custom timing/);
+  p.manual.caption_overrides.caption={text:'Retain this'};
+  assert.equal(h.scope.sequenceGapClosureIssue(p,gaps),'');
 });
 
 test('caption blocks show whole words or an ellipsis, never unreadable fragments', () => {

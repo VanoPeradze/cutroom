@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased — source review and all-layer gap closure
+
+- Export automatically uses mapped source A picture when a requested B/split layout has missing B coverage. The dialog, saved export record and finished-video review disclose the substitution. Covered B intervals keep their requested layout; the saved edit, duration, captions and chosen audio remain unchanged. Unsafe picture gaps, missing media and real rendering failures still report an error.
+- Together → Close gaps now shifts later added video/audio/images and custom text with A/B and layout. Time occupied by any layer, including muted media or spanning music/titles, is retained. Source offsets, fades, clip identity and styling stay unchanged.
+- One Undo/Redo covers the complete operation; source locks and stale-revision rejection remain atomic. A/B-only closing keeps its existing independent-layer behavior. Reviewed caption alternatives, independently retimed transcript captions and uncertain caption ownership block closure rather than silently losing caption edits. This does not add general mixed-layer ripple editing or change released downloads.
+- **Save source marks** remembers one In/Out selection per imported library video in the current browser. Reopen it for the existing Insert/Append actions, or explicitly clear the saved marks. Project/import IDs and source metadata keep ordinary re-imports separate; this is not portable project storage or a content fingerprint. See [source marks](docs/SOURCE_MARKS.md) for scope and recovery.
+- Source review adds **Jump to In/Out**, dialog-scoped **I/O** marking and explicit selected-shot play/pause/resume. Metadata, stale edits, busy operations and close/late-response cleanup guard these controls. Completing a selected preview no longer leaves its stop boundary active during later native playback. Browser-event timing is not frame-accurate stepping; no automatic loop is added.
+- Source-linked caption corrections survive an older project's first sequence conversion, including harmless camera-boundary splits. Genuine caption merges still reject safely. Integration checks cover close → insert → append, save/reopen, Undo/Redo and real encoded picture/audio/caption output.
+
 ## 1.3 Beta repair candidate - 2026-10-25 - Preview space and added-video sound
 
 - The short AI draft notice now opens its explanation on demand in the inspector, leaving the preview header clear. Draft and target lengths remain visible.

@@ -78,7 +78,8 @@ test('local candidates cannot enter the existing production deployment workflow'
 
 test('public beta authorization keeps native provenance and accepted limits mandatory', () => {
   const source_commit = 'a'.repeat(40);
-  const architecture = {status:'passed',offline_checks_passed:69,feature_tests_passed:340,required_cases_passed:50,skipped:0,
+  const architecture = {status:'passed',feature_tests_passed:340,required_cases_passed:50,skipped:0,
+    combined_archive_sha256:release.sha256,installation_checks:{...Object.fromEntries(["status", "launcher_health_and_api", "restart_persistence", "repeat_launch", "different_data_port_collision", "source_audio_and_caption_checks", "offline_ready_setup", "installed_packages_unchanged"].map(key=>[key,'passed'])),unicode_and_spaces_path:true},
     fresh_app_install:'passed',missing_pip_recovery:'passed',restart_persistence:'passed'};
   const beta = {...release,platforms:{windows:release,mac:release},release_state:'beta',public_beta_authorized:true,
     full_release_qualified:false,accepted_limitations:['Human editing and model acceptance remain pending.'],
@@ -87,6 +88,15 @@ test('public beta authorization keeps native provenance and accepted limits mand
     native_validation:{run_id:39139136807,head_commit:'b'.repeat(40),application_source_commit:source_commit,transcription_run:false,
       architectures:{arm64:architecture,x64:architecture}}};
   assert.doesNotThrow(()=>assertPublishable(beta));
+  for (const key of Object.keys(architecture.installation_checks)) {
+    for (const bad of [false, 'failed', 'pending', null, 'true']) {
+      const failed = {...architecture.installation_checks,[key]:bad};
+      assert.throws(()=>assertPublishable({...beta,native_validation:{...beta.native_validation,architectures:{arm64:architecture,x64:{...architecture,installation_checks:failed}}}}),/validation provenance/);
+    }
+    const missing = {...architecture.installation_checks}; delete missing[key];
+    assert.throws(()=>assertPublishable({...beta,native_validation:{...beta.native_validation,architectures:{arm64:architecture,x64:{...architecture,installation_checks:missing}}}}),/validation provenance/);
+  }
+  assert.throws(()=>assertPublishable({...beta,native_validation:{...beta.native_validation,architectures:{arm64:architecture,x64:{...architecture,combined_archive_sha256:'0'.repeat(64)}}}}),/validation provenance/);
   for (const changed of [{public_beta_authorized:false},{full_release_qualified:true},{accepted_limitations:[]},
     {native_mac_validation:'pending'},{native_validation_app_source_commit:'c'.repeat(40)},
     {validated_pr_head:'unknown'},{mac_validation_url:'https://example.com/run'},

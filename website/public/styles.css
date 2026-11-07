@@ -304,3 +304,38 @@ html:not(.js) [data-motion-toggle] { display:none; }
   .footer-motion { display:none; }
 }
 @media (hover:none) { .site-header nav a:hover, .motion-toggle:hover { background:transparent; color:var(--text); } }
+
+/* Original-image tour: let the application carry the presentation. */
+.hero-lead { padding-block:24px 12px; }
+.hero-atmosphere { opacity:.35; }
+.hero-title .intro { max-width:38ch; }
+.editor-preview { margin-top:40px; }
+.preview-heading { padding-block:16px; }
+.shot-button { display:block; width:100%; text-align:start; }
+.workspace-shot, .shot-button img { aspect-ratio:auto; width:100%; height:auto; object-fit:contain; }
+.editor-preview figcaption { gap:16px; padding-block:18px; line-height:1.6; }
+.tour { border-top:1px solid var(--line); }
+.js .tour-tabs { display:flex; flex-wrap:wrap; gap:4px; padding-block:12px; margin-bottom:28px; }
+.tour-tab { flex:1 1 100px; min-height:52px; padding:12px; font-size:14px; border-radius:4px 4px 0 0; }
+.tour-tab[aria-selected=true] { background:var(--panel); }
+.tour-panel { gap:20px; }
+.panel-copy { padding-block:8px; }
+.workspace-image-link { display:block; cursor:zoom-in; }
+.workspace-shot { border-radius:6px; box-shadow:0 20px 64px #0003; }
+.original-link { display:inline-flex; align-items:center; align-self:flex-end; min-height:44px; font-size:13px; color:var(--cyan); text-decoration:underline; text-underline-offset:4px; }
+.dialog-header { position:sticky; top:0; z-index:2; background:var(--bg); }
+.dialog-actions { display:flex; flex-wrap:wrap; align-items:center; gap:12px; padding:12px 20px; border-bottom:1px solid var(--line); }
+.dialog-actions a { margin-inline-start:auto; display:inline-flex; align-items:center; min-height:44px; color:var(--cyan); text-decoration:underline; text-underline-offset:4px; }
+.dialog-actions #imageCounter { font-variant-numeric:tabular-nums; color:var(--dim); }
+.image-dialog img { display:block; max-height:none; object-fit:contain; }
+@media(max-width:767px) {
+ .hero-lead { padding-top:8px; }
+ .editor-preview { margin-top:24px; }
+ .editor-preview figcaption { display:grid; font-size:12px; }
+ .tour-tab { flex-basis:calc(33.333% - 4px); font-size:13px; min-height:48px; }
+ .dialog-actions { gap:8px; padding:12px; }
+ .dialog-actions a { flex-basis:100%; margin:0; }
+ .original-link { align-self:flex-start; }
+}
+
+.gallery-note { max-width:80ch; margin:28px 0 0; font-size:13px; color:var(--muted); line-height:1.7; }

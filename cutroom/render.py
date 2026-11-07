@@ -253,8 +253,17 @@ def _render_plan(project: dict[str, Any], *, layout_coverage: list[dict[str, Any
                        else {"A"} | ({"B"} if b_has_video and b_start <= midpoint < b_end else set()))
             if layout_coverage is not None and needs_b(camera):
                 required = {"A", "B"} if camera in {"stacked", "side_by_side", "pip"} else {"B"}
+                missing_slots = sorted(required - present)
+                # Automatic substitution is safe only when real A picture
+                # covers the entire affected interval, not merely its midpoint.
+                output_start = math.floor(start * fps + 0.5) / fps
+                output_end = math.floor(end * fps + 0.5) / fps
+                a_covers = (any(left <= output_start + 1e-6 and right >= output_end - 1e-6
+                                for left, right in track_video_ranges["A"]) if independent else
+                            _source_has_video(source) and output_end <= math.floor(_source_video_duration(source) * fps + 0.5) / fps + 1e-6)
                 layout_coverage.append({"start": start, "end": end, "camera": camera,
-                                        "missing_slots": sorted(required - present)})
+                                        "missing_slots": missing_slots,
+                                        "fallback_camera": "A" if missing_slots == ["B"] and a_covers else None})
             # A shorter/offset B must not turn part of a camera-only shot black
             # or freeze its last frame. Match the preview by showing A wherever
             # B has no real video; preserve the requested layout inside B.
@@ -310,7 +319,7 @@ class LayoutCoverageError(ValueError):
                          if short_source else "")
         super().__init__(
             f"The requested layout is missing footage for {coverage['missing_seconds']:.2f} "
-            f"of {coverage['requested_seconds']:.2f} seconds. Export would silently replace that layout. "
+            f"of {coverage['requested_seconds']:.2f} seconds. Those intervals do not all have safe source A picture for automatic export. "
             "For synchronized recordings, review source alignment; for independently recorded camera/narration, "
             "explicitly place the needed source range on the edit timeline. Missing footage is not looped or frozen."
             + duration_help
@@ -331,20 +340,34 @@ def composition_layout_coverage(project: dict[str, Any]) -> dict[str, Any]:
                 or (project.get("settings") or {}).get("layout") in multi
                 or bool(manual.get("sequence"))
                 or any(row.get("layout") in multi for row in manual.get("camera_overrides") or []))
+    fallback_available = bool(missing) and all(row["fallback_camera"] == "A" for row in missing)
     return {"requested_seconds": round(sum(row["end"] - row["start"] for row in rows), 6),
             "missing_seconds": round(sum(row["end"] - row["start"] for row in missing), 6),
             "missing_ranges": missing[:32], "missing_range_count": len(missing),
             "explicit_layout": bool(explicit), "clock": "edit" if has_sequence(project) else "source_A",
             "source_B_video_duration": _source_video_duration((project.get("sources") or {}).get("B") or {}),
-            "export_blocked": bool(explicit and missing)}
+            "fallback_available": fallback_available,
+            "export_blocked": bool(explicit and missing and not fallback_available)}
 
 
-def require_layout_coverage(project: dict[str, Any], options: dict[str, Any] | None = None) -> None:
+def _layout_fallback_notice(coverage: dict[str, Any]) -> dict[str, Any] | None:
+    if not coverage["fallback_available"]:
+        return None
+    return {"mode": "available_A", "missing_seconds": coverage["missing_seconds"],
+            "requested_seconds": coverage["requested_seconds"], "clock": coverage["clock"],
+            "ranges": coverage["missing_ranges"], "range_count": coverage["missing_range_count"],
+            "warning": (f"Source B has no mapped picture for {coverage['missing_seconds']:.2f} seconds of the requested layout. "
+                        "This export uses source A picture in those intervals; the B/split layout is absent there. "
+                        "The saved edit, duration, captions and selected audio are unchanged. Missing B sound is not replaced.")}
+
+
+def require_layout_coverage(project: dict[str, Any], options: dict[str, Any] | None = None) -> dict[str, Any] | None:
     if options:
         project = with_export_options(project, options)
     coverage = composition_layout_coverage(project)
     if coverage["export_blocked"]:
         raise LayoutCoverageError(coverage)
+    return _layout_fallback_notice(coverage)
 
 
 def _frame_aligned_plan(project: dict[str, Any]) -> list[dict[str, Any]]:
@@ -557,11 +580,12 @@ def _effective_audio_slot(project: dict[str, Any]) -> str | None:
     sources = project.get("sources") or {}
     source_a = sources.get("A") or {}
     source_b = sources.get("B") or {}
-    if has_sequence(project) or has_source_tracks(project):
-        # Removing the selected track is silence, never permission to resurrect
-        # its audio from the other source or from an implicit sync mapping.
-        raw = (project.get("manual") or {}).get("source_mixer") or {}
-        selected = str(raw.get("audio_slot") or (project.get("settings") or {}).get("audio_source") or "A").upper()
+    raw = (project.get("manual") or {}).get("source_mixer") or {}
+    explicit_slot = raw.get("audio_slot") or (project.get("settings") or {}).get("audio_source")
+    if has_sequence(project) or has_source_tracks(project) or str(explicit_slot).upper() in {"A", "B"}:
+        # Missing selected sound is silence, never permission to substitute the
+        # other recording. This also applies to explicitly routed legacy edits.
+        selected = str(explicit_slot or "A").upper()
         return selected if selected in {"A", "B"} and (sources.get(selected) or {}).get("has_audio") else None
     audio_slot = _source_mixer(project)["audio_slot"]
     source_duration = max(0.0, _finite_float(source_a.get("duration")))
@@ -1637,8 +1661,8 @@ def render_project(context: JobContext, project_id: str, store: ProjectStore, se
     validate_sequence_version(project)
     saved_input_fingerprint = _render_input_fingerprint(project)
     project = with_export_options(project, options)
-    if options.get("_require_layout_coverage"):
-        require_layout_coverage(project)
+    layout_fallback = (require_layout_coverage(project) if options.get("_require_layout_coverage")
+                       else _layout_fallback_notice(composition_layout_coverage(project)))
     render_input_fingerprint = _render_input_fingerprint(project)
     fps = project_export_fps(project)
     if not project.get("sources", {}).get("A"):
@@ -1812,6 +1836,8 @@ def render_project(context: JobContext, project_id: str, store: ProjectStore, se
             "input_fingerprint": render_input_fingerprint,
             "input_demand": input_demand,
         }
+        if layout_fallback is not None:
+            record["layout_fallback"] = layout_fallback
         if caption_ass is not None or project.get("settings", {}).get("captions"):
             record["caption_settings"] = caption_settings
         context.update(0.98, "Checking the finished video")
@@ -1836,6 +1862,9 @@ def render_project(context: JobContext, project_id: str, store: ProjectStore, se
             )
         except Exception as exc:  # Advice only: a failed check never fails the export.
             record["review"] = {"version": 1, "error": type(exc).__name__, "warnings": 0, "checks": []}
+        if layout_fallback is not None:
+            record["review"]["checks"].insert(0, {"id": "layout_fallback", "status": "warn", "detail": layout_fallback["warning"]})
+            record["review"]["warnings"] += 1
         srt_lines = caption_lines(automatic_captions, caption_settings["caption_words_per_line"])
         if project.get("settings", {}).get("captions") and (srt_lines or any(row["kind"] == "caption" for row in text_clips)):
             caption_path = output.with_suffix(".srt")

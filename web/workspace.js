@@ -378,7 +378,7 @@ export function initWorkspace({ document: doc = document, window: win = window, 
     ["Remove a green screen", "Open Edit → Effects · Green screen, choose the foreground video, use green-screen defaults or choose its key color, then choose the background and Apply & preview. Fine-tune edges opens tolerance and softness. Each video keeps its own settings with Undo; Edited video shows the saved key."],
     ["Find your moment", "Click the ruler to seek. Space plays or pauses. Edited video shows your cut; Full source lets you inspect the original without changing the edit."],
     ["Remove the part you do not want", "Choose Range, drag over the section, then Remove from video. Together closes the gap on both tracks and keeps them in sync. Undo brings it back."],
-    ["Arrange your story", "Cut: click to split. Drag the middle of a clip to reorder: its old position closes and destination footage shifts, without overwriting it. In Select / Move, select a clip and pull its white edges to reveal original footage into a gap. Edges stop at neighboring clips or the media limit. Together shortening closes the gap; A/B-only shortening affects just that source. Close gaps removes existing empty time. Undo restores changes."],
+    ["Arrange your story", "Cut: click to split. Drag the middle of a clip to reorder: its old position closes and destination footage shifts, without overwriting it. In Select / Move, select a clip and pull its white edges to reveal original footage into a gap. Edges stop at neighboring clips or the media limit. Together shortening closes the gap; A/B-only shortening affects just that source. Close gaps in Together removes time empty on every layer and moves later sources, added media/audio and text together. Spanning music or titles keep their occupied time. One Undo restores all layers."],
     ["Line up your cuts", "Switch on Snap beside Undo to align with the playhead, A/B cuts or added media and audio. A cyan guide names the target. Hold Alt to bypass; Escape cancels a drag. The timeline readout is hours:minutes:seconds:frames at your output FPS. A trim stops at the available source or its neighbor."],
     ["Protect finished work", "Edit → Track protection locks source A or B against changes. Locked footage still plays and exports. Choose the other source to keep editing; Together edits and history changes that would affect a locked source require unlocking first. Added media, layout and the audio mixer remain separate controls."],
     ["Bring footage back", "Original footage opens the complete recording with kept and removed sections: preview, drag a Range, then Restore to edit or Remove from edit. You can also extend a cut's white edges directly on the timeline. Zoom in if a clip is too small to grab its edges."],
@@ -435,6 +435,7 @@ export function initWorkspace({ document: doc = document, window: win = window, 
   applyTimelineHeight();
   applyInspector();
   renderFullscreen();
+  const viewport = initPreviewViewport({ document: doc, preview });
   const chrome = initStudioChrome({ document: doc, panel, guideButton, fullscreenButton, inspectorToggle });
   const controller = {
     toggleFullscreen, openGuide, setTimelineHeight, setInspectorWidth, setInspectorCollapsed, setWorkspace, setEditEffects,
@@ -448,6 +449,7 @@ export function initWorkspace({ document: doc = document, window: win = window, 
       observer?.disconnect();
       if (resizeFrame !== null) win.cancelAnimationFrame(resizeFrame);
       chrome.restore();
+      viewport.restore();
       guideButton.remove();
       fullscreenButton.remove();
       status.remove();
@@ -520,4 +522,19 @@ function initStudioChrome({ document: doc, panel, guideButton, fullscreenButton,
       }
     },
   };
+}
+
+// Fit against the actual free grid cell, not the entire dock minus a guessed
+// transport height. Notices and wrapped controls reserve their own rows.
+export function initPreviewViewport({ document: doc, preview }) {
+  const stage = doc.getElementById("previewStage");
+  if (!stage || stage.parentNode !== preview) return { restore() {} };
+  const viewport = doc.createElement("div");
+  viewport.className = "preview-viewport";
+  preview.insertBefore(viewport, stage);
+  viewport.appendChild(stage);
+  return { restore() {
+    if (stage.parentNode === viewport) preview.insertBefore(stage, viewport);
+    viewport.remove();
+  } };
 }

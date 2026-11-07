@@ -405,6 +405,36 @@ for (const code of ["layout_coverage_incomplete", "other_export_problem"]) {
   });
 }
 
+test("automatic layout fallback is shown during normal export without another request or click", async () => {
+  const {run,nodes}=settingsApp();
+  run(`pauseAllMedia=()=>{};flushProjectSaves=async()=>{};globalThis.exportRequests=0;
+    api=async()=>{exportRequests++;return {job:{id:'r'},layout_fallback:{warning:'B picture missing: source A used for 90 seconds.'}};};
+    setActiveJob=()=>{};pollExportJob=async()=>({});completeExportJob=async()=>{};`);
+  await run('startExport()');
+  assert.equal(run('exportRequests'),1);
+  assert.equal(nodes.get('exportLayoutWarning').hidden,false);
+  assert.match(nodes.get('exportLayoutWarning').textContent,/source A used/);
+});
+
+test("layout warning is text-only and does not leak into an unrelated or new export", () => {
+  const {run,nodes}=settingsApp();
+  run(`showExportLayoutWarning({warning:'<img src=x onerror=alert(1)>'}, 'Previous export: ');`);
+  assert.equal(nodes.get('exportLayoutWarning').textContent,'Previous export: <img src=x onerror=alert(1)>');
+  run('showExportLayoutWarning(null)');
+  assert.equal(nodes.get('exportLayoutWarning').hidden,true);assert.equal(nodes.get('exportLayoutWarning').textContent,'');
+  run('showExportLayoutWarning({warning:123})');assert.equal(nodes.get('exportLayoutWarning').hidden,true);
+});
+
+test("completed export restores its recorded fallback warning and a later normal result clears it", async () => {
+  const {run,nodes}=settingsApp();
+  run(`api=async()=>({project:state.project});rememberProjectRevision=()=>{};loadProjects=async()=>{};renderExportReview=()=>{};
+    globalThis.completed={result:{url:'/api/exports/fallback.mp4',export:{name:'fallback.mp4',fps:30,layout_fallback:{warning:'Source A substituted for missing B.'}}}};`);
+  await run("completeExportJob(completed,state.project.id)");
+  assert.equal(nodes.get('exportLayoutWarning').hidden,false);assert.match(nodes.get('exportLayoutWarning').textContent,/substituted/);
+  run('delete completed.result.export.layout_fallback');await run("completeExportJob(completed,state.project.id)");
+  assert.equal(nodes.get('exportLayoutWarning').hidden,true);
+});
+
 test("style radios support arrow and boundary keys without consuming modified shortcuts", () => {
   const { run, nodes } = app();
   const radios = ["smart", "reaction_burst", "clean_vod"].map(value => {

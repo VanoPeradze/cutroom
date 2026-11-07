@@ -2484,7 +2484,7 @@ def create_app(settings: Settings | None = None) -> Flask:
             return jsonify({"error": "draft_required", "message": "Generate or create a draft before rendering."}), 400
         validate_sequence_version(project)
         try:
-            require_layout_coverage(project, payload)
+            layout_fallback = require_layout_coverage(project, payload)
         except LayoutCoverageError as error:
             return jsonify(error.public()), 409
         try:
@@ -2492,11 +2492,12 @@ def create_app(settings: Settings | None = None) -> Flask:
         except InsufficientStorageError as error:
             return jsonify(error.as_dict()), error.status_code
         def require_renderable(latest: dict[str, Any]) -> None:
+            nonlocal layout_fallback
             validate_sequence_version(latest)
             if not latest.get("sources", {}).get("A") or not latest.get("draft"):
                 raise APIInputError("draft_required", "Generate or create a draft before rendering.")
             try:
-                require_layout_coverage(latest, payload)
+                layout_fallback = require_layout_coverage(latest, payload)
             except LayoutCoverageError as error:
                 raise APIInputError("layout_coverage_incomplete", str(error), 409, layout_coverage=error.coverage) from error
 
@@ -2511,7 +2512,8 @@ def create_app(settings: Settings | None = None) -> Flask:
             validate_project=require_renderable,
             job_identity=payload,
         )
-        return jsonify({"job": job.public(), "storage_estimate": storage_estimate}), 202
+        return jsonify({"job": job.public(), "storage_estimate": storage_estimate,
+                        "layout_fallback": layout_fallback}), 202
 
     @app.get("/api/jobs/<job_id>")
     def get_job(job_id: str):

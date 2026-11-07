@@ -208,7 +208,28 @@
       tabs.append(tab);
       return tab;
     });
-    tools.append(search, tabs);
+    const views = make("div", "library-view");
+    views.setAttribute("role", "group");
+    views.setAttribute("aria-label", "Media library view");
+    let view = "list";
+    try { if (localStorage.getItem("cutroom-library-view-v1") === "grid") view = "grid"; } catch {}
+    const viewButtons = ["list", "grid"].map(value => {
+      const button = make("button", "", value === "list" ? "List" : "Grid");
+      button.type = "button";
+      button.dataset.view = value;
+      button.addEventListener("click", () => {
+        view = value; applyView();
+        try { localStorage.setItem("cutroom-library-view-v1", view); } catch {}
+      });
+      views.append(button);
+      return button;
+    });
+    const applyView = () => {
+      shelf.dataset.libraryView = view;
+      viewButtons.forEach(button => button.setAttribute("aria-pressed", String(button.dataset.view === view)));
+    };
+    applyView();
+    tools.append(search, tabs, views);
     heading?.after(tools);
     const apply = () => {
       const query = search.value.trim().toLowerCase();
