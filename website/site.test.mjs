@@ -45,9 +45,9 @@ test('the 1.3 beta uses exact Windows, shared Mac/combined and source downloads'
     assert.match(mirror[0][2], /mirror/i);
     assert.ok(linksTo(html, `/downloads/${entry.filename}.sha256`).length >= 1);
   }
-  assert.equal(release.filename, 'CUTROOM-1.3-Beta-combined-2dacba3.zip');
-  assert.equal(release.platforms.windows.filename, 'CUTROOM-1.3-Beta-Windows-2dacba3.zip');
-  assert.equal(release.platforms.mac.filename, 'CUTROOM-1.3-Beta-combined-2dacba3.zip');
+  assert.equal(release.filename, 'CUTROOM-1.3-Beta-combined-d2c6f6f.zip');
+  assert.equal(release.platforms.windows.filename, 'CUTROOM-1.3-Beta-Windows-d2c6f6f.zip');
+  assert.equal(release.platforms.mac.filename, 'CUTROOM-1.3-Beta-combined-d2c6f6f.zip');
   assert.equal(release.platforms.mac.filename, release.filename);
   assert.equal(release.platforms.mac.folder,'mac', 'Mac uses the shared combined archive mac folder');
   assert.equal(linksTo(html, release.url).length, 2); // Optional combined ZIP help link, separate from the Mac button.
@@ -56,10 +56,10 @@ test('the 1.3 beta uses exact Windows, shared Mac/combined and source downloads'
   assert.match(html, /Mac uses the combined ZIP\. Extract it, open mac, then run START CUTROOM\.command beside App\./);
   assert.match(region('details', 'install-help'), /The optional combined ZIP has exactly two folders: windows and mac/);
   const source = release.source_archive;
-  assert.equal(source.filename, 'SOURCE-2dacba3.zip');
+  assert.equal(source.filename, 'SOURCE-d2c6f6f.zip');
   for (const url of [source.url, `/downloads/${source.filename}`, `/downloads/${source.filename}.sha256`]) assert.equal(linksTo(html,url).length,1);
   assert.equal(downloadEntries(release).length,3);
-  assert.match(html, /1\.3 Beta · Workspace &amp; sound/);
+  assert.match(html, /1\.3 Beta · Studio &amp; source editing/);
   const update = region('details', 'update-status');
   assert.match(update, /if FFprobe is missing or unavailable, import explains how to repair and retry/);
   assert.match(update, /A failed replacement preserves your saved media and edits/);
@@ -73,8 +73,8 @@ test('the 1.3 beta uses exact Windows, shared Mac/combined and source downloads'
 
 test('download metadata pins a dated release and preserves Expo mirrors and provenance', () => {
   const release = JSON.parse(readFileSync(new URL('./release.json', import.meta.url), 'utf8'));
-  assert.equal(release.github_release.tag, 'v1.3-beta-20261107-editor1');
-  assert.equal(release.github_release.previous_public_tag, 'v1.3-beta-20261106-stability1');
+  assert.equal(release.github_release.tag, 'v1.3-beta-20261108-studio1');
+  assert.equal(release.github_release.previous_public_tag, 'v1.3-beta-20261107-editor1');
   assert.equal(release.github_release.tag_commit, release.source_commit);
   assert.equal(release.github_release.package_bytes_changed, true);
   assert.equal(release.github_release.url, `${repository}/releases/tag/${release.github_release.tag}`);
@@ -89,14 +89,14 @@ test('public beta retains exact automated native provenance and visible pending 
   assertPublishable(release);
   assert.equal(release.release_state,'beta');
   assert.equal(release.full_release_qualified,false);
-  assert.equal(release.source_commit,'2dacba3cdc83b3be21e7223d6aa9fba0f36f72fe');
-  assert.equal(release.github_release.tag,'v1.3-beta-20261107-editor1');
-  assert.equal(release.native_validation.run_id,42406800822);
-  assert.equal(release.validated_pr_head,'2dacba3cdc83b3be21e7223d6aa9fba0f36f72fe');
+  assert.equal(release.source_commit,'d2c6f6f8b649c0a9c8b23e7b0b75415da78a5b00');
+  assert.equal(release.github_release.tag,'v1.3-beta-20261108-studio1');
+  assert.equal(release.native_validation.run_id,42489336008);
+  assert.equal(release.validated_pr_head,'d2c6f6f8b649c0a9c8b23e7b0b75415da78a5b00');
   assert.equal(release.native_validation.head_commit,release.validated_pr_head);
   assert.equal(release.native_validation.application_source_commit,release.source_commit);
   assert.equal(release.native_validation.transcription_run,false);
-  assert.equal(release.native_validation.review_record_commit,'99bdbf22d82336d7492161b9d15593d2d0c036ca');
+  assert.equal(release.native_validation.review_record_commit,'4f73f1e550cb328741a42c159260d55b65462cec');
   for (const architecture of ['arm64','x64']) {
     const checks = release.native_validation.architectures[architecture];
     assert.equal(checks.status,'passed');
@@ -107,7 +107,7 @@ test('public beta retains exact automated native provenance and visible pending 
     assert.equal(checks.required_cases_passed,50);
     assert.equal(checks.skipped,0);
     assert.equal(checks.source_audio_and_caption_checks,'passed');
-    assert.equal(checks.job_id,architecture === 'arm64' ? 128507047775 : 128507047636);
+    assert.equal(checks.job_id,architecture === 'arm64' ? 128759366341 : 128759366404);
     for (const gate of ['fresh_app_install','missing_pip_recovery','restart_persistence']) assert.equal(checks[gate],'passed');
     assert.equal(checks.combined_archive_sha256,release.sha256);
   }
@@ -582,15 +582,103 @@ test('archived supplemental views and undated AI setup are labeled honestly', ()
 });
 
 
-test('current release discloses archival screenshots and preserves preceding Nov6 provenance', () => {
+test('current release discloses archival screenshots and preserves preceding Nov6 and Nov7 provenance', () => {
   const release = JSON.parse(readFileSync(new URL('./release.json', import.meta.url),'utf8'));
   assert.ok(release.known_limitations.some(text => text.includes('Fresh current-version screenshots were not captured')));
-  assert.match(html, /fresh current-version screenshots were not captured/);
+  assert.match(html, /Current-app visual acceptance and fresh app captures remain pending/);
   assert.equal(release.historical_native_validation.find(row=>row.release_tag==='v1.3-beta-20261106-stability1').native_validation.run_id,42291275917);
+  assert.equal(release.historical_native_validation.find(row=>row.release_tag==='v1.3-beta-20261107-editor1').native_validation.run_id,42406800822);
   const retained = JSON.parse(readFileSync(new URL('./retained-downloads.json', import.meta.url),'utf8'));
-  assert.equal(retained.length,39);
+  assert.equal(retained.length,42);
   for (const entry of retained) {
-    assert.equal(entry.url,`https://cutroom-studio--cfqtj1cb86.expo.app/downloads/${entry.filename}`);
+    assert.equal(entry.url,`https://cutroom-studio--${entry.filename.includes('2dacba3') ? 'o6r0sixwri' : 'cfqtj1cb86'}.expo.app/downloads/${entry.filename}`);
     assert.ok(entry.github_url.startsWith('https://github.com/VanoPeradze/cutroom/releases/download/'));
   }
+});
+
+// Studio navigation follows its responsive visual orientation and stays operable
+// without a browser render. Pixel geometry is verified separately in a browser.
+test('studio tour supports horizontal navigation, RTL and keyboard boundaries', async()=>{
+ const {runInNewContext}=await import('node:vm');
+ const nodes=new Map();
+ const document={documentElement:{dir:'ltr'},activeElement:null,getElementById:id=>nodes.get(id),querySelectorAll:()=>[]};
+ const element=(id)=>({id,attrs:{},events:{},hidden:false,tabIndex:-1,setAttribute(k,v){this.attrs[k]=v;},getAttribute(k){return this.attrs[k];},addEventListener(k,f){this.events[k]=f;},focus(){document.activeElement=this;}});
+ const tabs=['home','media','edit'].map(id=>{const t=element('tab-'+id);t.attrs['aria-controls']='panel-'+id;nodes.set('panel-'+id,element('panel-'+id));return t;});
+ const list=element('tour');list.querySelectorAll=()=>tabs;document.querySelector=()=>list;
+ const preference={matches:true,addEventListener(k,f){this.change=f;}};
+ const start=script.indexOf("  const tabList = document.querySelector('.tour-tabs');");
+ const end=script.indexOf('  function revealLinkedHelp()',start);
+ assert.ok(start>=0&&end>start);
+ runInNewContext(script.slice(start,end),{document,window:{matchMedia:query=>{assert.equal(query,'(min-width: 1040px)');return preference;}}});
+ assert.equal(list.attrs['aria-orientation'],'horizontal');assert.equal(tabs[0].attrs['aria-selected'],'true');
+ const key=(key,extra={})=>{let prevented=false;list.events.keydown({key,preventDefault(){prevented=true;},...extra});return prevented;};
+ tabs[0].focus();assert.equal(key('ArrowDown'),true);assert.equal(document.activeElement,tabs[1]);
+ assert.equal(nodes.get('panel-home').hidden,true);assert.equal(nodes.get('panel-media').hidden,false);
+ key('End');assert.equal(document.activeElement,tabs[2]);key('ArrowDown');assert.equal(document.activeElement,tabs[0]);
+ document.documentElement.dir='rtl';key('ArrowLeft');assert.equal(document.activeElement,tabs[1]);key('ArrowRight');assert.equal(document.activeElement,tabs[0]);
+ key('ArrowUp');assert.equal(document.activeElement,tabs[2]);
+ assert.equal(key('ArrowDown',{ctrlKey:true}),false);assert.equal(document.activeElement,tabs[2]);
+ assert.equal(list.attrs['aria-orientation'],'horizontal');
+ tabs[1].events.click();assert.equal(tabs[1].attrs['aria-selected'],'true');assert.equal(tabs.filter(t=>t.tabIndex===0).length,1);
+});
+
+test('studio finish stays local, preserves real imagery and has bounded responsive rules',()=>{
+ const finish=readFileSync(new URL('./public/studio.css',import.meta.url),'utf8');
+ assert.match(html,/href="\/studio.css\?v=20261108-cuttingroom3"/);
+ assert.match(finish,/grid-template-columns:repeat\(5,minmax\(0,1fr\)\)/);
+ assert.match(finish,/@media\(max-width:767px\)/);
+ assert.match(finish,/@media\(max-width:359px\)/);
+ assert.match(finish,/@media\(prefers-reduced-motion:reduce\)/);
+ assert.doesNotMatch(finish,/@import|url\(['"]?https?:/);
+ assert.match(html,/<span data-he="החומר שלך\.">Your footage\.<\/span>/);
+ assert.match(html,/Interface captured 19 October 2026/);
+});
+
+
+test('section navigation tracks visible sections without changing location or focus', async()=>{
+ const {runInNewContext}=await import('node:vm');
+ const sections=['start','workspaces','ai','guide','download'].map(id=>({id}));
+ const links=sections.map(s=>({hash:'#'+s.id,attrs:{},setAttribute(k,v){this.attrs[k]=v;},removeAttribute(k){delete this.attrs[k];}}));
+ let callback,options;const observed=[];
+ class IntersectionObserver { constructor(cb,opts){callback=cb;options=opts;} observe(section){observed.push(section);} }
+ const document={querySelectorAll:()=>links,getElementById:id=>sections.find(s=>s.id===id)};
+ const start=script.indexOf('  const sectionLinks =');
+ const end=script.indexOf("  if ('IntersectionObserver' in window && !motionPreference.matches)",start);
+ assert.ok(start>=0&&end>start);
+ runInNewContext(script.slice(start,end),{document,IntersectionObserver,window:{IntersectionObserver}});
+ assert.equal(options.rootMargin,'-104px 0px -45% 0px');
+ assert.equal(observed.length,5);
+ callback([{target:sections[4],isIntersecting:true}]);assert.equal(links[4].attrs['aria-current'],'location');
+ callback([{target:sections[4],isIntersecting:false},{target:sections[1],isIntersecting:true}]);
+ assert.equal(links[4].attrs['aria-current'],undefined);assert.equal(links[1].attrs['aria-current'],'location');
+ const finish=readFileSync(new URL('./public/studio.css',import.meta.url),'utf8');
+ assert.match(finish,/overflow-x:clip/);
+ assert.match(finish,/@media\(min-width:768px\) and \(max-width:980px\)/);
+});
+
+
+test('the cutting-room redesign uses locally licensed fonts and a real workflow',()=>{
+ const finish=readFileSync(new URL('./public/studio.css',import.meta.url),'utf8');
+ assert.match(html,/class="marketing-page cutting-room"/);
+ assert.match(finish,/@font-face\{font-family:Geist/);
+ assert.match(finish,/font-display:swap/);
+ for(const font of ['Geist','NotoSansHebrew']) {
+  assert.ok(readFileSync(new URL(`./public/assets/${font}.ttf`,import.meta.url)).length>10000);
+  assert.match(readFileSync(new URL(`./public/assets/${font}-OFL.txt`,import.meta.url),'utf8'),/SIL OPEN FONT LICENSE/);
+ }
+ for(const workspace of ['media','edit','output']) {
+  assert.match(html,new RegExp(`data-workspace="${workspace}" href="#workspaces"`));
+ }
+ assert.match(script,/const index = tabs.findIndex/);
+ assert.match(script,/if \(index >= 0\) selectTab\(index, false\)/);
+ assert.match(finish,/html\[data-motion=paused\][^{}]+\.motion-ready\{transform:none;opacity:1;transition:none\}/);
+ assert.doesNotMatch(html, /class="hero-atmosphere"/);
+});
+
+test('new light surfaces and platform buttons maintain readable contrast',()=>{
+ const L=hex=>hex.match(/[a-f0-9]{2}/gi).map(v=>parseInt(v,16)/255).map(v=>v<=.04045?v/12.92:((v+.055)/1.055)**2.4).reduce((v,c,i)=>v+c*[.2126,.7152,.0722][i],0);
+ const ratio=(a,b)=>{const x=L(a),y=L(b);return(Math.max(x,y)+.05)/(Math.min(x,y)+.05);};
+ for(const background of ['f2f4f1','e7ece7','e5ece5'])for(const text of ['16231e','46584e','53645a','14644b'])assert.ok(ratio(text,background)>=4.5,`${text}/${background}`);
+ assert.ok(ratio('16231e','a2e3c1')>=4.5);
+ assert.ok(ratio('f2f4f1','16231e')>=4.5);
 });

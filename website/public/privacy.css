@@ -10,6 +10,15 @@
 .privacy-page p{font-size:17px;color:var(--dim);overflow-wrap:anywhere}
 .privacy-page a{color:var(--cyan-text);text-decoration:underline;text-underline-offset:4px}
 .privacy-page .text-link{display:inline-block;margin-top:18px;text-decoration:none}
-.privacy-page [lang=he]{font-family:'Segoe UI',Arial,sans-serif}
+.privacy-page [lang=he]{font-family:var(--font)}
 @media(max-width:480px){.privacy-page{padding-block:38px 56px}.privacy-page h2{font-size:28px}.privacy-page h3{font-size:22px}.privacy-date span{display:block}.privacy-heading{padding-bottom:24px}}
 @media print{body{background:white;color:black}.site-header,.skip,.footer{display:none}.privacy-page{max-width:none;padding:0}.privacy-page p,.privacy-page a,.privacy-heading h1 span{color:black}.privacy-page h2,.privacy-page h3{break-after:avoid}.privacy-page section+section{break-before:page}}
+
+/* The privacy text is unchanged; align the legal surface with the current site. */
+.cutting-room .privacy-page{max-width:980px}
+.cutting-room .privacy-heading h1{max-width:none;text-align:start;font-weight:550;letter-spacing:-.045em}
+.cutting-room .privacy-heading h1 span{font-family:var(--font);font-size:.8em}
+.cutting-room .privacy-page h2{font-size:32px;line-height:1.3;letter-spacing:-.035em}
+.cutting-room .privacy-page h3{font-weight:550;letter-spacing:-.02em}
+.cutting-room .privacy-page section{scroll-margin-top:104px}
+@media(max-width:480px){.cutting-room .privacy-page h2{font-size:28px}.cutting-room .privacy-page p{font-size:15px}.cutting-room .privacy-heading h1{font-size:36px}}

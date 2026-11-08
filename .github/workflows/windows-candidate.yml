@@ -13,10 +13,10 @@ concurrency:
 
 jobs:
   scope:
-    # Qualify the new studio candidate independently of the frozen November 7 release.
-    # Historical packages and validation records remain unchanged. Metadata-only review
-    # record commits are excluded below so they cannot replace the tested app archive.
-    if: ${{ github.event.pull_request.head.ref == 'design/studio-ui-20261108' }}
+    # Candidate d2c6f6f passed exact Windows and both native Mac architectures in run 42489336008.
+    # Freeze these retained archives; publication metadata must not create a new app candidate.
+    # Ordinary repository, security and exact-pin macOS release gates remain enabled.
+    if: ${{ false }}
     runs-on: ubuntu-latest
     outputs:
       build_candidate: ${{ steps.scope.outputs.build_candidate }}

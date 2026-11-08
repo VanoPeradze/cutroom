@@ -37,11 +37,11 @@ assert.equal(JSON.parse(readFileSync(resolve(root,'package.json'),'utf8')).versi
 assert.ok(html.includes('WINDOWS + MAC · 1.3 BETA'), 'The download must display both platforms and 1.3 Beta');
 assertPublishable(release);
 assert.equal(release.release_state, 'beta');
-assert.equal(release.source_commit, '2dacba3cdc83b3be21e7223d6aa9fba0f36f72fe');
-assert.equal(release.filename, 'CUTROOM-1.3-Beta-combined-2dacba3.zip');
-assert.equal(release.platforms.windows.filename, 'CUTROOM-1.3-Beta-Windows-2dacba3.zip');
-assert.equal(release.platforms.mac.filename, 'CUTROOM-1.3-Beta-combined-2dacba3.zip');
-assert.equal(release.source_archive.filename, 'SOURCE-2dacba3.zip');
+assert.equal(release.source_commit, 'd2c6f6f8b649c0a9c8b23e7b0b75415da78a5b00');
+assert.equal(release.filename, 'CUTROOM-1.3-Beta-combined-d2c6f6f.zip');
+assert.equal(release.platforms.windows.filename, 'CUTROOM-1.3-Beta-Windows-d2c6f6f.zip');
+assert.equal(release.platforms.mac.filename, 'CUTROOM-1.3-Beta-combined-d2c6f6f.zip');
+assert.equal(release.source_archive.filename, 'SOURCE-d2c6f6f.zip');
 assert.equal(downloadEntries(release).length,3,'Three exact public archives must be prepared');
 assert.equal(release.platforms.mac.filename, release.filename);
 assert.equal(release.platforms.mac.folder,'mac','Mac uses the shared combined archive mac folder');
@@ -53,12 +53,13 @@ assert.ok(html.includes('/downloads/'+zip+'.sha256"'), 'The checksum link must m
 assert.ok(!html.includes('5.6.1'), 'Stale application version on the public page');
 assert.match(release.sha256, /^[a-f0-9]{64}$/);
 assert.ok(Number.isSafeInteger(release.bytes) && release.bytes > 0);
-assert.equal(release.github_release.tag, 'v1.3-beta-20261107-editor1');
-assert.equal(release.github_release.previous_public_tag, 'v1.3-beta-20261106-stability1');
+assert.equal(release.github_release.tag, 'v1.3-beta-20261108-studio1');
+assert.equal(release.github_release.previous_public_tag, 'v1.3-beta-20261107-editor1');
 assert.equal(release.github_release.tag_commit, release.source_commit);
 const releaseBase = `https://github.com/VanoPeradze/cutroom/releases/download/${release.github_release.tag}/`;
 const retained = JSON.parse(readFileSync(resolve(root,'retained-downloads.json'),'utf8'));
 const retainedTags = new Map([
+  ...['CUTROOM-1.3-Beta-Windows-2dacba3.zip','CUTROOM-1.3-Beta-combined-2dacba3.zip','SOURCE-2dacba3.zip'].map(filename=>[filename,'v1.3-beta-20261107-editor1']),
   ...['CUTROOM-1.3-Beta-Windows-34113eb.zip','CUTROOM-1.3-Beta-combined-34113eb.zip','SOURCE-34113eb.zip'].map(filename=>[filename,'v1.3-beta-20261106-stability1']),
   ...['CUTROOM-1.3-Beta-Windows-7a14fc0.zip','CUTROOM-1.3-Beta-combined-7a14fc0.zip','SOURCE-7a14fc0.zip'].map(filename=>[filename,'v1.3-beta-20261105-installfix1']),
   ['CUTROOM-1.3-Beta-Windows-3caa23d.zip','v1.3-beta-20261103-ui2'],
@@ -83,7 +84,7 @@ const retainedTags = new Map([
   ...['CUTROOM-1.2-Beta-Windows-review-fe35453.zip','CUTROOM-1.2-Beta-combined-review-fe35453.zip','SOURCE-fe35453.zip'].map(filename=>[filename,'v1.2-beta-20261018']),
   ...['CUTROOM-1.2-Beta-20261019.zip','CUTROOM-1.2-Beta-Windows-20261019.zip','CUTROOM-1.2-Beta-Mac-20261019.zip','SOURCE-20261019.zip'].map(filename=>[filename,'v1.2-beta-20261019']),
 ]);
-assert.deepEqual(retained.map(entry=>entry.filename).sort(),[...retainedTags.keys()].sort(),'Preserve all 39 historical archives including the preceding live website downloads');
+assert.deepEqual(retained.map(entry=>entry.filename).sort(),[...retainedTags.keys()].sort(),'Preserve all 42 historical archives including the preceding live website downloads');
 uniqueDownloadEntries([...downloadEntries(release), ...retained]);
 for (const entry of downloadEntries(release)) {
   assert.equal(entry.url, releaseBase + entry.filename);
@@ -99,7 +100,7 @@ for (const entry of downloadEntries(release)) {
 }
 for (const entry of retained) {
   assert.equal(entry.github_url,`https://github.com/VanoPeradze/cutroom/releases/download/${retainedTags.get(entry.filename)}/${entry.filename}`);
-  assert.equal(entry.url,`https://cutroom-studio--cfqtj1cb86.expo.app/downloads/${entry.filename}`);
+  assert.equal(entry.url,`https://cutroom-studio--${entry.filename.includes('2dacba3') ? 'o6r0sixwri' : 'cfqtj1cb86'}.expo.app/downloads/${entry.filename}`);
   verifyArchive(readFileSync(resolve(root,'public/downloads',entry.filename)),entry);
   const sidecar = readFileSync(resolve(root,'public/downloads',entry.filename+'.sha256'),'utf8').trim().split(/\s+/);
   assert.equal(sidecar[0],entry.sha256);
