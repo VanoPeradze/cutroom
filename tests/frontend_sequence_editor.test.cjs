@@ -306,10 +306,143 @@ test('minimum edit length follows export fps and source insertion admits a singl
     const {run,nodes} = app();
     run(`state.project.settings.fps=${fps};openSourceInsert();`);
     assert.equal(run('minimumEditLength()'),1/fps);
-    nodes.get('sourceInsertIn').value='1';nodes.get('sourceInsertOut').value=(1+1/fps).toFixed(6);nodes.get('sourceInsertAt').value='0';
+    nodes.get('sourceInsertIn').value='1';nodes.get('sourceInsertOut').value=(1+1/fps).toFixed(9);nodes.get('sourceInsertAt').value='0';
     await run('insertSourceFootage({preventDefault(){}})');
     assert.equal(run('requests.length'),1);
   }
+});
+
+test('source review handoff preserves source selection, scope and exact frame precision',()=>{
+  const {run,nodes}=app();
+  run(`state.manualSelection={start:1,end:3};
+    openSourceInsert({projectId:'p',slot:'A',scope:'source',source_start:1,source_end:1+1/30});`);
+  assert.equal(run('activeEditTarget()'),'A');
+  assert.equal(nodes.get('sourceInsertIn').value,'00:01.000');
+  assert.equal(nodes.get('sourceInsertOut').value,'1.033333333');
+  assert.equal(run('sourceInsertPlan().length'),1.033333333-1);
+  assert.deepEqual(plain(run('state.manualSelection')),{start:1,end:3});
+  assert.equal(run(`openSourceInsert({projectId:'other',slot:'B'})`),false);
+});
+
+test('three-point overwrite uses captured timeline zone and source In, never changes speed',async()=>{
+  const {run,nodes}=app();
+  run(`state.manualSelection={start:1,end:3};state.timeline.playhead=5;openSourceInsert({slot:'A',source_start:10,source_end:15});
+    elements.sourceInsertMode.value='overwrite';elements.sourceInsertZone.value='selection';renderSourceInsert();`);
+  assert.equal(nodes.get('sourceInsertAt').value,'00:01.000');
+  assert.equal(nodes.get('sourceInsertOut').value,'00:12.000');
+  assert.equal(nodes.get('sourceInsertAt').disabled,true);
+  assert.equal(nodes.get('sourceInsertOut').disabled,true);
+  assert.match(nodes.get('sourceInsertStatus').textContent,/speed is unchanged/);
+  run(`state.manualSelection={start:3,end:6};state.timeline.playhead=0;`);
+  await run('insertSourceFootage({preventDefault(){}})');
+  assert.deepEqual(plain(run('requests[0].body')),{action:'sequence_overwrite',slot:'A',scope:'edit',start:1,source_start:10,source_end:12,expected_revision:7});
+  assert.deepEqual(plain(run('selections.at(-1)')),{start:1,end:3});
+});
+
+test('three-point source insertion reuses existing ripple action and restores manual Out on toggle',async()=>{
+  const {run,nodes}=app();
+  run(`state.manualSelection={start:1,end:3};state.timeline.playhead=4;
+    openSourceInsert({slot:'B',source_start:10,source_end:15});
+    elements.sourceInsertZone.value='selection';renderSourceInsert();
+    elements.sourceInsertZone.value='playhead';renderSourceInsert();`);
+  assert.equal(nodes.get('sourceInsertAt').value,'00:04.000');
+  assert.equal(nodes.get('sourceInsertOut').value,'00:15.000');
+  assert.equal(nodes.get('sourceInsertOut').disabled,false);
+  run(`elements.sourceInsertZone.value='selection';renderSourceInsert();`);
+  await run('insertSourceFootage({preventDefault(){}})');
+  assert.deepEqual(plain(run('requests[0].body')),{action:'sequence_insert_linked',slot:'B',start:1,source_start:10,source_end:12,expected_revision:7});
+});
+
+test('source-only overwrite sends its scope and blocks extending beyond timeline end',async()=>{
+  const {run,nodes}=app();
+  run(`setEditTarget('B');openSourceInsert();elements.sourceInsertMode.value='overwrite';
+    elements.sourceInsertIn.value='10';elements.sourceInsertOut.value='12';elements.sourceInsertAt.value='5';renderSourceInsert();`);
+  assert.equal(nodes.get('sourceInsertApply').disabled,true);
+  assert.match(nodes.get('sourceInsertStatus').textContent,/fit inside the edit/);
+  await run('insertSourceFootage({preventDefault(){}})');
+  assert.equal(run('requests.length'),0);
+  run(`elements.sourceInsertAt.value='4';renderSourceInsert();`);
+  await run('insertSourceFootage({preventDefault(){}})');
+  assert.deepEqual(plain(run('requests[0].body')),{action:'sequence_overwrite',slot:'B',scope:'source',start:4,source_start:10,source_end:12,expected_revision:7});
+});
+
+test('fit-to-zone rejects insufficient source rather than shortening, looping or slowing',async()=>{
+  const {run,nodes}=app();
+  run(`state.manualSelection={start:1,end:3};openSourceInsert({slot:'A',source_start:19,source_end:20});
+    elements.sourceInsertZone.value='selection';renderSourceInsert();`);
+  assert.equal(nodes.get('sourceInsertApply').disabled,true);
+  assert.match(nodes.get('sourceInsertStatus').textContent,/Not enough source footage/);
+  await run('insertSourceFootage({preventDefault(){}})');
+  assert.equal(run('requests.length'),0);
+  run(`elements.sourceInsertIn.value='18.0001';renderSourceInsert();`);
+  assert.equal(nodes.get('sourceInsertApply').disabled,true,'even a small shortage must not change the selected duration');
+});
+
+test('missing selection cannot be used as a timeline zone',async()=>{
+  const {run,nodes}=app();
+  run(`openSourceInsert();elements.sourceInsertZone.value='selection';renderSourceInsert();`);
+  assert.equal(nodes.get('sourceInsertApply').disabled,true);
+  await run('insertSourceFootage({preventDefault(){}})');
+  assert.equal(run('requests.length'),0);
+});
+
+test('cancel and reopen discard placement options without changing source or timeline selection',async()=>{
+  const {run,nodes}=app();
+  run(`bindEvents();state.manualSelection={start:1,end:3};globalThis.beforePlacement=JSON.stringify(state.project);
+    openSourceInsert({slot:'A',source_start:10,source_end:12});elements.sourceInsertMode.value='overwrite';
+    elements.sourceInsertZone.value='selection';renderSourceInsert();`);
+  nodes.get('sourceInsertCancel').listeners.click();
+  assert.equal(nodes.get('sourceInsertForm').hidden,true);
+  await run('insertSourceFootage({preventDefault(){}})');
+  assert.equal(run('requests.length'),0);
+  assert.equal(run('JSON.stringify(state.project)===beforePlacement'),true);
+  assert.deepEqual(plain(run('state.manualSelection')),{start:1,end:3});
+  run('openSourceInsert();');
+  assert.equal(nodes.get('sourceInsertMode').value,'insert');
+  assert.equal(nodes.get('sourceInsertZone').value,'playhead');
+});
+
+test('placement rejects changed source, timeline or locks while the form is open',async()=>{
+  for(const mutation of [`state.project.sources.A.generation='new'`, `state.project.editor_sequence.duration=8`, `state.project.manual.track_locks={A:true}`]) {
+    const {run,nodes}=app();
+    run(`openSourceInsert();${mutation};renderSourceInsert();`);
+    assert.equal(nodes.get('sourceInsertApply').disabled,true);
+    assert.match(nodes.get('sourceInsertStatus').textContent,/changed/);
+    await run('insertSourceFootage({preventDefault(){}})');
+    assert.equal(run('requests.length'),0);
+  }
+});
+
+test('already locked source blocks overwrite, but independent other-source editing remains possible',()=>{
+  const {run,nodes}=app();
+  run(`state.project.manual.track_locks={A:true};openSourceInsert();elements.sourceInsertMode.value='overwrite';renderSourceInsert();`);
+  assert.equal(nodes.get('sourceInsertApply').disabled,true);
+  assert.match(nodes.get('sourceInsertStatus').textContent,/locked/);
+  run(`setEditTarget('B');openSourceInsert();elements.sourceInsertMode.value='overwrite';renderSourceInsert();`);
+  assert.equal(nodes.get('sourceInsertApply').disabled,false);
+});
+
+test('placement blocks duplicate submissions and cancel while pending; failure does not claim rollback',async()=>{
+  const {run,nodes}=app();
+  run(`bindEvents();openSourceInsert();applyManualEdit=()=>new Promise(resolve=>{globalThis.finishPlacement=resolve;globalThis.placementCalls=(globalThis.placementCalls||0)+1;});
+    globalThis.pendingPlacement=insertSourceFootage({preventDefault(){}});`);
+  assert.equal(nodes.get('sourceInsertApply').disabled,true);
+  assert.equal(nodes.get('sourceInsertCancel').disabled,true);
+  nodes.get('sourceInsertCancel').listeners.click();
+  assert.equal(nodes.get('sourceInsertForm').hidden,false);
+  await run('insertSourceFootage({preventDefault(){}})');
+  assert.equal(run('placementCalls'),1);
+  run('finishPlacement(null);');await run('pendingPlacement');
+  assert.match(nodes.get('sourceInsertStatus').textContent,/not confirmed.*Review the timeline/);
+  assert.equal(nodes.get('sourceInsertCancel').disabled,false);
+});
+
+test('source or timeline changes during pending saves abort before sending placement',async()=>{
+  const {run,nodes}=app();
+  run(`openSourceInsert();flushProjectSaves=async()=>{state.project.sources.A.generation='replacement';};`);
+  await run('insertSourceFootage({preventDefault(){}})');
+  assert.equal(run('requests.length'),0);
+  assert.match(nodes.get('sourceInsertStatus').textContent,/not confirmed/);
 });
 
 test('unsupported or missing sequence fps defaults to 30 without changing legacy minimums',()=>{

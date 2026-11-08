@@ -156,6 +156,8 @@
   const tabs = [...tabList.querySelectorAll('.tour-tab')];
   const panels = tabs.map(tab => document.getElementById(tab.getAttribute('aria-controls')));
   tabList.setAttribute('role', 'tablist');
+  // The redesigned workspace browser is horizontal at every width.
+  tabList.setAttribute('aria-orientation', 'horizontal');
   tabs.forEach(tab => tab.setAttribute('role', 'tab'));
   panels.forEach(panel => { panel.setAttribute('role', 'tabpanel'); panel.tabIndex = 0; });
   function selectTab(index, focus) {
@@ -170,12 +172,12 @@
   tabs.forEach((tab, index) => tab.addEventListener('click', () => selectTab(index, false)));
   tabList.addEventListener('keydown', event => {
     const current = tabs.indexOf(document.activeElement);
-    if (current < 0) return;
+    if (current < 0 || event.altKey || event.ctrlKey || event.metaKey) return;
     const forward = document.documentElement.dir === 'rtl' ? 'ArrowLeft' : 'ArrowRight';
     const backward = document.documentElement.dir === 'rtl' ? 'ArrowRight' : 'ArrowLeft';
     let next = null;
-    if (event.key === forward) next = (current + 1) % tabs.length;
-    else if (event.key === backward) next = (current - 1 + tabs.length) % tabs.length;
+    if (event.key === forward || event.key === 'ArrowDown') next = (current + 1) % tabs.length;
+    else if (event.key === backward || event.key === 'ArrowUp') next = (current - 1 + tabs.length) % tabs.length;
     else if (event.key === 'Home') next = 0;
     else if (event.key === 'End') next = tabs.length - 1;
     if (next === null) return;
@@ -183,6 +185,15 @@
     selectTab(next, true);
   });
   selectTab(0, false);
+
+  // Feature links select the actual gallery workspace, with normal anchors as fallback.
+  document.querySelectorAll('[data-workspace]').forEach(link => {
+    link.addEventListener('click', event => {
+      if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || event.button !== 0) return;
+      const index = tabs.findIndex(tab => tab.id === `tab-${link.dataset.workspace}`);
+      if (index >= 0) selectTab(index, false);
+    });
+  });
 
   function revealLinkedHelp() {
     const target = document.getElementById(location.hash.slice(1));
@@ -205,6 +216,40 @@
       revealLinkedHelp();
     }
   });
+  // Active section navigation mirrors actual scroll position without changing
+  // URLs, browser history or the user's current keyboard focus.
+  const sectionLinks = [...document.querySelectorAll('.site-header .nav-section, .site-header .nav-download')];
+  const sections = [...new Set(sectionLinks.map(link => document.getElementById(link.hash.slice(1))).filter(Boolean))];
+  const markSection = id => sectionLinks.forEach(link => {
+    if (link.hash === `#${id}`) link.setAttribute('aria-current', 'location');
+    else link.removeAttribute('aria-current');
+  });
+  if ('IntersectionObserver' in window) {
+    const visibleSections = new Set();
+    const observer = new IntersectionObserver(entries => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) visibleSections.add(entry.target);
+        else visibleSections.delete(entry.target);
+      });
+      const active = sections.find(section => visibleSections.has(section));
+      if (active) markSection(active.id);
+    }, {rootMargin:'-104px 0px -45% 0px', threshold:0});
+    sections.forEach(section => observer.observe(section));
+  }
+  if ('IntersectionObserver' in window && !motionPreference.matches) {
+    const reveals = new IntersectionObserver(entries => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('is-in-view');
+          reveals.unobserve(entry.target);
+        }
+      });
+    }, {threshold:0.08});
+    document.querySelectorAll('.editing-steps article, .start-options li, .ai-options article').forEach(node => {
+      node.classList.add('motion-ready');
+      reveals.observe(node);
+    });
+  }
   renderLanguage();
   revealLinkedHelp();
 })();

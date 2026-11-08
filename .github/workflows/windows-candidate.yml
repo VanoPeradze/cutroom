@@ -13,9 +13,9 @@ concurrency:
 
 jobs:
   scope:
-    # Candidate 2dacba3 passed Windows and both native Mac architectures in run 42406800822.
-    # Freeze those exact artifacts; metadata-only promotion must not create a new candidate.
-    # The ordinary repository, security and macOS release gates remain enabled.
+    # Candidate d2c6f6f passed exact Windows and both native Mac architectures in run 42489336008.
+    # Freeze these retained archives; publication metadata must not create a new app candidate.
+    # Ordinary repository, security and exact-pin macOS release gates remain enabled.
     if: ${{ false }}
     runs-on: ubuntu-latest
     outputs:
@@ -182,8 +182,7 @@ jobs:
           if ($tests.Count -lt 1) { throw 'Packaged frontend tests missing' }
           node --test @tests
           if ($LASTEXITCODE -ne 0) { throw 'Packaged frontend tests failed' }
-      - name: Verify media-probe recovery from the extracted stability candidate
-        if: ${{ github.event.pull_request.head.ref == 'codex/editor-gallery-candidate-20261107' }}
+      - name: Verify media-probe recovery from the extracted candidate
         shell: pwsh
         run: |
           Set-Location -LiteralPath $env:CUTROOM_EXTRACTED_APP
@@ -195,6 +194,8 @@ jobs:
           Set-Location -LiteralPath $env:CUTROOM_EXTRACTED_APP
           & $env:CUTROOM_TEST_PYTHON -m unittest tests.test_desktop_launcher_stdlib tests.test_all_layer_gap_closure tests.test_layout_fallback_export
           if ($LASTEXITCODE -ne 0) { throw 'New editor and desktop regressions failed' }
+          & $env:CUTROOM_TEST_PYTHON -m pytest -q tests/test_three_point_editing.py
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged three-point editing regressions failed' }
       - name: Test synthetic portrait, audio and process restart
         timeout-minutes: 12
         shell: pwsh

@@ -42,3 +42,37 @@ test('media view toggles reuse cards, preserve filters and survive denied prefer
   assert.equal(shelf.children[1],cards[0]);assert.equal(shelf.children[2],cards[1]);
  }
 });
+
+Element.prototype.focus = function () { this.focused = true; };
+
+test('media search reports real counts, recovers from no matches and preserves card identity',()=>{
+ const script=fs.readFileSync(path.join(web,'studio-screens.js'),'utf8');
+ const section=script.slice(script.indexOf('  function initMedia() {'),script.indexOf('  // ---------- Layout ----------'));
+ const shelf=new Element(),heading=new Element(),title=new Element();
+ const cards=[new Element(),new Element()];
+ cards[0].dataset.kind='video';cards[0].textContent='Camera interview.mp4';
+ cards[1].dataset.kind='audio';cards[1].textContent='Music.wav';
+ shelf.append(heading,...cards);
+ let refresh;
+ const context={$:q=>q==='#studioShelfMedia'?shelf:q==='.shelf-heading'?heading:q==='h3'?title:null,$$:()=>cards,make:(tag,cls,text)=>{const e=new Element(tag);e.className=cls;e.textContent=text||'';return e;},syncers:new Set(),observe(target,callback){refresh=callback;},localStorage:{getItem(){return null;},setItem(){}}};
+ vm.runInNewContext(section+'\ninitMedia();',context);
+ const tools=shelf.children.at(-1),[search,filters,views,count,empty]=tools.children;
+ assert.equal(filters.attrs.role,'group');
+ assert.equal(filters.children.filter(b=>b.attrs['aria-pressed']==='true').length,1);
+ assert.equal(count.textContent,'2 items');assert.equal(count.attrs.role,'status');assert.equal(empty.hidden,true);
+ search.value='missing';search.listeners.input();
+ assert.equal(count.textContent,'0 of 2 items');assert.equal(empty.hidden,false);assert.ok(cards.every(c=>c.hidden));
+ views.children[1].click();assert.equal(empty.hidden,false);
+ empty.children[1].click();
+ assert.equal(search.value,'');assert.equal(search.focused,true);assert.equal(count.textContent,'2 items');assert.equal(empty.hidden,true);
+ filters.children.find(b=>b.dataset.value==='audio').click();
+ assert.equal(count.textContent,'1 of 2 items');assert.equal(cards[0].hidden,true);assert.equal(cards[1].hidden,false);
+ const added=new Element();added.dataset.kind='audio';added.textContent='Voice.wav';cards.push(added);shelf.append(added);refresh();
+ assert.equal(count.textContent,'2 of 3 items');
+ const first=cards[0];assert.equal(shelf.children[1],first,'Never rebuild a media card');
+ let writes=0;let text=count.textContent;
+ Object.defineProperty(count,'textContent',{get(){return text;},set(v){writes++;text=v;}});
+ for(let i=0;i<8;i++)refresh();
+ assert.equal(writes,0,'Observer callbacks must not rewrite unchanged live status');
+ cards.length=0;refresh();assert.equal(count.textContent,'No media imported');assert.equal(empty.hidden,true);
+});

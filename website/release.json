@@ -1,11 +1,11 @@
 {
-  "filename": "CUTROOM-1.3-Beta-combined-2dacba3.zip",
-  "bytes": 11234540,
-  "sha256": "2c5f5d0dd3deb1d3f38173e910f908fdaed06de5338078222d0d6e0e20819e2d",
-  "build_id": "CUTROOM-1.3-beta-mac-20261107-193538",
-  "url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.3-beta-20261107-editor1/CUTROOM-1.3-Beta-combined-2dacba3.zip",
+  "filename": "CUTROOM-1.3-Beta-combined-d2c6f6f.zip",
+  "bytes": 11271849,
+  "sha256": "541b62a01a820ad484db6b8f1a3979e5025fe8c3db6b43848159e5ac71356ed0",
+  "build_id": "CUTROOM-1.3-beta-mac-20261108-142323",
+  "url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.3-beta-20261108-studio1/CUTROOM-1.3-Beta-combined-d2c6f6f.zip",
   "mirrors": [
-    "https://cutroom-studio.expo.app/downloads/CUTROOM-1.3-Beta-combined-2dacba3.zip"
+    "https://cutroom-studio.expo.app/downloads/CUTROOM-1.3-Beta-combined-d2c6f6f.zip"
   ],
   "version": "1.3-beta",
   "label": "1.3 Beta",
@@ -13,18 +13,18 @@
   "release_state": "beta",
   "public_beta_authorized": true,
   "full_release_qualified": false,
-  "source_commit": "2dacba3cdc83b3be21e7223d6aa9fba0f36f72fe",
-  "source_tree": "a89a94068e9f24e3d004bc7355d2e23e97701f2b",
+  "source_commit": "d2c6f6f8b649c0a9c8b23e7b0b75415da78a5b00",
+  "source_tree": "05e4d2853526b0d80c69d6a409e61eb2ee92b9d8",
   "uncommitted_changes": false,
-  "mac_validation_url": "https://github.com/VanoPeradze/cutroom/actions/runs/42406800822",
-  "validated_pr_head": "2dacba3cdc83b3be21e7223d6aa9fba0f36f72fe",
+  "mac_validation_url": "https://github.com/VanoPeradze/cutroom/actions/runs/42489336008",
+  "validated_pr_head": "d2c6f6f8b649c0a9c8b23e7b0b75415da78a5b00",
   "native_mac_validation": "automated-passed",
-  "native_validation_app_source_commit": "2dacba3cdc83b3be21e7223d6aa9fba0f36f72fe",
+  "native_validation_app_source_commit": "d2c6f6f8b649c0a9c8b23e7b0b75415da78a5b00",
   "native_mac_validation_scope": "Exact combined archive on hosted Mac ARM64 and Intel: 357 feature tests and 50 required cases with zero skips, fresh-App installation, synthetic portrait/landscape exports, source audio/captions, missing-pip recovery and restart persistence passed. Physical UI, human listening, model inference and transcription were not performed.",
   "native_validation": {
-    "run_id": 42406800822,
-    "head_commit": "2dacba3cdc83b3be21e7223d6aa9fba0f36f72fe",
-    "application_source_commit": "2dacba3cdc83b3be21e7223d6aa9fba0f36f72fe",
+    "run_id": 42489336008,
+    "head_commit": "d2c6f6f8b649c0a9c8b23e7b0b75415da78a5b00",
+    "application_source_commit": "d2c6f6f8b649c0a9c8b23e7b0b75415da78a5b00",
     "transcription_run": false,
     "architectures": {
       "arm64": {
@@ -33,12 +33,12 @@
         "required_cases_passed": 50,
         "skipped": 0,
         "source_audio_and_caption_checks": "passed",
-        "job_id": 128507047775,
-        "job_url": "https://github.com/VanoPeradze/cutroom/actions/runs/42406800822/job/128507047775",
+        "job_id": 128759366341,
+        "job_url": "https://github.com/VanoPeradze/cutroom/actions/runs/42489336008/job/128759366341",
         "fresh_app_install": "passed",
         "missing_pip_recovery": "passed",
         "restart_persistence": "passed",
-        "combined_archive_sha256": "2c5f5d0dd3deb1d3f38173e910f908fdaed06de5338078222d0d6e0e20819e2d",
+        "combined_archive_sha256": "541b62a01a820ad484db6b8f1a3979e5025fe8c3db6b43848159e5ac71356ed0",
         "installation_checks": {
           "status": "passed",
           "launcher_health_and_api": "passed",
@@ -57,23 +57,23 @@
           "stacked_camera_above_screen": {
             "width": 720,
             "height": 1280,
-            "fps": 60,
-            "duration": 2,
+            "fps": 60.0,
+            "duration": 2.0,
             "has_audio": true
           },
           "exports": [
             {
               "width": 2560,
               "height": 1440,
-              "fps": 60,
-              "duration": 2,
+              "fps": 60.0,
+              "duration": 2.0,
               "has_audio": true
             },
             {
               "width": 3840,
               "height": 2160,
-              "fps": 30,
-              "duration": 2,
+              "fps": 30.0,
+              "duration": 2.0,
               "has_audio": true
             }
           ],
@@ -88,12 +88,12 @@
         "required_cases_passed": 50,
         "skipped": 0,
         "source_audio_and_caption_checks": "passed",
-        "job_id": 128507047636,
-        "job_url": "https://github.com/VanoPeradze/cutroom/actions/runs/42406800822/job/128507047636",
+        "job_id": 128759366404,
+        "job_url": "https://github.com/VanoPeradze/cutroom/actions/runs/42489336008/job/128759366404",
         "fresh_app_install": "passed",
         "missing_pip_recovery": "passed",
         "restart_persistence": "passed",
-        "combined_archive_sha256": "2c5f5d0dd3deb1d3f38173e910f908fdaed06de5338078222d0d6e0e20819e2d",
+        "combined_archive_sha256": "541b62a01a820ad484db6b8f1a3979e5025fe8c3db6b43848159e5ac71356ed0",
         "installation_checks": {
           "status": "passed",
           "launcher_health_and_api": "passed",
@@ -112,23 +112,23 @@
           "stacked_camera_above_screen": {
             "width": 720,
             "height": 1280,
-            "fps": 60,
-            "duration": 2,
+            "fps": 60.0,
+            "duration": 2.0,
             "has_audio": true
           },
           "exports": [
             {
               "width": 2560,
               "height": 1440,
-              "fps": 60,
-              "duration": 2,
+              "fps": 60.0,
+              "duration": 2.0,
               "has_audio": true
             },
             {
               "width": 3840,
               "height": 2160,
-              "fps": 30,
-              "duration": 2,
+              "fps": 30.0,
+              "duration": 2.0,
               "has_audio": true
             }
           ],
@@ -138,36 +138,36 @@
         }
       }
     },
-    "review_record_commit": "99bdbf22d82336d7492161b9d15593d2d0c036ca"
+    "review_record_commit": "4f73f1e550cb328741a42c159260d55b65462cec"
   },
   "github_release": {
-    "tag": "v1.3-beta-20261107-editor1",
-    "url": "https://github.com/VanoPeradze/cutroom/releases/tag/v1.3-beta-20261107-editor1",
-    "tag_commit": "2dacba3cdc83b3be21e7223d6aa9fba0f36f72fe",
-    "publication_date": "2026-11-07",
+    "tag": "v1.3-beta-20261108-studio1",
+    "url": "https://github.com/VanoPeradze/cutroom/releases/tag/v1.3-beta-20261108-studio1",
+    "tag_commit": "d2c6f6f8b649c0a9c8b23e7b0b75415da78a5b00",
+    "publication_date": "2026-11-08",
     "package_bytes_changed": true,
-    "package_bytes_basis": "Exact frozen source-bound archives tested in run 42406800822 and independently redownloaded/hash-verified at immutable staging o6r0sixwri; release publication is a separate action.",
-    "previous_public_tag": "v1.3-beta-20261106-stability1"
+    "package_bytes_basis": "Exact source-bound archives tested in run 42489336008; immutable staging oz9pego43i is checksum-pinned and independently checked by the ordinary release gates before publication.",
+    "previous_public_tag": "v1.3-beta-20261107-editor1"
   },
   "platforms": {
     "windows": {
-      "filename": "CUTROOM-1.3-Beta-Windows-2dacba3.zip",
-      "bytes": 5593014,
-      "sha256": "edd0220477db3495b4448c4e8bfb0d5d44e989c019a47d5c2920181191fd8354",
-      "build_id": "CUTROOM-1.3-beta-20261107-193402",
-      "url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.3-beta-20261107-editor1/CUTROOM-1.3-Beta-Windows-2dacba3.zip",
+      "bytes": 5611557,
+      "sha256": "ffb46fab8c8ed41fcff9f5452f6dfd8680871b74b6eead55611f4213de758adc",
+      "build_id": "CUTROOM-1.3-beta-20261108-142115",
+      "filename": "CUTROOM-1.3-Beta-Windows-d2c6f6f.zip",
+      "url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.3-beta-20261108-studio1/CUTROOM-1.3-Beta-Windows-d2c6f6f.zip",
       "mirrors": [
-        "https://cutroom-studio.expo.app/downloads/CUTROOM-1.3-Beta-Windows-2dacba3.zip"
+        "https://cutroom-studio.expo.app/downloads/CUTROOM-1.3-Beta-Windows-d2c6f6f.zip"
       ]
     },
     "mac": {
-      "filename": "CUTROOM-1.3-Beta-combined-2dacba3.zip",
-      "bytes": 11234540,
-      "sha256": "2c5f5d0dd3deb1d3f38173e910f908fdaed06de5338078222d0d6e0e20819e2d",
-      "build_id": "CUTROOM-1.3-beta-mac-20261107-193538",
-      "url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.3-beta-20261107-editor1/CUTROOM-1.3-Beta-combined-2dacba3.zip",
+      "bytes": 11271849,
+      "sha256": "541b62a01a820ad484db6b8f1a3979e5025fe8c3db6b43848159e5ac71356ed0",
+      "build_id": "CUTROOM-1.3-beta-mac-20261108-142323",
+      "filename": "CUTROOM-1.3-Beta-combined-d2c6f6f.zip",
+      "url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.3-beta-20261108-studio1/CUTROOM-1.3-Beta-combined-d2c6f6f.zip",
       "mirrors": [
-        "https://cutroom-studio.expo.app/downloads/CUTROOM-1.3-Beta-combined-2dacba3.zip"
+        "https://cutroom-studio.expo.app/downloads/CUTROOM-1.3-Beta-combined-d2c6f6f.zip"
       ],
       "folder": "mac",
       "layout": "windows-mac-folders-v1",
@@ -175,16 +175,16 @@
     }
   },
   "source_archive": {
-    "filename": "SOURCE-2dacba3.zip",
-    "bytes": 8186040,
-    "sha256": "56d3cea3f22bb5789de69f7d0b9cc585b6ae380e55fed2830dade1837b45ccd7",
-    "url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.3-beta-20261107-editor1/SOURCE-2dacba3.zip",
+    "bytes": 8208141,
+    "sha256": "b5ef068ba387f2815d4b61d160d1abd91801d7a55ad71d36a006d6ec034f0707",
+    "filename": "SOURCE-d2c6f6f.zip",
+    "url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.3-beta-20261108-studio1/SOURCE-d2c6f6f.zip",
     "mirrors": [
-      "https://cutroom-studio.expo.app/downloads/SOURCE-2dacba3.zip"
+      "https://cutroom-studio.expo.app/downloads/SOURCE-d2c6f6f.zip"
     ]
   },
-  "update_date": "2026-11-07",
-  "release_summary": "Editor workflow and media/timeline controls updated. Gallery retains explicitly dated archival screenshots; fresh current-version screenshots and browser visual acceptance remain incomplete.",
+  "update_date": "2026-11-08",
+  "release_summary": "Refreshed studio hierarchy, retained Source In/Out handoff, Insert/Overwrite and optional captured timeline-zone placement. Overwrite preserves edit duration and later timing with atomic Undo and source locks. Gallery screenshots remain explicitly archived; no fresh editor visual acceptance is claimed.",
   "known_limitations": [
     "The Windows source-beta setup ran on a configured hosted runner. Clean-OS and prerequisite installation and the packaged batch launcher were not tested.",
     "Mac ARM64 and Intel automated checks passed. Physical-device UI, Finder, Gatekeeper, Safari and human listening remain unverified.",
@@ -581,6 +581,41 @@
         "media_probe_recovery_tests": 13
       },
       "scope": "Historical only; does not qualify the new source or downloads."
+    },
+    {
+      "release_tag": "v1.3-beta-20261107-editor1",
+      "application_source_commit": "2dacba3cdc83b3be21e7223d6aa9fba0f36f72fe",
+      "archive_sha256": "edd0220477db3495b4448c4e8bfb0d5d44e989c019a47d5c2920181191fd8354",
+      "windows_fresh_install_acceptance": "not-completed-user-accepted-beta-gap",
+      "windows_fresh_install": {
+        "application_source_commit": "2dacba3cdc83b3be21e7223d6aa9fba0f36f72fe",
+        "archive_sha256": "edd0220477db3495b4448c4e8bfb0d5d44e989c019a47d5c2920181191fd8354",
+        "result": "not_performed_for_revised_package",
+        "guest_report_received": false,
+        "status": "not_verified",
+        "beta_gate_waiver": "explicitly-accepted-not-passed",
+        "model_inference": "not_run",
+        "scope": "No clean-OS or prerequisite-installation test and no packaged batch-launcher run. Direct unmodified setup on a configured hosted Windows runner is recorded separately."
+      },
+      "windows_installed_validation": {
+        "application_source_commit": "2dacba3cdc83b3be21e7223d6aa9fba0f36f72fe",
+        "archive_sha256": "edd0220477db3495b4448c4e8bfb0d5d44e989c019a47d5c2920181191fd8354",
+        "environment": "configured GitHub-hosted Windows runner; isolated synthetic media and disposable projects",
+        "portrait_720x1280": "passed",
+        "two_source_stacked_30_70_pixels": "passed",
+        "selected_source_b_audio_detected": "passed",
+        "full_decode": "passed",
+        "direct_unmodified_setup_without_ollama": "passed",
+        "saved_project_and_export_after_server_restart": "passed",
+        "clean_os_installation": "not_run",
+        "packaged_batch_launcher": "not_run",
+        "human_listening": "not_performed",
+        "model_inference": "not_run",
+        "validation_url": "https://github.com/VanoPeradze/cutroom/actions/runs/42406800822",
+        "feature_tests_passed": 357,
+        "feature_tests_skipped": 0
+      },
+      "scope": "Historical only; does not qualify the new source or downloads."
     }
   ],
   "historical_native_validation": [
@@ -831,12 +866,135 @@
           }
         }
       }
+    },
+    {
+      "source_commit": "2dacba3cdc83b3be21e7223d6aa9fba0f36f72fe",
+      "release_tag": "v1.3-beta-20261107-editor1",
+      "native_validation": {
+        "run_id": 42406800822,
+        "head_commit": "2dacba3cdc83b3be21e7223d6aa9fba0f36f72fe",
+        "application_source_commit": "2dacba3cdc83b3be21e7223d6aa9fba0f36f72fe",
+        "transcription_run": false,
+        "architectures": {
+          "arm64": {
+            "status": "passed",
+            "feature_tests_passed": 357,
+            "required_cases_passed": 50,
+            "skipped": 0,
+            "source_audio_and_caption_checks": "passed",
+            "job_id": 128507047775,
+            "job_url": "https://github.com/VanoPeradze/cutroom/actions/runs/42406800822/job/128507047775",
+            "fresh_app_install": "passed",
+            "missing_pip_recovery": "passed",
+            "restart_persistence": "passed",
+            "combined_archive_sha256": "2c5f5d0dd3deb1d3f38173e910f908fdaed06de5338078222d0d6e0e20819e2d",
+            "installation_checks": {
+              "status": "passed",
+              "launcher_health_and_api": "passed",
+              "restart_persistence": "passed",
+              "repeat_launch": "passed",
+              "different_data_port_collision": "passed",
+              "source_audio_and_caption_checks": "passed",
+              "offline_ready_setup": "passed",
+              "installed_packages_unchanged": "passed",
+              "unicode_and_spaces_path": true
+            },
+            "extended_render_checks": {
+              "http_source_uploads": "passed",
+              "mov_10bit_hevc_input": "passed",
+              "manual_split_and_remove": "passed",
+              "stacked_camera_above_screen": {
+                "width": 720,
+                "height": 1280,
+                "fps": 60,
+                "duration": 2,
+                "has_audio": true
+              },
+              "exports": [
+                {
+                  "width": 2560,
+                  "height": 1440,
+                  "fps": 60,
+                  "duration": 2,
+                  "has_audio": true
+                },
+                {
+                  "width": 3840,
+                  "height": 2160,
+                  "fps": 30,
+                  "duration": 2,
+                  "has_audio": true
+                }
+              ],
+              "image_broll_music_imports": "passed",
+              "mixer_gain_and_source_mute": "passed",
+              "srt_import_and_title_burning": "passed"
+            }
+          },
+          "x64": {
+            "status": "passed",
+            "feature_tests_passed": 357,
+            "required_cases_passed": 50,
+            "skipped": 0,
+            "source_audio_and_caption_checks": "passed",
+            "job_id": 128507047636,
+            "job_url": "https://github.com/VanoPeradze/cutroom/actions/runs/42406800822/job/128507047636",
+            "fresh_app_install": "passed",
+            "missing_pip_recovery": "passed",
+            "restart_persistence": "passed",
+            "combined_archive_sha256": "2c5f5d0dd3deb1d3f38173e910f908fdaed06de5338078222d0d6e0e20819e2d",
+            "installation_checks": {
+              "status": "passed",
+              "launcher_health_and_api": "passed",
+              "restart_persistence": "passed",
+              "repeat_launch": "passed",
+              "different_data_port_collision": "passed",
+              "source_audio_and_caption_checks": "passed",
+              "offline_ready_setup": "passed",
+              "installed_packages_unchanged": "passed",
+              "unicode_and_spaces_path": true
+            },
+            "extended_render_checks": {
+              "http_source_uploads": "passed",
+              "mov_10bit_hevc_input": "passed",
+              "manual_split_and_remove": "passed",
+              "stacked_camera_above_screen": {
+                "width": 720,
+                "height": 1280,
+                "fps": 60,
+                "duration": 2,
+                "has_audio": true
+              },
+              "exports": [
+                {
+                  "width": 2560,
+                  "height": 1440,
+                  "fps": 60,
+                  "duration": 2,
+                  "has_audio": true
+                },
+                {
+                  "width": 3840,
+                  "height": 2160,
+                  "fps": 30,
+                  "duration": 2,
+                  "has_audio": true
+                }
+              ],
+              "image_broll_music_imports": "passed",
+              "mixer_gain_and_source_mute": "passed",
+              "srt_import_and_title_burning": "passed"
+            }
+          }
+        },
+        "review_record_commit": "99bdbf22d82336d7492161b9d15593d2d0c036ca"
+      }
     }
   ],
   "windows_fresh_install_acceptance": "not-completed-user-accepted-beta-gap",
   "windows_fresh_install": {
-    "application_source_commit": "2dacba3cdc83b3be21e7223d6aa9fba0f36f72fe",
-    "archive_sha256": "edd0220477db3495b4448c4e8bfb0d5d44e989c019a47d5c2920181191fd8354",
+    "application_source_commit": "d2c6f6f8b649c0a9c8b23e7b0b75415da78a5b00",
+    "archive_sha256": "ffb46fab8c8ed41fcff9f5452f6dfd8680871b74b6eead55611f4213de758adc",
     "result": "not_performed_for_revised_package",
     "guest_report_received": false,
     "status": "not_verified",
@@ -845,8 +1003,8 @@
     "scope": "No clean-OS or prerequisite-installation test and no packaged batch-launcher run. Direct unmodified setup on a configured hosted Windows runner is recorded separately."
   },
   "windows_installed_validation": {
-    "application_source_commit": "2dacba3cdc83b3be21e7223d6aa9fba0f36f72fe",
-    "archive_sha256": "edd0220477db3495b4448c4e8bfb0d5d44e989c019a47d5c2920181191fd8354",
+    "application_source_commit": "d2c6f6f8b649c0a9c8b23e7b0b75415da78a5b00",
+    "archive_sha256": "ffb46fab8c8ed41fcff9f5452f6dfd8680871b74b6eead55611f4213de758adc",
     "environment": "configured GitHub-hosted Windows runner; isolated synthetic media and disposable projects",
     "portrait_720x1280": "passed",
     "two_source_stacked_30_70_pixels": "passed",
@@ -858,9 +1016,12 @@
     "packaged_batch_launcher": "not_run",
     "human_listening": "not_performed",
     "model_inference": "not_run",
-    "validation_url": "https://github.com/VanoPeradze/cutroom/actions/runs/42406800822",
+    "validation_url": "https://github.com/VanoPeradze/cutroom/actions/runs/42489336008",
     "feature_tests_passed": 357,
-    "feature_tests_skipped": 0
+    "feature_tests_skipped": 0,
+    "frontend_tests_passed": 900,
+    "three_point_editing_tests_passed": 36,
+    "media_probe_recovery_tests": 13
   },
   "historical_maintenance": {
     "scope": "Actual FFprobe container must match suffix and allowed codecs for direct preview.",

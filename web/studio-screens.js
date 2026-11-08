@@ -196,13 +196,12 @@
     search.placeholder = "Search media...";
     search.setAttribute("aria-label", "Search media");
     const tabs = make("div", "library-filter");
-    tabs.setAttribute("role", "tablist");
-    tabs.setAttribute("aria-label", "Media type");
+    tabs.setAttribute("role", "group");
+    tabs.setAttribute("aria-label", "Filter media by type");
     let kind = "all";
     const filters = [["all", "All media"], ["video", "Video"], ["audio", "Audio"], ["image", "Images"]].map(([value, text]) => {
       const tab = make("button", "", text);
       tab.type = "button";
-      tab.setAttribute("role", "tab");
       tab.addEventListener("click", () => { kind = value; apply(); });
       tab.dataset.value = value;
       tabs.append(tab);
@@ -229,16 +228,41 @@
       viewButtons.forEach(button => button.setAttribute("aria-pressed", String(button.dataset.view === view)));
     };
     applyView();
-    tools.append(search, tabs, views);
+    const count = make("p", "library-result-count");
+    count.setAttribute("role", "status");
+    count.setAttribute("aria-live", "polite");
+    count.setAttribute("aria-atomic", "true");
+    const empty = make("div", "library-no-results");
+    empty.hidden = true;
+    const emptyCopy = make("p", "", "No matching media. Try another search or show all files.");
+    const reset = make("button", "", "Show all media");
+    reset.type = "button";
+    reset.addEventListener("click", () => {
+      search.value = "";
+      kind = "all";
+      apply();
+      search.focus();
+    });
+    empty.append(emptyCopy, reset);
+    tools.append(search, tabs, views, count, empty);
     heading?.after(tools);
     const apply = () => {
       const query = search.value.trim().toLowerCase();
-      filters.forEach((tab) => tab.setAttribute("aria-selected", String(tab.dataset.value === kind)));
-      for (const item of $$(".source-library-card, .media-asset", shelf)) {
+      filters.forEach((tab) => tab.setAttribute("aria-pressed", String(tab.dataset.value === kind)));
+      const items = $$(".source-library-card, .media-asset", shelf);
+      let shown = 0;
+      for (const item of items) {
         const matchesKind = kind === "all" || item.dataset.kind === kind;
         const matchesText = !query || item.textContent.toLowerCase().includes(query);
         item.hidden = !(matchesKind && matchesText);
+        if (!item.hidden) shown += 1;
       }
+      const message = items.length === 0 ? "No media imported" : query || kind !== "all"
+        ? `${shown} of ${items.length} items` : `${items.length} ${items.length === 1 ? "item" : "items"}`;
+      // The shelf observer sees child-list mutations. Do not rewrite identical
+      // text, or the status itself would schedule another endless refresh.
+      if (count.textContent !== message) count.textContent = message;
+      empty.hidden = shown > 0 || items.length === 0;
     };
     search.addEventListener("input", apply);
     // One list for everything: keep the imported-files section open.
