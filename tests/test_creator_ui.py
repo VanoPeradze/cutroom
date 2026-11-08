@@ -114,11 +114,13 @@ def test_visual_layer_is_shipped_after_existing_geometry_styles():
     # The shared visual skin follows geometry; the scoped editor panel layer
     # follows that skin so inspector sizing and the separate Master win the cascade.
     # The studio design system and its editor chrome follow; the layout and
-    # overlap fixes found by the screen sweep come last so they win the cascade.
+    # overlap fixes stay intact. The final presentation layer does not own
+    # monitor geometry or the user-controlled panel sizes.
     style_paths = [urlsplit(href).path for href in page.styles]
-    assert style_paths[-6:] == ["/assets/creator-ui.css", "/assets/editor-panels.css",
+    assert style_paths[-7:] == ["/assets/creator-ui.css", "/assets/editor-panels.css",
                                 "/assets/studio-design.css", "/assets/studio-chrome.css",
-                                "/assets/studio-screens.css", "/assets/ui-polish.css"]
+                                "/assets/studio-screens.css", "/assets/ui-polish.css",
+                                "/assets/studio-finish.css"]
     assert len(style_paths) == len(set(style_paths))
     for href in page.styles:
         assert href.startswith("/assets/")

@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased - 2026-11-08 - Three-point source editing
+
+- Original footage now carries the selected source range and scope into **Place selected footage**, instead of discarding the selection and resetting to the first five seconds.
+- Choose **Insert** or **Overwrite**, either at an edit position or filling a captured timeline range from Source In. The range computes Source Out without looping or changing speed. Insufficient source media is rejected rather than silently shortening the requested placement.
+- Source overwrite is one atomic, undoable edit. Together replaces A/B and framing only inside the destination; source-only replaces one lane. Edit duration, later timing, independent media/audio, titles and current audio routing remain unchanged. Source-linked captions follow the new footage, preserving local corrections on surviving uses.
+- Track locks, source/timeline changes, repeated submissions, cancellation, project switches and stale API revisions are guarded. Existing insertion semantics remain source-track-only rather than all-layer ripple. See [source placement and its boundaries](docs/INDEPENDENT_TRACKS.md#three-point-source-placement).
+- Regressions cover persistence/reopen, Undo/Redo, overlapping independent layers, caption ownership and encoded 30/60 FPS synthetic picture/audio boundaries. Local source tests do not establish a published native release or physical-device acceptance.
+
 ## Unreleased — source review and all-layer gap closure
 
 - Export automatically uses mapped source A picture when a requested B/split layout has missing B coverage. The dialog, saved export record and finished-video review disclose the substitution. Covered B intervals keep their requested layout; the saved edit, duration, captions and chosen audio remain unchanged. Unsafe picture gaps, missing media and real rendering failures still report an error.

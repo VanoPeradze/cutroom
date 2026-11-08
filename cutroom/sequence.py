@@ -21,6 +21,7 @@ SEQUENCE_ACTION_FIELDS = {
     "sequence_move": {"slot", "clip_id", "start", "mode"},
     "sequence_duplicate": {"slot", "clip_id", "start"},
     "sequence_insert": {"slot", "start", "source_start", "source_end"},
+    "sequence_overwrite": {"slot", "start", "source_start", "source_end", "scope"},
     "sequence_ripple_delete": {"start", "end"},
     "sequence_split_all": {"time"},
     "sequence_move_range": {"start", "end", "to", "mode", "slot"},
@@ -525,6 +526,44 @@ def _trim_sequence_edge(value: dict[str, Any], payload: dict[str, Any]) -> dict[
     return manual
 
 
+def _overwrite_source(value: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
+    """Replace a source zone inside the edit without changing any timeline clock.
+
+    Together replaces A/B and their layout only in the destination window.
+    Independent media, titles, mixer settings and the original transcript are
+    not lifted or shifted. Captions are projected from the resulting clips by
+    the existing editing transaction, including its correction remapping.
+    """
+    slot = payload.get("slot")
+    scope = payload.get("scope", "source")
+    if not isinstance(slot, str) or slot not in {"A", "B"} or _duration(value, slot) <= 0:
+        raise SourceTrackError("Choose an existing source track A or B")
+    if scope not in ("source", "edit"):
+        raise SourceTrackError("Choose this source or Together for overwrite")
+    from .track_locks import require_tracks_unlocked
+    require_tracks_unlocked(value, (slot,) if scope == "source" else ("A", "B"))
+    source_start = _number(payload.get("source_start"), "source_start")
+    source_end = _number(payload.get("source_end"), "source_end")
+    if source_start < 0 or source_end > _duration(value, slot) + EPSILON:
+        raise SourceTrackError(f"The clip extends beyond source {slot}'s media")
+    length = round(source_end - source_start, 9)
+    if length < minimum_clip_seconds(value) - EPSILON:
+        raise SourceTrackError("Select at least one output frame")
+    start = _placement_time(payload, "start")
+    end = round(start + length, 9)
+    if end > timeline_duration(value) + EPSILON:
+        raise SourceTrackError("Overwrite must fit inside the edit. Use Insert to extend it.")
+    manual = value["manual"]
+    for track_slot in ((slot,) if scope == "source" else ("A", "B")):
+        manual["source_tracks"][track_slot] = _without_time(manual["source_tracks"][track_slot], start, end, slot=track_slot)
+    manual["source_tracks"][slot].append({"id": _new_id(slot), "start": start, "end": end, "source_start": source_start})
+    if scope == "edit":
+        cameras = _without_time(manual["sequence"]["camera_plan"], start, end)
+        manual["sequence"]["camera_plan"] = sorted([*cameras, {"start": start, "end": end, "camera": slot}], key=lambda row: row["start"])
+    _finish(value)
+    return manual
+
+
 def _prepare_linked_edit(value: dict[str, Any], payload: dict[str, Any], action: str) -> dict[str, Any] | None:
     manual, duration = value["manual"], timeline_duration(value)
     if action == "sequence_split_all":
@@ -640,6 +679,8 @@ def prepare_sequence_edit(project: dict[str, Any], payload: dict[str, Any]) -> d
         payload = {"action": "sequence_crop", "slot": "A", "start": start, "end": end, **crop}
         action = "sequence_crop"
     initial_tracks = copy.deepcopy(manual["source_tracks"])
+    if action == "sequence_overwrite":
+        return _overwrite_source(value, payload)
     if action == "sequence_trim_edge":
         return _trim_sequence_edge(value, payload)
     if action == "sequence_close_gaps":

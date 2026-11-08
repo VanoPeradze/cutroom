@@ -41,7 +41,7 @@ Framing follows clips through moves, copies and splits and is applied in both pr
 - **Range…** accepts exact edit times as seconds or mm:ss.mmm.
 - **Original footage** opens a large source player and the complete original timeline. Green sections are in the current edit; red sections are removed. Click a section or drag any range, preview it, then **Restore to edit** or **Remove from edit**. Previous/Next removed and zoom help review long recordings. Source and edited playback stay separate.
 - Restore inserts only missing portions of the selected recording, near the next source neighbor (or after the preceding one). Existing clips keep their relative order even if you rearranged the story. Together restores the original synchronized A/B mapping and layout; source-only restores just that track, filling a corresponding gap when possible. Remove affects all uses of the selected interval, including copies; Together closes the gap, source-only leaves it. Each action is one Undo step. Original media and transcripts are not rewritten.
-- **Insert a copy by time…** remains available inside Original footage for deliberate insertion/duplication with exact Source in / Source out and edit times. This inserts only the chosen source; Together shifts both existing tracks, while source-only shifts only that track.
+- **Place selected footage...** carries the reviewed original range and chosen scope into the placement form. Choose Insert or Overwrite and review the destination before applying; opening or cancelling the form does not change the edit.
 - **Duplicate clip** copies the selected section. In Together it includes both tracks and layouts.
 - **Cut out** removes the interval between two clicks.
 - **Keys / Shortcuts** selects a supported keyboard profile. These cover CUTROOM's available actions, not every command from another editor.
@@ -50,6 +50,22 @@ Framing follows clips through moves, copies and splits and is applied in both pr
 In the Together inspector, Start / End select exact times; use **Remove from video** for removal. **Move to start** uses Start as the final position and preserves the selected section's length. In A-only/B-only, **Apply trim** changes clip boundaries and Source in independently.
 
 An empty timeline is valid and stays empty when reopened. Use Original footage to restore a selection, or Undo to continue. Export is unavailable until some footage exists.
+
+### Three-point source placement
+
+1. Optionally select a destination range on the edited timeline first.
+2. Open **Original footage**, choose A or B, and drag the source section you want. Choose Together or This source only, then **Place selected footage...**. The source selection is retained instead of resetting to the first five seconds.
+3. Choose **Insert (shift source tracks)** or **Overwrite (keep timing)**.
+4. Use **At edit position** to place the Source In/Out range at the displayed edit time. Or choose **Selected edit range** to use its captured start and duration. In that mode, Source In remains editable and Source Out is calculated automatically. Switching back restores the manually entered Out and destination.
+5. Review the operation and apply. A single Undo reverses it; Redo restores it.
+
+**Insert** retains the existing source insertion behavior. Together shifts A/B and framing, inserts only the chosen source and leaves the other source empty during the new footage. Source-only inserts on that lane. Independent added video/audio, images and titles retain their existing times; this is not a general all-layer ripple command.
+
+**Overwrite** replaces only the destination interval and never ripples or extends the edit. Together removes A/B footage in that interval and sets its layout to the chosen source. Source-only replaces that lane and leaves the other source and layout unchanged. Later clips, added media/audio and custom text stay at the same times, including layers overlapping the replacement. Existing audio routing is retained, so the selected audio source can be silent where Together removes it. Source-linked captions follow the resulting footage; existing corrections on surviving uses are preserved.
+
+The selected edit range is captured when the placement form opens. Its duration determines how much footage is taken after Source In; this never loops, freezes or changes playback speed. Insufficient source footage, extension past the edit end, protected tracks, unsupported tiny surviving fragments and stale source/timeline changes are rejected. Select a shorter range or use Insert where appropriate. Source selections preserve fractional-frame precision in the numeric fields, but browser source preview is not a frame-accurate monitor.
+
+This workflow is an original CUTROOM implementation informed by [Kdenlive's three-point editing documentation](https://docs.kdenlive.org/en/tips_and_tricks/useful_info/insert_overwrite_advanced_timeline_editing.html). No Kdenlive source code is included. It supports CUTROOM's existing A/B scope, not Kdenlive's unlimited track targeting, nested sequences or every editing mode.
 
 ## Layout, captions and playback
 

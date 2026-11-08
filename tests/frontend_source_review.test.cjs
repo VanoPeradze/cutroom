@@ -27,6 +27,25 @@ function fixture() {
   return {review,nodes,dialog,context,requests,get current(){return current;},set current(p){current=p;},get paused(){return paused;}};
 }
 
+test('placing original footage carries the actual source selection and scope into the editor',()=>{
+  const f=fixture();let placement;
+  f.review.exactInsert=value=>placement=plain(value);
+  f.review.open('edit');f.review.slot='B';f.nodes.scope.value='source';f.review.select({start:2.25,end:5.75});
+  f.nodes.exact.onclick();
+  assert.equal(f.dialog.open,false);
+  assert.equal(f.nodes.video.src,undefined);
+  assert.deepEqual(placement,{projectId:'p',slot:'B',scope:'source',source_start:2.25,source_end:5.75});
+  assert.equal(f.requests.length,0,'opening placement must not edit');
+});
+
+test('placement cannot leave a busy, locked or stale source review',()=>{
+  for(const change of [f=>f.review.busy=true,f=>f.current.manual.track_locks={A:true},f=>f.current={...f.current,id:'other'}]) {
+    const f=fixture();let calls=0;f.review.exactInsert=()=>calls++;
+    f.review.open('edit');change(f);f.nodes.exact.onclick();
+    assert.equal(calls,0);assert.equal(f.dialog.open,true);
+  }
+});
+
 test('source protection permits review but disables changing protected scope',async()=>{
   const f=fixture();f.current.manual={track_locks:{A:true}};
   f.review.open('edit');f.review.select({start:0,end:5});

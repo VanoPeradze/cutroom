@@ -21,6 +21,7 @@
   <link rel="stylesheet" href="/assets/studio-chrome.css?v=1.2-beta-20261019">
   <link rel="stylesheet" href="/assets/studio-screens.css?v=1.2-beta-20261019">
   <link rel="stylesheet" href="/assets/ui-polish.css?v=1.3-beta-20261107-monitor1">
+  <link rel="stylesheet" href="/assets/studio-finish.css?v=20261108-studio1">
 </head>
 <body class="welcome-mode">
   <a class="skip-link" href="#main" data-i18n="skip">Skip to content</a>
@@ -83,14 +84,17 @@
         <div class="home-section-head"><div><p class="eyebrow">START A PROJECT</p><h2 id="welcomeServicesTitle">Pick your starting point.</h2></div><p>Every path leads to an editable timeline.</p></div>
         <div class="service-grid">
           <button class="service-card" type="button" data-start-workflow="short">
+            <span class="service-index" aria-hidden="true">01 / SHORTS</span>
             <span class="service-art short-art" aria-hidden="true"><span class="art-scene-wide"></span><span class="art-reel"><span class="art-scene"></span><span class="art-ratio">9:16</span><span class="art-caption"></span></span><span class="art-platforms"><i></i><i></i><i></i></span></span>
             <span class="service-copy"><strong>Create a Short / Reel</strong><span>Find a moment. Make it vertical.</span><small>AI draft · Vertical video · Editable captions</small></span><span class="service-start primary">Start</span>
           </button>
           <button class="service-card" type="button" data-start-workflow="youtube">
+            <span class="service-index" aria-hidden="true">02 / YOUTUBE</span>
             <span class="service-art youtube-art" aria-hidden="true"><span class="art-wide"><span class="art-scene"></span><span class="art-play"></span></span><span class="art-strip"><i></i><i></i><i></i><i class="on"></i><i></i><i></i><i></i></span></span>
             <span class="service-copy"><strong>Edit a YouTube video</strong><span>Build a focused first draft.</span><small>AI-assisted cleanup · Horizontal video</small></span><span class="service-start">Start</span>
           </button>
           <button class="service-card" type="button" data-start-workflow="manual">
+            <span class="service-index" aria-hidden="true">03 / MANUAL</span>
             <span class="service-art manual-art" aria-hidden="true"><span class="art-ruler"></span><span class="art-lanes"><i class="lane-video"></i><i class="lane-audio"></i><i class="lane-voice"></i><i class="lane-text">Title</i></span><span class="art-playhead"></span></span>
             <span class="service-copy"><strong>Edit it yourself</strong><span>Full manual control. No AI required.</span><small>No AI required · Full manual control</small></span><span class="service-start">Open editor</span>
           </button>
@@ -432,7 +436,17 @@
             <section id="emptyTimeline" class="empty-timeline" hidden><h3>Your timeline is empty</h3><p>Your original recordings are safe. Add footage or Undo to bring your edit back.</p><button id="emptyTimelineAdd" class="button primary" type="button">Add source footage</button></section>
             <header class="studio-tool-intro"><div><p>01 / EDIT</p><h3>Clip controls</h3></div><span>Select a clip to trim or move it. Choose Range to remove a section.</span></header>
             <form class="clip-trim-bar" id="clipTrimForm" hidden><strong id="clipTrimTitle">Selected clip</strong><label>Timeline start <input id="clipTrimIn" type="number" step="0.001" min="0" required></label><label>Timeline end <input id="clipTrimOut" type="number" step="0.001" min="0" required></label><label id="clipSourceField" hidden>Source in <input id="clipSourceIn" type="number" step="0.001" min="0"></label><span>seconds</span><button id="clipTrimApply" type="submit">Apply trim</button><button id="clipMove" type="button" hidden>Move to start</button><span id="clipTrimStatus" role="status"></span></form>
-            <form class="clip-trim-bar" id="sourceInsertForm" hidden><strong id="sourceInsertTitle">Add source footage</strong><label>Source <select id="sourceInsertSlot" aria-label="Footage source"><option value="A">A</option><option value="B">B</option></select></label><label>Source in <input id="sourceInsertIn" type="text" inputmode="decimal" value="0" required></label><label>Source out <input id="sourceInsertOut" type="text" inputmode="decimal" required></label><label>Insert at (edit time) <input id="sourceInsertAt" type="text" inputmode="decimal" value="0" required></label><button type="submit">Insert footage</button><button type="button" id="sourceInsertCancel">Cancel</button><span id="sourceInsertStatus" role="status">Original source times · seconds or mm:ss.mmm. Inserts on this track only.</span></form>
+            <form class="clip-trim-bar" id="sourceInsertForm" hidden aria-describedby="sourceInsertStatus">
+              <strong id="sourceInsertTitle">Place source footage</strong>
+              <label>Source <select id="sourceInsertSlot" aria-label="Footage source"><option value="A">A</option><option value="B">B</option></select></label>
+              <label>Operation <select id="sourceInsertMode"><option value="insert">Insert (shift source tracks)</option><option value="overwrite">Overwrite (keep timing)</option></select></label>
+              <label>Placement <select id="sourceInsertZone"><option value="playhead">At edit position</option><option value="selection" disabled>Selected edit range</option></select></label>
+              <label>Source in <input id="sourceInsertIn" type="text" inputmode="decimal" value="0" required></label>
+              <label>Source out <input id="sourceInsertOut" type="text" inputmode="decimal" required></label>
+              <label>At (edit time) <input id="sourceInsertAt" type="text" inputmode="decimal" value="0" required></label>
+              <button id="sourceInsertApply" type="submit">Insert footage</button><button type="button" id="sourceInsertCancel">Cancel</button>
+              <span id="sourceInsertStatus" role="status">Source and edit times accept seconds or mm:ss.mmm. Review the operation before applying.</span>
+            </form>
             <details class="editor-more track-protection" id="trackProtection" hidden>
               <summary>Track protection <span id="trackProtectionSummary">Unlocked</span></summary>
               <div class="editor-more-panel"><button id="trackLockA" type="button" aria-pressed="false">Lock A</button><button id="trackLockB" type="button" aria-pressed="false" hidden>Lock B</button></div>
@@ -811,7 +825,7 @@
       <div class="source-review-player"><video data-review="video" controls playsinline preload="metadata" aria-label="Original source preview"></video><p data-review="quote" dir="auto"></p></div>
       <div class="source-review-toolbar"><label>View <select data-review="slot" aria-label="Original recording"><option value="A">Source A</option><option value="B">Source B</option></select></label><span class="source-review-legend"><span>■ In edit</span><span>▧ Removed</span></span><button data-review="previous" type="button">← Previous removed</button><button data-review="next" type="button">Next removed →</button><div><button data-review="zoomOut" type="button" aria-label="Zoom out original timeline">−</button><button data-review="zoomIn" type="button" aria-label="Zoom in original timeline">＋</button><button data-review="fit" type="button">Fit</button></div></div>
       <div class="timeline-scroll source-review-timeline" data-review="scroll"><canvas data-review="canvas" height="180" tabindex="0" role="slider" aria-label="Original footage timeline" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"></canvas></div>
-      <div class="source-review-actions"><p data-review="selection" aria-live="polite"></p><div><select data-review="scope" aria-label="Original footage edit scope"><option value="edit">Together (A+B)</option><option value="source">This source only</option></select><button class="button primary" data-review="restore" type="button">Restore to edit</button><button data-review="remove" type="button">Remove from edit</button><button data-review="undo" type="button">Undo</button><button class="source-review-exact" data-review="exact" type="button">Insert a copy by time…</button></div><p data-review="effect"></p><button type="button" class="button ghost" data-review="retry" hidden>Retry preview</button><p data-review="status" role="status">Click a section to preview it. Drag to select your own range. Use the ruler to seek anywhere.</p></div>
+      <div class="source-review-actions"><p data-review="selection" aria-live="polite"></p><div><select data-review="scope" aria-label="Original footage edit scope"><option value="edit">Together (A+B)</option><option value="source">This source only</option></select><button class="button primary" data-review="restore" type="button">Restore to edit</button><button data-review="remove" type="button">Remove from edit</button><button data-review="undo" type="button">Undo</button><button class="source-review-exact" data-review="exact" type="button">Place selected footage...</button></div><p data-review="effect"></p><button type="button" class="button ghost" data-review="retry" hidden>Retry preview</button><p data-review="status" role="status">Click a section to preview it. Drag to select your own range. Use the ruler to seek anywhere.</p></div>
     </div>
   </dialog>
   <dialog id="projectsDialog" class="sheet-dialog" aria-labelledby="projectsTitle">
@@ -925,7 +939,7 @@
       <footer class="connection-actions"><button class="button ghost" id="forgetCloudKey" type="button">Forget session key</button><button class="button primary" id="saveAIConnection" type="submit">Use this connection</button></footer>
     </form>
   </dialog>
-  <script type="module" src="/assets/app.js?v=1.3-beta-20261107-export-fallback1"></script>
-  <script src="/assets/studio-screens.js?v=1.3-beta-20261107-monitor1" defer></script>
+  <script type="module" src="/assets/app.js?v=1.3-beta-20261108-three-point1"></script>
+  <script src="/assets/studio-screens.js?v=20261108-studio1" defer></script>
 </body>
 </html>

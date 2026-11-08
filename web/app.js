@@ -4,7 +4,7 @@ import { MediaStudio } from "./media-studio.js?v=1.3-beta-20261107-source-marks1
 import { StabilizationStudio } from "./stabilization-studio.js?v=1.2-beta";
 import { ChromaStudio } from "./chroma-studio.js?v=1.2-beta";
 import { ChromaPreview } from "./chroma-preview.js?v=1.2-beta";
-import { SourceReview } from "./source-review.js?v=1.3-beta-20261101-ui8";
+import { SourceReview } from "./source-review.js?v=1.3-beta-20261108-three-point1";
 import { initWorkspace } from "./workspace.js?v=1.3-beta-20261107-monitor1";
 import { KEYBOARD_PROFILES, resolveEditorShortcut, isEditorTransportSpace, shortcutRows } from "./keyboard.js?v=1.2-beta";
 import { AudioThresholdView } from "./audio-meter.js?v=1.2-beta";
@@ -165,7 +165,7 @@ function cacheElements() {
     "quietAction", "quietGain", "quietGainOut", "loudAction", "loudGain", "loudGainOut", "normalizeAudio",
     "modelStatus", "modelButton", "retryAIButton", "setupRuntimeDock", "studioRuntimeDock", "draftRebuildNotice", "draftRebuildTitle", "draftRebuildText", "rebuildDraftButton", "exportDialog", "closeExportDialog", "exportSummary", "exportReview",
     "activeJobBar", "activeJobLabel", "activeJobDetail", "globalCancelJobButton", "exportTitle", "exportDescription", "exportProgress", "exportActions", "cancelExport", "cancelExportJobButton", "confirmExport", "downloadExport", "toastRegion", "cameraBadge",
-    "sourceInsertForm", "sourceInsertTitle", "sourceInsertIn", "sourceInsertOut", "sourceInsertAt", "sourceInsertStatus", "sourceInsertCancel", "sourceInsertSlot", "clipDuplicate", "editorMoreButton", "editorMoreTools", "emptyTimeline", "emptyTimelineAdd",
+    "sourceInsertForm", "sourceInsertTitle", "sourceInsertIn", "sourceInsertOut", "sourceInsertAt", "sourceInsertStatus", "sourceInsertCancel", "sourceInsertSlot", "sourceInsertMode", "sourceInsertZone", "sourceInsertApply", "clipDuplicate", "editorMoreButton", "editorMoreTools", "emptyTimeline", "emptyTimelineAdd",
   ].forEach((id) => { elements[id] = document.getElementById(id); });
 }
 
@@ -972,8 +972,13 @@ function bindEvents() {
     const slot = elements.sourceInsertSlot.value;
     elements.sourceInsertIn.value = "00:00.000";
     elements.sourceInsertOut.value = formatSourceTime(Math.min(5, Number(state.project?.sources?.[slot]?.duration || 0)));
+    if (state.sourceInsertSession) state.sourceInsertSession.sourceOut = elements.sourceInsertOut.value;
+    renderSourceInsert();
   });
-  elements.sourceInsertCancel.addEventListener("click", () => { elements.sourceInsertForm.hidden = true; });
+  for (const control of [elements.sourceInsertIn, elements.sourceInsertOut, elements.sourceInsertAt]) control.addEventListener("input", renderSourceInsert);
+  elements.sourceInsertMode.addEventListener("change", renderSourceInsert);
+  elements.sourceInsertZone.addEventListener("change", renderSourceInsert);
+  elements.sourceInsertCancel.addEventListener("click", () => { if (!state.sourceInsertSession?.busy) elements.sourceInsertForm.hidden = true; });
   elements.clipDuplicate.addEventListener("click", async () => {
     const clip = selectedTimelineClip();
     if (!clip || !state.project?.editor_sequence) return;
@@ -6559,49 +6564,145 @@ function openSourceReview() {
   return state.sourceReview.open(activeEditTarget());
 }
 
-function openSourceInsert() {
-  if (!state.project?.editor_sequence || foregroundBusy() || state.manualEditBusy) return false;
+function formatSourcePlacementTime(value) {
+  const seconds = Number(value);
+  return Number.isFinite(seconds) && Math.abs(seconds * 1000 - Math.round(seconds * 1000)) > 1e-6
+    ? String(Number(seconds.toFixed(9))) : formatSourceTime(seconds);
+}
+
+function sourceInsertIdentity() {
+  const p = state.project;
+  return JSON.stringify([p?.id, p?.sources, p?.editor_sequence, p?.settings?.fps, p?.manual?.track_locks]);
+}
+
+function openSourceInsert(placement = {}) {
+  if (!state.project?.editor_sequence || foregroundBusy() || state.manualEditBusy || state.sourceInsertSession?.busy) return false;
+  if (placement.projectId && placement.projectId !== state.project.id) return false;
+  const selection = state.manualSelection ? {...state.manualSelection} : null;
   if (!openStudioTab("timeline")) return false;
   selectEditTool("clip");
+  if (placement.scope) setEditTarget(placement.scope === "edit" ? "edit" : placement.slot);
   const target = activeEditTarget();
-  const slot = target === "edit" ? transcriptSourceSlot() : target;
-  state.timeline?.clearSelection();
+  const slot = target === "edit" ? (state.project.sources[placement.slot] ? placement.slot : transcriptSourceSlot()) : target;
   const form = elements.sourceInsertForm;
   form.dataset.projectId = state.project.id;
   form.dataset.target = target;
   elements.sourceInsertSlot.value = slot;
   elements.sourceInsertSlot.disabled = target !== "edit";
   elements.sourceInsertSlot.querySelector('option[value="B"]').disabled = !state.project.sources.B;
-  elements.sourceInsertTitle.textContent = "Add source footage";
-  elements.sourceInsertIn.value = "00:00.000";
-  elements.sourceInsertOut.value = formatSourceTime(Math.min(5, Number(state.project.sources[slot]?.duration || 0)));
+  elements.sourceInsertTitle.textContent = "Place source footage";
+  elements.sourceInsertIn.value = formatSourcePlacementTime(placement.source_start ?? 0);
+  elements.sourceInsertOut.value = formatSourcePlacementTime(placement.source_end ?? Math.min(5, Number(state.project.sources[slot]?.duration || 0)));
   elements.sourceInsertAt.value = formatSourceTime(previewTimelineTime());
-  elements.sourceInsertStatus.textContent = target === "edit"
-    ? "Inserts the chosen source and shifts both tracks together. The other source is empty during the new footage. Original times: seconds or mm:ss.mmm."
-    : `Inserts on ${slot} only; the other track stays still. Original times: seconds or mm:ss.mmm.`;
+  elements.sourceInsertMode.value = "insert";
+  elements.sourceInsertZone.value = "playhead";
+  const zone = selection && selection.start >= 0 && selection.end <= editorDuration() + 1e-6 && selection.end - selection.start >= minimumEditLength() - 1e-6 ? selection : null;
+  state.sourceInsertSession = {identity:sourceInsertIdentity(), zone, busy:false, useZone:false};
+  const zoneOption = elements.sourceInsertZone.querySelector('option[value="selection"]');
+  zoneOption.disabled = !zone;
+  zoneOption.textContent = zone ? `Selected edit range (${formatSourceTime(zone.start)} - ${formatSourceTime(zone.end)})` : "Select a timeline range first";
   form.hidden = false;
+  renderSourceInsert();
   pauseAllMedia();
   elements.sourceInsertIn.focus();
   form.scrollIntoView({ block: "nearest" });
   return true;
 }
 
+function sourceInsertPlan() {
+  const form = elements.sourceInsertForm, session = state.sourceInsertSession;
+  const slot = elements.sourceInsertSlot.value, mode = elements.sourceInsertMode.value;
+  if (!session || form.dataset.projectId !== state.project?.id || form.dataset.target !== activeEditTarget()
+    || session.identity !== sourceInsertIdentity()) throw new Error("The edit or source changed. Cancel and review the current version before placing footage.");
+  if (!["insert", "overwrite"].includes(mode)) throw new Error("Choose Insert or Overwrite.");
+  const sourceDuration = Number(state.project.sources?.[slot]?.duration);
+  const sourceStart = parseSourceTime(elements.sourceInsertIn.value, 9);
+  const useZone = elements.sourceInsertZone.value === "selection";
+  if (useZone && !session.zone) throw new Error("Select a timeline range before using it for placement.");
+  const start = useZone ? session.zone.start : parseSourceTime(elements.sourceInsertAt.value, 9);
+  let sourceEnd = useZone ? sourceStart + session.zone.end - session.zone.start : parseSourceTime(elements.sourceInsertOut.value, 9);
+  if (![start, sourceStart, sourceEnd, sourceDuration].every(Number.isFinite) || start < 0 || sourceStart < 0
+    || sourceEnd - sourceStart < minimumEditLength() - 1e-9 || sourceEnd > sourceDuration + (useZone ? 1e-9 : .0005) || start + sourceEnd - sourceStart > 86400) {
+    throw new Error(useZone ? "Not enough source footage from this In point to fill the selected edit range. Choose an earlier In point or a shorter range."
+      : `Choose source times between 0 and ${formatSourceTime(sourceDuration)} and a valid edit position.`);
+  }
+  // Keep millisecond-rounded full-media endpoints usable without extending media.
+  sourceEnd = Math.min(sourceDuration, sourceEnd);
+  const length = sourceEnd - sourceStart;
+  if (mode === "overwrite" && start + length > editorDuration() + 1e-6) throw new Error("Overwrite must fit inside the edit. Choose Insert to extend it.");
+  const affected = form.dataset.target === "edit" ? ["A", "B"] : [slot];
+  const locked = affected.filter(name => state.project.manual?.track_locks?.[name] === true);
+  if (locked.length) throw new Error(`Track ${locked.join(" + ")} is locked. Unlock it before placing footage.`);
+  return {slot, mode, start, sourceStart, sourceEnd, length, target:form.dataset.target, useZone};
+}
+
+function renderSourceInsert() {
+  const form = elements.sourceInsertForm, session = state.sourceInsertSession;
+  if (!form || form.hidden || !session) return;
+  const useZone = elements.sourceInsertZone.value === "selection" && Boolean(session.zone);
+  if (useZone && !session.useZone) {
+    session.sourceOut = elements.sourceInsertOut.value;
+    session.editAt = elements.sourceInsertAt.value;
+  } else if (!useZone && session.useZone) {
+    elements.sourceInsertOut.value = session.sourceOut;
+    elements.sourceInsertAt.value = session.editAt;
+  }
+  session.useZone = useZone;
+  if (useZone) {
+    elements.sourceInsertAt.value = formatSourcePlacementTime(session.zone.start);
+    const start = parseSourceTime(elements.sourceInsertIn.value, 9);
+    elements.sourceInsertOut.value = Number.isFinite(start) ? formatSourcePlacementTime(start + session.zone.end - session.zone.start) : "";
+  }
+  const busy = session.busy || state.manualEditBusy || foregroundBusy();
+  for (const node of [elements.sourceInsertIn,elements.sourceInsertMode,elements.sourceInsertZone,elements.sourceInsertCancel]) node.disabled = Boolean(busy);
+  elements.sourceInsertSlot.disabled = Boolean(busy) || form.dataset.target !== "edit";
+  elements.sourceInsertOut.disabled = elements.sourceInsertAt.disabled = Boolean(busy) || useZone;
+  elements.sourceInsertApply.textContent = elements.sourceInsertMode.value === "overwrite" ? "Overwrite footage" : "Insert footage";
+  elements.sourceInsertApply.disabled = Boolean(busy);
+  if (busy) { elements.sourceInsertStatus.textContent = "Placing footage. Please wait for confirmation."; return; }
+  try {
+    const plan = sourceInsertPlan();
+    const scope = plan.target === "edit" ? "Together (A+B)" : `Source ${plan.slot} only`;
+    const effect = plan.mode === "overwrite"
+      ? (plan.target === "edit" ? "Replaces A/B footage and framing only in this range." : "Replaces only this source; other-source clips and framing stay unchanged.") + " Later clips, added media/audio and titles stay at their existing times."
+      : (plan.target === "edit" ? "Inserts this source, leaving the other source empty here, and shifts both source tracks and framing." : "Inserts on this source only; the other source stays still.") + " Added media/audio and titles keep their existing times.";
+    elements.sourceInsertStatus.textContent = `${scope}: ${plan.length.toFixed(3)} s at ${formatSourceTime(plan.start)}. ${effect} ${plan.useZone ? "The edit range determines Source Out; playback speed is unchanged. " : ""}Audio routing is unchanged. Undo is available.`;
+  } catch (error) {
+    elements.sourceInsertApply.disabled = true;
+    elements.sourceInsertStatus.textContent = error.message;
+  }
+}
+
 async function insertSourceFootage(event) {
   event.preventDefault();
-  const form = elements.sourceInsertForm, slot = elements.sourceInsertSlot.value;
+  const form = elements.sourceInsertForm, session = state.sourceInsertSession;
+  if (form.hidden || !session || session.busy || state.manualEditBusy || foregroundBusy()) return;
   if (form.dataset.target !== activeEditTarget()) { form.hidden = true; return; }
-  if (form.dataset.projectId !== state.project?.id || !state.project?.sources?.[slot]) { form.hidden = true; return; }
-  const sourceStart = parseSourceTime(elements.sourceInsertIn.value), sourceEnd = parseSourceTime(elements.sourceInsertOut.value), start = parseSourceTime(elements.sourceInsertAt.value);
-  const sourceDuration = Number(state.project.sources[slot].duration);
-  if (![start, sourceStart, sourceEnd].every(Number.isFinite) || start < 0 || sourceStart < 0 || sourceEnd - sourceStart < minimumEditLength() - 1e-6 || sourceEnd > sourceDuration + .0005 || start + sourceEnd - sourceStart > 86400) {
-    elements.sourceInsertStatus.textContent = `Choose source times between 0 and ${formatSourceTime(sourceDuration)} and a valid edit position.`;
-    return;
+  if (form.dataset.projectId !== state.project?.id) { form.hidden = true; return; }
+  let plan;
+  try { plan = sourceInsertPlan(); }
+  catch (error) { elements.sourceInsertStatus.textContent = error.message; return; }
+  const {slot,mode,start,sourceStart,sourceEnd,length,target} = plan;
+  session.busy = true;
+  renderSourceInsert();
+  let updated;
+  try {
+    const action = mode === "overwrite" ? "sequence_overwrite" : target === "edit" ? "sequence_insert_linked" : "sequence_insert";
+    const detail = {slot,start,source_start:sourceStart,source_end:sourceEnd,
+      ...(mode === "overwrite" ? {scope:target === "edit" ? "edit" : "source"} : {})};
+    updated = await applyManualEdit(action, detail, {isCurrent:() => session === state.sourceInsertSession && session.identity === sourceInsertIdentity()});
+  } catch {
+    // A transport failure cannot establish whether the edit was committed.
+    updated = null;
+  } finally {
+    session.busy = false;
+    if (session === state.sourceInsertSession && form.dataset.projectId === state.project?.id) renderSourceInsert();
   }
-  const updated = await applyManualEdit(form.dataset.target === "edit" ? "sequence_insert_linked" : "sequence_insert", { slot, start, source_start: sourceStart, source_end: Math.min(sourceDuration, sourceEnd) });
-  if (!updated || updated.id !== form.dataset.projectId || state.project?.id !== updated.id) { elements.sourceInsertStatus.textContent = "Footage was not inserted. Check the times and try again."; return; }
+  if (session !== state.sourceInsertSession || form.dataset.projectId !== state.project?.id) return;
+  if (!updated || updated.id !== form.dataset.projectId) { elements.sourceInsertStatus.textContent = "Placement was not confirmed. Review the timeline before trying again."; return; }
   form.hidden = true;
-  setEditTarget(form.dataset.target);
-  state.timeline.selectRange(start, start + sourceEnd - sourceStart);
+  setEditTarget(target);
+  state.timeline.selectRange(start, start + length);
   seekSourcePreview(start);
 }
 
@@ -6634,9 +6735,9 @@ function setEditTarget(target, fromTimeline = false) {
 
 // Inputs deliberately use source time, matching the ruler even after removals.
 // Accept plain seconds or conventional timecode, never silently swap endpoints.
-function parseSourceTime(raw) {
+function parseSourceTime(raw, precision = 6) {
   const value = String(raw ?? "").trim();
-  if (!/^\d+(?::\d{1,2}){0,2}(?:\.\d{1,6})?$/.test(value)) return NaN;
+  if (!/^\d+(?::\d{1,2}){0,2}(?:\.\d{1,9})?$/.test(value) || (value.split(".")[1] || "").length > precision) return NaN;
   const parts = value.split(":").map(Number);
   if (parts.slice(1).some((part) => part >= 60)) return NaN;
   const seconds = parts.reduce((total, part) => total * 60 + part, 0);
@@ -7100,6 +7201,7 @@ async function applySelectedClipTrim(event) {
 }
 
 function renderManualControls() {
+  renderSourceInsert();
   renderPodcastFraming();
   if (!elements.manualSelectionLabel) return;
   const selection = state.manualSelection;

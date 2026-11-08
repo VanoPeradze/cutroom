@@ -72,7 +72,12 @@ export class SourceReview {
     n.fit.onclick = () => this.timeline.fit();
     n.zoomIn.onclick = () => this.timeline.setZoom(this.timeline.zoom*1.5);
     n.zoomOut.onclick = () => this.timeline.setZoom(this.timeline.zoom/1.5);
-    n.exact.onclick = () => { this.dialog.close(); this.exactInsert(); };
+    n.exact.onclick = () => {
+      if (this.busy || this.getProject()?.id !== this.projectId || this.protectedSlots().length) return;
+      const selection = this.selection ? {source_start:this.selection.start, source_end:this.selection.end} : {};
+      const placement = {projectId:this.projectId, slot:this.slot, scope:n.scope.value === "edit" ? "edit" : "source", ...selection};
+      this.dialog.close(); this.exactInsert(placement);
+    };
     n.video.addEventListener("timeupdate", () => { this.timeline.setPlayhead(n.video.currentTime); this.updateQuote(); });
     n.video.addEventListener("loadedmetadata", () => {
       if (!this.dialog.open) return;
