@@ -1,6 +1,7 @@
 """Offline Cloudflare contract tests. Never contact a provider or download a model."""
 import copy
 import json
+import subprocess
 import threading
 import wave
 from pathlib import Path
@@ -190,6 +191,47 @@ def test_second_chunk_failure_reports_possible_uploads_without_retry(settings, m
     assert error.value.uploaded_parts == 2
     assert error.value.fallback_allowed
     assert len(calls) == 2
+
+
+@pytest.mark.parametrize("failure", [
+    OSError("private path"),
+    subprocess.CalledProcessError(1, ["ffmpeg", "private path"]),
+    subprocess.TimeoutExpired(["ffmpeg", "private path"], 180),
+])
+@pytest.mark.parametrize("completed_parts", [0, 1])
+def test_extraction_failure_preserves_upload_accounting(settings, monkeypatch, failure, completed_parts):
+    from cutroom import media
+    _, job = approved(settings)
+    mock_audio(monkeypatch, duration=None)
+    prepare = media.run_command
+    uploads = []
+    def command(*args, **kwargs):
+        if len(uploads) == completed_parts:
+            raise failure
+        return prepare(*args, **kwargs)
+    def post(*args):
+        uploads.append(1)
+        return response()
+    monkeypatch.setattr(media, "run_command", command)
+    monkeypatch.setattr(cf, "_post", post)
+    with pytest.raises(cf.CloudTranscriptionError) as error:
+        cf.transcribe_cloud_whisper(Path("mock.wav"), job, duration=130)
+    assert error.value.uploaded_parts == completed_parts
+    assert not error.value.fallback_allowed
+    assert len(uploads) == completed_parts
+    assert "private path" not in str(error.value)
+    assert ("Cloud upload attempts:" in str(error.value)) == bool(completed_parts)
+
+
+def test_extraction_cancellation_is_not_converted(settings, monkeypatch):
+    from cutroom import media
+    _, job = approved(settings)
+    def command(*args, **kwargs):
+        raise JobCancelled("test cancel")
+    monkeypatch.setattr(media, "run_command", command)
+    monkeypatch.setattr(cf, "_post", lambda *args: pytest.fail("must not upload"))
+    with pytest.raises(JobCancelled):
+        cf.transcribe_cloud_whisper(Path("mock.wav"), job, duration=130)
 
 
 def test_cancel_never_converted_to_fallback(settings, monkeypatch):

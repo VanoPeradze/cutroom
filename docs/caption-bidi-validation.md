@@ -82,8 +82,12 @@ CSS/direction contract in `tests/frontend_caption_bidi.test.cjs`.
 
 The expanded export tests passed on Windows with existing FFmpeg/libass and the
 bundled font. The real-browser cases passed on Chromium 149.0.7827.55 on Windows.
-Native macOS ARM/Intel execution still needs the normal CI run against the final
-commit; removal of the skip path is not a claim that those runs already passed.
+Native macOS ARM/Intel execution passed in the
+[post-merge validation run](https://github.com/VanoPeradze/cutroom/actions/runs/42982890017)
+for merge commit `eec41cf578b7805b1f9c2d493be0cf233b474b91`, following the
+[final pre-merge gate](https://github.com/VanoPeradze/cutroom/actions/runs/42980968841).
+Both native jobs completed the full Python regression suite with real FFmpeg.
+These CI results do not establish real-speech accuracy or manual acceptance.
 
 These are controlled text-rendering checks, not speech-recognition accuracy,
 real user-footage validation, or pixel-identical preview/export typography. Browser

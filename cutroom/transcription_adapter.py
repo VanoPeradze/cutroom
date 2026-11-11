@@ -14,6 +14,7 @@ import math
 import os
 from pathlib import Path
 import re
+import subprocess
 import tempfile
 import threading
 import time
@@ -318,9 +319,17 @@ def transcribe_cloud_whisper(media_path: Path, settings, language=None, progress
             core_start, core_end = index * CHUNK_SECONDS, min(duration, (index + 1) * CHUNK_SECONDS)
             start, end = max(0, core_start - 1), min(duration, core_end + 1)
             audio = Path(temp) / "audio.wav"
-            run_command([settings.ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-ss", str(start),
-                         "-i", str(media_path), "-t", str(end-start), "-map", "0:a:0", "-vn", "-ac", "1",
-                         "-ar", "16000", "-c:a", "pcm_s16le", str(audio)], timeout=180, cancel_check=check)
+            try:
+                run_command([settings.ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-ss", str(start),
+                             "-i", str(media_path), "-t", str(end-start), "-map", "0:a:0", "-vn", "-ac", "1",
+                             "-ar", "16000", "-c:a", "pcm_s16le", str(audio)], timeout=180, cancel_check=check)
+            except (OSError, subprocess.SubprocessError):
+                # A later chunk can fail after earlier audio reached the provider.
+                # Do not expose command arguments/stderr or enable a new fallback.
+                raise CloudTranscriptionError(
+                    "Audio preparation failed; nothing from this part was sent.",
+                    uploaded_parts=attempted,
+                ) from None
             check()
             try:
                 with wave.open(str(audio), "rb") as wav:
