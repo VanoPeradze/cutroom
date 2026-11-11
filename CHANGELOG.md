@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.3 Beta gray interface and Hebrew captions (2026-11-11)
+
+- Light mode now uses layered neutral gray surfaces instead of near-white panels, including home cards, source setup, tool controls and dialogs. Dark mode and video/caption colors are unchanged.
+- Mixed Hebrew/Latin caption rendering keeps phrases such as `4K 60fps` together in exported ASS captions, without changing source text or SRT.
+- Auto transcription may refine confidently detected Hebrew with an already cached ivrit.ai model on a suitable CUDA device. Balanced/Lite stay lightweight; the new automatic path does not download a model or upload audio.
+- The Hebrew routing and mixed-caption fixes have automated safety/render regressions. Real-footage recognition accuracy and full arbitrary-caption preview/export parity are not certified by those checks.
+
+
 ## Unreleased - 2026-11-08 - Three-point source editing
 
 - Original footage now carries the selected source range and scope into **Place selected footage**, instead of discarding the selection and resetting to the first five seconds.

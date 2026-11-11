@@ -13,10 +13,9 @@ concurrency:
 
 jobs:
   scope:
-    # Candidate d2c6f6f passed exact Windows and both native Mac architectures in run 42489336008.
-    # Freeze these retained archives; publication metadata must not create a new app candidate.
-    # Ordinary repository, security and exact-pin macOS release gates remain enabled.
-    if: ${{ false }}
+    # Qualify only this explicitly reviewed gray/Hebrew release branch.
+    # Existing published candidate archives remain immutable.
+    if: ${{ github.head_ref == 'codex/gray-hebrew-release-20261111' }}
     runs-on: ubuntu-latest
     outputs:
       build_candidate: ${{ steps.scope.outputs.build_candidate }}
@@ -194,7 +193,7 @@ jobs:
           Set-Location -LiteralPath $env:CUTROOM_EXTRACTED_APP
           & $env:CUTROOM_TEST_PYTHON -m unittest tests.test_desktop_launcher_stdlib tests.test_all_layer_gap_closure tests.test_layout_fallback_export
           if ($LASTEXITCODE -ne 0) { throw 'New editor and desktop regressions failed' }
-          & $env:CUTROOM_TEST_PYTHON -m pytest -q tests/test_three_point_editing.py
+          & $env:CUTROOM_TEST_PYTHON -m pytest -q tests/test_three_point_editing.py tests/test_hebrew_auto_refinement.py tests/test_caption_bidi_presentation.py tests/test_caption_bidi_render.py
           if ($LASTEXITCODE -ne 0) { throw 'Packaged three-point editing regressions failed' }
       - name: Test synthetic portrait, audio and process restart
         timeout-minutes: 12

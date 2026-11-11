@@ -20,7 +20,8 @@ CUTROOM does not bundle Python, uv, FFmpeg, Ollama or model weights inside this 
 - Purpose: optional enhanced Hebrew transcription in CUTROOM Quality mode / suitable GPU-assisted runs.
 - Runtime model: `ivrit-ai/whisper-large-v3-turbo-ct2`.
 - License: Apache License 2.0 according to the upstream model card.
-- Model weights are not bundled in the CUTROOM ZIP; faster-whisper downloads them on first use when selected.
+- Model weights are not bundled in the CUTROOM ZIP. Explicit Quality can download them on first use; automatic upgrades require cached files and use offline model loading.
+- Upstream model card: https://huggingface.co/ivrit-ai/whisper-large-v3-turbo-ct2 (Apache-2.0 checked 2026-11-10). Model-card licensing is not a measured accuracy or performance guarantee.
 
 See [the model inventory](MODELS.md) for configured tags and upstream sources. The MIT-licensed CUTROOM source is included in CUTROOM 1.2 Beta; this does not relicense third-party tools or weights.
 

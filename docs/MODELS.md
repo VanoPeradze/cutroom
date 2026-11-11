@@ -9,7 +9,7 @@ Checked against code/defaults on 2026-09-12. These are choices, **not models all
 | Whisper `base` | Lite; Auto on CPU, subject to recovery/resource rules | Light multilingual transcription. |
 | Whisper `small` | Balanced; Auto with CUDA, subject to memory checks | Heavier multilingual transcription; also used by relevant recovery paths. |
 | Whisper `turbo` | General Quality transcription | Faster large-v3 variant through CTranslate2. |
-| `ivrit-ai/whisper-large-v3-turbo-ct2` | Quality with Hebrew selected; Quality auto-detection may refine Hebrew | Hebrew-specific transcription. |
+| `ivrit-ai/whisper-large-v3-turbo-ct2` | Quality with Hebrew selected; Quality auto-detection may refine Hebrew; bounded Auto refinement when cached and GPU-safe | Hebrew-specific transcription. |
 | Silero VAD | Decoding uses `vad_filter=True` | Speech activity detection, not story selection. |
 
 The installed faster-whisper alias map resolves base/small to `Systran/faster-whisper-base` / `Systran/faster-whisper-small`, and turbo to `mobiuslabsgmbh/faster-whisper-large-v3-turbo`. Dependency updates may change aliases; record actual model metadata for comparisons.
@@ -17,6 +17,14 @@ The installed faster-whisper alias map resolves base/small to `Systran/faster-wh
 This pipeline **transcribes**, not a complete cross-language subtitle translation workflow. Whisper documents language-dependent accuracy; Turbo is not trained for translation. Whisper code and weights use MIT. [Whisper documentation](https://github.com/openai/whisper)
 
 The ivrit.ai model card lists Apache-2.0. faster-whisper and CTranslate2 are inference engines, not extra editorial models. Silero is faster-whisper's small speech detector. [ivrit.ai](https://huggingface.co/ivrit-ai/whisper-large-v3-turbo-ct2), [faster-whisper](https://github.com/SYSTRAN/faster-whisper), [Silero](https://github.com/snakers4/silero-vad)
+
+### Hebrew Auto refinement (2026-11-10)
+
+Explicit Balanced remains Small and Lite remains Base. Auto can make one Hebrew-specific second pass after confident, unambiguous Hebrew detection (at least 0.62), on CUDA, with a known source duration no longer than hebrew_auto_gpu_max_seconds (default 3600 seconds). It requires an already installed model and a successful single-GPU free-memory measurement, using the Quality headroom threshold (default 6144 MiB). Unknown/remapped/multiple GPUs or a failed measurement skip this optional refinement.
+
+Automatic Quality loads and the Auto Hebrew second pass pass local_files_only=True to faster-whisper, so this upgrade cannot silently download model weights. Explicit Quality retains its existing first-use download behavior. No cloud provider is enabled by this change.
+
+A candidate must retain recognized English terms, pass the speech-quality gate, have complete and valid source timing, and overlap at least 80% of the original speech duration. Otherwise the original transcript is kept with a warning. Language confidence stays that of the original detection. These are safety checks, not proof of lower WER. Actual Hebrew accuracy, speed and peak VRAM still require consented audio evaluation.
 
 ## Story planning
 
