@@ -337,5 +337,26 @@
     "sha256": "b5ef068ba387f2815d4b61d160d1abd91801d7a55ad71d36a006d6ec034f0707",
     "url": "https://cutroom-studio--oz9pego43i.expo.app/downloads/SOURCE-d2c6f6f.zip",
     "github_url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.3-beta-20261108-studio1/SOURCE-d2c6f6f.zip"
+  },
+  {
+    "filename": "CUTROOM-1.3-Beta-Windows-4fc52ae.zip",
+    "bytes": 5620196,
+    "sha256": "8db1a53ce8949198b9263032871aae2bc8b9ccb9dcdec9a3853b497fc82b124d",
+    "url": "https://cutroom-studio--nbymjtivwx.expo.app/downloads/CUTROOM-1.3-Beta-Windows-4fc52ae.zip",
+    "github_url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.3-beta-20261111-gray1/CUTROOM-1.3-Beta-Windows-4fc52ae.zip"
+  },
+  {
+    "filename": "CUTROOM-1.3-Beta-combined-4fc52ae.zip",
+    "bytes": 11289293,
+    "sha256": "8c5dc99524fb8f19058ab1bc2108deee0a7bedc8bb3a05c2e054adf65da236c3",
+    "url": "https://cutroom-studio--nbymjtivwx.expo.app/downloads/CUTROOM-1.3-Beta-combined-4fc52ae.zip",
+    "github_url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.3-beta-20261111-gray1/CUTROOM-1.3-Beta-combined-4fc52ae.zip"
+  },
+  {
+    "filename": "SOURCE-4fc52ae.zip",
+    "bytes": 8389937,
+    "sha256": "f5626b399198fc87bae826d4172e2041815861d1ccf5700b9b599c46df2f44b0",
+    "url": "https://cutroom-studio--nbymjtivwx.expo.app/downloads/SOURCE-4fc52ae.zip",
+    "github_url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.3-beta-20261111-gray1/SOURCE-4fc52ae.zip"
   }
 ]

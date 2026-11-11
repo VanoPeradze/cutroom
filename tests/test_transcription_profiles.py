@@ -17,6 +17,12 @@ from cutroom.transcription import (
 )
 
 
+@pytest.fixture(autouse=True)
+def stable_cpu_memory(monkeypatch):
+    # Inference is mocked; host load must not change these routing contracts.
+    monkeypatch.setattr(transcription, "_available_cpu_memory_mb", lambda: 16384.0)
+
+
 class DummySettings:
     ai = {
         "whisper_model": "base",
@@ -27,15 +33,15 @@ class DummySettings:
     }
 
 
-def test_hebrew_quality_uses_specialized_model_while_balanced_stays_light():
+def test_hebrew_quality_and_balanced_use_specialized_model():
     settings = DummySettings()
     assert _model_for_request(settings, "quality", "he", "cpu") == "ivrit-ai/whisper-large-v3-turbo-ct2"
-    assert _model_for_request(settings, "balanced", "he", "cuda") == "small"
+    assert _model_for_request(settings, "balanced", "he", "cuda") == "ivrit-ai/whisper-large-v3-turbo-ct2"
 
 
-def test_balanced_cpu_keeps_light_multilingual_model():
+def test_balanced_cpu_uses_hebrew_model_but_lite_stays_light():
     settings = DummySettings()
-    assert _model_for_request(settings, "balanced", "he", "cpu") == "small"
+    assert _model_for_request(settings, "balanced", "he", "cpu") == "ivrit-ai/whisper-large-v3-turbo-ct2"
     assert _model_for_request(settings, "lite", "he", "cpu") == "base"
 
 

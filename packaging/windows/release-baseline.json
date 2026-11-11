@@ -1,13 +1,13 @@
 {
-  "filename": "CUTROOM-1.3-Beta-Windows-4fc52ae.zip",
-  "bytes": 5620196,
-  "sha256": "8db1a53ce8949198b9263032871aae2bc8b9ccb9dcdec9a3853b497fc82b124d",
-  "build_id": "CUTROOM-1.3-beta-20261111-052335",
-  "url": "https://cutroom-studio--nbymjtivwx.expo.app/downloads/CUTROOM-1.3-Beta-Windows-4fc52ae.zip",
+  "filename": "CUTROOM-1.3-Beta-Windows-ba67003.zip",
+  "bytes": 6399567,
+  "sha256": "07b7acecad8ae88e017ddcae03ad2daf04714120a4a734f5a23b304e2b70f51d",
+  "build_id": "CUTROOM-1.3-beta-20261111-071437",
+  "url": "https://cutroom-studio--sgntpkmsft.expo.app/downloads/CUTROOM-1.3-Beta-Windows-ba67003.zip",
   "mirrors": [],
   "version": "1.3-beta",
-  "manifest_sha256": "a5274f5dd127b929de66f9056189aa9cadb1dfa9520da34af701ba84ff164a28",
-  "source_commit": "4fc52aef210cca74722b356c852a1cc5a24ad371",
-  "note": "Exact hosted Windows candidate: direct setup without Ollama, 901 frontend tests, Hebrew/ASS rendering, synthetic export, source audio and restart persistence passed. Clean-OS, packaged batch launcher, physical-device and human acceptance remain unverified. Historical validation pins are unchanged.",
-  "validation_url": "https://github.com/VanoPeradze/cutroom/actions/runs/42965402773"
+  "manifest_sha256": "50df0a6f7e4fb67ed4bcbcff79e89462e990020c028dbcb27444ebf5a01eb2b5",
+  "source_commit": "ba67003726e80e0d394b1927b6b710f191a60157",
+  "note": "Exact hosted Windows candidate: direct setup without Ollama, 919 frontend tests, full source regressions, exact packaged speech/privacy/bidi regressions, synthetic export, source audio and restart persistence passed. Clean-OS, packaged batch launcher, physical-device and human acceptance remain unverified. Historical validation pins are unchanged.",
+  "validation_url": "https://github.com/VanoPeradze/cutroom/actions/runs/42977968863"
 }

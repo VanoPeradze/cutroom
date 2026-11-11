@@ -34,7 +34,7 @@ _SPEECH = {
     "base": ("Whisper Base", 0.15, "Smallest download; useful for clear speech and lighter computers."),
     "small": ("Whisper Small", 0.49, "A balanced multilingual starting point; usually more accurate than Base."),
     "turbo": ("Whisper Turbo", 1.63, "Higher-quality multilingual transcription; needs more memory and processing time."),
-    "ivrit-ai/whisper-large-v3-turbo-ct2": ("Hebrew · ivrit.ai", 1.63, "Hebrew-focused transcription for Quality mode with the spoken language set to Hebrew."),
+    "ivrit-ai/whisper-large-v3-turbo-ct2": ("Hebrew · ivrit.ai", 1.63, "Hebrew-focused transcription for Balanced and Quality. Download here before first use; CPU processing may be slow."),
 }
 _STORY = {
     "qwen3.5:2b": ("Story · Lite", 2.7, "Lighter story planning; complex material may need a stronger model. Also powers Gameplay vision."),
@@ -78,7 +78,14 @@ def _complete_speech_snapshot(path: Path) -> bool:
 
 
 def speech_installed(model: str) -> bool:
+    # Custom local CT2 directories and explicit Hugging Face repositories also
+    # support cache-only inference; never make a network request to inspect them.
+    candidate = Path(model).expanduser()
+    if candidate.is_dir():
+        return _complete_speech_snapshot(candidate)
     repo = _WHISPER_REPOS.get(model)
+    if not repo and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.-]*", model):
+        repo = model
     if not repo:
         return False
     directory = speech_cache_dir() / ("models--" + repo.replace("/", "--"))
@@ -124,7 +131,7 @@ def catalog(settings: Settings, runtime: dict[str, Any], *, engine_installed: bo
         speech_profiles.setdefault(str(model), []).append(str(profile))
     hebrew = str(settings.ai.get("hebrew_whisper_model") or "")
     if hebrew:
-        speech_profiles.setdefault(hebrew, []).append("quality · Hebrew")
+        speech_profiles.setdefault(hebrew, []).extend(["balanced · Hebrew", "quality · Hebrew"])
     story_profiles: dict[str, list[str]] = {}
     for profile, field in (("lite", "editor_lite_model"), ("balanced", "editor_model"), ("quality", "editor_quality_model")):
         story_profiles.setdefault(str(settings.ai.get(field) or ""), []).append(profile)
@@ -140,6 +147,8 @@ def catalog(settings: Settings, runtime: dict[str, Any], *, engine_installed: bo
                 "kind": kind, "model": model, "label": label, "description": description,
                 "profiles": profiles[model], "estimated_download_gb": estimate,
                 "requirements": (
+                    "Hebrew Balanced/Quality: install explicitly before use. Safety checks require 4 GiB available CPU RAM or 6 GiB measured free NVIDIA VRAM; CPU can be slow. These checks do not guarantee performance."
+                    if model == hebrew and kind == "transcription" else
                     "Runs on CPU; compatible NVIDIA acceleration is optional. Larger models need more RAM and time."
                     if kind == "transcription" else
                     "Requires Ollama. Runs on CPU or supported GPU; memory needs grow with model and video length."

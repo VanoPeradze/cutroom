@@ -49,7 +49,7 @@ def test_inventory_reads_files_without_network_or_inference(settings, monkeypatc
     assert result["runtime"]["install_url"] == "https://ollama.com/download"
     assert result["runtime"]["installed"] is False
     assert "Speech models do not require Ollama" in result["runtime"]["message"]
-    assert rows["ivrit-ai/whisper-large-v3-turbo-ct2"]["profiles"] == ["quality · Hebrew"]
+    assert rows["ivrit-ai/whisper-large-v3-turbo-ct2"]["profiles"] == ["balanced · Hebrew", "quality · Hebrew"]
 
 
 def test_partial_cache_and_invalid_revision_are_not_installed(settings):

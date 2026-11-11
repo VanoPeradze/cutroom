@@ -218,12 +218,14 @@ def _settings():
 @pytest.mark.parametrize("language, expected_model", [("he", "local-hebrew-quality"), ("en", "turbo")])
 @pytest.mark.parametrize("fallback", ["headroom", "decode_error"])
 def test_explicit_quality_keeps_requested_model_on_cpu(monkeypatch, language, expected_model, fallback):
+    monkeypatch.setattr(transcription, "_available_cpu_memory_mb", lambda: 16384.0)
+    monkeypatch.setattr(transcription, "_cuda_has_capacity", lambda *_args, **_kwargs: True)
     calls = []
     monkeypatch.setattr(transcription, "cuda_available", lambda *_args: True)
     preferred = ("cpu", "int8") if fallback == "headroom" else ("cuda", "float16")
     monkeypatch.setattr(transcription, "_resolve_device", lambda *_args: preferred)
 
-    def once(_path, _settings, model, device, compute, _language, mode, *_args):
+    def once(_path, _settings, model, device, compute, _language, mode, *_args, **_kwargs):
         calls.append((model, device, mode))
         if device == "cuda":
             raise RuntimeError("fixture CUDA failure")

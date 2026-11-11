@@ -10,6 +10,9 @@ from cutroom.caption_alternatives import review
 
 @pytest.fixture
 def backend(api, monkeypatch, tmp_path):
+    # Mocked inference tests must not depend on the host's current memory load.
+    # The dedicated low-memory test overrides this deterministic baseline.
+    monkeypatch.setattr(generation,"available_memory",lambda:16*1024**3)
     model=tmp_path/"cached-model";model.mkdir()
     monkeypatch.setattr(generation,"cached_model",lambda *_:model)
     monkeypatch.setattr(generation.importlib.util,"find_spec",lambda _:object())

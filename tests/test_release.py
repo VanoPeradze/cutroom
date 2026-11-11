@@ -435,7 +435,8 @@ def test_transcription_profiles_are_bounded():
     assert '"balanced": "small"' in config
     assert '"quality": "turbo"' in config
     assert 'mode == "lite"' in transcription
-    assert "preferred_device, preferred_compute = _resolve_device(settings, mode)" in transcription
+    assert "plan = _local_request_plan(settings, language, performance_mode, duration)" in transcription
+    assert "_model_resource_check(settings, model, device, compute)" in transcription
     assert '"whisper_isolate_process": true' in config
     assert "_run_transcription_worker" in transcription
     assert 'attempts.append(("cpu", "int8"))' in transcription

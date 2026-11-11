@@ -90,9 +90,10 @@ def generate(context, project_id, store, settings, language, expected_revision, 
     if not source.is_relative_to(media_root) or not source.is_file(): raise ValueError("The original source file is unavailable.")
     if shutil.disk_usage(settings.cache_dir).free < 128*1024**2: raise ValueError("Keep at least 128 MiB free for the bounded audio scratch file.")
     selected = copy.deepcopy(settings)
-    selected.ai.update(cloud_connection={"mode":"local"}, whisper_device="cpu", whisper_compute_type="int8",
+    selected.ai.update(cloud_connection={"mode":"local"}, transcription_engine="local", whisper_device="cpu", whisper_compute_type="int8",
         whisper_model=str(model), whisper_models={"quality":str(model)}, hebrew_whisper_model=str(model),
         whisper_isolate_process=True, whisper_local_files_only=True, download_models_on_setup=False)
+    selected.ai.pop("cloudflare_connection", None)
     started = time.monotonic()
     def check():
         context.check_cancelled()

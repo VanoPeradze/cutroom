@@ -91,6 +91,7 @@ def test_scope_tampering_and_stale_geometry_rejected(ranged):
 
 def test_generation_api_extracts_only_selected_cut_pieces_and_saves_review_scope(ranged,monkeypatch,tmp_path):
     from cutroom import caption_generation as g
+    monkeypatch.setattr(g,"available_memory",lambda:16*1024**3)
     import time
     _,client,store,pid=ranged;p=store.load(pid);c=p["manual"]["source_tracks"]["A"][0]
     p["manual"]["source_tracks"]["A"]=[{**c,"end":10.},{**c,"id":"second","start":10.,"end":20.,"source_start":40.}]

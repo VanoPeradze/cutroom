@@ -1,0 +1,249 @@
+{
+  "application_source_commit": "ba67003726e80e0d394b1927b6b710f191a60157",
+  "candidate_record": {
+    "schema_version": 1,
+    "kind": "cutroom-private-review-candidate",
+    "published": false,
+    "qualified_for_release": false,
+    "native_candidate_status": "pending",
+    "source": {
+      "commit": "ba67003726e80e0d394b1927b6b710f191a60157",
+      "tree": "93fc159575a2f463cd16351959223fdf2fd11daa",
+      "archive_sha256": "ac612470059964776266a779e55ae0efb491e23dfbf07ff910da88f44099e35a",
+      "archive_bytes": 9171065,
+      "files": 692
+    },
+    "windows": {
+      "bytes": 6399567,
+      "sha256": "07b7acecad8ae88e017ddcae03ad2daf04714120a4a734f5a23b304e2b70f51d",
+      "manifest_sha256": "50df0a6f7e4fb67ed4bcbcff79e89462e990020c028dbcb27444ebf5a01eb2b5",
+      "build_id": "CUTROOM-1.3-beta-20261111-071437"
+    },
+    "combined": {
+      "bytes": 12849257,
+      "sha256": "5a406f47f7cb24e49f1967fbcd8e06c2cfb51748379e6938f504433b4e4e7b7c",
+      "manifest_sha256": "1d7163d4282eace4da0e412b2750e3d397ea234f3da43c59028628b13e9b5e5e",
+      "build_id": "CUTROOM-1.3-beta-mac-20261111-072132"
+    }
+  },
+  "windows_smoke": {
+    "head_sha": "ba67003726e80e0d394b1927b6b710f191a60157",
+    "candidate_sha256": "07b7acecad8ae88e017ddcae03ad2daf04714120a4a734f5a23b304e2b70f51d",
+    "mode": "extracted Windows source-beta on hosted Windows runner",
+    "checks": {
+      "portrait_width": 720,
+      "portrait_height": 1280,
+      "duration_seconds": 3.0,
+      "two_source_stacked_30_70_pixels": "passed",
+      "source_B_audio_rms": 0.08824547580817554,
+      "source_B_audio_frequency_hz": 655.0,
+      "full_decode": "passed",
+      "direct_setup": "passed_direct_unmodified_setup_without_ollama",
+      "saved_project_and_export_after_server_restart": "passed"
+    },
+    "limits": [
+      "Packaged native batch launcher was not run",
+      "No clean OS install, human listening, model, or physical-device test",
+      "AI disabled in extracted test configuration; archive unmodified"
+    ]
+  },
+  "windows_features": {
+    "mode": "source-only",
+    "platform": "win32",
+    "architecture": "AMD64",
+    "runtime": {
+      "ffmpeg": "ffmpeg version 9.0.2-essentials_build-www.gyan.dev Copyright (c) 2000-2026 the FFmpeg developers",
+      "ffprobe": "ffprobe version 9.0.2-essentials_build-www.gyan.dev Copyright (c) 2007-2026 the FFmpeg developers",
+      "stabilization_filters": [
+        "vidstabdetect",
+        "vidstabtransform"
+      ],
+      "chroma_filters": [
+        "chromakey",
+        "crop",
+        "drawbox",
+        "format",
+        "overlay",
+        "scale",
+        "setpts",
+        "setsar",
+        "split"
+      ]
+    },
+    "passed": 357,
+    "skipped": 0,
+    "required_cases": [
+      "test_cancelled_transform_does_not_commit_or_leave_partial_files",
+      "test_clean_vod_keeps_natural_cleanup_controls_and_full_recording",
+      "test_commentary_preserves_planned_ending_when_separate_story_parts_fit_budget",
+      "test_copy_is_a_project_asset_and_original_timeline_and_bytes_stay_unchanged",
+      "test_duration_intent_replans_from_cached_context_without_retranscription",
+      "test_duration_review_explains_style_source_and_evidence_limits",
+      "test_empty_critic_response_requires_bounded_review_before_applying_story",
+      "test_final_review_exposes_planned_ending_lost_to_unavoidable_budget",
+      "test_imported_audio_waveforms_have_real_peaks_and_survive_public_projection",
+      "test_imported_key_reopen_missing_file_edit_atomicity_and_safe_disable",
+      "test_installed_fallback_is_usable_but_identified_as_different_model",
+      "test_later_budget_slot_restoration_keeps_actual_removal",
+      "test_layer_frame_retains_alpha_and_old_api_clients_can_omit_mode",
+      "test_legacy_basic_cleanup_cache_does_not_require_a_story_model",
+      "test_legacy_critic_pass_cannot_bypass_review_on_explicit_rebuild",
+      "test_malformed_or_contradictory_critic_cannot_become_a_pass",
+      "test_missing_filter_does_not_create_assets_or_jobs",
+      "test_missing_filter_never_mutates_project_but_disabling_remains_possible",
+      "test_missing_filters_fail_before_processing_and_keep_original",
+      "test_missing_or_unusable_model_edit_is_labelled_basic_cleanup",
+      "test_no_available_configured_model_never_sends_request_to_missing_model",
+      "test_preset_rebuild_reports_preserved_manual_timeline_and_keeps_undo",
+      "test_preset_without_manual_sequence_is_applied_to_editor_timeline",
+      "test_real_chroma_keeps_independent_removed_footage_black",
+      "test_real_chroma_replaces_only_selected_video_and_preserves_audio_and_original",
+      "test_real_fades_and_mutes_preserve_library_audio_with_silent_source",
+      "test_real_frame_keys_at_native_geometry_before_downscale_and_preserves_source",
+      "test_real_imported_video_chroma_matches_preview_export_and_preserves_audio",
+      "test_real_incompatible_audio_is_explicitly_encoded_as_aac",
+      "test_real_music_ducking_responds_to_source_speech",
+      "test_real_nonuniform_image_background_and_library_overlay_keep_pixels_audio_and_sources",
+      "test_real_render_project_keeps_unused_existing_b_before_background_image",
+      "test_real_shared_image_nodes_generate_the_same_known_png_preview_pixels",
+      "test_real_silent_source_produces_silent_copy",
+      "test_real_synthetic_stabilization_copy_prepares_waveform_and_downloads_original_resolution",
+      "test_real_two_pass_reduces_jitter_preserves_frame_clock_and_copied_audio",
+      "test_real_variable_frame_timestamps_and_source_audio_offset_are_preserved",
+      "test_rejected_required_slot_is_exposed_without_restoring_its_material",
+      "test_removing_an_unselected_candidate_is_a_noop_not_an_applied_repair",
+      "test_saved_commentary_keeps_planned_anchors_with_truthful_review",
+      "test_single_moment_prefers_sustained_action_over_louder_three_second_spike",
+      "test_single_moment_sparse_evidence_keeps_short_event_without_padding",
+      "test_single_moment_style_does_not_join_distant_semantic_stories",
+      "test_source_a_b_waveforms_are_measured_on_native_clocks_and_survive_reopen",
+      "test_source_no_audio_and_silent_audio_have_distinct_measured_states",
+      "test_target_budget_caps_sustained_activity_and_short_source_without_repetition",
+      "test_target_highlights_accumulate_distinct_action_without_silent_padding",
+      "test_target_speech_retains_complete_selected_passages_and_style_maximum_remains_explicit",
+      "test_three_plus_targets_same_filenames_save_undo_reset_and_no_cross_target_copy",
+      "test_transparent_media_keeps_background_audio_timing_and_foreground"
+    ]
+  },
+  "native_run": "https://github.com/VanoPeradze/cutroom/actions/runs/42977968863",
+  "native_architectures": {
+    "arm64": {
+      "verdict": "passed_private_native_review_checks",
+      "published": false,
+      "qualified_for_release": false,
+      "public_pins_unchanged": true,
+      "architecture": "arm64",
+      "candidate_source_commit": "ba67003726e80e0d394b1927b6b710f191a60157",
+      "combined_sha256": "5a406f47f7cb24e49f1967fbcd8e06c2cfb51748379e6938f504433b4e4e7b7c",
+      "features_passed": 357,
+      "features_skipped": 0,
+      "fresh_install": "passed",
+      "restart_persistence": "passed",
+      "portrait": {
+        "width": 720,
+        "height": 1280,
+        "duration": 2.0,
+        "has_audio": true
+      },
+      "landscape": {
+        "width": 1280,
+        "height": 720,
+        "duration": 2.0,
+        "has_audio": true
+      },
+      "source_audio_and_caption_checks": "passed",
+      "missing_pip_recovery": "passed",
+      "human_acceptance": "not_performed",
+      "transcription": "not_run",
+      "manual_finder_gatekeeper_test": "not_run"
+    },
+    "x64": {
+      "verdict": "passed_private_native_review_checks",
+      "published": false,
+      "qualified_for_release": false,
+      "public_pins_unchanged": true,
+      "architecture": "x86_64",
+      "candidate_source_commit": "ba67003726e80e0d394b1927b6b710f191a60157",
+      "combined_sha256": "5a406f47f7cb24e49f1967fbcd8e06c2cfb51748379e6938f504433b4e4e7b7c",
+      "features_passed": 357,
+      "features_skipped": 0,
+      "fresh_install": "passed",
+      "restart_persistence": "passed",
+      "portrait": {
+        "width": 720,
+        "height": 1280,
+        "duration": 2.0,
+        "has_audio": true
+      },
+      "landscape": {
+        "width": 1280,
+        "height": 720,
+        "duration": 2.0,
+        "has_audio": true
+      },
+      "source_audio_and_caption_checks": "passed",
+      "missing_pip_recovery": "passed",
+      "human_acceptance": "not_performed",
+      "transcription": "not_run",
+      "manual_finder_gatekeeper_test": "not_run"
+    }
+  },
+  "local_validation": {
+    "source_commit": "ba67003726e80e0d394b1927b6b710f191a60157",
+    "full_python": {
+      "passed": 5734,
+      "skipped": 4,
+      "subtests_passed": 48,
+      "log": "iddo-final2-python-20261111.log",
+      "skips": [
+        "two Windows symbolic-link privilege tests",
+        "two Mac socket reuse tests excluded on Windows"
+      ]
+    },
+    "frontend": {
+      "passed": 919,
+      "skipped": 0
+    },
+    "real_speech_inference": false,
+    "model_weights_downloaded": false,
+    "cloud_audio_uploaded": false,
+    "cloudflare_live_compatibility": "not_verified",
+    "cloudflare_billing": "not_verified",
+    "wer_cer_speed_peak_memory": "not_measured",
+    "tracked_tree": "93fc159575a2f463cd16351959223fdf2fd11daa",
+    "bidi_browser": {
+      "status": "passed",
+      "passed": 250,
+      "browser": "149.0.7827.55",
+      "sourceSha256": {
+        "app": "acf081a7a658ce42093714c805cc108991f5b0b63aa21e8a7ac9c96b575941f0",
+        "styles": "0d87e22c7b135a28c90db267281ce2c7e187f427800bedd0c989aa3f98d9fda0"
+      },
+      "scope": "Synthetic production renderer functions and production CSS, offline Chromium; not a whole-app user-media test or pixel-identical browser/FFmpeg typography."
+    },
+    "settings_browser": {
+      "checks": [
+        "Real local API: local/legacy saves, restart-safe status, unavailable cloud cannot enable, Escape discards draft",
+        "Responsive 390px: no horizontal overflow, account/model wrap, cancellation reachable",
+        "Responsive 768px: no horizontal overflow, account/model wrap, cancellation reachable",
+        "Mock-only Cloudflare UI: exact scope, unchecked consent, changes clear consent, one explicit save, no audio request"
+      ],
+      "pageerrors": [],
+      "externalRequests": [],
+      "ok": true
+    }
+  },
+  "known_limitations": [
+    "The Windows source-beta setup ran on a configured hosted runner. Clean-OS and prerequisite installation and the packaged batch launcher were not tested.",
+    "Mac ARM64 and Intel automated checks passed. Physical-device UI, Finder, Gatekeeper, Safari and human listening remain unverified.",
+    "No real speech model inference was run. Hebrew accuracy, WER/CER, speed and peak memory have not been measured. Resource thresholds are policy guards, not measured fit guarantees; review transcripts and edits.",
+    "Process restart is not an OS reboot. Windows SmartScreen, quarantine and physical-device acceptance remain unverified.",
+    "Existing silent overlays preserve their saved setting. Select the clip and enable Include source sound; also check clip/group mute and gain.",
+    "Picture speed changes only the image; sound retains its normal clock from Source in. Review sync before publishing.",
+    "Current headless Chromium checks covered transcription settings in desktop, 768px and 390px layouts, Local/legacy saves, unavailable cloud, consent, Escape/reopen and light/dark states. Earlier gray workspace checks remain historical. Physical-device and actual 200% browser zoom acceptance remain unverified.",
+    "The website gallery remains archival: workspace images from 19 October 2026, Projects/export from 15 October, and an unrecorded AI setup capture date. Targeted fresh gray-mode QA captures were inspected separately; this is not a complete new product gallery.",
+    "Physical Chrome/manual browser acceptance and representative human listening were not performed; automated and headless checks do not replace them.",
+    "Cloudflare transcription is experimental, off by default and tested with mocked responses only. Live response compatibility, word-timing quality, Hebrew accuracy, provider quotas and billing behavior are not verified. No real audio was uploaded for this release.",
+    "Bidi checks use controlled text, pinned fonts and both production browser preview renderers. They do not certify every font, device or pixel-identical browser/export typography."
+  ]
+}

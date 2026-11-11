@@ -85,6 +85,7 @@ def build_analysis_cache_fingerprints(
         slot: source_identity(sources.get(slot), source_paths.get(slot))
         for slot in ("A", "B")
     }
+    from .transcription_adapter import cache_identity
     raw = getattr(settings, "raw", {}) or {}
     ai = getattr(settings, "ai", {}) or {}
     goal = str(brief.get("goal") or "short")
@@ -97,9 +98,17 @@ def build_analysis_cache_fingerprints(
         "project_language": project.get("language"),
         "requested_language": brief.get("spoken_language") or project.get("language") or "auto",
         "performance_mode": brief.get("performance_mode") or ai.get("performance_mode", "auto"),
+        "transcription_route": cache_identity(settings),
         "ai_connection": {key: (ai.get("cloud_connection") or {}).get(key)
                           for key in ("mode", "provider", "base_url", "model", "transcript_model")},
     }
+    # Story-model changes must not re-upload unchanged audio or incur another
+    # transcription charge. Only legacy speech follows the old connection.
+    speech_context = {key: value for key, value in context_common.items() if key != "ai_connection"}
+    legacy = ai.get("cloud_connection") or {}
+    if context_common["transcription_route"]["engine"] == "legacy" and legacy.get("mode") in {"free", "own"}:
+        speech_context["legacy_speech_connection"] = {key: legacy.get(key) for key in
+            ("mode", "provider", "base_url", "transcript_model")}
     scenes_required = bool(identities.get("B")) and goal != "youtube"
     vision_required = bool(
         (
@@ -117,13 +126,14 @@ def build_analysis_cache_fingerprints(
         "transcript": stable_fingerprint(
             "transcript",
             {
-                **context_common,
+                **speech_context,
                 "models": ai.get("whisper_models"),
                 "default_model": ai.get("whisper_model"),
                 "hebrew_model": ai.get("hebrew_whisper_model"),
                 "device": ai.get("whisper_device"),
                 "compute_type": ai.get("whisper_compute_type"),
                 "coverage_policy": "processed-chunks-vad-v1",
+                "transcription_policy": "hebrew-balanced-quality-cached-cloudflare-routing-v2",
             },
         ),
         "scenes": stable_fingerprint(

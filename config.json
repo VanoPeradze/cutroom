@@ -11,6 +11,8 @@
   "proxy_height": 720,
   "proxy_crf": 27,
   "ai": {
+    "transcription_engine": "legacy",
+    "cloudflare_transcription": {"model": "@cf/openai/whisper-large-v3-turbo"},
     "enabled": true,
     "ollama_url": "http://127.0.0.1:11434",
     "editor_model": "qwen3.5:4b",

@@ -213,3 +213,16 @@ dialog.connection-dialog { width:min(1050px,calc(100vw - 32px)); }
   .home-hub .service-card:nth-child(2) { animation-delay:35ms; }
   .home-hub .service-card:nth-child(3) { animation-delay:70ms; }
 }
+/* Independent speech routing; uses the existing gray/dark semantic tokens. */
+.transcription-dialog { max-width:min(760px,calc(100vw - 24px)); }
+.transcription-dialog .dialog-shell { min-width:0; }
+.transcription-destination { display:grid; grid-template-columns:auto minmax(0,1fr); gap:8px 16px; padding:16px; background:var(--surface-inset); border:1px solid var(--line); border-radius:8px; }
+.transcription-destination dt { color:var(--muted); }
+.transcription-destination dd { margin:0; overflow-wrap:anywhere; }
+.transcription-links { display:flex; flex-wrap:wrap; gap:12px; }
+.transcription-dialog .connection-consent { align-items:flex-start; line-height:1.55; }
+.transcription-dialog .connection-actions { flex-wrap:wrap; }
+.transcription-dialog .connection-note strong { color:var(--paper); }
+@media(max-width:540px) { .transcription-destination { grid-template-columns:1fr; gap:4px; } .transcription-destination dd { margin-bottom:10px; } }
+
+.transcription-provenance-note { overflow-wrap:anywhere; padding:12px; border:1px solid var(--line); border-radius:8px; background:var(--surface-inset); line-height:1.55; }
