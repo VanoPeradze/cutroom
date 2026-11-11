@@ -45,9 +45,9 @@ test('the 1.3 beta uses exact Windows, shared Mac/combined and source downloads'
     assert.match(mirror[0][2], /mirror/i);
     assert.ok(linksTo(html, `/downloads/${entry.filename}.sha256`).length >= 1);
   }
-  assert.equal(release.filename, 'CUTROOM-1.3-Beta-combined-4fc52ae.zip');
-  assert.equal(release.platforms.windows.filename, 'CUTROOM-1.3-Beta-Windows-4fc52ae.zip');
-  assert.equal(release.platforms.mac.filename, 'CUTROOM-1.3-Beta-combined-4fc52ae.zip');
+  assert.equal(release.filename, 'CUTROOM-1.3-Beta-combined-ba67003.zip');
+  assert.equal(release.platforms.windows.filename, 'CUTROOM-1.3-Beta-Windows-ba67003.zip');
+  assert.equal(release.platforms.mac.filename, 'CUTROOM-1.3-Beta-combined-ba67003.zip');
   assert.equal(release.platforms.mac.filename, release.filename);
   assert.equal(release.platforms.mac.folder,'mac', 'Mac uses the shared combined archive mac folder');
   assert.equal(linksTo(html, release.url).length, 2); // Optional combined ZIP help link, separate from the Mac button.
@@ -56,10 +56,10 @@ test('the 1.3 beta uses exact Windows, shared Mac/combined and source downloads'
   assert.match(html, /Mac uses the combined ZIP\. Extract it, open mac, then run START CUTROOM\.command beside App\./);
   assert.match(region('details', 'install-help'), /The optional combined ZIP has exactly two folders: windows and mac/);
   const source = release.source_archive;
-  assert.equal(source.filename, 'SOURCE-4fc52ae.zip');
+  assert.equal(source.filename, 'SOURCE-ba67003.zip');
   for (const url of [source.url, `/downloads/${source.filename}`, `/downloads/${source.filename}.sha256`]) assert.equal(linksTo(html,url).length,1);
   assert.equal(downloadEntries(release).length,3);
-  assert.match(html, /1\.3 Beta · Studio &amp; source editing/);
+  assert.match(html, /1\.3 Beta · Hebrew-first speech and independent routing/);
   const update = region('details', 'update-status');
   assert.match(update, /if FFprobe is missing or unavailable, import explains how to repair and retry/);
   assert.match(update, /A failed replacement preserves your saved media and edits/);
@@ -73,8 +73,8 @@ test('the 1.3 beta uses exact Windows, shared Mac/combined and source downloads'
 
 test('download metadata pins a dated release and preserves Expo mirrors and provenance', () => {
   const release = JSON.parse(readFileSync(new URL('./release.json', import.meta.url), 'utf8'));
-  assert.equal(release.github_release.tag, 'v1.3-beta-20261111-gray1');
-  assert.equal(release.github_release.previous_public_tag, 'v1.3-beta-20261108-studio1');
+  assert.equal(release.github_release.tag, 'v1.3-beta-20261111-hebrew1');
+  assert.equal(release.github_release.previous_public_tag, 'v1.3-beta-20261111-gray1');
   assert.equal(release.github_release.tag_commit, release.source_commit);
   assert.equal(release.github_release.package_bytes_changed, true);
   assert.equal(release.github_release.url, `${repository}/releases/tag/${release.github_release.tag}`);
@@ -89,14 +89,14 @@ test('public beta retains exact automated native provenance and visible pending 
   assertPublishable(release);
   assert.equal(release.release_state,'beta');
   assert.equal(release.full_release_qualified,false);
-  assert.equal(release.source_commit,'4fc52aef210cca74722b356c852a1cc5a24ad371');
-  assert.equal(release.github_release.tag,'v1.3-beta-20261111-gray1');
-  assert.equal(release.native_validation.run_id,42965402773);
-  assert.equal(release.validated_pr_head,'4fc52aef210cca74722b356c852a1cc5a24ad371');
+  assert.equal(release.source_commit,'ba67003726e80e0d394b1927b6b710f191a60157');
+  assert.equal(release.github_release.tag,'v1.3-beta-20261111-hebrew1');
+  assert.equal(release.native_validation.run_id,42977968863);
+  assert.equal(release.validated_pr_head,'ba67003726e80e0d394b1927b6b710f191a60157');
   assert.equal(release.native_validation.head_commit,release.validated_pr_head);
   assert.equal(release.native_validation.application_source_commit,release.source_commit);
   assert.equal(release.native_validation.transcription_run,false);
-  assert.equal(release.native_validation.review_record_commit,'e2876d89c8d008fdde6e5b57f731fa8e44a5007b');
+  assert.equal(release.native_validation.review_record_commit,'acc6ceec1cbad8ac8b5382767df64b48fd1b7ae5');
   for (const architecture of ['arm64','x64']) {
     const checks = release.native_validation.architectures[architecture];
     assert.equal(checks.status,'passed');
@@ -107,7 +107,7 @@ test('public beta retains exact automated native provenance and visible pending 
     assert.equal(checks.required_cases_passed,50);
     assert.equal(checks.skipped,0);
     assert.equal(checks.source_audio_and_caption_checks,'passed');
-    assert.equal(checks.job_id,architecture === 'arm64' ? 130344776001 : 130344776031);
+    assert.equal(checks.job_id,architecture === 'arm64' ? 130386852359 : 130386852742);
     for (const gate of ['fresh_app_install','missing_pip_recovery','restart_persistence']) assert.equal(checks[gate],'passed');
     assert.equal(checks.combined_archive_sha256,release.sha256);
   }
@@ -585,15 +585,16 @@ test('archived supplemental views and undated AI setup are labeled honestly', ()
 test('current release discloses archival screenshots and preserves preceding Nov6, Nov7 and Nov8 provenance', () => {
   const release = JSON.parse(readFileSync(new URL('./release.json', import.meta.url),'utf8'));
   assert.ok(release.known_limitations.some(text => /[Gg]allery.*archiv/.test(text)));
-  assert.match(html, /Limited headless-browser checks covered Home, editor tabs, the export dialog and theme switching with synthetic media/);
-  assert.match(html, /Physical-device UI and real-speech listening still need manual acceptance/);
+  assert.match(html, /Transcription settings were checked in desktop and mobile browser layouts/);
+  assert.match(html, /live Cloudflare, accuracy measurements, physical-device acceptance and human listening remain untested/);
   assert.equal(release.historical_native_validation.find(row=>row.release_tag==='v1.3-beta-20261106-stability1').native_validation.run_id,42291275917);
   assert.equal(release.historical_native_validation.find(row=>row.release_tag==='v1.3-beta-20261107-editor1').native_validation.run_id,42406800822);
   assert.equal(release.historical_native_validation.find(row=>row.release_tag==='v1.3-beta-20261108-studio1').native_validation.run_id,42489336008);
+  assert.equal(release.historical_native_validation.find(row=>row.release_tag==='v1.3-beta-20261111-gray1').native_validation.run_id,42965402773);
   const retained = JSON.parse(readFileSync(new URL('./retained-downloads.json', import.meta.url),'utf8'));
-  assert.equal(retained.length,45);
+  assert.equal(retained.length,48);
   for (const entry of retained) {
-    assert.equal(entry.url,`https://cutroom-studio--${entry.filename.includes('d2c6f6f') ? 'oz9pego43i' : entry.filename.includes('2dacba3') ? 'o6r0sixwri' : 'cfqtj1cb86'}.expo.app/downloads/${entry.filename}`);
+    assert.equal(entry.url,`https://cutroom-studio--${entry.filename.includes('4fc52ae') ? 'nbymjtivwx' : entry.filename.includes('d2c6f6f') ? 'oz9pego43i' : entry.filename.includes('2dacba3') ? 'o6r0sixwri' : 'cfqtj1cb86'}.expo.app/downloads/${entry.filename}`);
     assert.ok(entry.github_url.startsWith('https://github.com/VanoPeradze/cutroom/releases/download/'));
   }
 });
@@ -699,4 +700,21 @@ test('gray and Hebrew release copy is bilingual and limits its accuracy claims',
   assert.match(html, /Beta build · 11 November 2026/);
   assert.match(html, /Beta release notes - build 11 November 2026/);
   assert.match(html, /Gallery screenshots remain archival/);
+});
+
+
+test('Hebrew-first and optional cloud disclosure remains bilingual and unmeasured', () => {
+  const release = JSON.parse(readFileSync(new URL('./release.json', import.meta.url),'utf8'));
+  const update = region('details','update-status');
+  const note = update.match(/<p data-he="([^"]+)">New: ([^<]+)<\/p>/);
+  assert.ok(note);
+  assert.match(note[1], /[\u0590-\u05ff]/);
+  for (const text of ['ivrit.ai in both Balanced and Quality','memory checks','local speech never uploads audio','experimental and off by default','explicit account/model/future-job consent','No real audio was uploaded','accuracy or billing behavior is not verified']) assert.ok(note[2].includes(text),text);
+  assert.match(update,/prior upload attempts remain visible/);
+  assert.match(update,/not transcription-accuracy certification/);
+  assert.equal(release.local_regression_validation.real_speech_inference,false);
+  assert.equal(release.local_regression_validation.cloud_audio_uploaded,false);
+  assert.equal(release.local_regression_validation.bidi_browser.passed,250);
+  assert.equal(release.local_regression_validation.frontend.passed,919);
+  assert.ok(release.known_limitations.some(text=>/Cloudflare.*experimental.*mocked/.test(text)));
 });

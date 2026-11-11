@@ -13,9 +13,9 @@ concurrency:
 
 jobs:
   scope:
-    # Only this explicitly reviewed same-repository Hebrew/cloud candidate.
+    # Disabled after exact ba67003 Windows and native Mac qualification.
     # All previously published archives and validation records remain untouched.
-    if: ${{ github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'codex/iddo-full-implementation-20261111' }}
+    if: ${{ false }}
     runs-on: ubuntu-latest
     outputs:
       build_candidate: ${{ steps.scope.outputs.build_candidate }}
