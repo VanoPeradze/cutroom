@@ -11,6 +11,6 @@
   "source_commit": "4fc52aef210cca74722b356c852a1cc5a24ad371",
   "native_validation_url": "https://github.com/VanoPeradze/cutroom/actions/runs/42965402773",
   "native_validation_commit": "4fc52aef210cca74722b356c852a1cc5a24ad371",
-  "note": "Exact combined archive for hosted native ARM64 and Intel review. Physical UI, human listening, model inference and transcription acceptance remain unverified.",
+  "note": "The exact combined archive passed hosted native ARM64 and Intel synthetic review. Physical UI, human listening, model inference and transcription acceptance remain unverified.",
   "review_record_commit": "e2876d89c8d008fdde6e5b57f731fa8e44a5007b"
 }
