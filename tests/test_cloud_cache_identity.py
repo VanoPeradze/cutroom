@@ -18,7 +18,6 @@ def fingerprints(**overrides):
 @pytest.mark.parametrize("change", [
     {"base_url": "https://other.example.com/v1"},
     {"transcript_model": "other-speech-model"},
-    {"model": "other-story-model"},
     {"provider": "groq"},
 ])
 def test_cloud_destination_and_models_invalidate_transcript_and_story(change):
@@ -30,3 +29,10 @@ def test_cloud_destination_and_models_invalidate_transcript_and_story(change):
 
 def test_api_key_rotation_is_not_part_of_the_analysis_cache():
     assert fingerprints() == fingerprints(api_key="test-replacement-key")
+
+
+def test_story_model_change_reuses_speech_without_uploading_again():
+    before, after = fingerprints(), fingerprints(model="other-story-model")
+    assert before["transcript"] == after["transcript"]
+    assert before["story"] != after["story"]
+    assert before["source"] == after["source"]

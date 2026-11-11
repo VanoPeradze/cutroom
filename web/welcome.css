@@ -224,3 +224,5 @@ dialog.connection-dialog { width:min(1050px,calc(100vw - 32px)); }
 .transcription-dialog .connection-actions { flex-wrap:wrap; }
 .transcription-dialog .connection-note strong { color:var(--paper); }
 @media(max-width:540px) { .transcription-destination { grid-template-columns:1fr; gap:4px; } .transcription-destination dd { margin-bottom:10px; } }
+
+.transcription-provenance-note { overflow-wrap:anywhere; padding:12px; border:1px solid var(--line); border-radius:8px; background:var(--surface-inset); line-height:1.55; }
