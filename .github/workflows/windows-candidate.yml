@@ -13,9 +13,9 @@ concurrency:
 
 jobs:
   scope:
-    # Qualify only this explicitly reviewed gray/Hebrew release branch.
-    # Existing published candidate archives remain immutable.
-    if: ${{ github.head_ref == 'codex/gray-hebrew-release-20261111' }}
+    # Freeze the exact 4fc52ae package bytes after reviewed qualification.
+    # Retained published archives and historical validation pins stay unchanged.
+    if: ${{ false }}
     runs-on: ubuntu-latest
     outputs:
       build_candidate: ${{ steps.scope.outputs.build_candidate }}
