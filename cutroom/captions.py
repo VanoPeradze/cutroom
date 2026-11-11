@@ -137,6 +137,34 @@ def _ass_escape(text: str) -> str:
     return str(text).replace("\r\n", "\n").replace("\r", "\n").replace("\\", r"\\").replace("{", r"\{").replace("}", r"\}").replace("\n", r"\N")
 
 
+# Keep adjacent Latin words together: isolating "4K" and "60fps" separately
+# reverses their relative order in an RTL sentence. Internal punctuation belongs
+# to camera/codec names; sentence punctuation remains in the outer paragraph.
+_ASCII_CAPTION_WORD = r"[A-Za-z0-9]+(?:[._/:-][A-Za-z0-9]+)*"
+_ASCII_CAPTION_CONTINUATION = rf"(?:{_ASCII_CAPTION_WORD}|\({_ASCII_CAPTION_WORD}(?:[ \t]+{_ASCII_CAPTION_WORD})*\))"
+_ASCII_CAPTION_RUN = re.compile(
+    rf"(?<![A-Za-z0-9_\\]){_ASCII_CAPTION_WORD}"
+    rf"(?:(?:[ \t]+|[ \t]*[,;/&+:-][ \t]+){_ASCII_CAPTION_CONTINUATION})*"
+)
+
+
+def _isolate_caption_ltr_runs(paragraph: str) -> str:
+    def isolate(match: re.Match[str]) -> str:
+        value = match.group(0)
+        # Numbers alone already have well-defined bidi behavior. Do not split
+        # an accented/non-ASCII Latin word or detach its combining marks.
+        neighbours = paragraph[max(0, match.start() - 1):match.start()] + paragraph[match.end():match.end() + 1]
+        if paragraph[match.end():].startswith(("\\", ":\\")):
+            return value
+        if not re.search("[A-Za-z]", value) or any(
+            unicodedata.bidirectional(char) in {"L", "NSM"} for char in neighbours
+        ):
+            return value
+        return "\u2066" + value + "\u2069"
+
+    return _ASCII_CAPTION_RUN.sub(isolate, paragraph)
+
+
 def _ass_plain_caption(text: str) -> str:
     """Bind neutral punctuation to each RTL paragraph in libass.
 
@@ -150,6 +178,8 @@ def _ass_plain_caption(text: str) -> str:
     for paragraph in paragraphs:
         direction = next((unicodedata.bidirectional(char) for char in paragraph
                           if unicodedata.bidirectional(char) in {"L", "R", "AL"}), None)
+        if direction in {"R", "AL"}:
+            paragraph = _isolate_caption_ltr_runs(paragraph)
         escaped = _ass_escape(paragraph)
         if direction in {"R", "AL"}:
             escaped = "\u200f" + escaped + "\u200f"

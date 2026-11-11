@@ -32,6 +32,8 @@
 
 ## 1.3 Beta update
 
+The November 11 revision adds a neutral-gray light theme and safer local Hebrew refinement, plus mixed Hebrew/Latin caption rendering fixes. Dark mode and video colors are unchanged. See the [changelog](CHANGELOG.md) for exact behavior and validation limits.
+
 CUTROOM 1.3 Beta gives added videos their detected source sound by default, with mute and gain controls. Existing silent overlays keep their saved choice. The AI draft notice expands in the inspector, leaving the preview clear. Compact layouts, preview recovery and FFmpeg compatibility are improved. See the [changelog](CHANGELOG.md) for source-review and timeline updates; each [release](https://github.com/VanoPeradze/cutroom/releases) identifies its exact source and recorded checks.
 
 ## Highlights

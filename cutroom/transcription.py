@@ -146,8 +146,8 @@ def _missing_english_terms(original: dict[str, Any], candidate: dict[str, Any]) 
     return not _trusted_english_terms(original).issubset(candidate_terms)
 
 
-def _retry_acceptance(original: dict[str, Any], candidate: dict[str, Any], duration: float) -> str | None:
-    """Reject uncertain replacements; preserve the original unit as a whole."""
+def _candidate_timing_rejection(candidate: dict[str, Any], duration: float) -> str | None:
+    """Validate completion and timing without comparing model confidence."""
     if (candidate.get("coverage") or {}).get("complete") is not True:
         return "incomplete_candidate"
     if abs(_finite_number(candidate.get("duration")) - duration) > 0.5:
@@ -169,6 +169,24 @@ def _retry_acceptance(original: dict[str, Any], candidate: dict[str, Any], durat
                     or word_start < last_word_end - 0.05):
                 return "invalid_candidate_timing"
             last_word_end = word_end
+    return None
+
+
+def _speech_timing_preserved(original: dict[str, Any], candidate: dict[str, Any], duration: float) -> bool:
+    original_ranges = _merged_time_ranges(original.get("segments"), duration)
+    candidate_ranges = _merged_time_ranges(candidate.get("segments"), duration)
+    original_speech = sum(row["end"] - row["start"] for row in original_ranges)
+    retained_speech = sum(max(0.0, min(old["end"], new["end"]) - max(old["start"], new["start"]))
+                          for old in original_ranges for new in candidate_ranges)
+    return retained_speech >= original_speech * 0.8
+
+
+def _retry_acceptance(original: dict[str, Any], candidate: dict[str, Any], duration: float) -> str | None:
+    """Reject uncertain replacements; preserve the original unit as a whole."""
+    timing_rejection = _candidate_timing_rejection(candidate, duration)
+    if timing_rejection:
+        return timing_rejection
+    rows = candidate.get("segments") or []
     if _missing_english_terms(original, candidate):
         return "english_terms_not_preserved"
     if _BILINGUAL_TRANSCRIPTION_HINT in str(candidate.get("text") or ""):
@@ -176,12 +194,7 @@ def _retry_acceptance(original: dict[str, Any], candidate: dict[str, Any], durat
     if (_script_profile(str(original.get("text") or ""))["hebrew_letters"] >= 8
             and _script_profile(str(candidate.get("text") or ""))["hebrew_letters"] < 8):
         return "hebrew_speech_not_preserved"
-    original_ranges = _merged_time_ranges(original.get("segments"), duration)
-    candidate_ranges = _merged_time_ranges(rows, duration)
-    original_speech = sum(row["end"] - row["start"] for row in original_ranges)
-    retained_speech = sum(max(0.0, min(old["end"], new["end"]) - max(old["start"], new["start"]))
-                          for old in original_ranges for new in candidate_ranges)
-    if retained_speech < original_speech * 0.8:
+    if not _speech_timing_preserved(original, candidate, duration):
         return "speech_timing_not_preserved"
     old_confidence = [_segment_confidence(row) for row in original.get("segments", [])]
     new_confidence = [_segment_confidence(row) for row in rows]
@@ -470,7 +483,13 @@ def _split_oversized_segments(segments: list[dict[str, Any]], max_seconds: float
     return output
 
 
-def _cuda_has_capacity(settings: Settings, mode: str | None = None, minimum_free_mb: float | None = None) -> bool:
+def _cuda_has_capacity(
+    settings: Settings,
+    mode: str | None = None,
+    minimum_free_mb: float | None = None,
+    *,
+    require_measurement: bool = False,
+) -> bool:
     """Avoid taking CUDA when another application has consumed its safe headroom.
 
     CTranslate2 only reports whether a CUDA device exists. On a creator machine a
@@ -494,7 +513,14 @@ def _cuda_has_capacity(settings: Settings, mode: str | None = None, minimum_free
         except (TypeError, ValueError):
             minimum_free_mb = defaults.get(str(mode), 4096.0)
     if minimum_free_mb <= 0:
-        return True
+        return not require_measurement
+    if require_measurement and (
+        not math.isfinite(minimum_free_mb)
+        or "CUDA_VISIBLE_DEVICES" in os.environ
+        or "CUDA_DEVICE_ORDER" in os.environ
+    ):
+        # Optional refinement must not guess which physical GPU backs CUDA 0.
+        return False
     creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
     try:
         probe = subprocess.run(
@@ -507,13 +533,18 @@ def _cuda_has_capacity(settings: Settings, mode: str | None = None, minimum_free
             check=False,
             creationflags=creationflags,
         )
+        if require_measurement:
+            if probe.returncode != 0 or len(probe.stdout.splitlines()) != 1:
+                return False
+            first_gpu_free = float(probe.stdout.splitlines()[0].strip())
+            return math.isfinite(first_gpu_free) and first_gpu_free >= minimum_free_mb
         free_values = [
             float(line.strip().split()[0])
             for line in probe.stdout.splitlines()
             if line.strip() and line.strip().split()[0].replace(".", "", 1).isdigit()
         ]
     except (OSError, subprocess.TimeoutExpired, ValueError):
-        return True
+        return not require_measurement
     return not free_values or max(free_values) >= minimum_free_mb
 
 
@@ -577,7 +608,14 @@ def _register_windows_cuda_runtime() -> None:
                 continue
 
 
-def _load_model(settings: Settings, device: str | None = None, compute: str | None = None, model_name: str | None = None) -> tuple[Any, str, str, str]:
+def _load_model(
+    settings: Settings,
+    device: str | None = None,
+    compute: str | None = None,
+    model_name: str | None = None,
+    *,
+    local_files_only: bool = False,
+) -> tuple[Any, str, str, str]:
     model_name = str(model_name or settings.ai.get("whisper_model", "base"))
     if device is None or compute is None:
         device, compute = _resolve_device(settings)
@@ -590,17 +628,44 @@ def _load_model(settings: Settings, device: str | None = None, compute: str | No
                 from faster_whisper import WhisperModel
             except ImportError as exc:
                 raise RuntimeError("faster-whisper is not installed. Run setup again or install requirements-ai.txt") from exc
-            _MODEL_CACHE[key] = WhisperModel(model_name, device=device, compute_type=compute, **({"local_files_only": True} if settings.ai.get("whisper_local_files_only") else {}))
+            _MODEL_CACHE[key] = WhisperModel(model_name, device=device, compute_type=compute, **({"local_files_only": True} if local_files_only or settings.ai.get("whisper_local_files_only") else {}))
     return _MODEL_CACHE[key], model_name, device, compute
 
 
-def _auto_quality_ready(settings: Settings, requested_language: str | None) -> bool:
+def _auto_quality_ready(
+    settings: Settings,
+    requested_language: str | None,
+    *,
+    require_measurement: bool = False,
+) -> bool:
     """Auto uses Quality only when its model is already on disk and the GPU has
     the configured headroom. It never starts a download."""
     from .local_models import speech_installed
 
     model = _model_for_request(settings, "quality", requested_language, "cuda")
-    return speech_installed(model) and _cuda_has_capacity(settings, "quality")
+    return speech_installed(model) and _cuda_has_capacity(
+        settings, "quality", **({"require_measurement": True} if require_measurement else {}),
+    )
+
+
+def _auto_hebrew_refinement_ready(settings: Settings, result: dict[str, Any], device: str, duration: float) -> bool:
+    """Optional second pass: cached model, confident Hebrew and measured headroom.
+
+    Explicit Balanced/Lite choices stay lightweight. Auto never downloads this
+    upgrade, guesses a device's free VRAM or refines unbounded recordings.
+    """
+    detection = result.get("language_detection")
+    detection = detection if isinstance(detection, dict) else {}
+    limit = _finite_number(settings.ai.get("hebrew_auto_gpu_max_seconds", 3600.0))
+    source_duration = _finite_number(duration) or _finite_number(result.get("duration"))
+    return bool(
+        device == "cuda"
+        and result.get("language") == "he"
+        and not detection.get("ambiguous")
+        and _clamp_probability(result.get("language_probability")) >= 0.62
+        and 0.0 < source_duration <= limit
+        and _auto_quality_ready(settings, "he", require_measurement=True)
+    )
 
 
 def _model_for_request(settings: Settings, mode: str, requested_language: str | None, device: str) -> str:
@@ -1227,10 +1292,15 @@ def _transcribe_once(
     cancel_check: Callable[[], None] | None = None,
     source_duration: float = 0.0,
     recovery_state: dict[str, Any] | None = None,
+    *,
+    local_files_only: bool = False,
 ) -> dict[str, Any]:
     if cancel_check:
         cancel_check()
-    model, model_name, device, compute = _load_model(settings, device, compute, model_name)
+    model, model_name, device, compute = _load_model(
+        settings, device, compute, model_name,
+        **({"local_files_only": True} if local_files_only else {}),
+    )
     if cancel_check:
         cancel_check()
     if progress:
@@ -1360,13 +1430,14 @@ def _transcribe_in_process(
             result = _transcribe_once(
                 media_path, settings, model_name_requested, device, compute,
                 requested_language, attempt_mode, progress, cancel_check, duration,
+                **({"local_files_only": True}
+                   if requested_mode == "auto" and attempt_mode == "quality" else {}),
             )
 
-            # Auto-language keeps a one-pass fast path. If Quality mode discovers
-            # Hebrew, try the Hebrew-specific CTranslate2 model. Keep the completed
-            # generic pass until the refinement passes the same quality gate used
-            # by the story planner: a larger model can also return empty or weak
-            # speech on noisy recordings.
+            # Quality can refine detected Hebrew. Auto may also refine a
+            # completed lightweight pass, but only using an already cached model
+            # and independently measured GPU headroom. Preserve the original
+            # until the candidate passes language, quality and timing gates.
             detected = str(result.get("language") or "unknown")
             hebrew_model = str(settings.ai.get("hebrew_whisper_model") or "").strip()
             should_refine_hebrew = (
@@ -1374,7 +1445,14 @@ def _transcribe_in_process(
                 and detected == "he"
                 and hebrew_model
                 and model_name_requested != hebrew_model
-                and attempt_mode == "quality"
+                and (
+                    requested_mode == "quality"
+                    or (
+                        requested_mode == "auto"
+                        and attempt_mode != "lite"
+                        and _auto_hebrew_refinement_ready(settings, result, device, duration)
+                    )
+                )
             )
             if should_refine_hebrew:
                 if progress:
@@ -1393,6 +1471,7 @@ def _transcribe_in_process(
                         media_path, settings, hebrew_model, device, compute,
                         "he", attempt_mode, progress, cancel_check, duration,
                         recovery_state=result.get("quality_recovery"),
+                        **({"local_files_only": True} if requested_mode == "auto" else {}),
                     )
                     refined["language"] = "he"
                     # The second pass is intentionally language-locked; its 1.0
@@ -1411,16 +1490,27 @@ def _transcribe_in_process(
                     )
                     refined["language_detection"] = detection
                     refined_quality = transcript_quality_report(refined)
+                    auto_timing_rejection = None
+                    if requested_mode == "auto":
+                        source_duration = _finite_number(duration) or _finite_number(result.get("duration"))
+                        auto_timing_rejection = _candidate_timing_rejection(refined, source_duration)
+                        if not auto_timing_rejection and not _speech_timing_preserved(result, refined, source_duration):
+                            auto_timing_rejection = "speech_timing_not_preserved"
                     if _missing_english_terms(result, refined):
                         result["hebrew_refine_warning"] = (
                             "Hebrew refinement did not preserve recognized English terms; kept the original transcript."
                         )
+                    elif auto_timing_rejection:
+                        result["hebrew_refine_warning"] = (
+                            "Hebrew refinement failed the timing check; kept the original transcript: "
+                            + auto_timing_rejection
+                        )
                     elif (
-                        transcript_quality_report(result)["usable_for_story"]
+                        (requested_mode == "auto" or transcript_quality_report(result)["usable_for_story"])
                         and not refined_quality["usable_for_story"]
                     ):
                         result["hebrew_refine_warning"] = (
-                            "Hebrew refinement failed the speech quality check; kept the usable original transcript: "
+                            "Hebrew refinement failed the speech quality check; kept the original transcript: "
                             + ", ".join(refined_quality["reasons"])
                         )
                     else:

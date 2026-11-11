@@ -7,7 +7,17 @@ This folder is the maintained website source inside the public [CUTROOM reposito
 It does not run the editor, receive footage, process video, or handle user API keys.
 The previous separate website checkout is not needed for future updates.
 
-## 1.3 beta - 6 November 2026
+## 1.3 beta - 11 November 2026
+
+The gray and Hebrew update uses product source `4fc52aef210cca74722b356c852a1cc5a24ad371` and release tag `v1.3-beta-20261111-gray1`. The exact Windows, combined Mac/Windows and source ZIPs are pinned in `release.json`. Release qualification and publication status must be checked there; the review run is [42965402773](https://github.com/VanoPeradze/cutroom/actions/runs/42965402773).
+
+Light mode now uses neutral gray workspace surfaces without changing media-preview colors or dark mode. Automatic Hebrew refinement uses an already-cached local model only, keeps the original transcript when the candidate is weak, and does not download a new model. Mixed Hebrew-English caption rendering is corrected. Real-speech transcription accuracy has not been measured.
+
+Limited headless-browser checks used an isolated synthetic clip: Home, all six editor tabs, export dialog reopening and Escape, dark/light switching and light-theme persistence, plus compact Home. Targeted Home/editor/captions/export screenshots were visually reviewed. This is not physical-device or human-listening acceptance. The website gallery keeps its explicitly archived originals, not these test captures.
+
+The previous 8 November 1.3 release and latest 1.2 release are retained. All 45 historical download archives remain checksum-pinned; no old archive is deleted by this website update. Clean-OS Windows installation, the packaged batch launcher, physical Mac UI/Finder/Gatekeeper/Safari and representative speech/model acceptance remain unverified.
+
+## Previous 1.3 beta - 6 November 2026 (history)
 
 Product source is `34113eb3ce3d30c4b66976c6ee9c51c9a1ac85c3`; the public release is [v1.3-beta-20261106-stability1](https://github.com/VanoPeradze/cutroom/releases/tag/v1.3-beta-20261106-stability1). Windows setup no longer waits for an automatic Ollama installation; optional local AI can be configured after opening the editor. The Mac download uses the `mac/` folder in the exact combined archive.
 

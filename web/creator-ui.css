@@ -253,9 +253,9 @@ html[data-theme="light"] .studio-workspace .studio-timeline-dock,
 html[data-theme="light"] .advanced-panel.studio-workspace .timeline-toolbar,
 html[data-theme="light"] .advanced-panel.studio-workspace:not([hidden]) { background:var(--surface-chrome); }
 html[data-theme="light"] .advanced-panel.studio-workspace .advanced-tabs button.active { color:#56377b; background:#e7dff0; }
-html[data-theme="light"] .director-panel .source-slot { background:#edf0eb; border-color:#a9b6b1; }
-html[data-theme="light"] .director-panel .source-slot:hover { background:#e4ece7; }
-html[data-theme="light"] .source-index { background:#dde5df; color:#202a2b; }
+html[data-theme="light"] .director-panel .source-slot { background:var(--surface-inset); border-color:var(--line-strong); }
+html[data-theme="light"] .director-panel .source-slot:hover { background:var(--surface-hover); }
+html[data-theme="light"] .source-index { background:var(--surface-raised); color:var(--paper); }
 html[data-theme="light"] .transcript-edit-form input,
 html[data-theme="light"] .toast { background:var(--surface-raised); }
 html[data-theme="light"] .icon-button { background:var(--surface-inset); }
@@ -365,9 +365,9 @@ dialog.project-confirm-dialog { max-width:500px; border-radius:18px; background:
 .project-rename-form > p,.project-delete-copy { color:var(--paper-dim); font-size:13px; line-height:1.7; overflow-wrap:anywhere; }
 .project-rename-actions { display:flex; justify-content:flex-end; flex-wrap:wrap; gap:10px; margin-top:24px; }
 .project-action-error { color:var(--danger); font-size:12px; line-height:1.6; }
-html[data-theme="light"] .home-hub .short-art { background:#ece3f3; }
-html[data-theme="light"] .home-hub .youtube-art { background:#e1edeb; }
-html[data-theme="light"] .home-hub .manual-art { background:#e8e6ef; }
+html[data-theme="light"] .home-hub .short-art { background:var(--surface-inset); }
+html[data-theme="light"] .home-hub .youtube-art { background:var(--surface-inset); }
+html[data-theme="light"] .home-hub .manual-art { background:var(--surface-inset); }
 html[data-theme="light"] .home-hub .art-tag { color:#675e73; }
 @media (max-width:650px) {
   .home-hub .recent-list { grid-template-columns:minmax(0,1fr); }
