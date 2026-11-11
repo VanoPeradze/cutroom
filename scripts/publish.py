@@ -28,7 +28,7 @@ MAX_HISTORY_BYTES = 128 * 1024 * 1024
 MAX_HISTORY_OBJECTS = 20000
 PRIVATE_PARTS = {"data", ".git", ".venv", ".tools", "dist", "node_modules", "__pycache__",
                  ".pytest_cache", ".codex", ".agents", "models", "validation-work"}
-PRIVATE_FILES = {".runtime-paths.cmd", ".setup-complete", ".verified", "ai-connection.json",
+PRIVATE_FILES = {".runtime-paths.cmd", ".setup-complete", ".verified", "ai-connection.json", "transcription-engine.json",
                  "validation-report.json", "validation_report_he.md"}
 PRIVATE_SUFFIXES = {".pem", ".key", ".p12", ".pfx", ".log", ".mp4", ".mov", ".mkv",
                     ".avi", ".webm", ".wav", ".mp3", ".m4a", ".flac", ".gguf",

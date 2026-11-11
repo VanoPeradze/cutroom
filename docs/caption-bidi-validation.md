@@ -14,27 +14,81 @@ Camera names, internal punctuation, and simple parenthesized model suffixes
 are supported. Arbitrary nested punctuation, non-ASCII Latin phrases, and unusual
 pre-authored bidi controls are not covered by the new visual fixtures.
 
-## Checks
+## Required export checks
 
-Run `python -m pytest tests/test_caption_bidi_presentation.py tests/test_caption_bidi_render.py`.
-Render tests require existing FFmpeg/libass and a Hebrew-capable font: installed
-Arial on Windows, or DejaVu Sans/fontconfig on Linux. They explicitly skip when
-prerequisites are missing. No speech models or network services are used.
+Run:
 
-Real grayscale frames are compared with an independent forced-LTR reference
-that spells the intended visual order. That test-only reference uses unpointed
-Hebrew, not Arabic. Caption-ink-normalized pixel error allows small subpixel
-raster differences without diluting errors into the black background. Negative
-controls reject both the original behavior and separate-token isolation.
+```sh
+python -m pytest tests/test_caption_bidi_presentation.py tests/test_caption_bidi_render.py tests/test_captions.py
+```
 
-The 14 real-render tests cover 4K, 4K 60fps, Sony A7 IV, Sony (A7 IV),
-Sony A7 IV / H.264, Sony, Canon, H.264, S-Log3, 4K/60fps, (4K), and Swit,
-plus three negative controls. Unit checks cover source/SRT preservation,
-all four styles, first-strong paragraph direction, escaping, and Hebrew prefixes.
+The real-render suite requires existing FFmpeg with libass on PATH. Missing
+FFmpeg, subtitle support, or font fixtures is a **failure**, not a skip. It uses
+pinned, unmodified DejaVu Sans regular and bold fixtures in `tests/fixtures/fonts`
+with the complete upstream redistribution license. The font is passed explicitly
+via `fontsdir`, never installed into the OS. It works without the `fc-match`
+utility or an OS-installed DejaVu font, removing the previous macOS skip path.
+The regular and bold files are SHA-256 checked. No network or speech model is used.
+
+Real grayscale frames are compared with independent forced-LTR references that
+spell the intended physical visual order. Only test references reverse unpointed
+Hebrew; production never reverses words or characters. Caption-ink-normalized
+pixel error allows small raster differences without diluting errors into black
+background. Negative controls reject both original behavior and per-token
+isolation. For natural wrapping, the portrait fixture has a fixed two-row visual
+reference: a whole forced-LTR paragraph is not a valid RTL wrapping oracle.
+
+The 35 real-render cases cover:
+- 11 mixed Hebrew/Latin phrases and three negative controls.
+- Both landscape and portrait in all four styles for `4K 60fps` and
+  `Sony A7 IV / H.264`, including a two-row naturally wrapped portrait reference.
+- Explicit multiline paragraphs in all four styles.
+- Hebrew highlight with real word-timing input: deliberately one plain phrase,
+  not unsafe per-word libass colour runs.
+
+Presentation checks independently verify source transcripts/caption items and
+SRT stay unchanged, escaping, first-strong paragraph direction, and Hebrew prefixes.
+The fixture font is not a change to the product's exported Arial font.
+
+## Real browser companion
+
+With an **existing** Playwright and Chromium installation:
+
+```sh
+node scripts/validate_caption_bidi_browser.cjs
+```
+
+Optionally set `CUTROOM_CHROMIUM_EXECUTABLE` to the existing browser and
+`NODE_PATH` to an existing Playwright installation. The script does not install
+or download anything. It aborts all network requests and uses synthetic text.
+It extracts the actual `renderCaptionItemPreview` and `updatePreviewCaption`
+functions from `web/app.js` and loads the actual preview CSS; dependencies for
+project lookup/timing are controlled fixtures rather than a live user project.
+
+Its 250 cases verify logical text preservation, Latin token visual order using
+real browser glyph rectangles, four styles, both renderer routes, landscape,
+portrait and narrow natural wrapping. Explicit-newline tests require separate
+physical rows. LTR active-word spans remain enabled as a control, while Hebrew
+highlight remains plain to match export. Results and two screenshots are written
+to `validation-work/caption-bidi-browser` (or the CLI output-directory argument).
+
+This exposed a real mismatch: the preview collapsed authored newlines, whereas
+ASS emitted a hard line break. `white-space: pre-line` now preserves those breaks
+without changing stored text. The multiline browser assertion failed before
+that CSS change and passed after it. The standard frontend suite also guards the
+CSS/direction contract in `tests/frontend_caption_bidi.test.cjs`.
 
 ## Verification limits
 
-Linux FFmpeg 7.1.5 with DejaVu Sans was verified in the isolated cloud checkout.
-The tests also passed on Windows using the existing FFmpeg and installed Arial.
-These controlled single-line fixtures do not establish preview/export parity,
-arbitrary wrapping, Arabic visual correctness, or speech-recognition accuracy.
+The expanded export tests passed on Windows with existing FFmpeg/libass and the
+bundled font. The real-browser cases passed on Chromium 149.0.7827.55 on Windows.
+Native macOS ARM/Intel execution still needs the normal CI run against the final
+commit; removal of the skip path is not a claim that those runs already passed.
+
+These are controlled text-rendering checks, not speech-recognition accuracy,
+real user-footage validation, or pixel-identical preview/export typography. Browser
+and libass have different sizing, fonts, and wrapping algorithms. The matrix
+establishes the checked token-order and line-break behavior, not arbitrary nested
+punctuation, arbitrary wrapping, Arabic shaping, every browser, or all Unicode.
+The browser companion exercises production rendering functions but is not a full
+end-to-end editor/navigation test. No audio was uploaded or transcribed.

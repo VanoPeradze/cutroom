@@ -23,6 +23,7 @@ def settings(tmp_path, monkeypatch):
 def connected(settings):
     store = cloud_ai.ConnectionStore(settings)
     store.update({"mode": "free", "api_key": "test-secret-not-a-real-key", "consent": True})
+    store.transcription.update({"engine": "legacy"})
     return store, store.job_settings(settings)
 
 
@@ -38,6 +39,7 @@ def connected_compatible(settings, *, base_url="https://api.vendor.com/v1"):
         "consent": True,
         "endpoint_consent": base_url,
     })
+    store.transcription.update({"engine": "legacy"})
     return store, store.job_settings(settings)
 
 

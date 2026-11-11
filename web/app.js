@@ -8,7 +8,8 @@ import { SourceReview } from "./source-review.js?v=1.3-beta-20261108-three-point
 import { initWorkspace } from "./workspace.js?v=1.3-beta-20261107-monitor1";
 import { KEYBOARD_PROFILES, resolveEditorShortcut, isEditorTransportSpace, shortcutRows } from "./keyboard.js?v=1.2-beta";
 import { AudioThresholdView } from "./audio-meter.js?v=1.2-beta";
-import { initWelcome, workflowSettings, cloudProviderName } from "./welcome.js?v=1.2-beta";
+import { initWelcome, workflowSettings, cloudProviderName } from "./welcome.js?v=1.3-beta-20261111-transcription1";
+import { initTranscriptionEngine } from "./transcription-engine.js?v=20261111";
 import { initLocalModels } from "./local-models.js?v=1.2-beta";
 import { trackClips, trackAt, hasSourceTracks, SourceTimelineClock } from "./source-tracks.js?v=1.2-beta";
 import { initTrackProtection } from "./track-protection.js?v=1.2-beta";
@@ -557,8 +558,11 @@ async function boot() {
   const localModels = initLocalModels({ document, api, busy: foregroundBusy,
     changed: async () => { state.runtimeGeneration += 1; await loadSystem(); },
   });
+  state.transcription = initTranscriptionEngine({ document, api, busy: foregroundBusy, pause: pauseAllMedia,
+    changed: async () => { state.runtimeGeneration += 1; await loadSystem(); },
+  });
   state.welcome = initWelcome({ document, api,
-    models: localModels,
+    models: localModels, transcription: state.transcription,
     createProject: (options) => runUiAction(() => createProject(options)), goHome,
     pause: pauseAllMedia, busy: foregroundBusy,
     changed: async (connection) => {
@@ -1156,6 +1160,7 @@ async function loadSystem() {
   renderModelStatus();
   renderUploadLimits();
   state.welcome?.setConnection(state.system?.ai_connection);
+  state.transcription?.setStatus(state.system?.transcription_engine);
   renderEditStyleChoices();
   scheduleRuntimeRefresh();
 }
@@ -7657,6 +7662,32 @@ function highlightTranscriptSelection() {
   });
 }
 
+function transcriptionProvenance(transcript) {
+  if (!transcript) return "";
+  const execution = transcript.execution || {};
+  const parts = value => Number.isSafeInteger(Number(value)) && Number(value) >= 0 ? Number(value) : null;
+  const attempt = execution.cloud_attempt;
+  const messages = [];
+  if (execution.transcription_fallback === "cloudflare_to_cached_local" || attempt?.provider === "cloudflare") {
+    const count = parts(attempt?.uploaded_parts);
+    messages.push(`Cloudflare was attempted${count == null ? "" : ` (${count} upload attempt${count === 1 ? "" : "s"})`}; this transcript completed with cached local speech. Uploaded audio and possible provider charges were not undone.`);
+  } else if (execution.provider === "cloudflare") {
+    const count = parts(execution.uploaded_parts);
+    messages.push(`Transcribed by Cloudflare${count == null ? "" : ` (${count} upload attempt${count === 1 ? "" : "s"})`}. Audio was sent to the selected provider account; provider retention and billing terms apply.`);
+  }
+  const model = execution.actual_model || transcript.model;
+  const device = execution.actual_device || transcript.device;
+  if (execution.actual_transcription_engine === "local" || device === "cpu" || device === "cuda") {
+    messages.push(`Local speech model: ${model || "not recorded"}; device: ${device || "not recorded"}.`);
+    if (execution.requested_model && execution.requested_model !== model) messages.push(`Requested model: ${execution.requested_model}.`);
+    if (["large_model_cuda_headroom", "cuda_headroom"].includes(execution.fallback_reason)) messages.push("GPU memory headroom was insufficient or unverified; local CPU fallback was used.");
+    if (["device_error", "worker_stall"].includes(execution.fallback_reason)) messages.push("A local device/runtime failure triggered the recorded fallback.");
+    if (execution.resource_warnings?.includes("cpu_memory_unverified")) messages.push("Available CPU memory could not be verified.");
+    if (execution.resource_warnings?.includes("large_model_cpu_may_be_slow")) messages.push("Large-model CPU processing can be slow; hardware performance is not certified.");
+  }
+  return messages.join(" ");
+}
+
 function renderTranscript() {
   if (!elements.transcriptList) return;
   if (!state.captionAlternativesUI && document.getElementById("captionAlternatives")) {
@@ -7678,6 +7709,11 @@ function renderTranscript() {
   state.captionAlternativesUI?.render();
   const query = elements.transcriptSearch.value.trim().toLowerCase();
   const transcript = state.project?.analysis?.transcript;
+  const provenance = document.getElementById("transcriptionProvenance");
+  if (provenance) {
+    provenance.textContent = transcriptionProvenance(transcript);
+    provenance.hidden = !provenance.textContent;
+  }
   const segments = transcript?.segments || [];
   const quality = state.project?.analysis?.transcript_quality;
   const reviewIds = new Set((Array.isArray(quality?.review_segments) ? quality.review_segments : [])

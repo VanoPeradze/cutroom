@@ -20,7 +20,7 @@ export function compatibleBaseURL(value) {
   return url.href.replace(/\/+$/, "");
 }
 
-export function initWelcome({ document, api, createProject, goHome, pause, changed, busy, models = null }) {
+export function initWelcome({ document, api, createProject, goHome, pause, changed, busy, models = null, transcription = null }) {
   const byId = id => document.getElementById(id);
   const dialog = byId("aiConnectionDialog");
   const form = byId("aiConnectionForm");
@@ -72,15 +72,15 @@ export function initWelcome({ document, api, createProject, goHome, pause, chang
     byId("cloudAPIKey").disabled = !cloud;
     byId("cloudAPIKey").placeholder = custom ? "Paste the key for this API endpoint" : "Paste your Groq API key";
     byId("cloudProviderLabel").textContent = custom ? "OpenAI-compatible API" : "Groq";
-    byId("cloudProviderSummary").textContent = custom ? "Requires compatible chat and timed transcription APIs" : "Cloud transcription + Story AI";
+    byId("cloudProviderSummary").textContent = custom ? "Story AI; timed audio API only when speech follows this connection" : "Cloud Story AI; transcription selected separately";
     byId("groqKeyLink").hidden = custom;
     byId("cloudDestinationName").textContent = destinationName;
     byId("cloudProviderHelp").textContent = custom
       ? "Your endpoint must support chat/completions with JSON object output and audio/transcriptions with verbose_json and word timestamps. A chatbot key alone is not enough. Enter both model IDs exactly as your provider documents them. Provider charges and limits apply."
-      : `Transcription uses Whisper Large V3 with word timings. ${mode() === "free" ? "Use your own Groq Free account; quotas apply. Selecting Free tier here does not change a paid account or prevent its charges." : "Check model availability, billing and limits in your Groq account."} CUTROOM provides no shared API key or credit. CUTROOM_GROQ_API_KEY is an optional user-managed environment setting.`;
+      : `When transcription follows this connection, it uses Whisper Large V3 with word timings. ${mode() === "free" ? "Use your own Groq Free account; quotas apply. Selecting Free tier here does not change a paid account or prevent its charges." : "Check model availability, billing and limits in your Groq account."} CUTROOM provides no shared API key or credit. CUTROOM_GROQ_API_KEY is an optional user-managed environment setting.`;
     byId("cloudConsentCopy").textContent = `I agree to send the selected audio, transcript and editing instructions to ${destinationName} when I start AI processing. I have checked this destination, my account's plan and its limits.`;
     byId("forgetCloudKey").hidden = !selected.has_key;
-    byId("saveAIConnection").textContent = cloud ? "Use this cloud connection" : "Use local AI";
+    byId("saveAIConnection").textContent = cloud ? "Use this cloud connection" : "Use local Story AI";
     reviewedDestination = destination();
     if (!cloud) void models?.refresh();
   }
@@ -97,6 +97,7 @@ export function initWelcome({ document, api, createProject, goHome, pause, chang
     byId("homePrivacyNote").textContent = cloud
       ? `${providerName} selected for cloud AI${value.configured ? "" : " — reconnect your API key to use AI"}. Audio and transcript text are sent only when you start AI processing. Editing and export remain on this computer.`
       : "Local AI selected. Your footage stays on this computer. Online AI is optional; editing and export still run locally.";
+    transcription?.setStoryConnection(value);
   }
   function openConnection() {
     pause();
@@ -177,7 +178,7 @@ export function initWelcome({ document, api, createProject, goHome, pause, chang
       form.querySelector('input[value="local"]').checked = true;
       clearPendingCredentials(true);
       showCloudFields();
-      announce(result.connection.has_key ? "Session key cleared. A user-managed environment key is still available." : "Session key removed. Local AI selected.");
+      announce(result.connection.has_key ? "Session key cleared. A user-managed environment key is still available." : "Session key removed. Local Story AI selected; your separate transcription choice is unchanged.");
     } catch (error) { announce(error.message, true); }
     finally { saving = false; }
   });

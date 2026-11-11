@@ -1042,6 +1042,7 @@ def create_app(settings: Settings | None = None) -> Flask:
             "models": _model_status(connections.job_settings(settings)),
             "runtime": {"state": "cloud", "available": connections.public()["configured"]} if connections.public()["mode"] != "local" else ai_runtime.snapshot(),
             "ai_connection": connections.public(),
+            "transcription_engine": connections.transcription.public(),
             "edit_styles": public_edit_styles(),
             "data_dir": str(settings.data_dir),
             "limits": {
@@ -1069,6 +1070,22 @@ def create_app(settings: Settings | None = None) -> Flask:
             except ValueError as error:
                 raise APIInputError("invalid_connection", str(error)) from error
         return jsonify({"connection": selected})
+
+    @app.get("/api/transcription/engine")
+    def transcription_engine():
+        return jsonify(connections.transcription.public())
+
+    @app.post("/api/transcription/engine")
+    def save_transcription_engine():
+        payload = _json_object()
+        with project_job_gate:
+            if jobs.active():
+                raise APIInputError("project_busy", "Wait for active processing before changing transcription.", 409)
+            try:
+                selected = connections.transcription.update(payload)
+            except ValueError as error:
+                raise APIInputError("invalid_transcription_engine", str(error)) from error
+        return jsonify(selected)
 
     @app.post("/api/runtime/prepare")
     def prepare_ai_runtime():
@@ -2390,44 +2407,49 @@ def create_app(settings: Settings | None = None) -> Flask:
         except StoryBudgetError as error:
             raise APIInputError("instruction_contract", str(error), **error.diagnostic) from error
         goal = str(effective.get("goal") or "short")
-        selected_settings = connections.job_settings(settings)
-        if cloud_enabled(selected_settings):
-            require_connection(selected_settings)
-        if goal in {"short", "podcast"}:
-            status = story_ai_status(selected_settings, effective)
-            if not status["ready"]:
-                return jsonify({
-                    "error": "story_ai_required",
-                    "message": (
-                        "Story AI is disabled in CUTROOM configuration."
-                        if status["reason"] == "ai_disabled"
-                        else "Local Story AI is not ready. Use Retry AI to prepare the engine, then retry this edit."
-                        if status["reason"] == "ollama_unavailable"
-                        else f"Story AI model {status['recommended_model']} must be installed before this edit can be created."
-                    ),
-                    "story_ai": status,
-                    "runtime": ai_runtime.snapshot(),
-                    "recommended_model": status["recommended_model"],
-                }), 409
-        def require_source(latest: dict[str, Any]) -> None:
-            require_reviewed_revision(latest)
-            require_tracks_unlocked(latest)
-            if not latest.get("sources", {}).get("A"):
-                raise APIInputError("source_required", "Add source A before generating an edit.")
+        # Snapshot consent and admit the job under the same gate as connection
+        # changes. A successful switch to Local can never race an older cloud job.
+        with project_job_gate:
+            selected_settings = connections.job_settings(settings)
+            from cutroom.transcription_adapter import require_transcription_connection
+            require_transcription_connection(selected_settings)
+            if cloud_enabled(selected_settings):
+                require_connection(selected_settings)
+            if goal in {"short", "podcast"}:
+                status = story_ai_status(selected_settings, effective)
+                if not status["ready"]:
+                    return jsonify({
+                        "error": "story_ai_required",
+                        "message": (
+                            "Story AI is disabled in CUTROOM configuration."
+                            if status["reason"] == "ai_disabled"
+                            else "Local Story AI is not ready. Use Retry AI to prepare the engine, then retry this edit."
+                            if status["reason"] == "ollama_unavailable"
+                            else f"Story AI model {status['recommended_model']} must be installed before this edit can be created."
+                        ),
+                        "story_ai": status,
+                        "runtime": ai_runtime.snapshot(),
+                        "recommended_model": status["recommended_model"],
+                    }), 409
+            def require_source(latest: dict[str, Any]) -> None:
+                require_reviewed_revision(latest)
+                require_tracks_unlocked(latest)
+                if not latest.get("sources", {}).get("A"):
+                    raise APIInputError("source_required", "Add source A before generating an edit.")
 
-        job = submit_project_job(
-            "director",
-            project_id,
-            analyze_project,
-            project_id,
-            store,
-            selected_settings,
-            payload,
-            validate_project=require_source,
-            job_identity=payload,
-            **({"expected_project_revision": reviewed_revision} if reviewed_revision is not None else {}),
-        )
-        return jsonify({"job": job.public()}), 202
+            job = submit_project_job(
+                "director",
+                project_id,
+                analyze_project,
+                project_id,
+                store,
+                selected_settings,
+                payload,
+                validate_project=require_source,
+                job_identity=payload,
+                **({"expected_project_revision": reviewed_revision} if reviewed_revision is not None else {}),
+            )
+            return jsonify({"job": job.public()}), 202
 
     @app.post("/api/projects/<project_id>/director/refine")
     def refine(project_id: str):
@@ -2449,18 +2471,19 @@ def create_app(settings: Settings | None = None) -> Flask:
                     "invalid_variation", "Build a Short draft before requesting another cut.",
                 )
 
-        job = submit_project_job(
-            "refine",
-            project_id,
-            refine_project,
-            project_id,
-            store,
-            connections.job_settings(settings),
-            command,
-            validate_project=require_draft,
-            job_identity={"command": command},
-        )
-        return jsonify({"job": job.public()}), 202
+        with project_job_gate:
+            job = submit_project_job(
+                "refine",
+                project_id,
+                refine_project,
+                project_id,
+                store,
+                connections.job_settings(settings),
+                command,
+                validate_project=require_draft,
+                job_identity={"command": command},
+            )
+            return jsonify({"job": job.public()}), 202
 
     @app.post("/api/projects/<project_id>/render")
     def render(project_id: str):

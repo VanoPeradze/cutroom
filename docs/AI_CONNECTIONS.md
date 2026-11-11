@@ -71,3 +71,10 @@ Cancel stops CUTROOM from continuing the job and closes the local request. It ca
 ## Beta verification
 
 Automated tests cover opt-in consent, credential redaction, restart behavior, provider failures, cancellation, chunk timing and routing without local-model fallback. Responses are mocked: real provider inference has not been verified with a user API key in this change. No new claim is made about Hebrew accuracy or Story quality. Review transcripts, edits and exports before using them.
+
+
+## Independent transcription routing
+
+The Transcription button now controls speech separately from Story AI. New installations default to **On this computer only**. Existing saved cloud connections migrate once to **Follow existing AI connection**, preserving their existing audio-sharing choice; choosing Local explicitly overrides that path for audio. Local Story AI alone does not disable a separately selected Cloudflare speech engine. Check both choices.
+
+[Cloudflare transcription setup, consent and limitations](CLOUDFLARE_TRANSCRIPTION.md). Existing projects and edits are not rewritten when a connection changes. A deliberate rebuild uses the selected route and invalidates incompatible speech cache; changing only the Story model does not re-upload the same audio.

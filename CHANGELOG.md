@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.3 Beta - Hebrew-first transcription candidate (2026-11-11)
+
+- Hebrew in Balanced and Quality now uses the cached ivrit.ai model, with explicit download setup and actual-model RAM/VRAM checks. Lite stays lightweight; execution records expose fallback choices. No accuracy or speed improvement is claimed without real-audio evaluation.
+- Separate transcription from Story AI. Local is the fresh-install default and overrides legacy audio cloud routing. Optional Cloudflare and Cloudflare-to-cached-local use explicit destination-bound future-job consent, strict timing/WAV validation, bounded cancellable transport and upload-attempt provenance. Cloudflare is experimental, disabled by default and not live-service validated.
+- Fix explicit newline parity in caption preview. Required, pinned-font FFmpeg checks now cover four styles and portrait/wrapping; controlled browser checks cover both preview rendering paths. These are rendering checks, not speech-quality certification.
+- Preserve prior releases, source recordings, existing transcripts and manual edits. Story-only model changes no longer invalidate the speech cache.
+
+
 ## 1.3 Beta gray interface and Hebrew captions (2026-11-11)
 
 - Light mode now uses layered neutral gray surfaces instead of near-white panels, including home cards, source setup, tool controls and dialogs. Dark mode and video/caption colors are unchanged.

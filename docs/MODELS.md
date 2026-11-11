@@ -1,15 +1,15 @@
 # Models in CUTROOM
 
-Checked against code/defaults on 2026-09-12. These are choices, **not models all loaded together or bundled in the ZIP**. A developer's installed models do not transfer to testers.
+Speech policy updated against code on 2026-11-11; other sections retain their existing validation dates. These are choices, **not models all loaded together or bundled in the ZIP**. A developer's installed models do not transfer to testers.
 
 ## Speech
 
 | Model | When used | Role |
 | --- | --- | --- |
 | Whisper `base` | Lite; Auto on CPU, subject to recovery/resource rules | Light multilingual transcription. |
-| Whisper `small` | Balanced; Auto with CUDA, subject to memory checks | Heavier multilingual transcription; also used by relevant recovery paths. |
+| Whisper `small` | Non-Hebrew Balanced; Auto with CUDA when a cached large model is not suitable | Heavier multilingual transcription; also used by relevant recovery paths. |
 | Whisper `turbo` | General Quality transcription | Faster large-v3 variant through CTranslate2. |
-| `ivrit-ai/whisper-large-v3-turbo-ct2` | Quality with Hebrew selected; Quality auto-detection may refine Hebrew; bounded Auto refinement when cached and GPU-safe | Hebrew-specific transcription. |
+| `ivrit-ai/whisper-large-v3-turbo-ct2` | Hebrew Balanced and Quality; both may refine detected Hebrew; bounded Auto refinement when cached and GPU-safe | Hebrew-specific transcription. |
 | Silero VAD | Decoding uses `vad_filter=True` | Speech activity detection, not story selection. |
 
 The installed faster-whisper alias map resolves base/small to `Systran/faster-whisper-base` / `Systran/faster-whisper-small`, and turbo to `mobiuslabsgmbh/faster-whisper-large-v3-turbo`. Dependency updates may change aliases; record actual model metadata for comparisons.
@@ -18,13 +18,21 @@ This pipeline **transcribes**, not a complete cross-language subtitle translatio
 
 The ivrit.ai model card lists Apache-2.0. faster-whisper and CTranslate2 are inference engines, not extra editorial models. Silero is faster-whisper's small speech detector. [ivrit.ai](https://huggingface.co/ivrit-ai/whisper-large-v3-turbo-ct2), [faster-whisper](https://github.com/SYSTRAN/faster-whisper), [Silero](https://github.com/snakers4/silero-vad)
 
-### Hebrew Auto refinement (2026-11-10)
+### Hebrew-first profiles and resource checks (2026-11-11)
 
-Explicit Balanced remains Small and Lite remains Base. Auto can make one Hebrew-specific second pass after confident, unambiguous Hebrew detection (at least 0.62), on CUDA, with a known source duration no longer than hebrew_auto_gpu_max_seconds (default 3600 seconds). It requires an already installed model and a successful single-GPU free-memory measurement, using the Quality headroom threshold (default 6144 MiB). Unknown/remapped/multiple GPUs or a failed measurement skip this optional refinement.
+**Balanced and Quality use ivrit.ai when Hebrew is selected.** Lite remains Base. With automatic language detection, Balanced starts with multilingual Small and Quality with multilingual Turbo, then may refine detected Hebrew with ivrit.ai. Missing/refused/failed refinement keeps the original transcript and records a warning; the original is not overwritten by an incomplete candidate. Requested and actual model/device, fallback reason, and resource warnings are recorded in `execution` metadata.
 
-Automatic Quality loads and the Auto Hebrew second pass pass local_files_only=True to faster-whisper, so this upgrade cannot silently download model weights. Explicit Quality retains its existing first-use download behavior. No cloud provider is enabled by this change.
+**Install the Hebrew model explicitly from Setup > Local models before first use.** Every ivrit.ai load is cache-only, including explicit Quality and refinement. An absent or incomplete cache produces setup instructions, not a hidden model download. The checked model file is 1,617,884,968 bytes (about 1.62 GB decimal); this is not a RAM requirement. Weights are not bundled. Model card license: Apache-2.0. Metadata checked on 2026-11-11 at revision `72ad623a37947395efcc3933132353790e5a12f5`.
 
-A candidate must retain recognized English terms, pass the speech-quality gate, have complete and valid source timing, and overlap at least 80% of the original speech duration. Otherwise the original transcript is kept with a warning. Language confidence stays that of the original detection. These are safety checks, not proof of lower WER. Actual Hebrew accuracy, speed and peak VRAM still require consented audio evaluation.
+Resource checks follow the **actual model**, not the profile name. Large/Turbo/ivrit models require a successful, unambiguous single-GPU measurement of at least 6144 MiB free VRAM (or a higher configured Quality threshold). Unknown, remapped or multiple GPUs use CPU/INT8 instead, with a visible fallback reason, including when CUDA was explicitly configured. A Balanced threshold intended for Small cannot lower the large-model floor. Explicit Balanced/Quality never silently substitute Small for requested Hebrew.
+
+Large-model CPU execution checks available/reclaimable RAM on Windows, macOS and Linux. Known availability below 4096 MiB refuses the operation with instructions to close applications or choose Lite. An unavailable measurement is reported as `cpu_memory_unverified`, not as a passed readiness check. CPU decoding can be much slower. These conservative point-in-time safety floors are **not measured peak requirements or a fit/performance guarantee**; other applications and decode length can change memory use. A CUDA execution error may retry the same model on CPU after the RAM check; cancellation never retries.
+
+Auto keeps its lightweight CPU path. It only upgrades to an already installed large model; if GPU resources fall short, it returns to Small or Base for a long recording rather than loading a large model on CPU. The optional Hebrew second pass requires confident, unambiguous detection (at least 0.62), CUDA, a known duration no longer than `hebrew_auto_gpu_max_seconds` (default 3600 seconds), an installed model, and measured headroom. That optional pass never downloads weights.
+
+An Auto or Balanced refinement candidate must retain recognized English terms, pass the speech-quality gate, have complete and valid source timing, and overlap at least 80% of the original speech duration. All refinements retain the original language-detection confidence. These are safety checks, not proof of lower WER. **Actual Hebrew accuracy, correction time, speed and peak memory have not been measured by these offline routing tests.** Use the [consented transcript evaluation procedure](TRANSCRIPT_EVALUATION.md) before making quality claims.
+
+Cloud-to-local fallback uses a detached settings snapshot with `whisper_local_files_only=True`. Preflight inspects the runtime, the exact local plan's cache and resources without loading a model. Execution checks again, since available memory or cached files can change. No model is downloaded by this fallback. Cloud routing and consent remain a separate choice, not a consequence of choosing a Hebrew model.
 
 ## Story planning
 
@@ -66,9 +74,9 @@ FFmpeg/FFprobe, audio-level analysis, synchronization, timeline edits and most l
 
 ## What is worth changing?
 
-These are **evaluation recommendations, not measured CUTROOM improvements**. No models were replaced for this package.
+These are **evaluation recommendations, not measured CUTROOM improvements**. The Hebrew Balanced routing change above is a product choice, not an accuracy certification.
 
-1. **Keep defaults for the first beta.** Get comparable footage and feedback before increasing everyone's memory and download requirements.
+1. **Measure the Hebrew-first change.** Compare consented footage and feedback while keeping the Lite alternative and explicit download/resource disclosure.
 2. **Compare the supported Story 4B and 9B**, using the same corrected transcript and brief. Score useful moments, coverage, repetition, lost meaning and human correction time. More capacity may help reasoning but cannot recover speech missing from the transcript.
 3. **Compare Hebrew Quality (ivrit.ai) against Small** on consented clean/noisy and mixed Hebrew/English recordings. Measure WER/CER plus correction time before claiming language parity. [Evaluation procedure](TRANSCRIPT_EVALUATION.md)
 4. **Consider Whisper large-v3 as a quality experiment, not a default swap.** Upstream describes Turbo as a faster large-v3 derivative with an accuracy/speed tradeoff. The benefit on our footage still needs measurement. [Whisper models](https://github.com/openai/whisper#available-models-and-languages)

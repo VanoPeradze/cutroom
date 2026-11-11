@@ -3855,7 +3855,10 @@ def analyze_project(
         upgrade_mode, retry_language = _transcript_upgrade_request(
             performance_mode, spoken_language, transcript, transcript_quality,
         )
-        if not cloud_enabled(settings) and cuda_available(settings) and upgrade_mode:
+        from .transcription_adapter import engine as transcription_engine
+        speech_engine = transcription_engine(settings)
+        local_speech = speech_engine == "local" or (speech_engine == "legacy" and not cloud_enabled(settings))
+        if local_speech and cuda_available(settings) and upgrade_mode:
             retry_start = max(0.20 if reusable_context else 0.44, float(context.job.progress))
             retry_span = max(0.005, 0.575 - retry_start)
             context.update(retry_start, "Improving a low-confidence transcript on GPU")

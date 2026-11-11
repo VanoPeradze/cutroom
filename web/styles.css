@@ -1046,7 +1046,7 @@ body.studio-open { overflow: hidden; }
 .caption-choice-copy b { color:var(--paper); font-size:13px; }
 .caption-choice-copy small { color:var(--paper-dim); line-height:1.4; }
 .burn-caption-choice input { width:42px; height:22px; accent-color:var(--signal); flex:0 0 auto; }
-.preview-caption { --caption-preview-scale:1; position:absolute; z-index:7; left:7%; right:7%; bottom:7%; padding:7px 10px; text-align:center; color:#fff; font-weight:800; font-size:clamp(14px,2.0vw,28px); line-height:1.18; text-shadow:0 2px 3px #000,0 0 9px #000,1px 1px 0 #000,-1px -1px 0 #000; transform:scale(var(--caption-preview-scale)); transform-origin:center bottom; pointer-events:none; unicode-bidi:plaintext; }
+.preview-caption { --caption-preview-scale:1; position:absolute; z-index:7; left:7%; right:7%; bottom:7%; padding:7px 10px; text-align:center; color:#fff; font-weight:800; font-size:clamp(14px,2.0vw,28px); line-height:1.18; text-shadow:0 2px 3px #000,0 0 9px #000,1px 1px 0 #000,-1px -1px 0 #000; transform:scale(var(--caption-preview-scale)); transform-origin:center bottom; pointer-events:none; unicode-bidi:plaintext; white-space:pre-line; }
 .preview-stage[data-aspect="9:16"] .preview-caption { bottom:8%; font-size:clamp(16px,3.1vw,30px); }
 .preview-caption[data-caption-style="clean"] { padding:5px 8px; background:transparent; border-radius:0; font-weight:600; text-shadow:0 2px 3px rgba(0,0,0,.92),0 0 5px rgba(0,0,0,.74); }
 .preview-caption[data-caption-style="bold"] { background:transparent; font-weight:900; text-shadow:0 2px 3px #000,0 0 9px #000,1px 1px 0 #000,-1px -1px 0 #000; }

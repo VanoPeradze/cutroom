@@ -250,6 +250,7 @@ test("late startup checks do not override a project opened from the welcome scre
     applyTranslations = () => ({});
     initWelcome = () => ({});
     initLocalModels = () => null;
+    globalThis.initTranscriptionEngine = () => ({setStatus() {}, setStoryConnection() {}});
     initWorkspace = () => {};
     globalThis.initNumericScrub = () => {};
     initTrackProtection = () => null;

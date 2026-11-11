@@ -123,6 +123,8 @@ def _default_preferences() -> dict[str, str]:
 
 class ConnectionStore:
     def __init__(self, settings):
+        from .transcription_adapter import EngineStore
+        self.transcription = EngineStore(settings)
         self.path = settings.data_dir / "ai-connection.json"
         self.lock = threading.RLock()
         self.key = ""
@@ -254,6 +256,7 @@ class ConnectionStore:
     def job_settings(self, settings):
         raw = copy.deepcopy(settings.raw)
         raw["ai"]["cloud_connection"] = self.snapshot()
+        raw["ai"].update(self.transcription.snapshot())
         return replace(settings, raw=raw)
 
 

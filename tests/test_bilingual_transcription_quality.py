@@ -225,6 +225,7 @@ def test_enabled_cloud_is_called_once_without_local_recovery(monkeypatch):
 
 
 def test_existing_hebrew_model_refinement_cannot_transliterate_trusted_english(monkeypatch):
+    monkeypatch.setattr(transcription, "_available_cpu_memory_mb", lambda: 16384.0)
     original = _decoded(logprob=-0.2)
     original["model"] = "turbo"
     candidate = _decoded(text="אני מסביר עכשיו איך עובדים עם אופן איי בתוך הפרויקט שלנו", logprob=-0.1)

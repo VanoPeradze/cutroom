@@ -85,8 +85,7 @@ def test_cached_hebrew_refines_auto_even_without_generic_turbo(monkeypatch, sett
 
 
 @pytest.mark.parametrize("mode,device,expected", [
-    ("balanced", "cuda", "small"), ("lite", "cuda", "base"),
-    ("balanced", "cpu", "small"), ("lite", "cpu", "base"),
+    ("lite", "cuda", "base"), ("lite", "cpu", "base"),
     ("auto", "cpu", "small"),
 ])
 def test_lightweight_modes_and_cpu_do_not_refine(monkeypatch, settings, gpu, mode, device, expected):
@@ -219,10 +218,12 @@ def test_initial_auto_quality_load_is_also_cache_only(monkeypatch, settings, gpu
     assert calls[0][1]["local_files_only"] is True
 
 
-def test_explicit_quality_retains_existing_first_use_behavior(monkeypatch, settings, gpu):
-    value, calls = run_decode(monkeypatch, settings, mode="quality")
+@pytest.mark.parametrize("mode", ["balanced", "quality"])
+def test_explicit_profiles_refinement_requires_cached_hebrew_model(monkeypatch, settings, gpu, mode):
+    value, calls = run_decode(monkeypatch, settings, mode=mode)
     assert len(calls) == 2 and value["hebrew_refined"]
-    assert all("local_files_only" not in kwargs for _args, kwargs in calls)
+    assert "local_files_only" not in calls[0][1]
+    assert calls[1][1]["local_files_only"] is True
 
 
 @pytest.mark.parametrize("requested,configured,expected", [(True, False, True), (False, True, True), (False, False, False)])
@@ -233,6 +234,7 @@ def test_loader_passes_offline_flag_to_faster_whisper(monkeypatch, settings, req
         return object()
     monkeypatch.setitem(sys.modules, "faster_whisper", SimpleNamespace(WhisperModel=model))
     monkeypatch.setattr(transcription, "_MODEL_CACHE", {})
+    monkeypatch.setattr(local_models, "speech_installed", lambda _model: True)
     settings.ai["whisper_local_files_only"] = configured
     transcription._load_model(settings, "cpu", "int8", "synthetic-model", local_files_only=requested)
     assert calls[0][1].get("local_files_only", False) is expected

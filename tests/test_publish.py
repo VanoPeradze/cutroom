@@ -10,7 +10,7 @@ from scripts import publish
 
 
 @pytest.mark.parametrize("name", ["data/project.json", "nested/.env", ".env.local", ".tools/run.py",
-                                  "web/recording.mp4", "weights.gguf", "my.key", "ai-connection.json",
+                                  "web/recording.mp4", "weights.gguf", "my.key", "ai-connection.json", "transcription-engine.json",
                                   "a/../b.py", "/outside.py", "a\\b.py", "C:/outside.py"])
 def test_rejects_private_runtime_or_noncanonical_paths(name):
     with pytest.raises(publish.PublishError):

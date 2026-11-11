@@ -30,6 +30,8 @@ DEFAULTS: dict[str, Any] = {
     "visual_moments": {"budget": {"lite": 48, "balanced": 120, "quality": 200}, "max_seconds": 900},
     "ai": {
         "enabled": True,
+        "transcription_engine": "legacy",
+        "cloudflare_transcription": {"model": "@cf/openai/whisper-large-v3-turbo"},
         "ollama_url": "http://127.0.0.1:11434",
         "auto_start_ollama": True,
         "editor_model": "qwen3.5:4b",

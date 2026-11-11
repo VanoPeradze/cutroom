@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import importlib.util
 import json
 import os
 import math
@@ -11,6 +12,7 @@ import tempfile
 import threading
 import time
 from collections import defaultdict
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, Callable
 
@@ -628,7 +630,19 @@ def _load_model(
                 from faster_whisper import WhisperModel
             except ImportError as exc:
                 raise RuntimeError("faster-whisper is not installed. Run setup again or install requirements-ai.txt") from exc
-            _MODEL_CACHE[key] = WhisperModel(model_name, device=device, compute_type=compute, **({"local_files_only": True} if local_files_only or settings.ai.get("whisper_local_files_only") else {}))
+            hebrew_model = model_name == str(settings.ai.get("hebrew_whisper_model") or "")
+            cached_only = local_files_only or settings.ai.get("whisper_local_files_only") or hebrew_model
+            if cached_only:
+                from .local_models import speech_installed
+                if not speech_installed(model_name):
+                    raise RuntimeError(
+                        f"Speech model {model_name} is not installed. Open Setup > Local models "
+                        "and download it explicitly, then retry. "
+                        + ("The default Hebrew ivrit.ai download is approximately 1.62 GB. " if hebrew_model else "")
+                        + "Lite uses a smaller model. No model was downloaded."
+                    )
+            _MODEL_CACHE[key] = WhisperModel(model_name, device=device, compute_type=compute,
+                                           **({"local_files_only": True} if cached_only else {}))
     return _MODEL_CACHE[key], model_name, device, compute
 
 
@@ -651,8 +665,8 @@ def _auto_quality_ready(
 def _auto_hebrew_refinement_ready(settings: Settings, result: dict[str, Any], device: str, duration: float) -> bool:
     """Optional second pass: cached model, confident Hebrew and measured headroom.
 
-    Explicit Balanced/Lite choices stay lightweight. Auto never downloads this
-    upgrade, guesses a device's free VRAM or refines unbounded recordings.
+    Auto never downloads this upgrade, guesses a device's free VRAM or
+    refines unbounded recordings. Lite remains lightweight.
     """
     detection = result.get("language_detection")
     detection = detection if isinstance(detection, dict) else {}
@@ -673,12 +687,157 @@ def _model_for_request(settings: Settings, mode: str, requested_language: str | 
     default = str(model_map.get(mode) or settings.ai.get("whisper_model", "base"))
     hebrew_model = str(settings.ai.get("hebrew_whisper_model") or "").strip()
     if requested_language == "he" and hebrew_model:
-        # Keep the heavyweight Hebrew-specific model for explicit Quality mode.
-        # Balanced Small/CUDA with language locked to Hebrew is substantially
-        # lighter and is the automatic recovery path for weak Base transcripts.
-        if mode == "quality":
+        # Hebrew is first-class in both normal editing profiles. Lite remains
+        # lightweight; Auto upgrades only from an already installed model.
+        if mode in {"balanced", "quality"}:
             return hebrew_model
     return default
+
+
+def _large_speech_model(settings: Settings, model: str) -> bool:
+    """Conservative resource class, independent of the editing-profile label."""
+    # Caption-only jobs can temporarily assign Base/Small as the Hebrew model;
+    # those recognized lightweight models must not inherit the ivrit budget.
+    if model.casefold() in {"tiny", "base", "small", "tiny.en", "base.en", "small.en",
+                            "systran/faster-whisper-tiny", "systran/faster-whisper-base", "systran/faster-whisper-small"}:
+        return False
+    return bool(model and (
+        model == str(settings.ai.get("hebrew_whisper_model") or "")
+        or "large" in model.casefold() or "turbo" in model.casefold()
+    ))
+
+
+def _available_cpu_memory_mb() -> float | None:
+    """Read available/reclaimable host RAM without dependencies or inference.
+
+    This is a point-in-time lower-bound guard, not a promise that native decoding
+    will fit. Unknown platforms/probe failures remain explicitly unknown.
+    """
+    try:
+        if sys.platform == "win32":
+            import ctypes
+
+            class MemoryStatus(ctypes.Structure):
+                _fields_ = [("length", ctypes.c_ulong), ("load", ctypes.c_ulong)] + [
+                    (name, ctypes.c_ulonglong) for name in (
+                        "total_phys", "avail_phys", "total_page", "avail_page",
+                        "total_virtual", "avail_virtual", "avail_extended",
+                    )
+                ]
+
+            status = MemoryStatus()
+            status.length = ctypes.sizeof(status)
+            if not ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status)):
+                return None
+            value = status.avail_phys / (1024 * 1024)
+        elif sys.platform == "darwin":
+            probe = subprocess.run(["/usr/bin/vm_stat"], capture_output=True,
+                                   text=True, timeout=2.0, check=False)
+            page_size = re.search(r"page size of (\d+) bytes", probe.stdout)
+            pages = [re.search(rf"{name}:\s+(\d+)\.", probe.stdout) for name in
+                     ("Pages free", "Pages inactive", "Pages speculative")]
+            if probe.returncode or not page_size or any(row is None for row in pages):
+                return None
+            value = int(page_size.group(1)) * sum(int(row.group(1)) for row in pages) / (1024 * 1024)
+        elif sys.platform.startswith("linux"):
+            match = re.search(r"^MemAvailable:\s+(\d+) kB", Path("/proc/meminfo").read_text(), re.M)
+            if not match:
+                return None
+            value = int(match.group(1)) / 1024
+        else:
+            return None
+        return value if math.isfinite(value) and value >= 0 else None
+    except (OSError, ValueError, AttributeError, subprocess.TimeoutExpired):
+        return None
+
+
+def _model_resource_check(settings: Settings, model: str, device: str, compute: str, *, check_cpu: bool = True) -> tuple[str, str, str | None, list[str]]:
+    """Check the actual model, even when it was selected by Balanced or detected language."""
+    if not _large_speech_model(settings, model):
+        return device, compute, None, []
+    reason = None
+    warnings: list[str] = []
+    if device == "cuda":
+        # Do not infer CUDA-0 headroom from another GPU, a remapped index or a
+        # missing measurement. The 6 GiB safety floor cannot be lowered by a
+        # Balanced-profile override intended for Small.
+        configured = settings.ai.get("whisper_cuda_min_free_mb", {})
+        threshold = configured.get("quality", 6144) if isinstance(configured, dict) else configured
+        minimum = max(6144.0, _finite_number(threshold, 6144.0))
+        if not _cuda_has_capacity(settings, "quality", minimum_free_mb=minimum, require_measurement=True):
+            device, compute, reason = "cpu", "int8", "large_model_cuda_headroom"
+    if device == "cpu" and check_cpu:
+        available = _available_cpu_memory_mb()
+        if available is not None and available < 4096:
+            raise RuntimeError(
+                "The selected large speech model needs at least 4 GiB available RAM as a safety check. "
+                "Close memory-heavy applications and retry, or select Lite. "
+                "No smaller model was substituted."
+            )
+        if available is None:
+            warnings.append("cpu_memory_unverified")
+        warnings.append("large_model_cpu_may_be_slow")
+    return device, compute, reason, warnings
+
+
+def _local_request_plan(settings: Settings, language: str | None, performance_mode: str, duration: float = 0.0) -> dict[str, Any]:
+    requested_language = None if not language or language == "auto" else _language_code(language)
+    requested_mode = str(performance_mode or settings.ai.get("performance_mode", "auto"))
+    if requested_mode not in {"auto", "lite", "balanced", "quality"}:
+        requested_mode = "auto"
+    has_cuda = cuda_available(settings)
+    mode = requested_mode
+    if mode == "auto":
+        mode = "balanced" if has_cuda else "lite"
+        if has_cuda and _auto_quality_ready(settings, requested_language):
+            mode = "quality"
+    device, compute = _resolve_device(settings, mode)
+    # An uncached Hebrew upgrade must not turn Auto's Small pass into a large
+    # first-use download. Keep Hebrew language locking, but not the upgrade.
+    model_language = None if requested_mode == "auto" and mode == "balanced" else requested_language
+    model = _model_for_request(settings, mode, model_language, device)
+    requested_model = model
+    device, compute, reason, warnings = _model_resource_check(settings, model, device, compute, check_cpu=False)
+    if not reason and str(settings.ai.get("whisper_device", "auto")) == "auto" and has_cuda and device == "cpu":
+        reason = "cuda_headroom"
+    threshold = max(60.0, _finite_number(settings.ai.get("whisper_cpu_lite_threshold_seconds", 600), 600))
+    if requested_mode == "auto" and reason:
+        mode = "lite" if _finite_number(duration) >= threshold else "balanced"
+        model = _model_for_request(settings, mode, None, device)
+    device, compute, second_reason, warnings = _model_resource_check(settings, model, device, compute)
+    reason = reason or second_reason
+    return {"requested_mode": requested_mode, "mode": mode, "model": model,
+            "requested_model": requested_model, "language": requested_language,
+            "device": device, "compute": compute, "fallback_reason": reason,
+            "warnings": warnings, "has_cuda": has_cuda, "cpu_lite_threshold": threshold}
+
+
+def local_cached_fallback_settings(settings: Settings, language: str | None = None,
+                                   performance_mode: str = "auto", duration: float = 0.0) -> Settings:
+    """Snapshot an entirely local, installed-model fallback before cloud upload.
+
+    Readiness does not load a model, fetch weights or send audio. Inference checks
+    resources again because memory can change while a cloud request runs.
+    """
+    from .local_models import speech_installed
+
+    for package in ("faster_whisper", "ctranslate2"):
+        try:
+            available = importlib.util.find_spec(package) is not None
+        except (ImportError, ValueError):
+            available = False
+        if not available:
+            raise RuntimeError("Local transcription fallback is unavailable. Run CUTROOM setup to install the speech runtime.")
+    raw = copy.deepcopy(settings.raw)
+    raw.setdefault("ai", {})["whisper_local_files_only"] = True
+    frozen = replace(settings, raw=raw)
+    plan = _local_request_plan(frozen, language, performance_mode, duration)
+    if not speech_installed(plan["model"]):
+        raise RuntimeError(
+            f"Local transcription fallback needs the installed model {plan['model']}. "
+            "Open Setup > Local models and download it explicitly before enabling fallback."
+        )
+    return frozen
 
 
 def _stop_process(process: subprocess.Popen[Any]) -> None:
@@ -1368,47 +1527,26 @@ def _transcribe_in_process(
     cancel_check: Callable[[], None] | None = None,
 ) -> dict[str, Any]:
     requested_language = None if not language or language == "auto" else _language_code(language)
+    if cancel_check:
+        cancel_check()
     if os.environ.get("CUTROOM_FAKE_TRANSCRIPT"):
         fake = _fake_transcript(media_path)
         return _resolve_language_evidence(fake, requested_language)
     configured_device = str(settings.ai.get("whisper_device", "auto"))
-    mode = str(performance_mode or settings.ai.get("performance_mode", "auto"))
-    if mode not in {"auto", "lite", "balanced", "quality"}:
-        mode = "auto"
-    requested_mode = mode
-    has_cuda = cuda_available(settings)
-    if mode == "auto":
-        # Keep CPU-only machines on the light path. A CUDA machine can run the
-        # balanced multilingual model efficiently even for long recordings; using
-        # Base/CPU solely because the source is long sacrifices both speed and the
-        # transcript quality that semantic editing depends on.
-        mode = "balanced" if has_cuda else "lite"
-        # Semantic editing depends on the transcript. A capable GPU with Turbo
-        # (or the Hebrew Turbo model) already installed uses it automatically.
-        if has_cuda and _auto_quality_ready(settings, requested_language):
-            mode = "quality"
-
-    preferred_device, preferred_compute = _resolve_device(settings, mode)
-    requested_model = _model_for_request(settings, mode, requested_language, preferred_device)
-    resource_fallback = bool(
-        configured_device == "auto"
-        and has_cuda
-        and preferred_device == "cpu"
-    )
-    try:
-        cpu_lite_threshold = float(settings.ai.get("whisper_cpu_lite_threshold_seconds", 600.0))
-    except (TypeError, ValueError):
-        cpu_lite_threshold = 600.0
-    if requested_mode == "auto" and resource_fallback and float(duration or 0.0) >= max(60.0, cpu_lite_threshold):
-        # A long Small/Turbo decode on CPU can be slower and heavier than useful.
-        # Base/INT8 is the predictable fallback when CUDA lacks safe headroom.
-        mode = "lite"
+    plan = _local_request_plan(settings, language, performance_mode, duration)
+    requested_mode, mode = plan["requested_mode"], plan["mode"]
+    has_cuda = plan["has_cuda"]
+    preferred_device, preferred_compute = plan["device"], plan["compute"]
+    requested_model = plan["requested_model"]
+    resource_fallback = bool(plan["fallback_reason"])
+    cpu_lite_threshold = plan["cpu_lite_threshold"]
     attempts: list[tuple[str, str]] = [(preferred_device, preferred_compute)]
     if configured_device == "auto" and preferred_device != "cpu":
         attempts.append(("cpu", "int8"))
 
     errors: list[str] = []
     failed_coverage: dict[str, Any] | None = None
+    tried: set[tuple[str, str, str]] = set()
     for device, compute in attempts:
         attempt_mode = mode
         attempt_resource_fallback = resource_fallback
@@ -1417,24 +1555,34 @@ def _transcribe_in_process(
             and requested_mode == "auto"
             and configured_device == "auto"
             and has_cuda
-            and float(duration or 0.0) >= max(60.0, cpu_lite_threshold)
         ):
-            attempt_mode = "lite"
+            attempt_mode = "lite" if _finite_number(duration) >= cpu_lite_threshold else "balanced"
             attempt_resource_fallback = True
-        model_name_requested = _model_for_request(settings, attempt_mode, requested_language, device)
+        model_language = None if requested_mode == "auto" and attempt_mode == "balanced" else requested_language
+        model_name_requested = _model_for_request(settings, attempt_mode, model_language, device)
         try:
+            device, compute, model_fallback, resource_warnings = _model_resource_check(
+                settings, model_name_requested, device, compute,
+            )
+            attempt_resource_fallback = attempt_resource_fallback or bool(model_fallback)
+            attempt_key = (model_name_requested, device, compute)
+            if attempt_key in tried:
+                continue
+            tried.add(attempt_key)
             if cancel_check:
                 cancel_check()
             if progress:
-                progress(0.02, f"Loading transcription model on {device}")
+                progress(0.02, f"Loading {model_name_requested} on {device}" +
+                         ("; large-model CPU processing may be slow" if resource_warnings else ""))
             result = _transcribe_once(
                 media_path, settings, model_name_requested, device, compute,
                 requested_language, attempt_mode, progress, cancel_check, duration,
                 **({"local_files_only": True}
-                   if requested_mode == "auto" and attempt_mode == "quality" else {}),
+                   if (requested_mode == "auto" and attempt_mode == "quality")
+                   or model_name_requested == str(settings.ai.get("hebrew_whisper_model") or "") else {}),
             )
 
-            # Quality can refine detected Hebrew. Auto may also refine a
+            # Balanced/Quality can refine detected Hebrew. Auto may also refine a
             # completed lightweight pass, but only using an already cached model
             # and independently measured GPU headroom. Preserve the original
             # until the candidate passes language, quality and timing gates.
@@ -1446,7 +1594,7 @@ def _transcribe_in_process(
                 and hebrew_model
                 and model_name_requested != hebrew_model
                 and (
-                    requested_mode == "quality"
+                    requested_mode in {"balanced", "quality"}
                     or (
                         requested_mode == "auto"
                         and attempt_mode != "lite"
@@ -1467,11 +1615,16 @@ def _transcribe_in_process(
                     else {}
                 )
                 try:
+                    refine_device, refine_compute, refine_fallback, refine_warnings = _model_resource_check(
+                        settings, hebrew_model, device, compute,
+                    )
+                    if progress and refine_fallback:
+                        progress(0.48, "Hebrew model needs more GPU headroom; refining on CPU (may be slow)")
                     refined = _transcribe_once(
-                        media_path, settings, hebrew_model, device, compute,
+                        media_path, settings, hebrew_model, refine_device, refine_compute,
                         "he", attempt_mode, progress, cancel_check, duration,
                         recovery_state=result.get("quality_recovery"),
-                        **({"local_files_only": True} if requested_mode == "auto" else {}),
+                        local_files_only=True,
                     )
                     refined["language"] = "he"
                     # The second pass is intentionally language-locked; its 1.0
@@ -1491,7 +1644,7 @@ def _transcribe_in_process(
                     refined["language_detection"] = detection
                     refined_quality = transcript_quality_report(refined)
                     auto_timing_rejection = None
-                    if requested_mode == "auto":
+                    if requested_mode in {"auto", "balanced"}:
                         source_duration = _finite_number(duration) or _finite_number(result.get("duration"))
                         auto_timing_rejection = _candidate_timing_rejection(refined, source_duration)
                         if not auto_timing_rejection and not _speech_timing_preserved(result, refined, source_duration):
@@ -1506,7 +1659,7 @@ def _transcribe_in_process(
                             + auto_timing_rejection
                         )
                     elif (
-                        (requested_mode == "auto" or transcript_quality_report(result)["usable_for_story"])
+                        (requested_mode in {"auto", "balanced"} or transcript_quality_report(result)["usable_for_story"])
                         and not refined_quality["usable_for_story"]
                     ):
                         result["hebrew_refine_warning"] = (
@@ -1515,12 +1668,15 @@ def _transcribe_in_process(
                         )
                     else:
                         refined["hebrew_refined"] = True
+                        resource_warnings = list(dict.fromkeys(resource_warnings + refine_warnings))
+                        model_fallback = refine_fallback or model_fallback
+                        attempt_resource_fallback = attempt_resource_fallback or bool(refine_fallback)
                         result = refined
                 except JobCancelled:
                     raise
                 except Exception as refine_exc:
-                    # The generic transcript is still useful; a first-use model
-                    # download failure must not discard completed work.
+                    # A missing cached model or failed refinement must not
+                    # discard completed generic transcription.
                     result["hebrew_refine_warning"] = str(refine_exc)
 
             if progress:
@@ -1539,9 +1695,11 @@ def _transcribe_in_process(
                 "actual_device": result.get("device", device),
                 "actual_compute_type": result.get("compute_type", compute),
                 "prior_attempt_errors": list(errors),
+                "resource_warnings": list(dict.fromkeys(plan["warnings"] + resource_warnings)),
+                "model_policy": "hebrew-balanced-quality-v2",
             }
             if attempt_resource_fallback:
-                result["resource_fallback"] = "cuda_headroom"
+                result["resource_fallback"] = model_fallback or plan["fallback_reason"] or ("device_error" if errors else "cuda_headroom")
             elif errors:
                 result["resource_fallback"] = "device_error"
             if result.get("resource_fallback"):
@@ -1566,8 +1724,13 @@ class TranscriptionWorkerStalled(RuntimeError):
 
 
 def _worker_settings_payload(settings: Settings, raw: dict[str, Any] | None = None) -> dict[str, Any]:
+    local_raw = copy.deepcopy(raw if raw is not None else settings.raw)
+    local_ai = local_raw.setdefault("ai", {})
+    local_ai.pop("cloudflare_connection", None)
+    local_ai["cloud_connection"] = {"mode": "local"}
+    local_ai["transcription_engine"] = "local"
     return {
-        "raw": copy.deepcopy(raw if raw is not None else settings.raw),
+        "raw": local_raw,
         "root": str(settings.root),
         "data_dir": str(settings.data_dir),
         "projects_dir": str(settings.projects_dir),
@@ -1640,6 +1803,8 @@ def _run_transcription_worker(
             str(progress_path),
         ]
         environment = os.environ.copy()
+        for credential in ("CUTROOM_CF_ACCOUNT_ID", "CUTROOM_CF_API_TOKEN", "CUTROOM_GROQ_API_KEY"):
+            environment.pop(credential, None)
         environment["CUTROOM_TRANSCRIPTION_WORKER"] = "1"
         environment["PYTHONUTF8"] = "1"
         if ai.get("whisper_local_files_only"):
@@ -1807,8 +1972,86 @@ def transcribe(
     cancel_check: Callable[[], None] | None = None,
 ) -> dict[str, Any]:
     from .cloud_ai import enabled, transcribe_cloud
-    if enabled(settings):
+    from .transcription_adapter import engine, transcribe_cloud_whisper, CloudTranscriptionError
+    if cancel_check:
+        cancel_check()
+    selected_engine = engine(settings)
+    # Speech routing is independent of Story AI. Explicit Local wins even when
+    # the old Groq/compatible connection is active for transcript text.
+    if selected_engine == "legacy" and enabled(settings):
         return transcribe_cloud(media_path, settings, language, progress, duration, cancel_check)
+    cloud_failure = None
+    local_settings = settings
+    if selected_engine == "auto":
+        try:
+            local_cached_fallback_settings(settings, language, performance_mode, duration)
+        except JobCancelled:
+            raise
+        except RuntimeError as unavailable:
+            raise CloudTranscriptionError(
+                f"Cloudflare with local fallback needs a ready cached local model before any upload: {unavailable} No audio was sent."
+            ) from unavailable
+    if selected_engine in {"cloud", "auto"}:
+        try:
+            return transcribe_cloud_whisper(media_path, settings, language, progress, duration, cancel_check)
+        except CloudTranscriptionError as error:
+            if selected_engine != "auto" or not error.fallback_allowed:
+                raise
+            if cancel_check:
+                cancel_check()
+            # Readiness checks are local/cache-only. Failure never initiates a
+            # model download or silently sends the recording to another cloud.
+            try:
+                local_settings = local_cached_fallback_settings(settings, language, performance_mode, duration)
+            except JobCancelled:
+                raise
+            except RuntimeError as unavailable:
+                raise CloudTranscriptionError(
+                    f"{error} Cached local fallback is unavailable: {unavailable} "
+                    f"Cloud upload attempts: {error.uploaded_parts}; uploads/charges cannot be undone.",
+                    uploaded_parts=error.uploaded_parts,
+                ) from unavailable
+            cloud_failure = error
+            if progress:
+                progress(0.0, f"Cloudflare failed after {error.uploaded_parts} upload attempt(s). Using cached local speech; uploads/charges cannot be undone.")
+    try:
+        result = _transcribe_local(media_path, local_settings, language, progress, performance_mode, duration, cancel_check)
+    except JobCancelled:
+        raise
+    except Exception as error:
+        if cloud_failure is not None:
+            raise CloudTranscriptionError(
+                f"Cloudflare and cached local transcription failed. Cloud upload attempts: {cloud_failure.uploaded_parts}; uploads/charges cannot be undone. Local error: {error}",
+                uploaded_parts=cloud_failure.uploaded_parts,
+            ) from error
+        raise
+    execution = result.setdefault("execution", {})
+    execution["transcription_engine"] = selected_engine
+    execution["actual_transcription_engine"] = "local"
+    if cloud_failure is not None:
+        execution["cloud_attempt"] = {
+            "provider": "cloudflare", "uploaded_parts": cloud_failure.uploaded_parts,
+            "reason": str(cloud_failure), "uploads_may_have_occurred": cloud_failure.uploaded_parts > 0,
+        }
+        execution["transcription_fallback"] = "cloudflare_to_cached_local"
+    return result
+
+
+def _transcribe_local(
+    media_path: Path,
+    settings: Settings,
+    language: str | None = None,
+    progress: Callable[[float, str], None] | None = None,
+    performance_mode: str = "auto",
+    duration: float = 0.0,
+    cancel_check: Callable[[], None] | None = None,
+) -> dict[str, Any]:
+    # Native workers serialize settings to an owned temporary request file.
+    # Speech on this computer has no reason to carry any cloud credentials.
+    settings = copy.deepcopy(settings)
+    settings.ai["cloud_connection"] = {"mode": "local"}
+    settings.ai.pop("cloudflare_connection", None)
+    settings.ai["transcription_engine"] = "local"
     isolate = bool(settings.ai.get("whisper_isolate_process", True))
     can_isolate = all(hasattr(settings, name) for name in ("raw", "root", "data_dir", "cache_dir"))
     if (
