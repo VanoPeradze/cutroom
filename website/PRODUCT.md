@@ -2,11 +2,11 @@
 
 CUTROOM is a free, open-source local video editor. It supports editable cuts, captions, source/layer audio mixing, optional AI drafts and MP4 export. The website explains and distributes it; it does not run the editor or accept recordings.
 
-The maintained static HTML/CSS/JavaScript website is `website/public` in VanoPeradze/cutroom, deployed through its existing Expo Hosting project at https://cutroom-studio.expo.app/. English is the default and `?lang=he` switches to Hebrew/RTL without browser storage. The November redesign replaces the previous dark split hero with a cool-white, centered layout, locally hosted licensed fonts and a functional workspace tour. See DESIGN.md for the current visual direction and browser review scope.
+The maintained static HTML/CSS/JavaScript website is `website/public` in VanoPeradze/cutroom, deployed through its existing Expo Hosting project at https://cutroom-studio.expo.app/. English is the default and `?lang=he` switches to Hebrew/RTL without browser storage. The screening-room redesign uses a graphite and copper opening, a lightweight original animated film-frame field, warm paper sections, locally hosted licensed fonts and a functional workspace tour. See DESIGN.md for the current visual direction and browser review scope.
 
 ## Current package identity
 
-The 8 November 1.3 beta update is prepared from exact product source `d2c6f6f8b649c0a9c8b23e7b0b75415da78a5b00`. Its tag is `v1.3-beta-20261108-studio1`. Windows uses `CUTROOM-1.3-Beta-Windows-d2c6f6f.zip`; Mac uses `CUTROOM-1.3-Beta-combined-d2c6f6f.zip` and its `mac/` folder; `SOURCE-d2c6f6f.zip` carries matching source. There is no standalone Mac archive. Public files must remain copies of the frozen, qualified archive bytes, never rebuilds. `release.json` records exact sizes, hashes, native evidence and accepted limits. Preserve previous public downloads and historical mirrors for rollback.
+The current 11 November 1.3 beta uses exact product source `ba67003726e80e0d394b1927b6b710f191a60157`. Its tag is `v1.3-beta-20261111-hebrew1`. Windows uses `CUTROOM-1.3-Beta-Windows-ba67003.zip`; Mac uses `CUTROOM-1.3-Beta-combined-ba67003.zip` and its `mac/` folder; `SOURCE-ba67003.zip` carries matching source. There is no standalone Mac archive. Public files must remain copies of the frozen, qualified archive bytes, never rebuilds. `release.json` records exact sizes, hashes, native evidence and accepted limits. Preserve previous public downloads and historical mirrors for rollback.
 
 ## Current behavior
 

@@ -16,7 +16,7 @@
 
 /* The privacy text is unchanged; align the legal surface with the current site. */
 .cutting-room .privacy-page{max-width:980px}
-.cutting-room .privacy-heading h1{max-width:none;text-align:start;font-weight:550;letter-spacing:-.045em}
+.cutting-room .privacy-heading h1{max-width:none;text-align:start;font-weight:550;letter-spacing:-.035em}
 .cutting-room .privacy-heading h1 span{font-family:var(--font);font-size:.8em}
 .cutting-room .privacy-page h2{font-size:32px;line-height:1.3;letter-spacing:-.035em}
 .cutting-room .privacy-page h3{font-weight:550;letter-spacing:-.02em}

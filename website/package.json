@@ -6,8 +6,8 @@
     "prepare:assets": "node prepare-assets.mjs",
     "check:assets": "node prepare-assets.mjs --check",
     "prepare:download": "node prepare-download.mjs",
-    "test": "node --test prepare-assets.test.mjs prepare-download.test.mjs site.test.mjs",
-    "check": "npm run prepare:assets && node verify.mjs && node --check public/site.js",
+    "test": "node --test prepare-assets.test.mjs prepare-download.test.mjs site.test.mjs cinema.test.mjs",
+    "check": "npm run prepare:assets && node verify.mjs && node --check public/site.js && node --check public/cinema.js",
     "deploy": "npm run prepare:download && npm test && npm run check && npx --yes eas-cli@24.7.0 deploy --export-dir public --prod --non-interactive"
   }
 }

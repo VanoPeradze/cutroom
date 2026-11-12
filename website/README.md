@@ -7,7 +7,13 @@ This folder is the maintained website source inside the public [CUTROOM reposito
 It does not run the editor, receive footage, process video, or handle user API keys.
 The previous separate website checkout is not needed for future updates.
 
-## 1.3 beta - 11 November 2026
+## Screening-room website redesign
+
+A substantial visual redesign replaces the previous white/mint composition with graphite, warm paper and copper, an original lightweight animated film-frame field, immediate platform downloads, a real workspace tour and bilingual installation guidance. No tracking or external runtime was added. Motion can be paused from the opening, mobile menu or footer and respects the device's reduced-motion setting. See [DESIGN.md](DESIGN.md) for rationale and [WEBSITE-REDESIGN-VALIDATION.md](WEBSITE-REDESIGN-VALIDATION.md) for verified checks and remaining limits.
+
+This website change does not rebuild the application or change the current release pins: `v1.3-beta-20261111-hebrew1`, source `ba67003726e80e0d394b1927b6b710f191a60157`. The 3 current and 48 historical archives remain pinned to their existing exact bytes. Historical app screenshots stay visibly dated; they are not presented as captures of this release.
+
+## Previous 1.3 beta - 11 November 2026 gray update (history)
 
 The gray and Hebrew update uses product source `4fc52aef210cca74722b356c852a1cc5a24ad371` and release tag `v1.3-beta-20261111-gray1`. The exact Windows, combined Mac/Windows and source ZIPs are pinned in `release.json`. Release qualification and publication status must be checked there; the review run is [42965402773](https://github.com/VanoPeradze/cutroom/actions/runs/42965402773).
 
@@ -54,7 +60,7 @@ Windows clean-install/export/restart/persistence qualification is **incomplete**
 - `release.json`: exact filenames, sizes, checksums and provenance for Windows, the shared Mac/combined archive and the source ZIP, their tag-specific GitHub URLs and retained Expo mirrors.
 - `prepare-download.mjs`: restores those approved artifacts locally without committing ZIPs to Git. A shared Mac/combined artifact is verified once; conflicting shared metadata is rejected.
 - `retained-downloads.json`: historical 1.1, 1.2 and previous 1.3 archives that remain verified and deployed at their original mirror paths, including on a fresh checkout.
-- `prepare-assets.mjs`: copies exactly six canonical repository files into `public/`, entirely offline.
+- `prepare-assets.mjs`: copies the canonical repository assets and guides into `public/`, entirely offline.
 
 Edit screenshots in `docs/images/{welcome,editor,ai-options}.png`, user guides in
 `docs/USER_GUIDE_EN.md` and `docs/USER_GUIDE_HE.md`, and the license in the root `LICENSE`.

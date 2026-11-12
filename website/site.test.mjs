@@ -467,24 +467,27 @@ test('background animation controls stay synchronized and respect device motion 
       setAttribute:(name,value)=>{attributes[name]=value;},
       addEventListener:(name,fn)=>{listeners[name]=fn;}};
   };
-  const desktop=createControl(),mobile=createControl(), preference={matches:false};
+  const desktop=createControl(),mobile=createControl(),hero=createControl(), preference={matches:false};
   preference.addEventListener=(name,fn)=>{preference[name]=fn;};
-  const document={documentElement:{dataset:{}},getElementById:id=>id==='motionToggle'?desktop:mobile};
+  const document={documentElement:{dataset:{}},getElementById:id=>({motionToggle:desktop,mobileMotionToggle:mobile,heroMotionToggle:hero}[id]||null)};
   const window={matchMedia:()=>preference};
   runInNewContext("let language='he';\n"+block+'\nrenderMotion();',{document,window});
   assert.equal(document.documentElement.dataset.motion,'running');
   assert.equal(desktop.attributes['aria-pressed'],'true');
   assert.equal(mobile.state.textContent,'פעיל');
+  assert.equal(hero.state.textContent,'פעיל');
   mobile.listeners.click();
   assert.equal(document.documentElement.dataset.motion,'paused');
   assert.equal(desktop.attributes['aria-pressed'],'false');
   assert.equal(mobile.state.textContent,'כבוי');
+  assert.equal(hero.state.textContent,'כבוי');
   desktop.listeners.click();
   assert.equal(document.documentElement.dataset.motion,'running');
   preference.matches=true; preference.change();
   assert.equal(document.documentElement.dataset.motion,'paused');
   assert.equal(desktop.disabled,true);
   assert.equal(mobile.disabled,true);
+  assert.equal(hero.disabled,true);
   assert.match(mobile.state.textContent,/הגדרות המכשיר/);
   mobile.listeners.click();
   assert.equal(document.documentElement.dataset.motion,'paused');
@@ -627,7 +630,7 @@ test('studio tour supports horizontal navigation, RTL and keyboard boundaries', 
 
 test('studio finish stays local, preserves real imagery and has bounded responsive rules',()=>{
  const finish=readFileSync(new URL('./public/studio.css',import.meta.url),'utf8');
- assert.match(html,/href="\/studio.css\?v=20261108-cuttingroom3"/);
+ assert.match(html,/href="\/studio.css\?v=20261112-screening-room1"/);
  assert.match(finish,/grid-template-columns:repeat\(5,minmax\(0,1fr\)\)/);
  assert.match(finish,/@media\(max-width:767px\)/);
  assert.match(finish,/@media\(max-width:359px\)/);
@@ -674,16 +677,16 @@ test('the cutting-room redesign uses locally licensed fonts and a real workflow'
  }
  assert.match(script,/const index = tabs.findIndex/);
  assert.match(script,/if \(index >= 0\) selectTab\(index, false\)/);
- assert.match(finish,/html\[data-motion=paused\][^{}]+\.motion-ready\{transform:none;opacity:1;transition:none\}/);
+ assert.match(finish,/html\[data-motion=paused\][^{}]+\.button[^{}]*\{transition:none\}/);
  assert.doesNotMatch(html, /class="hero-atmosphere"/);
 });
 
-test('new light surfaces and platform buttons maintain readable contrast',()=>{
+test('screening-room surfaces and platform buttons maintain readable contrast',()=>{
  const L=hex=>hex.match(/[a-f0-9]{2}/gi).map(v=>parseInt(v,16)/255).map(v=>v<=.04045?v/12.92:((v+.055)/1.055)**2.4).reduce((v,c,i)=>v+c*[.2126,.7152,.0722][i],0);
  const ratio=(a,b)=>{const x=L(a),y=L(b);return(Math.max(x,y)+.05)/(Math.min(x,y)+.05);};
- for(const background of ['f2f4f1','e7ece7','e5ece5'])for(const text of ['16231e','46584e','53645a','14644b'])assert.ok(ratio(text,background)>=4.5,`${text}/${background}`);
- assert.ok(ratio('16231e','a2e3c1')>=4.5);
- assert.ok(ratio('f2f4f1','16231e')>=4.5);
+ for(const background of ['f0eee8'])for(const text of ['28282d','55565e','6d3e2b'])assert.ok(ratio(text,background)>=4.5,`${text}/${background}`);
+ assert.ok(ratio('201c19','efb28d')>=4.5);
+ assert.ok(ratio('f5f1e9','23262b')>=4.5);
 });
 
 
