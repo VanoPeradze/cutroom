@@ -12,6 +12,7 @@ html[lang=he]{--font:'Noto Sans Hebrew',Geist,sans-serif;--display:'Noto Sans He
 .site-header nav a[aria-current=location]{color:var(--text);text-decoration:underline;text-decoration-color:var(--cyan);text-underline-offset:6px}
 .site-header nav .nav-download{color:var(--ink);background:var(--cyan);padding-inline:21px;border-radius:5px;margin-inline:10px;text-decoration:none;font-weight:650}
 .site-header nav .nav-download:hover{background:#f9c4a4;color:var(--ink)}
+.site-header nav .nav-download[aria-current=location]{color:var(--ink);text-decoration:none}
 .github-link{border-inline-start:1px solid var(--line);margin-inline-start:6px;padding-inline-start:20px!important}
 .github-link img{filter:invert(1);width:17px;height:17px}
 #languageSwitch{color:var(--text)}

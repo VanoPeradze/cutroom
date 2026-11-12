@@ -721,3 +721,9 @@ test('Hebrew-first and optional cloud disclosure remains bilingual and unmeasure
   assert.equal(release.local_regression_validation.frontend.passed,919);
   assert.ok(release.known_limitations.some(text=>/Cloudflare.*experimental.*mocked/.test(text)));
 });
+
+
+test('active header download keeps dark text on its copper surface',()=>{
+ const finish=readFileSync(new URL('./public/studio.css',import.meta.url),'utf8');
+ assert.ok(finish.includes('.site-header nav .nav-download[aria-current=location]{color:var(--ink);text-decoration:none}'));
+});
