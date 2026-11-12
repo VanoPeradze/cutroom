@@ -2,7 +2,7 @@
 
 CUTROOM is a free, open-source local video editor. It supports editable cuts, captions, source/layer audio mixing, optional AI drafts and MP4 export. The website explains and distributes it; it does not run the editor or accept recordings.
 
-The maintained static HTML/CSS/JavaScript website is `website/public` in VanoPeradze/cutroom, deployed through its existing Expo Hosting project at https://cutroom-studio.expo.app/. English is the default and `?lang=he` switches to Hebrew/RTL without browser storage. The screening-room redesign uses a graphite and copper opening, a lightweight original animated film-frame field, warm paper sections, locally hosted licensed fonts and a functional workspace tour. See DESIGN.md for the current visual direction and browser review scope.
+The maintained static HTML/CSS/JavaScript website is `website/public` in VanoPeradze/cutroom, deployed through its existing Expo Hosting project at https://cutroom-studio.expo.app/. English is the default and `?lang=he` switches to Hebrew/RTL without browser storage. The screening-room redesign uses a graphite, violet and cyan opening, a lightweight original animated film-frame field, cool lavender-paper sections, locally hosted licensed fonts and a functional workspace tour. See DESIGN.md for the current visual direction and browser review scope.
 
 ## Current package identity
 

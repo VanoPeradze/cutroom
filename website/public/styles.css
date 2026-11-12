@@ -1,7 +1,7 @@
 /* Shared accessible foundation. The public site and privacy page use local assets only. */
-:root{--bg:#141619;--panel:#202328;--line:#45474d;--text:#f5f1e9;--dim:#c9c7c3;--muted:#adaeaf;--cyan:#efb28d;--cyan-text:#efb28d;--violet:#b7a6de;--ink:#201c19;--paper:#f0eee8;--paper-ink:#28282d;--paper-muted:#55565e;--font:Geist,'Segoe UI',sans-serif;--display:Geist,'Segoe UI',sans-serif}
+:root{--bg:#15151f;--panel:#242232;--line:#4b485f;--text:#f3f1fa;--dim:#cdc9dd;--muted:#b1adc3;--cyan:#70d9e0;--cyan-text:#70d9e0;--violet:#b7a6de;--ink:#181c2a;--paper:#f0eff7;--paper-ink:#28243a;--paper-muted:#57506b;--font:Geist,'Segoe UI',sans-serif;--display:Geist,'Segoe UI',sans-serif}
 *{box-sizing:border-box}
-html{color-scheme:dark;scroll-behavior:smooth;scroll-padding-top:100px;scrollbar-color:#696b73 var(--bg)}
+html{color-scheme:dark;scroll-behavior:smooth;scroll-padding-top:100px;scrollbar-color:#76708e var(--bg)}
 body{margin:0;background:var(--bg);color:var(--text);font:16px/1.65 var(--font);-webkit-font-smoothing:antialiased}
 a{color:inherit;text-decoration:none;text-underline-offset:.2em;text-decoration-thickness:1px}
 button{font:inherit;color:inherit;cursor:pointer}
@@ -27,7 +27,7 @@ button,summary,a{outline-color:var(--cyan)}
 .dialog-header h2{font-size:21px;letter-spacing:-.02em}
 .dialog-header p{font-size:13px;color:var(--muted);margin-top:4px}
 .image-dialog button{min-height:44px;min-width:44px;padding:10px 16px;background:var(--panel);border:1px solid var(--line);border-radius:5px;font-size:13px}
-.image-dialog button:hover{background:#363940}
+.image-dialog button:hover{background:#39354b}
 .dialog-actions{display:flex;align-items:center;flex-wrap:wrap;gap:10px;padding:10px 24px;border-bottom:1px solid var(--line);font-size:13px}
 .dialog-actions a{margin-inline-start:auto;min-height:44px;display:inline-flex;align-items:center;color:var(--cyan);text-decoration:underline}
 #imageCounter{font-variant-numeric:tabular-nums;min-width:45px;text-align:center;color:var(--dim)}

@@ -33,3 +33,15 @@ Hidden-document pausing is unit-tested and code-reviewed, not browser-runtime ve
 ## Publication
 
 The validation above was completed before production integration. Integration follows the repository's protected-branch PR and required-check workflow; Expo publication is a separate step whose outcome must be verified. No branch-protection, workflow, application-release or archive-byte change is part of this website redesign.
+
+## Purple/cyan palette correction - 12 November 2026
+
+The owner requested the original CUTROOM purple/cyan identity after reviewing the redesign. On base `5f03a05be478acc31b9d8ac845885d015996468d`, the correction changes only site colors, theme-color metadata/cache tags, associated palette tests and design documentation. It preserves page content, product images, download destinations, layout, fonts, motion geometry and scheduling. Cyan identifies primary downloads; violet emphasizes the hero and closing section.
+
+- Windows website tests: **62 passed, 0 failed, 2 platform-specific symlink tests skipped** (64 total).
+- Browser QA: **230 checks passed, 0 defects**, in English and Hebrew at 1440 x 1000, 390 x 844 and 320 x 740. Desktop and mobile hero/full-page captures were visually inspected. No page errors, console errors or failed asset requests.
+- 114 computed contrast checks passed; the lowest measured foreground/background ratio was **4.82:1**. Active and hover download states, purple/cyan roles, mobile navigation, language and gallery keyboard behavior, pause/resume and reduced motion were covered.
+- All **51** local public archives were copied from the existing canonical files and verified against pinned sizes and SHA-256 hashes. No release/tag or application change is included.
+- Public-page/asset/anchor/release verification, JavaScript syntax and diff whitespace checks passed.
+
+These checks precede publication and are browser viewport checks, not physical-device or native-app acceptance. Protected-branch integration and public deployment must be verified separately.
