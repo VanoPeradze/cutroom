@@ -10,7 +10,8 @@
   let screenshotOpener = null;
   const motionToggle = document.getElementById('motionToggle');
   const mobileMotionToggle = document.getElementById('mobileMotionToggle');
-  const motionControls = [motionToggle, mobileMotionToggle].filter(Boolean);
+  const heroMotionToggle = document.getElementById('heroMotionToggle');
+  const motionControls = [motionToggle, mobileMotionToggle, heroMotionToggle].filter(Boolean);
   const motionPreference = window.matchMedia('(prefers-reduced-motion: reduce)');
   let motionPaused = motionPreference.matches;
   function renderMotion() {
@@ -58,6 +59,7 @@
       link.lang = language === 'he' ? 'en' : 'he';
       link.href = (language === 'he' ? '?lang=en' : '?lang=he') + location.hash;
     }
+    renderMotion();
     document.title = language === 'he' ? 'CUTROOM - חדר העריכה שלך' : 'CUTROOM - Your local editing studio';
     document.querySelector('meta[name="description"]').content = language === 'he'
       ? 'עורך וידאו חינמי ומקומי. חיתוכים, סאונד וכתוביות. בטא ל־Windows ול־Mac; Linux מהמקור. AI הוא אפשרות.'
@@ -237,18 +239,7 @@
     sections.forEach(section => observer.observe(section));
   }
   if ('IntersectionObserver' in window && !motionPreference.matches) {
-    const reveals = new IntersectionObserver(entries => {
-      entries.forEach(entry => {
-        if (entry.isIntersecting) {
-          entry.target.classList.add('is-in-view');
-          reveals.unobserve(entry.target);
-        }
-      });
-    }, {threshold:0.08});
-    document.querySelectorAll('.editing-steps article, .start-options li, .ai-options article').forEach(node => {
-      node.classList.add('motion-ready');
-      reveals.observe(node);
-    });
+    // The single authored motion is the film field, not a fade on every section.
   }
   renderLanguage();
   revealLinkedHelp();
