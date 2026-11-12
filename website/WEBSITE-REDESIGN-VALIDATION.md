@@ -32,4 +32,4 @@ Hidden-document pausing is unit-tested and code-reviewed, not browser-runtime ve
 
 ## Publication
 
-This is an isolated design branch, not a production deployment. No PR, master change, release or history rewrite is part of this website update. The existing public site remains unchanged until separately authorized deployment.
+The validation above was completed before production integration. Integration follows the repository's protected-branch PR and required-check workflow; Expo publication is a separate step whose outcome must be verified. No branch-protection, workflow, application-release or archive-byte change is part of this website redesign.
