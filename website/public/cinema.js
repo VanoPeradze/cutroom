@@ -32,7 +32,7 @@
       const cx=centerX+Math.sin(index*0.10+phase)*26, cy=centerY+Math.cos(index*0.12+phase)*24;
       const corners=(xx,yy)=>[[-xx,-yy],[xx,-yy],[xx,yy],[-xx,yy]].map(([a,b])=>project(a,b,depth,angle,yaw,cx,cy));
       const outer=corners(x,y),inner=corners(x-thickness,y-thickness);
-      const color=index%8<5?[225,162,127]:[169,153,202], opacity=Math.max(0.08,0.42-index*0.011);
+      const color=index%8<5?[112,217,224]:[183,166,222], opacity=Math.max(0.08,0.42-index*0.011);
       const material=context.createLinearGradient(outer[0][0],outer[0][1],outer[2][0],outer[2][1]);
       material.addColorStop(0,`rgba(${color.join(',')},${opacity*0.13})`);
       material.addColorStop(0.37,`rgba(${color.join(',')},${opacity})`);
@@ -47,7 +47,7 @@
           const a=outer[corner],b=outer[(corner+1)%4];context.moveTo(a[0],a[1]);
           context.lineTo(a[0]+(b[0]-a[0])*0.06,a[1]+(b[1]-a[1])*0.06);
         }
-        context.strokeStyle=`rgba(244,217,195,${opacity+0.14})`;context.lineWidth=1.3;context.stroke();
+        context.strokeStyle=`rgba(213,225,250,${opacity+0.14})`;context.lineWidth=1.3;context.stroke();
       }
     }
   }

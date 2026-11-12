@@ -4,7 +4,7 @@
 
 The public, bilingual CUTROOM marketing and download site uses **Persuade** mode. The visitor should understand the local editor, see genuine product evidence and choose the appropriate download without hunting for the action. This is a new visual world, not a cosmetic pass on the previous cool-white and mint composition.
 
-The opening is a graphite screening room with copper light. Oversized, left-aligned editorial type sits beside an original perspective field of film frames. Warm paper sections provide a deliberate change of pace. The cyan/violet CUTROOM mark remains the product signature. No neon green, unrelated visual assets, fabricated testimonials, inflated performance claims or simulated product controls are used.
+The opening is a graphite screening room with violet and cyan light, matching the original CUTROOM mark and artwork. Oversized, left-aligned editorial type sits beside an original perspective field of film frames. Cool lavender-paper sections provide a deliberate change of pace. The cyan/violet CUTROOM mark remains the product signature. No neon green, unrelated visual assets, fabricated testimonials, inflated performance claims or simulated product controls are used.
 
 ## Composition and interaction
 
@@ -21,12 +21,12 @@ The opening is a graphite screening room with copper light. Oversized, left-alig
 
 Geist and Noto Sans Hebrew are self-hosted under their shipped SIL Open Font Licenses. Display type is capped at 96px, tracking never tighter than -0.04em. Body copy and controls use proportional type, never monospace as decoration.
 
-- Graphite: `#141619`; panel: `#202328`; dividing line: `#45474d`.
-- Main text: `#f5f1e9`; secondary text: `#c9c7c3`; muted: `#adaeaf`.
-- Copper: `#efb28d`; dark button text: `#201c19`; violet accent: `#b7a6de`.
-- Warm paper: `#f0eee8`; paper text: `#28282d`; paper secondary: `#55565e`.
+- Graphite: `#15151f`; panel: `#242232`; dividing line: `#4b485f`.
+- Main text: `#f3f1fa`; secondary text: `#cdc9dd`; muted: `#b1adc3`.
+- Cyan actions: `#70d9e0`; dark button text: `#181c2a`; violet heading and closing surface: `#b7a6de`.
+- Lavender paper: `#f0eff7`; paper text: `#28243a`; paper secondary: `#57506b`.
 
-The existing variable named `--cyan` now holds copper for compatibility with the shared foundation. Geometry, spacing and contrast establish hierarchy, not decorative badges or repeated card grids.
+The owner explicitly requested the original purple/cyan brand on 12 November 2026. `--cyan` again means cyan; violet carries the display emphasis, and cyan identifies primary download actions. Copper is no longer part of the website palette. Geometry, spacing and contrast establish hierarchy, not decorative badges or repeated card grids.
 
 ## Motion, resilience and performance
 

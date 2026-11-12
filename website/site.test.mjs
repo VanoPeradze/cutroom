@@ -630,7 +630,7 @@ test('studio tour supports horizontal navigation, RTL and keyboard boundaries', 
 
 test('studio finish stays local, preserves real imagery and has bounded responsive rules',()=>{
  const finish=readFileSync(new URL('./public/studio.css',import.meta.url),'utf8');
- assert.match(html,/href="\/studio.css\?v=20261112-screening-room1"/);
+ assert.match(html,/href="\/studio.css\?v=20261112-purple-cyan1"/);
  assert.match(finish,/grid-template-columns:repeat\(5,minmax\(0,1fr\)\)/);
  assert.match(finish,/@media\(max-width:767px\)/);
  assert.match(finish,/@media\(max-width:359px\)/);

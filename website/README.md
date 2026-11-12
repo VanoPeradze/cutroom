@@ -9,7 +9,7 @@ The previous separate website checkout is not needed for future updates.
 
 ## Screening-room website redesign
 
-A substantial visual redesign replaces the previous white/mint composition with graphite, warm paper and copper, an original lightweight animated film-frame field, immediate platform downloads, a real workspace tour and bilingual installation guidance. No tracking or external runtime was added. Motion can be paused from the opening, mobile menu or footer and respects the device's reduced-motion setting. See [DESIGN.md](DESIGN.md) for rationale and [WEBSITE-REDESIGN-VALIDATION.md](WEBSITE-REDESIGN-VALIDATION.md) for verified checks and remaining limits.
+A substantial visual redesign replaces the previous white/mint composition with graphite, violet and cyan with cool lavender-paper sections, an original lightweight animated film-frame field, immediate platform downloads, a real workspace tour and bilingual installation guidance. No tracking or external runtime was added. Motion can be paused from the opening, mobile menu or footer and respects the device's reduced-motion setting. See [DESIGN.md](DESIGN.md) for rationale and [WEBSITE-REDESIGN-VALIDATION.md](WEBSITE-REDESIGN-VALIDATION.md) for verified checks and remaining limits.
 
 This website change does not rebuild the application or change the current release pins: `v1.3-beta-20261111-hebrew1`, source `ba67003726e80e0d394b1927b6b710f191a60157`. The 3 current and 48 historical archives remain pinned to their existing exact bytes. Historical app screenshots stay visibly dated; they are not presented as captures of this release.
 
