@@ -155,7 +155,7 @@
     "Existing silent overlays preserve their saved setting. Select the clip and enable Include source sound; also check clip/group mute and gain.",
     "Picture speed changes only the image; sound retains its normal clock from Source in. Review sync before publishing.",
     "Current headless Chromium checks covered transcription settings in desktop, 768px and 390px layouts, Local/legacy saves, unavailable cloud, consent, Escape/reopen and light/dark states. Earlier gray workspace checks remain historical. Physical-device and actual 200% browser zoom acceptance remain unverified.",
-    "The website gallery remains archival: workspace images from 19 October 2026, Projects/export from 15 October, and an unrecorded AI setup capture date. Targeted fresh gray-mode QA captures were inspected separately; this is not a complete new product gallery.",
+    "The website gallery was refreshed on 22 November 2026 from current source (a demo project with generated footage), which may be ahead of this downloadable build; the earlier archived captures remain in docs/images/readme.",
     "Physical Chrome/manual browser acceptance and representative human listening were not performed; automated and headless checks do not replace them.",
     "Cloudflare transcription is experimental, off by default and tested with mocked responses only. Live response compatibility, word-timing quality, Hebrew accuracy, provider quotas and billing behavior are not verified. No real audio was uploaded for this release.",
     "Bidi checks use controlled text, pinned fonts and both production browser preview renderers. They do not certify every font, device or pixel-identical browser/export typography."
@@ -168,7 +168,7 @@
     "Existing silent overlays preserve their saved setting. Select the clip and enable Include source sound; also check clip/group mute and gain.",
     "Picture speed changes only the image; sound retains its normal clock from Source in. Review sync before publishing.",
     "Current headless Chromium checks covered transcription settings in desktop, 768px and 390px layouts, Local/legacy saves, unavailable cloud, consent, Escape/reopen and light/dark states. Earlier gray workspace checks remain historical. Physical-device and actual 200% browser zoom acceptance remain unverified.",
-    "The website gallery remains archival: workspace images from 19 October 2026, Projects/export from 15 October, and an unrecorded AI setup capture date. Targeted fresh gray-mode QA captures were inspected separately; this is not a complete new product gallery.",
+    "The website gallery was refreshed on 22 November 2026 from current source (a demo project with generated footage), which may be ahead of this downloadable build; the earlier archived captures remain in docs/images/readme.",
     "Physical Chrome/manual browser acceptance and representative human listening were not performed; automated and headless checks do not replace them.",
     "Cloudflare transcription is experimental, off by default and tested with mocked responses only. Live response compatibility, word-timing quality, Hebrew accuracy, provider quotas and billing behavior are not verified. No real audio was uploaded for this release.",
     "Bidi checks use controlled text, pinned fonts and both production browser preview renderers. They do not certify every font, device or pixel-identical browser/export typography."
