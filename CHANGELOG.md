@@ -7,6 +7,13 @@
 - With the confirmed camera-on-top stack and a vertical output, card frames and previews show that framing. **Thumbnail ideas** saves full frames at the three strongest peaks as 1280x720 PNG files.
 - New **Gameplay YouTube video** style: condenses a long recording to the chosen length in minutes, keeping the strongest stretches in their original order, dropping silent menus/loading screens (gameplay vision now also runs for this style) and dead air inside kept stretches, and proposing YouTube chapters with a Copy button. The result arrives as the usual draft proposal; a manual timeline is kept until you apply it. Chapter names fall back to "Part N" without gameplay vision; rename them before publishing.
 
+- **Posting kit** on every Clips board moment: suggested titles, a description and hashtags built only from what is said in that moment, plus **Write with AI** through the configured Story AI. Copy them when you upload; Cutroom does not upload for you.
+- **Gameplay YouTube** chapters are now named from what is said in them, with a cold-open idea and short punch-in zooms at the loudest instants (skipped after a manual sequence rearrangement).
+- **Automatic framing follows the face** through a vertical clip instead of holding one position. A manual reframe or per-clip crop always wins.
+- **Color & motion** in Output: looks, exposure, contrast, saturation, warmth, an uploaded 3D `.cube` LUT, and zoom keyframes. The grade applies to the whole picture before captions. The preview is a close approximation; the LUT appears only in export.
+- **Edit evaluation:** `scripts/evaluate_edit.py` scores an edit against a human reference for your own recordings. See [Edit evaluation](docs/EDIT_EVALUATION.md).
+- UI precision fixes: the Home "16:9" card, toast placement, readable timeline clip labels, a shorter storage note after import and a Media pool header that no longer wraps at 1280px.
+
 ## 1.3 Beta - Hebrew-first transcription candidate (2026-11-11)
 
 - Hebrew in Balanced and Quality now uses the cached ivrit.ai model, with explicit download setup and actual-model RAM/VRAM checks. Lite stays lightweight; execution records expose fallback choices. No accuracy or speed improvement is claimed without real-audio evaluation.

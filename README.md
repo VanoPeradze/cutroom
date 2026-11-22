@@ -28,21 +28,32 @@
 
 ## Contents
 
-[1.3 Beta update](#13-beta-update) · [Highlights](#highlights) · [Quick start](#quick-start) · [How it works](#how-it-works) · [AI, your way](#ai-your-way) · [Privacy](#privacy) · [Requirements](#requirements) · [Beta status](#beta-status) · [Documentation](#documentation) · [Contributing and support](#contributing-and-support) · [License and credits](#license-and-credits)
+[What's new](#whats-new) · [Highlights](#highlights) · [Quick start](#quick-start) · [How it works](#how-it-works) · [AI, your way](#ai-your-way) · [Privacy](#privacy) · [Requirements](#requirements) · [Beta status](#beta-status) · [Documentation](#documentation) · [Contributing and support](#contributing-and-support) · [License and credits](#license-and-credits)
 
-## 1.3 Beta update
+## What's new
 
-The November 11 revision adds a neutral-gray light theme and safer local Hebrew refinement, plus mixed Hebrew/Latin caption rendering fixes. Dark mode and video colors are unchanged. See the [changelog](CHANGELOG.md) for exact behavior and validation limits.
+These features are in the current source and will arrive in the next release package. The [changelog](CHANGELOG.md) has the exact behavior and limits.
 
-CUTROOM 1.3 Beta gives added videos their detected source sound by default, with mute and gain controls. Existing silent overlays keep their saved choice. The AI draft notice expands in the inspector, leaving the preview clear. Compact layouts, preview recovery and FFmpeg compatibility are improved. See the [changelog](CHANGELOG.md) for source-review and timeline updates; each [release](https://github.com/VanoPeradze/cutroom/releases) identifies its exact source and recorded checks.
+| Feature | What you get |
+| --- | --- |
+| **Clips board** | Opens from the editor top bar and ranks the strongest 15, 30, 45 or 60 second moments of a recording, with a real frame, a preview and the reasons for each. Open a moment in the editor, place it on the timeline, or export one or several clips. |
+| **Posting kit** | Every Clips board moment gets suggested titles, a description and hashtags taken from what is said in it. **Write with AI** rewrites them with your Story AI. Copy them when you upload the clip. |
+| **Gameplay YouTube videos** | Condenses a long gameplay recording to the length you choose, drops menus, loading screens and dead air, and proposes chapters named from what is said in them, a cold-open idea and short punch-in zooms at the loudest moments. |
+| **Framing that follows you** | Automatic vertical framing now pans with your face through the clip instead of holding one position. A manual reframe always wins. |
+| **Color & motion** | Ready looks, exposure, contrast, saturation and warmth, your own `.cube` LUT, and zoom keyframes that ease between points. The preview updates live; the LUT applies on export. |
+| **Edit quality checks** | Score an edit against what you marked in your own recordings, one project or a whole set. [Edit evaluation](docs/EDIT_EVALUATION.md) |
+
+The 1.3 Beta release also added a neutral-gray light theme, Hebrew-first local transcription and source sound for added videos by default; each [release](https://github.com/VanoPeradze/cutroom/releases) lists its exact source and recorded checks.
 
 ## Highlights
 
 - **Six focused workspaces.** Media, Edit, Layout, Audio, Captions and Output share one player and one timeline.
+- **Clips board for Shorts.** Find the strongest moments of a long recording, then export them with ready titles, description and hashtags.
 - **Independent A/B tracks.** Cut, trim and move a camera and a screen recording together or separately, with Undo/Redo and track locks. [Timeline controls](docs/INDEPENDENT_TRACKS.md)
 - **Camera and screen layouts.** Stacked, side by side, picture in picture, camera only or screen only, for a selected range or the entire edit.
 - **Track mixer.** Balance Original, Music, Voiceover, Effects and Master with live level meters. Mute applies to preview and export; Solo is for preview only.
 - **Text and captions.** Add titles and captions, import SRT or VTT, and correct and style an optional AI transcript.
+- **Color and motion.** Looks, color sliders, your own `.cube` LUT and zoom keyframes for the whole edit.
 - **Green screen and stabilization.** Apply a chroma key to any video source, or create an optional stabilized local copy. [Green screen](docs/CHROMA_KEY.md) · [Stabilization](docs/STABILIZATION.md)
 - **Local MP4 export.** Landscape, vertical, square, portrait or the source shape, from 720p to 4K at up to 60 FPS, with no CUTROOM watermark.
 - **Gameplay vision for Shorts.** A compatible installed local Story model looks at sampled frames to propose action moments and filter menus and loading screens. Frames stay on your computer. [Models](docs/MODELS.md#gameplay-vision)
@@ -142,7 +153,7 @@ The library stays on the left, the preview in the centre, properties on the righ
 | **Layout** | Choose the composition, assign camera and screen roles, set the framing and adjust the sync offset. |
 | **Audio** | Mix Original, Music, Voiceover, Effects and Master with live meters, Mute and Solo. |
 | **Captions** | Add text and captions, import SRT or VTT, correct the transcript and style the subtitles. |
-| **Output** | Choose the shape, resolution, frame rate and quality, then export. |
+| **Output** | Choose the shape, resolution, frame rate and quality, grade the color and add zoom keyframes, then export. |
 
 [User guide](docs/USER_GUIDE_EN.md) · [Keyboard shortcuts](docs/KEYBOARD_SHORTCUTS.md) · [Shortcut profiles](docs/KEYBOARD_PROFILES.md)
 
@@ -196,6 +207,7 @@ Automated checks and synthetic renders do not prove real-footage quality or inst
 | [Timeline controls](docs/INDEPENDENT_TRACKS.md) | Working with sources A and B |
 | [Green screen](docs/CHROMA_KEY.md) · [Stabilization](docs/STABILIZATION.md) | Effects and their limits |
 | [Keyboard shortcuts](docs/KEYBOARD_SHORTCUTS.md) | Commands and shortcut profiles |
+| [Edit evaluation](docs/EDIT_EVALUATION.md) | Measuring edit quality on your own recordings |
 | [Test on another PC](docs/TEST_ON_ANOTHER_PC.md) | First-run checks and common setup problems |
 | [All guides](docs/README.md) | The full documentation index |
 
