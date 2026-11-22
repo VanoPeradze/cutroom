@@ -1911,7 +1911,8 @@ def render_project(context: JobContext, project_id: str, store: ProjectStore, se
                 caption_lines=burn_lines if burn_transcript else [],
             )
         lut_file = lut_path(store.project_dir(project_id), normalize_color((project.get("manual") or {}).get("color")))
-        graph, maps, has_audio = build_filter_graph(project, width, height, caption_ass, input_inventory, lut_file=lut_file)
+        graph, maps, has_audio = build_filter_graph(
+            project, width, height, caption_ass, input_inventory, **({"lut_file": lut_file} if lut_file else {}))
         if scope:
             # Keep the entire PCM mix in normalized staging. Its full-context loudness/limiter
             # filter runs first in the second pass; only then trim and rebase the audio.

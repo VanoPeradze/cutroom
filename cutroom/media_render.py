@@ -219,10 +219,22 @@ def append_media_graph(
                 overlay, output_label = visual_overlays[clip["id"]]
                 filters.append(f"{video_label}{overlay}")
                 video_label = output_label
+    def aligned(labels: list[str], name: str) -> list[str]:
+        # FFmpeg 6.1 amix drops an input after a short frame (the uneven
+        # piece edges of a source track); fixed-size frames keep it mixed.
+        if len(labels) < 2:
+            return labels
+        out = []
+        for position, label in enumerate(labels):
+            filters.append(f"{label}asetnsamples=n=1024:p=0[lib{name}al{position}]")
+            out.append(f"[lib{name}al{position}]")
+        return out
+
     buses: dict[str, str] = {}
     for role, labels in audio_roles.items():
         if not labels:
             continue
+        labels = aligned(labels, role)
         mix = f"amix=inputs={len(labels)}:duration=longest:dropout_transition=0:normalize=0" if len(labels) > 1 else "anull"
         filters.append(f"{''.join(labels)}{mix},volume={_gain(mixer, role):.9f}[libbus{role}]")
         buses[role] = f"[libbus{role}]"
@@ -239,7 +251,7 @@ def append_media_graph(
         filters.append(f"{buses['music']}[libduckkey]sidechaincompress=threshold=0.025:ratio=8:attack=20:release=350[libducked]")
         buses["music"] = "[libducked]"
     if buses:
-        labels = list(buses.values())
+        labels = aligned(list(buses.values()), "bus")
         mix = f"amix=inputs={len(labels)}:duration=longest:dropout_transition=0:normalize=0" if len(labels) > 1 else "anull"
         # When loudness normalization is enabled, apply the master fader after it.
         normalize = bool(((project.get("draft") or {}).get("audio_policy") or {}).get("normalize"))
