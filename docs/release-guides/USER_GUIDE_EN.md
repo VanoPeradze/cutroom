@@ -69,11 +69,11 @@ Models are not bundled in the ZIP. Downloads require internet; installed files a
 | Quality | Whisper Turbo | 1.63 GB | Qwen3.5 4B; 9B optional | 3.4 GB (+6.6 GB optional) |
 | Quality, Hebrew selected | ivrit.ai Whisper Large V3 Turbo | 1.63 GB | Qwen3.5 4B; 9B optional | 3.4 GB (+6.6 GB optional) |
 
-These are estimates for model downloads, **not total installation size or memory requirements**. Dependencies, cache overhead, footage, previews and exports take additional space. The 9B Story model is optional: Quality works fully with 4B, and the status offers 9B as an upgrade you may download. If the Lite 2B model is missing, an installed fallback (4B by default) is reported and used. Models are not downloaded automatically; choose an installed model or explicitly download the preferred one. A profile label does not guarantee semantic editing quality. [Full model details](MODELS.md)
+These are estimates for model downloads, **not total installation size or memory requirements**. Dependencies, cache overhead, footage, previews and exports take additional space. The 9B Story model is optional: Quality works fully with 4B, and the status offers 9B as an upgrade you may download. If the Lite 2B model is missing, an installed fallback (4B by default) is reported and used. Models are not downloaded automatically; choose an installed model or explicitly download the preferred one. A profile label does not guarantee semantic editing quality. [Full model details](../MODELS.md)
 
 The Story runtime is **Ollama**, separate from the model weights. CUTROOM's model-download action does not silently install this application or approve Windows permission prompts. Cancelling can leave reusable partial download files. Do not delete shared model caches as a routine fix. **Downloaded** checks files, not whether your computer has enough memory or whether the model has completed a successful inference.
 
-Default chronological YouTube cleanup can work without a Story model; semantic Short/Reel work needs one. Local transcription still needs its speech model. **Manual edit** needs neither. [Connection help](AI_CONNECTIONS.md) · [Installer troubleshooting](TEST_ON_ANOTHER_PC.md)
+Default chronological YouTube cleanup can work without a Story model; semantic Short/Reel work needs one. Local transcription still needs its speech model. **Manual edit** needs neither. [Connection help](../AI_CONNECTIONS.md) · [Installer troubleshooting](../TEST_ON_ANOTHER_PC.md)
 
 ### Cloud AI: consent, keys and costs
 
@@ -85,7 +85,7 @@ CUTROOM sends selected audio for transcription and transcript/editing context fo
 
 Keys entered in the app stay in memory for the current CUTROOM session and are bound to the selected provider and base URL. Changing either requires a new key and fresh consent. Reconnect after restarting. **Forget session key** clears that key and selects local AI. A supplied key is not a successful connection test. Never include keys in screenshots or bug reports.
 
-The Free tier label does not verify your plan or prevent a paid key from incurring charges. A Story edit can make multiple requests. Quota/key/provider errors stop the task rather than silently switching providers or plans. Cancellation cannot undo usage already accepted by the provider. Mocked regression tests do not certify real provider inference. [Privacy and connection details](AI_CONNECTIONS.md)
+The Free tier label does not verify your plan or prevent a paid key from incurring charges. A Story edit can make multiple requests. Quota/key/provider errors stop the task rather than silently switching providers or plans. Cancellation cannot undo usage already accepted by the provider. Mocked regression tests do not certify real provider inference. [Privacy and connection details](../AI_CONNECTIONS.md)
 
 ## 3. Add footage and check the sources
 
@@ -174,11 +174,11 @@ These controls protect the existing A/B lanes. Added media does not automaticall
 
 Open **Original footage** to see the full recording and its kept/removed regions. Choose A or B, preview a section or drag a range, then **Restore to edit**. **Previous removed / Next removed** help find omissions. Missing material returns near its source neighbors without reordering existing cuts. **Remove from edit** affects uses of that source interval, including copies; check the scope first.
 
-**Insert a copy by time…** deliberately duplicates source footage at an exact edit position. **Duplicate clip** copies the selected cut. **Reset to AI draft** resets manual sequence changes after confirmation; ordinary Undo is safer for one recent change. [Detailed editing behavior](INDEPENDENT_TRACKS.md)
+**Insert a copy by time…** deliberately duplicates source footage at an exact edit position. **Duplicate clip** copies the selected cut. **Reset to AI draft** resets manual sequence changes after confirmation; ordinary Undo is safer for one recent change. [Detailed editing behavior](../INDEPENDENT_TRACKS.md)
 
 ### Familiar keyboard controls
 
-Open **More editing tools → Keys / Shortcuts** and choose a preset. The list shows the commands supported by CUTROOM. Space plays/pauses. Shortcuts stay inactive while typing in caption or form fields. [Full shortcut reference](KEYBOARD_PROFILES.md)
+Open **More editing tools → Keys / Shortcuts** and choose a preset. The list shows the commands supported by CUTROOM. Space plays/pauses. Shortcuts stay inactive while typing in caption or form fields. [Full shortcut reference](../KEYBOARD_PROFILES.md)
 
 ### Add media and mix sound
 
@@ -192,7 +192,7 @@ Open **Audio mixer** to balance Original, Voiceover, Music, Effects and Master. 
 
 Faders move in 0.5 dB steps and show a 0 dB mark. Type an exact value in the box under a fader (−60 to +12 dB). Double-click a fader, or use its reset button where the panel shows one, to return to 0 dB. The mouse wheel changes a value only while that control is focused. When the draft normalizes loudness, channel faders set the balance between tracks before normalization and **Master** sets the final level after it; the panel says when a fader cannot change the exported level, for example when only one track is playing. The preview applies the same normalization, so what you hear is close to the export. Every export ends with a limiter that keeps true peaks at or below −1 dBTP, so loud sources no longer clip.
 
-**Stabilize footage** makes an optional local copy without replacing your original or edit. Support depends on your FFmpeg build, and smoothing may crop edges. [Steps and limits](STABILIZATION.md).
+**Stabilize footage** makes an optional local copy without replacing your original or edit. Support depends on your FFmpeg build, and smoothing may crop edges. [Steps and limits](../STABILIZATION.md).
 
 For a selected main A/B clip, **Picture speed** changes only the picture, from 0.25× to 4×. Clip length and speech timing stay in place. It can lose lip sync, and reaching the end of the source can hold the last frame. Check the result before export; this control does not speed up the entire picture-and-sound edit.
 
@@ -208,7 +208,7 @@ Use the one source workflow in **Layout**: **Sources & narration** chooses scree
 
 For an embedded camera, open **Camera area in this recording** and drag its rectangle; the picker starts folded once configured. Open **Precise camera position** only when you need numeric controls. **Main screen focus** sets the default screen position; a clip's own framing takes priority. **More layouts** contains side-by-side, picture-in-picture and the style default. A fixed rectangle does not track a moving camera. **Original source preview** and **Source order preview** are optional reference monitors; **Layout by section** lists composition blocks. If saving fails, the camera picker opens and offers **Retry save**; do not close the editor until it shows **Saved**.
 
-Open **Edit > Effects · Green screen**. Choose the foreground video, its key color or green-screen defaults, then the background. Fine-tune edges is optional. For a moving background, keep it as main footage and add the foreground through **Media > Add media**, place it on the timeline and select **Video underneath**. **Use green-screen defaults** starts at 12% tolerance; 100% can erase the whole foreground. **Apply & preview** saves the settings, updates edited playback and generates an exact processed frame. Original footage mode stays unkeyed. A/B and Media also support color/image backgrounds. Each video has independent settings with Undo/Redo and Reset. Browser edges can differ from the exact FFmpeg frame/export. [Steps and limits](CHROMA_KEY.md)
+Open **Edit > Effects · Green screen**. Choose the foreground video, its key color or green-screen defaults, then the background. Fine-tune edges is optional. For a moving background, keep it as main footage and add the foreground through **Media > Add media**, place it on the timeline and select **Video underneath**. **Use green-screen defaults** starts at 12% tolerance; 100% can erase the whole foreground. **Apply & preview** saves the settings, updates edited playback and generates an exact processed frame. Original footage mode stays unkeyed. A/B and Media also support color/image backgrounds. Each video has independent settings with Undo/Redo and Reset. Browser edges can differ from the exact FFmpeg frame/export. [Steps and limits](../CHROMA_KEY.md)
 
 ## 8. Add text and control captions
 
@@ -261,7 +261,7 @@ Under **AI subtitle style & speech language**:
 
 AI captions follow edited timing and the selected audio source. Manual projects start without transcript text; enabling subtitles does not itself transcribe them. You can still type or import your own captions above.
 
-For mixed Hebrew/English, choose the main spoken language and review names and English terms. Local Balanced/Quality can recheck up to two weak units of at most 30 seconds each, within a 48-second audio budget per local pass, using the loaded model. Lite adds no such retry. Timing, confidence and spelling checks can keep the original instead. This does not translate or use Story AI to rewrite speech. Low-confidence warnings mean “listen and review,” not a measured accuracy score; automatic detection can still be wrong. [Recovery details and limits](QUALITY_AND_LIMITS.md)
+For mixed Hebrew/English, choose the main spoken language and review names and English terms. Local Balanced/Quality can recheck up to two weak units of at most 30 seconds each, within a 48-second audio budget per local pass, using the loaded model. Lite adds no such retry. Timing, confidence and spelling checks can keep the original instead. This does not translate or use Story AI to rewrite speech. Low-confidence warnings mean “listen and review,” not a measured accuracy score; automatic detection can still be wrong. [Recovery details and limits](../QUALITY_AND_LIMITS.md)
 
 ## 9. Export and understand rebuilds
 
@@ -279,7 +279,7 @@ After each export CUTROOM runs a quick local check and shows it in the export di
 
 Projects live on the computer running CUTROOM, not in a cloud account. Default folders are `data/projects` for projects/imported media, `data/exports` for exports and `data/cache` for caches. Keep backups. Do not delete these folders as a generic fix. Use the confirmed **Delete** action in the lobby or Projects when you intend to remove a project and its imported copies/exports; original files outside CUTROOM remain untouched.
 
-Closing the browser does not stop the application. Save text, wait for the save indicator, and finish or cancel jobs before closing the launcher. Model caches can live outside the app folder. [Setup logs and recovery](TEST_ON_ANOTHER_PC.md)
+Closing the browser does not stop the application. Save text, wait for the save indicator, and finish or cancel jobs before closing the launcher. Model caches can live outside the app folder. [Setup logs and recovery](../TEST_ON_ANOTHER_PC.md)
 
 | Problem | Check first |
 | --- | --- |
@@ -292,7 +292,7 @@ Closing the browser does not stop the application. Save text, wait for the save 
 | Rebuild required | Save text and rebuild after editorial-setting changes |
 | Text prevents shortening the edit | Trim, move or remove the custom text that would be past the new end; text does not ripple automatically |
 
-Report the exact action/error, build name, input length/language and a redacted screenshot with the [feedback form](BETA_FEEDBACK.md). Never include API keys or the entire private `data` folder. The beta is not certified across all PCs, languages or footage; [limitations](BETA_STATUS.md) distinguish automated checks from real-world validation.
+Report the exact action/error, build name, input length/language and a redacted screenshot with the [feedback form](../BETA_FEEDBACK.md). Never include API keys or the entire private `data` folder. The beta is not certified across all PCs, languages or footage; [limitations](../BETA_STATUS.md) distinguish automated checks from real-world validation.
 
 
 ### Edit length
