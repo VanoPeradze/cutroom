@@ -162,3 +162,10 @@ body.welcome-mode #clipBoardButton { display: none; }
 @media (max-width: 520px) {
   .clip-radar-mark { min-width: 12px; font-size: 9px; }
 }
+
+/* YouTube chapters from a long-form gameplay draft (decision panel). */
+.draft-chapters { margin-top: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-inset); }
+.draft-chapters-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.draft-chapters-head strong { font-size: 13px; }
+.draft-chapters ol { margin: 0; padding: 0; list-style: none; display: grid; gap: 3px; font-size: 13px; font-variant-numeric: tabular-nums; }
+.draft-chapters small { display: block; margin-top: 8px; color: var(--muted); font-size: 12px; line-height: 1.4; }

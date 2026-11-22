@@ -16,7 +16,7 @@ import { initTrackProtection } from "./track-protection.js?v=1.2-beta";
 import { TextStudio } from "./text-studio.js?v=1.2-beta-20261019";
 import { initNumericScrub } from "./numeric-scrub.js?v=1.2-beta";
 import { ReelProposalReview, supportsReelReview } from "./reel-proposals.js?v=20261022";
-import { ClipBoard } from "./clip-board.js?v=20261122-clips2";
+import { ClipBoard } from "./clip-board.js?v=20261122-clips3";
 import { CaptionAlternatives } from "./caption-alternatives.js?v=20261023";
 import { reviewEditingRequest } from "./request-review.js?v=20261023";
 
@@ -1327,6 +1327,8 @@ function hydrateSettings() {
   elements.targetDuration.max = Math.max(15, Math.ceil(Math.min(600, state.project.sources?.A?.duration || 180)));
   elements.durationMode.value = settings.duration_mode || "style";
   updateDurationControl(Number(settings.target_duration || 60));
+  if (elements.durationGroup) elements.durationGroup.dataset.longform = "false";
+  syncLongformDuration(settings.goal || "short");
   elements.directorInstruction.value = settings.instruction || "";
   renderDirectorInstruction();
   if (elements.allowExtractiveRoughCut) elements.allowExtractiveRoughCut.checked = settings.allow_extractive_rough_cut === true;
@@ -1479,7 +1481,8 @@ function renderLanguageDetectionStatus() {
 function applyGoalMode(goal, applyDefaults = false) {
   const normalized = ["short", "youtube", "podcast", "clean"].includes(goal) ? goal : "short";
   renderEditStyleNote(normalized);
-  if (elements.durationGroup) elements.durationGroup.hidden = ["youtube", "clean"].includes(normalized);
+  if (elements.durationGroup) elements.durationGroup.hidden = ["youtube", "clean"].includes(normalized) && !longformGameplaySelected(normalized);
+  syncLongformDuration(normalized);
   const explainer = {
     short: ["shortModeTitle", "shortModeText"],
     youtube: ["youtubeModeTitle", "youtubeModeText"],
@@ -1568,7 +1571,46 @@ function renderEditStyleChoices() {
   renderEditStyleNote();
 }
 
+// Gameplay YouTube condenses a long recording: its length is minutes, not Short seconds.
+const LONGFORM_PRESETS = Object.freeze([300, 480, 600, 900]);
+function longformGameplaySelected(goal = elements.goalChoices?.querySelector("button.active")?.dataset.value || state.project?.settings?.goal) {
+  return goal === "youtube" && (state.selectedEditStyle || state.project?.settings?.edit_style) === "gameplay_youtube";
+}
+
+function syncLongformDuration(goal) {
+  if (!elements.targetDuration || !elements.durationGroup) return;
+  const longform = longformGameplaySelected(goal);
+  if (["youtube", "clean"].includes(goal)) elements.durationGroup.hidden = !longform;
+  const buttons = $$(".quick-values button", elements.durationGroup);
+  const wasLongform = elements.durationGroup.dataset.longform === "true";
+  if (!longform && !wasLongform) return;
+  elements.durationGroup.dataset.longform = String(longform);
+  const sourceDuration = Number(state.project?.sources?.A?.duration || 0);
+  if (longform) {
+    if (!wasLongform) elements.targetDuration.dataset.shortMax = elements.targetDuration.max;
+    elements.targetDuration.min = 60;
+    elements.targetDuration.max = Math.max(120, Math.ceil(Math.min(3600, sourceDuration || 3600)));
+    buttons.forEach((button, index) => {
+      if (!button.dataset.shortSeconds) { button.dataset.shortSeconds = button.dataset.seconds; button.dataset.shortLabel = button.textContent; }
+      const seconds = LONGFORM_PRESETS[index];
+      button.hidden = seconds == null;
+      if (seconds != null) { button.dataset.seconds = String(seconds); button.textContent = `${seconds / 60}m`; }
+    });
+    updateDurationControl(Number(elements.targetDuration.value) < 120 ? Math.min(600, Number(elements.targetDuration.max)) : Number(elements.targetDuration.value));
+  } else {
+    elements.targetDuration.min = 8;
+    if (elements.targetDuration.dataset.shortMax) elements.targetDuration.max = elements.targetDuration.dataset.shortMax;
+    buttons.forEach((button) => {
+      if (button.dataset.shortSeconds) { button.dataset.seconds = button.dataset.shortSeconds; button.textContent = button.dataset.shortLabel; }
+      button.hidden = false;
+    });
+    updateDurationControl(Number(elements.targetDuration.value));
+  }
+  if (typeof renderDurationPresets === "function") renderDurationPresets();
+}
+
 function renderEditStyleNote(goal = elements.goalChoices?.querySelector("button.active")?.dataset.value || state.project?.settings?.goal || "short") {
+  syncLongformDuration(goal);
   const selected = state.selectedEditStyle || state.project?.settings?.edit_style || "smart";
   const style = editStyleById(selected);
   if (elements.editStyleNote) {
@@ -3588,7 +3630,72 @@ function renderDecisions() {
     elements.decisionList.append(item);
   }
   renderGameplayMoments();
+  renderDraftChapters();
 }
+
+// YouTube chapters proposed by the long-form gameplay draft. Times are mapped
+// from each chapter's source start through the draft's current kept ranges.
+function draftChapterLines() {
+  const draft = state.project?.draft;
+  const chapters = Array.isArray(draft?.chapters) ? draft.chapters : [];
+  const keep = Array.isArray(draft?.keep_ranges) ? draft.keep_ranges : [];
+  if (chapters.length < 3 || !keep.length) return [];
+  const outputTime = (sourceTime) => {
+    let elapsed = 0;
+    for (const range of keep) {
+      const start = Number(range.start), end = Number(range.end);
+      if (sourceTime <= start) break;
+      elapsed += Math.min(sourceTime, end) - start;
+    }
+    return elapsed;
+  };
+  const clock = (seconds) => {
+    const whole = Math.max(0, Math.floor(seconds + 1e-6));
+    const hours = Math.floor(whole / 3600), minutes = Math.floor(whole / 60) % 60, rest = String(whole % 60).padStart(2, "0");
+    return hours ? `${hours}:${String(minutes).padStart(2, "0")}:${rest}` : `${minutes}:${rest}`;
+  };
+  const lines = [];
+  for (const [index, chapter] of chapters.entries()) {
+    const time = index === 0 ? 0 : outputTime(Number(chapter.source_start));
+    if (index && time - (lines.at(-1)?.time ?? 0) < 10) continue;
+    lines.push({ time, label: `${clock(time)} ${String(chapter.title || `Part ${index + 1}`).trim()}` });
+  }
+  return lines.length >= 3 ? lines : [];
+}
+
+function renderDraftChapters() {
+  let section = document.getElementById("draftChapters");
+  const lines = draftChapterLines();
+  if (!lines.length) { if (section) section.hidden = true; return; }
+  if (!section) {
+    section = document.createElement("section");
+    section.id = "draftChapters";
+    section.className = "draft-chapters";
+    const head = document.createElement("div");
+    head.className = "draft-chapters-head";
+    const title = document.createElement("strong");
+    title.textContent = "YouTube chapters";
+    const copy = document.createElement("button");
+    copy.type = "button";
+    copy.className = "button ghost compact";
+    copy.textContent = "Copy";
+    copy.addEventListener("click", async () => {
+      const text = draftChapterLines().map(line => line.label).join("\n");
+      try { await navigator.clipboard.writeText(text); toast("Chapters copied. Paste them into the YouTube description.", "success", 2800); }
+      catch { toast("Copy was blocked by the browser. Select the chapter text and copy it."); }
+    });
+    head.append(title, copy);
+    const list = document.createElement("ol");
+    const note = document.createElement("small");
+    note.textContent = "Suggested from the draft's kept stretches. Rename them, and check the times again after editing.";
+    section.append(head, list, note);
+    elements.decisionList.after(section);
+  }
+  section.hidden = false;
+  const list = section.querySelector("ol");
+  list.replaceChildren(...lines.map(line => { const item = document.createElement("li"); item.dir = "auto"; item.textContent = line.label; return item; }));
+}
+
 
 // The gameplay moments a draft kept, with their on-screen evidence. A moment
 // the model misread (a camera feed or replay read as a fight) can be marked as
