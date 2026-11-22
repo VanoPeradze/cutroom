@@ -171,3 +171,18 @@ body.welcome-mode #clipBoardButton { display: none; }
 .draft-chapters-head strong { font-size: 13px; }
 .draft-chapters ol { margin: 0; padding: 0; list-style: none; display: grid; gap: 3px; font-size: 13px; font-variant-numeric: tabular-nums; }
 .draft-chapters small { display: block; margin-top: 8px; color: var(--muted); font-size: 12px; line-height: 1.4; }
+
+/* Batch export. */
+.clip-batch-button[hidden] { display: none; }
+.clip-pick { margin-inline-start: auto; display: inline-flex; align-items: center; gap: 6px; color: var(--paper-dim); font-size: 12px; cursor: pointer; }
+.clip-pick input { width: 16px; height: 16px; margin: 0; }
+.clip-card.selected { border-color: var(--primary-fill); }
+.clip-batch { margin-bottom: 16px; padding: 12px 14px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface-raised); }
+.clip-batch-row { display: flex; align-items: center; gap: 12px; }
+.clip-batch-line { flex: 1; margin: 0; font-size: 13px; font-variant-numeric: tabular-nums; }
+.clip-batch-bar { display: block; height: 4px; margin-top: 10px; border-radius: 2px; background: var(--line); overflow: hidden; }
+.clip-batch-bar::after { content: ""; display: block; width: var(--progress, 0%); height: 100%; background: var(--cyan); transition: width 300ms ease; }
+.clip-batch-results { display: grid; gap: 4px; margin: 10px 0 0; padding: 0; list-style: none; font-size: 13px; font-variant-numeric: tabular-nums; }
+.clip-batch-results a { color: var(--cyan-text); }
+.clip-batch-results li.failed { color: var(--warning-text); }
+@media (prefers-reduced-motion: reduce) { .clip-batch-bar::after { transition: none; } }

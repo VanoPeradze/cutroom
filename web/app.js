@@ -16,7 +16,7 @@ import { initTrackProtection } from "./track-protection.js?v=1.2-beta";
 import { TextStudio } from "./text-studio.js?v=1.2-beta-20261019";
 import { initNumericScrub } from "./numeric-scrub.js?v=1.2-beta";
 import { ReelProposalReview, supportsReelReview } from "./reel-proposals.js?v=20261022";
-import { ClipBoard } from "./clip-board.js?v=20261122-clips4";
+import { ClipBoard } from "./clip-board.js?v=20261122-clips8";
 import { CaptionAlternatives } from "./caption-alternatives.js?v=20261023";
 import { reviewEditingRequest } from "./request-review.js?v=20261023";
 
@@ -8345,6 +8345,66 @@ function placeClipFromBoard(clip) {
   return opened;
 }
 
+// Export several Clips board moments, one marked-range render at a time. Each
+// render uses the same server checks as Export; finishing one advances the
+// project revision, which the next range is pinned to.
+function clipBatchSupported() {
+  return Boolean(state.project?.editor_sequence && !state.project.editor_sequence.error && clipRangeExportSupported());
+}
+
+async function exportClipBatch(clips, { onProgress = () => {}, isStopped = () => false } = {}) {
+  const projectId = state.project?.id;
+  const results = [];
+  if (!projectId || !clipBatchSupported()) throw new Error("Batch export needs an edited timeline. Open the editor first.");
+  if (!(await flushCurrentProjectSaves()) || state.project?.id !== projectId) throw new Error("Save your current edit before exporting clips.");
+  const issue = savedLayerTrackIssue()
+    || (!hasTimelineFootage() ? "Add footage to the timeline before exporting." : "")
+    || (exportRequiresDraftRebuild() ? t("rebuildBeforeRefine") : "");
+  if (issue) throw new Error(issue);
+  if (!requireResolvedExplicitDrafts() || !requireSavedTranscript()) throw new Error("Resolve the pending text or caption changes before exporting.");
+  pauseAllMedia();
+  for (const [index, clip] of clips.entries()) {
+    if (isStopped() || state.project?.id !== projectId) break;
+    const range = clipTimelineRange(clip);
+    if (!range) { results.push({ clip, error: "This moment is no longer in the edit." }); continue; }
+    const fps = Number(state.project.settings?.fps ?? 30);
+    const body = { range: { start_frame: Math.floor(range.start * fps + .5), end_frame: Math.floor(range.end * fps + .5), fps, expected_revision: state.project.revision } };
+    const lock = acquireJobStartLock("render", projectId);
+    if (!lock) { results.push({ clip, error: "Another job is already running." }); break; }
+    let jobId = null;
+    try {
+      onProgress({ index, total: clips.length, clip, progress: 0 });
+      const payload = await api(`/api/projects/${encodeURIComponent(projectId)}/render`, { method: "POST", body: JSON.stringify(body) });
+      jobId = payload.job.id;
+      setActiveJob(jobId, { projectId, kind: "render" });
+      let job = payload.job;
+      while (!["completed", "failed", "interrupted", "cancelled"].includes(job.status)) {
+        await new Promise(resolve => setTimeout(resolve, 800));
+        if (isStopped() && !job.cancel_requested) {
+          await api(`/api/jobs/${encodeURIComponent(jobId)}/cancel`, { method: "POST", body: "{}" }).catch(() => {});
+        }
+        job = (await api(`/api/jobs/${encodeURIComponent(jobId)}`)).job;
+        onProgress({ index, total: clips.length, clip, progress: Number(job.progress) || 0 });
+      }
+      clearActiveJob(jobId);
+      if (job.status !== "completed") {
+        results.push({ clip, error: job.status === "cancelled" ? "Stopped." : friendlyRenderError(job.error || "Render failed") });
+        if (job.status === "cancelled") break;
+        continue;
+      }
+      await completeExportJob(job, projectId);
+      results.push({ clip, url: job.result?.url, name: job.result?.export?.name });
+    } catch (error) {
+      if (jobId) clearActiveJob(jobId);
+      results.push({ clip, error: friendlyRenderError(error.message) });
+      if (["range_changed", "job_conflict", "insufficient_storage"].includes(error?.code)) break;
+    } finally {
+      releaseJobStartLock(lock);
+    }
+  }
+  return results;
+}
+
 async function openClipBoard() {
   if (!state.project?.sources?.A) { toast("Add a main recording before looking for clips."); return; }
   if (!(await flushCurrentProjectSaves())) return;
@@ -8355,6 +8415,9 @@ async function openClipBoard() {
     mediaUrl: project => sourceMediaUrl(project.sources.A),
     outputAspect: clipBoardAspect,
     stillLayout: clipStillLayout,
+    canExport: clipRangeExportSupported,
+    canBatch: clipBatchSupported,
+    exportBatch: exportClipBatch,
     timelineRange: clipTimelineRange,
     openClip: openClipFromBoard,
     canPlace: () => Boolean(state.project?.editor_sequence && !state.project.editor_sequence.error),

@@ -128,8 +128,12 @@ export class ClipBoard {
     close.type = "button";
     close.setAttribute("aria-label", "Close clips");
     close.append(icon(doc, "close"));
-    close.addEventListener("click", () => this.close());
-    head.append(titles, lengths, close);
+    close.addEventListener("click", () => { if (!this.batchRunning) this.close(); });
+    this.batchButton = this.el("button", "button primary compact clip-batch-button", "Export selected");
+    this.batchButton.type = "button";
+    this.batchButton.hidden = true;
+    this.batchButton.addEventListener("click", () => this.runBatch());
+    head.append(titles, this.batchButton, lengths, close);
 
     const radar = this.el("section", "clip-radar");
     radar.setAttribute("aria-label", "Moment strength across the recording");
@@ -150,10 +154,17 @@ export class ClipBoard {
     this.grid = this.el("div", "clip-grid");
     const body = this.el("div", "clip-board-body");
     const foot = this.el("p", "clip-board-foot", "Strength compares moments inside this recording. It is a measured signal, not a prediction of views. Open a clip to trim, frame and caption it in the editor.");
-    body.append(radar, this.status, this.grid, foot);
+    this.batchPanel = this.el("section", "clip-batch");
+    this.batchPanel.setAttribute("aria-live", "polite");
+    this.batchPanel.hidden = true;
+    body.append(radar, this.batchPanel, this.status, this.grid, foot);
     dialog.append(head, body);
     dialog.addEventListener("close", () => this.teardown());
-    dialog.addEventListener("cancel", () => this.stopPreview());
+    dialog.addEventListener("cancel", (event) => {
+      // A running batch keeps the board open; Stop ends it explicitly.
+      if (this.batchRunning) { event.preventDefault(); return; }
+      this.stopPreview();
+    });
     doc.body.append(dialog);
     this.dialog = dialog;
     this.radar = radar;
@@ -261,6 +272,9 @@ export class ClipBoard {
   render(board) {
     this.board = board;
     this.cards.clear();
+    this.selected = new Set();
+    this.batchSupported = Boolean(this.options.canBatch?.());
+    this.syncBatchButton();
     this.grid.removeAttribute("aria-busy");
     this.grid.replaceChildren();
     if (!board?.available) {
@@ -338,6 +352,19 @@ export class ClipBoard {
     const label = this.el("div", "clip-label");
     label.append(this.el("strong", null, strengthLabel(strength)), this.el("small", null, `${formatClock(clip.start)} – ${formatClock(clip.end)}`));
     meta.append(ring, label);
+    if (this.batchSupported && range) {
+      const pick = this.el("label", "clip-pick");
+      const box = this.el("input");
+      box.type = "checkbox";
+      box.setAttribute("aria-label", `Select clip ${clip.rank} for export`);
+      box.addEventListener("change", () => {
+        if (box.checked) this.selected.add(clip.id); else this.selected.delete(clip.id);
+        node.classList.toggle("selected", box.checked);
+        this.syncBatchButton();
+      });
+      pick.append(box, this.el("span", null, "Select"));
+      meta.append(pick);
+    }
     body.append(meta);
 
     const event = (clip.reasons || []).find(reason => reason.kind === "event" && reason.text);
@@ -503,6 +530,82 @@ export class ClipBoard {
     card.progress.style.removeProperty("--progress");
     card.play.replaceChildren(icon(this.doc, "play", true));
     card.play.setAttribute("aria-label", `Preview clip ${card.clip.rank}`);
+  }
+
+  syncBatchButton() {
+    if (!this.batchButton) return;
+    const count = this.selected?.size || 0;
+    this.batchButton.hidden = !this.batchSupported || !count;
+    this.batchButton.textContent = `Export ${count} ${count === 1 ? "clip" : "clips"}`;
+    this.batchButton.disabled = Boolean(this.batchRunning);
+  }
+
+  setBusy(busy) {
+    this.batchRunning = busy;
+    this.dialog.classList.toggle("batch-running", busy);
+    this.lengthButtons.forEach(button => { button.disabled = busy; });
+    this.grid.querySelectorAll(".clip-actions button, .clip-pick input").forEach(control => { control.disabled = busy; });
+    this.syncBatchButton();
+  }
+
+  async runBatch() {
+    const clips = (this.board?.clips || []).filter(clip => this.selected.has(clip.id));
+    if (!clips.length || this.batchRunning) return;
+    this.stopPreview();
+    this.batchStopped = false;
+    this.setBusy(true);
+    const line = this.el("p", "clip-batch-line", `Preparing ${clips.length} ${clips.length === 1 ? "clip" : "clips"}…`);
+    const bar = this.el("span", "clip-batch-bar");
+    const stop = this.el("button", "button ghost compact", "Stop");
+    stop.type = "button";
+    stop.addEventListener("click", () => { this.batchStopped = true; stop.disabled = true; line.textContent = "Stopping after the current step…"; });
+    const row = this.el("div", "clip-batch-row");
+    row.append(line, stop);
+    this.batchPanel.replaceChildren(row, bar);
+    this.batchPanel.hidden = false;
+    let results = [];
+    try {
+      results = await this.options.exportBatch(clips, {
+        isStopped: () => this.batchStopped,
+        onProgress: ({ index, total, clip, progress }) => {
+          const overall = (index + Math.max(0, Math.min(1, progress))) / total;
+          bar.style.setProperty("--progress", `${Math.round(overall * 100)}%`);
+          if (!this.batchStopped) line.textContent = `Exporting clip ${clip.rank} (${index + 1} of ${total}) · ${Math.round(progress * 100)}%`;
+        },
+      });
+    } catch (error) {
+      results = [{ error: error?.message || "Export could not start." }];
+    }
+    this.setBusy(false);
+    this.renderBatchResults(results, clips.length);
+  }
+
+  renderBatchResults(results, requested) {
+    const done = results.filter(row => row.url);
+    const head = this.el("div", "clip-batch-row");
+    head.append(this.el("p", "clip-batch-line", done.length === requested
+      ? `${done.length} ${done.length === 1 ? "clip is" : "clips are"} ready.`
+      : `${done.length} of ${requested} clips exported.`));
+    const dismiss = this.el("button", "button ghost compact", "Done");
+    dismiss.type = "button";
+    dismiss.addEventListener("click", () => { this.batchPanel.hidden = true; });
+    head.append(dismiss);
+    const list = this.el("ul", "clip-batch-results");
+    for (const row of results) {
+      const item = this.el("li");
+      if (row.url) {
+        const link = this.el("a", null, `Clip ${row.clip.rank} · ${formatClock(row.clip.start)}–${formatClock(row.clip.end)}`);
+        link.href = row.url;
+        if (row.name) link.download = row.name;
+        item.append(link);
+      } else {
+        item.className = "failed";
+        item.textContent = `${row.clip ? `Clip ${row.clip.rank}: ` : ""}${row.error || "Not exported."}`;
+      }
+      list.append(item);
+    }
+    this.batchPanel.replaceChildren(head, list);
+    this.batchPanel.hidden = false;
   }
 
   async place(clip) {
