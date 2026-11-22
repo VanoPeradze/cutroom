@@ -44,7 +44,7 @@ DOC_FILES = (
     "docs/CONTRIBUTING.md", "docs/AI_CONNECTIONS.md", "docs/PUBLISHING.md", "docs/PLATFORMS.md",
     "docs/EDITOR_ROADMAP.md", "docs/STABILIZATION.md", "docs/CHROMA_KEY.md", "docs/SOURCE_MARKS.md",
     "docs/USER_GUIDE_EN.md", "docs/USER_GUIDE_HE.md", "docs/SHOWCASE_EN.md", "docs/SHOWCASE_HE.md",
-    "docs/images/showcase/README.md", "docs/DESKTOP_APP.md",
+    "docs/images/showcase/README.md", "docs/DESKTOP_APP.md", "docs/PROJECT_COPIES.md", "docs/PREVIEW_REPAIR.md",
 )
 # Only reviewed, purpose-made app screenshots belong in the tester package.
 # Missing captures fail the build rather than silently shipping broken guide links.

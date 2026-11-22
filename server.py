@@ -100,6 +100,11 @@ SOURCE_TRACK_EDIT_FIELDS = {
     "track_reset": {"slot"},
 }
 JSON_BODY_ENDPOINTS = {
+    "clip_posting_kit",
+    "review_ai_draft",
+    "retained_edit_resume",
+    "create_project_copy",
+    "cancel_project_copy",
     "repair_asset_preview",
     "create_project",
     "patch_project",
