@@ -17,6 +17,7 @@ from .config import Settings
 from .caption_items import caption_items, caption_lines, _anchor_overlap
 from .captions import build_ass, build_srt, normalize_caption_settings, automatic_caption_plan
 from .composition import chroma_video_targets, select_embedded_candidate, source_chroma_key
+from .grading import color_filter, keyframe_transform_filter, lut_path, normalize_color, normalize_keyframes
 from .effects import build_chroma_key_nodes, chroma_key_capability, compile_automatic_effects
 from .frame_rates import project_export_fps, with_export_options
 from .range_export import ExportRange, validate_range
@@ -1129,18 +1130,12 @@ PUNCH_IN_ZOOM = 1.12
 PUNCH_IN_MAX = 12
 
 
-def punch_in_filter(project: dict[str, Any], width: int, height: int, fps: float, duration: float) -> str | None:
-    """Hard punch-in zooms at the long-form draft's loudest instants.
-
-    Times are on the draft's output clock, so they are unusable after a manual
-    sequence rearrangement and are skipped then. Geometry and duration are
-    preserved: zoompan emits one frame per input frame at the export size.
-    """
+def _punch_windows(project: dict[str, Any], duration: float) -> list[tuple[float, float]]:
     if has_sequence(project) or (project.get("settings") or {}).get("punch_ins", True) is False:
-        return None
+        return []
     draft = project.get("draft") or {}
     if draft.get("goal") != "youtube":
-        return None
+        return []
     windows = []
     for row in draft.get("punch_ins") or []:
         if not isinstance(row, dict):
@@ -1148,7 +1143,25 @@ def punch_in_filter(project: dict[str, Any], width: int, height: int, fps: float
         start, end = _finite_float(row.get("start")), _finite_float(row.get("end"))
         if 0.0 <= start < end <= duration + 1e-6 and end - start <= 3.0:
             windows.append((start, end))
-    windows = sorted(windows)[:PUNCH_IN_MAX]
+    return sorted(windows)[:PUNCH_IN_MAX]
+
+
+def transform_filter(project: dict[str, Any], width: int, height: int, fps: float, duration: float) -> str | None:
+    """Manual zoom keyframes (with any punch-ins folded in), else punch-ins alone."""
+    keyframes = normalize_keyframes((project.get("manual") or {}).get("keyframes"))
+    if keyframes:
+        return keyframe_transform_filter(keyframes, width, height, _punch_windows(project, duration), PUNCH_IN_ZOOM)
+    return punch_in_filter(project, width, height, fps, duration)
+
+
+def punch_in_filter(project: dict[str, Any], width: int, height: int, fps: float, duration: float) -> str | None:
+    """Hard punch-in zooms at the long-form draft's loudest instants.
+
+    Times are on the draft's output clock, so they are unusable after a manual
+    sequence rearrangement and are skipped then. Geometry and duration are
+    preserved: zoompan emits one frame per input frame at the export size.
+    """
+    windows = _punch_windows(project, duration)
     if not windows or width <= 0 or height <= 0:
         return None
     gate = "+".join(f"between(in_time,{start:.3f},{end:.3f})" for start, end in windows)
@@ -1176,7 +1189,8 @@ def chroma_background_input_args(project: dict[str, Any], project_dir: Path,
 
 
 def build_filter_graph(project: dict[str, Any], width: int, height: int, caption_ass: Path | None = None,
-                       input_inventory: RenderInputInventory | None = None) -> tuple[str, list[str], bool]:
+                       input_inventory: RenderInputInventory | None = None, *,
+                       lut_file: Path | None = None) -> tuple[str, list[str], bool]:
     validate_sequence_version(project)
     inventory = input_inventory or compile_render_inputs(project)
     inventory.validate(project)
@@ -1222,7 +1236,7 @@ def build_filter_graph(project: dict[str, Any], width: int, height: int, caption
     output_frames = sum(int(item["_end_frame"]) - int(item["_start_frame"]) for item in plan)
     effects_payload = _render_effects_payload(project)
     effect_expression = effects_payload.get("filter_expression")
-    punch_expression = punch_in_filter(project, width, height, fps, output_frames / fps)
+    punch_expression = transform_filter(project, width, height, fps, output_frames / fps)
     if punch_expression:
         effect_expression = f"{effect_expression},{punch_expression}" if effect_expression else punch_expression
     finalized_video_label = "vbase" if effect_expression else "vout"
@@ -1390,6 +1404,11 @@ def build_filter_graph(project: dict[str, Any], width: int, height: int, caption
         # Normalized exports get the ceiling in their final audio pass instead.
         filters.append(f"{audio_map}{audio_ceiling_filter()}[aceiling]")
         audio_map = "[aceiling]"
+    grade = color_filter(normalize_color((project.get("manual") or {}).get("color")), lut_file)
+    if grade:
+        # A timeline-level grade: the whole composed picture, before titles.
+        filters.append(f"{video_map}{grade}[vgrade]")
+        video_map = "[vgrade]"
     if caption_ass is not None:
         value = caption_ass.resolve().as_posix().replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'")
         filters.append(f"{video_map}ass=filename='{value}'[vfinal]")
@@ -1694,6 +1713,8 @@ def _render_input_fingerprint(project: dict[str, Any]) -> str:
                 "media_clips": manual.get("media_clips"),
                 "text_clips": manual.get("text_clips"),
                 "audio_mixer": manual.get("audio_mixer"),
+                # Only present once graded or keyframed, so older exports stay current.
+                **({key: manual.get(key) for key in ("color", "keyframes") if manual.get(key)}),
                 **({"layer_tracks": layer_tracks_render_identity(project)}
                    if "layer_tracks" in manual else {}),
                 # Only present once the user edits a caption, so older exports stay current.
@@ -1889,7 +1910,8 @@ def render_project(context: JobContext, project_id: str, store: ProjectStore, se
                 text_clips=text_clips,
                 caption_lines=burn_lines if burn_transcript else [],
             )
-        graph, maps, has_audio = build_filter_graph(project, width, height, caption_ass, input_inventory)
+        lut_file = lut_path(store.project_dir(project_id), normalize_color((project.get("manual") or {}).get("color")))
+        graph, maps, has_audio = build_filter_graph(project, width, height, caption_ass, input_inventory, lut_file=lut_file)
         if scope:
             # Keep the entire PCM mix in normalized staging. Its full-context loudness/limiter
             # filter runs first in the second pass; only then trim and rebase the audio.

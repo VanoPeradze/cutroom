@@ -34,6 +34,7 @@ import {planGroupJoin,verifyGroupJoin} from "./group-join.js?v=20261118-join1-ti
 import {takeContext, planTake, verifyTake, initTakeReplacement} from "./replace-take.js?v=20261118-take1";
 import { rollPair, planRoll, verifyRoll, initRollingEdit } from "./rolling-edit.js?v=20261118-slide1";
 import { makeExportRangePlan, sameExportRangePlan, exportFrameTime, exportRangeLabel } from "./range-export.js?v=20261117-1";
+import { initColorMotion } from "./color-motion.js?v=20261122-color1";
 import { initFirstRecordingGuide } from "./first-recording-guide.js?v=20261117-firstrecording1";
 import { KEYBOARD_PROFILES, resolveEditorShortcut, isEditorTransportSpace, shortcutRows } from "./keyboard.js?v=20261116-slip1-markers1-markrange1";
 import { AudioThresholdView } from "./audio-meter.js?v=20261112-workbench1";
@@ -669,9 +670,41 @@ function initializeChromaStudio() {
   });
 }
 
+function colorMotionOutputTime() {
+  return state.project ? sourceToOutputTime(previewPlaybackTime()) : 0;
+}
+
+function initColorMotionPanel() {
+  const root = document.getElementById("colorMotionRoot");
+  if (typeof initColorMotion !== "function" || !root || state.colorMotion) return;
+  const summary = document.querySelector("#colorMotionSection > summary");
+  if (summary) summary.textContent = uiCopy("צבע ותנועה", "Color & motion");
+  state.colorMotion = initColorMotion(root, {
+    getProject: () => {
+      // Include unsaved edits so a re-render never snaps sliders back.
+      const queue = state.project ? state.saveQueues.get(state.project.id) : null;
+      return applyPatchToProject(state.project, mergePatchValues(queue?.inFlightPatch || {}, queue?.pending || {}));
+    },
+    save: (manual) => schedulePatch({ manual }),
+    uploadLut: async (file) => {
+      const query = new URLSearchParams({ name: file.name.replace(/\.cube$/i, "") });
+      const payload = await api(`/api/projects/${encodeURIComponent(state.project.id)}/luts?${query}`, {
+        method: "POST", body: file, headers: { "Content-Type": "text/plain" },
+      });
+      return payload.lut;
+    },
+    outputTime: colorMotionOutputTime,
+    seek: (time) => { pauseAllMedia(); seekPreview(outputToSourceTime(time)); },
+    stage: elements.previewStage,
+    copy: uiCopy,
+    toast,
+  });
+}
+
 function updateMediaPreview() {
   updateChromaPlayback();
   updateTextPreview();
+  state.colorMotion?.sync(colorMotionOutputTime());
   if (!state.mediaStudio || !state.project?.draft) return;
   const project = playbackProject(), time = previewPlaybackTime(), sourceMode = previewUsesSourceTime();
   const mixer = sourceMixerSettings(), slot = mixer.audioSlot || "A", source = project.sources?.[slot];
@@ -2571,6 +2604,8 @@ function bindEvents() {
     seekPreview(previewUsesSourceTime() ? targetTime : outputToSourceTime(targetTime));
   });
 
+  initColorMotionPanel();
+
   elements.advancedButton.addEventListener("click", toggleAdvanced);
   elements.closeAdvanced.addEventListener("click", () => setAdvanced(false));
   $$('[data-edit-tool]').forEach(button => button.addEventListener('click', () => selectEditTool(button.dataset.editTool)));
@@ -3295,6 +3330,7 @@ function hydrateSettings() {
   updateFrameRateControls(settings.fps ?? 30);
   elements.autoReframe.checked = settings.auto_reframe !== false;
   elements.effectsToggle.checked = settings.editorial_effects !== false;
+  state.colorMotion?.render();
   elements.captionsToggle.checked = Boolean(settings.captions);
   setCaptionBurnEnabled(settings.burn_captions !== false, false);
   elements.captionStyleSelect.value = optionExists(elements.captionStyleSelect, settings.caption_style) ? settings.caption_style : CAPTION_DEFAULTS.style;
@@ -8214,6 +8250,7 @@ function updatePreviewUI(time) {
     elements.previewModeHint.textContent += ` ${t(sourceMode ? "chromaOriginalPlayback" : "chromaLivePlayback")}`;
   }
   updatePreviewCaption(time);
+  state.colorMotion?.sync(sourceToOutputTime(time));
   renderRetainedPreview();
 }
 

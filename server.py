@@ -32,6 +32,7 @@ from cutroom.director import analyze_project, refine_project
 from cutroom.edit_styles import UnknownEditStyle, get_edit_style, public_edit_styles
 from cutroom.editing import ManualEditError, apply_manual_edit, apply_source_review_edit, strip_private_edit_history
 from cutroom.reel_proposals import reel_proposal
+from cutroom.grading import LUT_MAX_BYTES, GradingError, normalize_color, normalize_keyframes, save_lut
 from cutroom.posting_kit import PostingKitError, PostingKitUnavailable, ai_posting_kit, build_posting_kit
 from cutroom.clip_board import ClipBoardError, build_clip_board, DEFAULT_COUNT as DEFAULT_CLIP_COUNT, DEFAULT_LENGTH as DEFAULT_CLIP_LENGTH
 from cutroom.ai_draft_proposals import ai_draft_proposal, ai_draft_review_status
@@ -444,7 +445,14 @@ def _validate_settings_payload(payload: dict[str, Any]) -> None:
 
 
 def _validate_manual_payload(payload: dict[str, Any]) -> None:
-    _reject_unknown_fields(payload, {"cuts", "keep_ranges", "camera_plan", "crop"})
+    _reject_unknown_fields(payload, {"cuts", "keep_ranges", "camera_plan", "crop", "color", "keyframes"})
+    try:
+        if "color" in payload:
+            normalize_color(payload["color"], strict=True)
+        if "keyframes" in payload:
+            normalize_keyframes(payload["keyframes"], strict=True)
+    except GradingError as error:
+        raise APIInputError("invalid_field", str(error)) from error
     for key in ("cuts", "keep_ranges", "camera_plan"):
         if key not in payload:
             continue
@@ -664,6 +672,9 @@ def _reset_manual_after_source_change(
         "crop": {"A": dict(crop["A"])} if keep_a_timeline and isinstance(crop.get("A"), dict) else {},
         "history": {"undo_count": 0, "redo_count": 0},
     }
+    # The grade is a look for the whole program, not tied to one recording.
+    if isinstance(previous.get("color"), dict):
+        project["manual"]["color"] = copy.deepcopy(previous["color"])
     previous_keys = previous.get("chroma_key")
     if isinstance(previous_keys, dict):
         retained_keys = {key: copy.deepcopy(value) for key, value in previous_keys.items()
@@ -675,7 +686,7 @@ def _reset_manual_after_source_change(
     # recording. Preserve explicit [] as an intentional empty A track.
     previous_tracks = previous.get("source_tracks")
     if keep_a_timeline:
-        for key in ("media_clips", "text_clips", "audio_mixer", "layer_tracks"):
+        for key in ("media_clips", "text_clips", "audio_mixer", "layer_tracks", "keyframes"):
             if key in previous:
                 project["manual"][key] = copy.deepcopy(previous[key])
     if keep_a_timeline and isinstance(previous_tracks, dict) and "A" in previous_tracks:
@@ -897,6 +908,11 @@ def create_app(settings: Settings | None = None) -> Flask:
             request.max_content_length = body_limit
             if request.content_length is not None and request.content_length > body_limit:
                 raise RequestEntityTooLarge()
+        if request.endpoint == "upload_lut":
+            # A .cube is plain text far larger than a JSON string field allows.
+            request.max_content_length = LUT_MAX_BYTES
+            if request.content_length is not None and request.content_length > LUT_MAX_BYTES:
+                raise RequestEntityTooLarge()
         if configured_loopback and not _is_loopback_host(_host_name(request.host)):
             raise APIInputError("invalid_host", "CUTROOM's local API only accepts loopback hosts.", 421)
         if request.method in UNSAFE_METHODS:
@@ -908,7 +924,7 @@ def create_app(settings: Settings | None = None) -> Flask:
         copy_writers = {"upload_source", "upload_asset", "preflight_upload", "append_upload",
                         "cancel_upload", "stabilize_source", "retry_asset_preparation", "retry_source_preparation",
                         "delete_source", "cancel_source_upload", "prepare_ai_runtime",
-                        "install_model"}
+                        "install_model", "upload_lut"}
         if request.endpoint in copy_writers or (request.view_args and "slot" in request.view_args and request.method in UNSAFE_METHODS):
             copies.begin_writer()
             g.project_copy_writer = True
@@ -1370,6 +1386,25 @@ def create_app(settings: Settings | None = None) -> Flask:
         except PostingKitUnavailable as error:
             raise APIInputError("posting_kit_unavailable", str(error), 409) from error
         return jsonify({"kit": kit})
+
+    @app.post("/api/projects/<project_id>/luts")
+    def upload_lut(project_id: str):
+        # Stores a validated .cube by content hash; choosing it is a normal
+        # manual.color save, so undo/revisions stay with the project edit.
+        # The body is the raw .cube text; the display name rides in the query.
+        if (request.mimetype or "") not in {"text/plain", "application/octet-stream"}:
+            raise APIInputError("invalid_content_type", "Send the .cube file as plain text.", 415)
+        try:
+            text = request.get_data(cache=False).decode("utf-8-sig")
+        except UnicodeDecodeError as error:
+            raise APIInputError("invalid_lut", "The LUT must be a UTF-8 text .cube file.") from error
+        store.load(project_id)
+        try:
+            lut_id = save_lut(store.project_dir(project_id), text)
+        except GradingError as error:
+            raise APIInputError("invalid_lut", str(error)) from error
+        name = re.sub(r"[\x00-\x1f\x7f]", "", str(request.args.get("name") or "LUT")).strip()[:120] or "LUT"
+        return jsonify({"lut": {"id": lut_id, "name": name}})
 
     @app.post("/api/projects/<project_id>/reel-proposal")
     def review_reel_candidate(project_id: str):

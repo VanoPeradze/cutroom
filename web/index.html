@@ -32,6 +32,7 @@
   <link rel="stylesheet" href="/assets/track-lift.css?v=20261118-lift1">
   <link rel="stylesheet" href="/assets/clip-opacity.css?v=20261118-opacity1">
   <link rel="stylesheet" href="/assets/mark-selection.css?v=20261118-markrange1">
+  <link rel="stylesheet" href="/assets/color-motion.css?v=20261122-color1">
   <link rel="stylesheet" href="/assets/ui-precision.css?v=20261122-precision1">
 </head>
 <body class="welcome-mode">
@@ -807,6 +808,9 @@
                   <label class="toggle-row"><span><b data-i18n="autoReframe">Automatic framing</b><small data-i18n="autoReframeHelp">Uses the detected speaker center</small><small class="rebuild-chip" data-rebuild-chip>Draft rebuild</small></span><input id="autoReframe" type="checkbox" checked></label>
                   <label class="toggle-row"><span><b data-i18n="editorialEffects">Smart editorial effects</b><small data-i18n="editorialEffectsHelp">Subtle, bounded emphasis at story peaks; no extra model and no free-form AI commands.</small></span><input id="effectsToggle" type="checkbox" checked></label>
                 </div>
+              </details>
+              <details class="studio-section color-motion-section inspector-section" id="colorMotionSection"><summary>Color &amp; motion</summary>
+                <div id="colorMotionRoot"></div>
               </details>
               <details class="ai-draft-settings"><summary>AI draft settings <small>Changes require rebuilding the draft</small></summary>
                 <div id="studioRuntimeDock" class="runtime-status-dock"></div>

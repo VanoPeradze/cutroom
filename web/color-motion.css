@@ -1,0 +1,32 @@
+/* Color & motion inspector section and its live preview hooks. */
+.preview-stage.is-graded .preview-pane { filter: var(--grade-filter, none); }
+.preview-stage .preview-pane { transform-origin: var(--kf-origin, 50% 50%); transition: transform .24s linear; }
+.preview-stage.has-keyframes .preview-pane { transform: var(--kf-transform, none); }
+@media (prefers-reduced-motion: reduce) { .preview-stage .preview-pane { transition: none; } }
+
+.color-motion-section #colorMotionRoot { display: grid; gap: 14px; padding-top: 10px; }
+.color-motion-block { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--line, rgba(255,255,255,.08)); border-radius: 12px; }
+.color-motion-head { display: grid; gap: 2px; margin-bottom: 4px; }
+.color-motion-head b { font-size: 13px; }
+.color-motion-head small { color: var(--muted, #9aa3ab); font-size: 12px; }
+.color-slider { display: grid; grid-template-columns: minmax(84px, 7.5em) minmax(0, 1fr) 3.4em; align-items: center; gap: 10px; font-size: 13px; }
+.color-slider > span { color: var(--muted, #9aa3ab); }
+.color-slider input[type="range"] { width: 100%; min-width: 0; margin: 0; }
+.color-slider output { text-align: end; font-variant-numeric: tabular-nums; font-size: 12px; color: var(--text, inherit); }
+.color-look-row { grid-template-columns: minmax(84px, 7.5em) minmax(0, 1fr); }
+.color-look-row select { width: 100%; }
+.color-lut-row, .color-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.color-lut-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--muted, #9aa3ab); }
+.color-note { color: var(--muted, #9aa3ab); font-size: 12px; line-height: 1.45; }
+
+.keyframe-list { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.keyframe-list:empty { display: none; }
+.keyframe-list li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 4px 6px 4px 4px; border-radius: 8px; background: rgba(127,127,127,.08); font-size: 12px; font-variant-numeric: tabular-nums; }
+.keyframe-list .keyframe-time { padding: 3px 8px; border: 0; border-radius: 6px; background: rgba(127,127,127,.16); color: inherit; font: inherit; cursor: pointer; }
+.keyframe-list .keyframe-time:hover, .keyframe-list .keyframe-time:focus-visible { background: rgba(127,127,127,.28); }
+.keyframe-list .keyframe-remove { width: 24px; height: 24px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--muted, #9aa3ab); font-size: 16px; line-height: 1; cursor: pointer; }
+.keyframe-list .keyframe-remove:hover, .keyframe-list .keyframe-remove:focus-visible { background: rgba(220,70,70,.16); color: #ff8c8c; }
+.color-motion-block .button.compact { min-height: 32px; padding: 0 12px; border-radius: 9px; font-size: 13px; }
+.color-lut-row .color-lut-name { flex: 1 0 100%; order: 3; }
+.color-lut-row [hidden] { display: none; }
+.color-lut-row .button { flex: none; white-space: nowrap; }
