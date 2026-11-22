@@ -16,7 +16,7 @@ import { initTrackProtection } from "./track-protection.js?v=1.2-beta";
 import { TextStudio } from "./text-studio.js?v=1.2-beta-20261019";
 import { initNumericScrub } from "./numeric-scrub.js?v=1.2-beta";
 import { ReelProposalReview, supportsReelReview } from "./reel-proposals.js?v=20261022";
-import { ClipBoard } from "./clip-board.js?v=20261122-clips3";
+import { ClipBoard } from "./clip-board.js?v=20261122-clips4";
 import { CaptionAlternatives } from "./caption-alternatives.js?v=20261023";
 import { reviewEditingRequest } from "./request-review.js?v=20261023";
 
@@ -8271,6 +8271,15 @@ function clipBoardAspect() {
   return width > 0 && height > 0 ? width / height : 16 / 9;
 }
 
+// Card stills follow the confirmed camera-on-top stack used by vertical export.
+function clipStillLayout() {
+  if (!embeddedCameraIsActive()) return null;
+  const camera = embeddedCameraCandidate();
+  const content = camera && embeddedContentRectangle(camera);
+  if (!camera || !content) return null;
+  return { split: .30, camera: { x: camera.x, y: camera.y, w: camera.w, h: camera.h }, content, focus: camera.content_focus || { x: .5, y: .5 } };
+}
+
 function clipTimelineRange(clip) {
   const start = Number(clip?.start), end = Number(clip?.end);
   if (!state.project?.draft || !Number.isFinite(start) || !Number.isFinite(end) || end <= start) return null;
@@ -8345,6 +8354,7 @@ async function openClipBoard() {
     getProject: () => state.project,
     mediaUrl: project => sourceMediaUrl(project.sources.A),
     outputAspect: clipBoardAspect,
+    stillLayout: clipStillLayout,
     timelineRange: clipTimelineRange,
     openClip: openClipFromBoard,
     canPlace: () => Boolean(state.project?.editor_sequence && !state.project.editor_sequence.error),

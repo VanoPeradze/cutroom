@@ -64,6 +64,24 @@ function icon(doc, name, filled = false) {
   return span;
 }
 
+// Draw a normalized source region into a canvas rectangle, cover-fit around a focus point.
+export function coverCrop(region, sourceWidth, sourceHeight, target, focus = { x: .5, y: .5 }) {
+  const sx = region.x * sourceWidth, sy = region.y * sourceHeight;
+  const sw = region.w * sourceWidth, sh = region.h * sourceHeight;
+  const ratio = target.w / target.h;
+  let cw = sw, ch = sw / ratio;
+  if (ch > sh) { ch = sh; cw = sh * ratio; }
+  const fx = Math.max(0, Math.min(1, Number(focus?.x ?? .5))), fy = Math.max(0, Math.min(1, Number(focus?.y ?? .5)));
+  const cx = Math.max(sx, Math.min(sx + sw - cw, sx + fx * sw - cw / 2));
+  const cy = Math.max(sy, Math.min(sy + sh - ch, sy + fy * sh - ch / 2));
+  return { sx: cx, sy: cy, sw: cw, sh: ch };
+}
+
+function drawCover(context, video, region, target, focus) {
+  const crop = coverCrop(region, video.videoWidth, video.videoHeight, target, focus);
+  context.drawImage(video, crop.sx, crop.sy, crop.sw, crop.sh, target.x, target.y, target.w, target.h);
+}
+
 export class ClipBoard {
   constructor(options) {
     this.options = options;
@@ -159,6 +177,7 @@ export class ClipBoard {
     this.aspect = this.options.outputAspect?.() || 16 / 9;
     this.dialog.style.setProperty("--clip-aspect", String(this.aspect));
     this.dialog.classList.toggle("vertical", this.aspect < 1);
+    this.layout = this.aspect < 1 ? this.options.stillLayout?.() || null : null;
     const url = this.options.mediaUrl(project);
     if (this.stillVideo.dataset.src !== url) { this.stillVideo.src = url; this.stillVideo.dataset.src = url; }
     if (this.previewVideo.dataset.src !== url) { this.previewVideo.src = url; this.previewVideo.dataset.src = url; }
@@ -406,10 +425,18 @@ export class ClipBoard {
     const context = canvas.getContext("2d");
     const width = video.videoWidth, height = video.videoHeight;
     if (!context || !width || !height) return;
-    // Cover-fit, centred. This is a preview of the moment, not the final framing.
-    const scale = Math.max(canvas.width / width, canvas.height / height);
-    const drawWidth = width * scale, drawHeight = height * scale;
-    try { context.drawImage(video, (canvas.width - drawWidth) / 2, (canvas.height - drawHeight) / 2, drawWidth, drawHeight); } catch { /* unreadable frame */ }
+    const layout = this.layout;
+    try {
+      if (layout) {
+        // Same stack as export: creator camera on top, gameplay below.
+        const top = Math.round(canvas.height * layout.split);
+        drawCover(context, video, layout.camera, { x: 0, y: 0, w: canvas.width, h: top }, { x: .5, y: .5 });
+        drawCover(context, video, layout.content, { x: 0, y: top, w: canvas.width, h: canvas.height - top }, layout.focus);
+      } else {
+        // Cover-fit, centred. A preview of the moment, not the final framing.
+        drawCover(context, video, { x: 0, y: 0, w: 1, h: 1 }, { x: 0, y: 0, w: canvas.width, h: canvas.height }, { x: .5, y: .5 });
+      }
+    } catch { /* unreadable frame */ }
   }
 
   togglePreview(clip) {
@@ -426,6 +453,16 @@ export class ClipBoard {
     this.playing = card;
     card.node.classList.add("playing");
     card.media.insertBefore(this.previewVideo, card.media.firstChild.nextSibling);
+    // With a camera stack, play through the card canvas so the preview keeps that framing.
+    this.previewVideo.classList.toggle("composited", Boolean(this.layout));
+    if (this.layout) {
+      const draw = () => {
+        if (this.playing !== card) return;
+        if (this.previewVideo.readyState >= 2) this.paint(card.canvas, this.previewVideo);
+        this.frame = requestAnimationFrame(draw);
+      };
+      this.frame = requestAnimationFrame(draw);
+    }
     const start = () => {
       try { this.previewVideo.currentTime = Number(clip.start) || 0; } catch { /* metadata pending */ }
       this.previewVideo.play().catch(() => this.stopPreview());
@@ -456,6 +493,7 @@ export class ClipBoard {
   stopPreview() {
     const card = this.playing;
     if (!this.previewVideo) return;
+    if (this.frame) { cancelAnimationFrame(this.frame); this.frame = null; }
     this.previewVideo.pause();
     this.previewVideo.onplay = this.previewVideo.onpause = null;
     this.previewVideo.remove();
