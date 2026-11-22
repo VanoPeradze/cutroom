@@ -1753,7 +1753,12 @@ export class TimelineView {
           ctx.save(); ctx.beginPath(); ctx.rect(x + 3, top, width - 6, h); ctx.clip();
           ctx.fillStyle = this.color("label", "#eef5f7"); ctx.font = this.font(10);
           const clipNumber = clipIndex + 1;
-          ctx.fillText(`${slot}${clipNumber} · ${formatTime(clip.source_start, true)} · ${(clip.end - clip.start).toFixed(1)}s${clip.video_speed && clip.video_speed!==1 ? ` · ${clip.video_speed}× picture` : ''}`, Math.max(x + 8, viewportLeft + this.labelInset(64)), top + (h > 40 ? 29 : 19));
+          const clipLabel = `${slot}${clipNumber} · ${formatTime(clip.source_start, true)} · ${(clip.end - clip.start).toFixed(1)}s${clip.video_speed && clip.video_speed!==1 ? ` · ${clip.video_speed}× picture` : ''}`;
+          const labelX = Math.max(x + 8, viewportLeft + this.labelInset(64)), labelY = top + (h > 40 ? 29 : 19);
+          // Thumbnails sit behind the label; a dark chip keeps it legible on any frame.
+          ctx.fillStyle = "rgba(8,12,16,.72)"; ctx.fillRect(labelX - 4, labelY - 11, ctx.measureText(clipLabel).width + 8, 15);
+          ctx.fillStyle = "#eef5f7";
+          ctx.fillText(clipLabel, labelX, labelY);
           ctx.restore();
         }
       }

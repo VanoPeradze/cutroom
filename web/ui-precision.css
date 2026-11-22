@@ -1,0 +1,41 @@
+/* Precision pass, 22 November 2026. Loaded last: small, targeted corrections
+   for measured defects. Each rule names the defect it fixes. */
+
+/* Home: the YouTube card's "16:9" caption inherited the older playhead bar
+   geometry (2px wide, offset left), so it was clipped to "6:9". */
+.home-hub .youtube-art::after {
+  left:0; right:0; bottom:6px; top:auto; width:auto; height:auto;
+  background:none; text-align:center;
+}
+
+/* Header: every primary action reads at one weight, and the stray divider
+   lines around "AI connection" no longer split the navigation in two. */
+.top-actions > .button.ghost.compact { font-weight:500; }
+.top-actions #aiConnectionButton { border-inline-color:transparent; }
+.top-actions #clipBoardButton { font-weight:600; }
+
+/* Home footer: version line and the policy line share one baseline. */
+.home-hub .home-footer { align-items:baseline; }
+
+/* Toasts sat over the bottom action bar and hid the main button ("Build my
+   first cut", the editor's bottom tabs). They now appear under the header. */
+.toast-region {
+  inset-block-start:calc(56px + env(safe-area-inset-top, 0px));
+  inset-block-end:auto;
+  align-content:start;
+}
+
+/* Import storage line: one quiet line; full arithmetic is in its tooltip. */
+.upload-storage-info { font-size:11px; color:var(--muted); cursor:help; }
+
+/* Media pool: the result count shared one row with Filter and List/Grid and
+   wrapped to four lines at 1280px, stretching the view toggle. The count now
+   has its own row; the controls stay on one line below it. */
+#advancedPanel #studioShelfMedia .library-tools .library-result-count { grid-row:3; grid-column:1 / -1; margin:0; }
+#advancedPanel #studioShelfMedia .library-tools .library-view,
+#advancedPanel #studioShelfMedia .library-tools .console-library-options { grid-row:4; align-self:center; }
+#advancedPanel #studioShelfMedia .library-tools .library-view { grid-column:3; }
+#advancedPanel #studioShelfMedia .library-tools .console-library-options { grid-column:2; }
+
+/* Editor header: the theme switch is an icon, not an 80px empty slab. */
+body.studio-open .top-actions .theme-toggle { min-width:36px; width:auto; padding-inline:9px; }

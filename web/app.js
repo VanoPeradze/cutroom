@@ -14,7 +14,7 @@ import { planLayerGroupMove, planLayerGroupRemove, planLayerGroupDuplicate, veri
 import { planLayerGroupFrame, verifyLayerGroupFrame } from "./layer-group-frame.js?v=20261117-match-frame3";
 import { planLayerGroupRelocate, verifyLayerGroupRelocate } from "./layer-group-tracks.js?v=20261116-track-levels2";
 import { applyTranslations, dictionaries } from "./i18n.js?v=1.2-beta";
-import { TimelineView, formatTime, editableClips, timelineDuration, sequenceBlocks, sequenceGaps, sequenceGapClosureIssue, rippleMoveStart } from "./timeline.js?v=20261117-editing-context1-markers1";
+import { TimelineView, formatTime, editableClips, timelineDuration, sequenceBlocks, sequenceGaps, sequenceGapClosureIssue, rippleMoveStart } from "./timeline.js?v=20261117-editing-context1-markers1-precision1";
 import { MediaStudio, libraryInsertReadiness, libraryAssetUsage, readLibraryShotMarks } from "./media-studio.js?v=20261117-audio-source1-mixer1-roll1-slide1-take1-ow1-sourceview1-opacity1-ripplechapter1-matchseam1-sourcedrag1-frame1-handoff1";
 import { initMediaFrameEditor } from "./viewer-transform.js?v=20261116-transform2";
 import { initTimelineMediaDrop } from "./timeline-media-drop.js?v=20261117-editing-context1-sourcedrag1";
@@ -45,7 +45,7 @@ import { initTrackProtection } from "./track-protection.js?v=1.2-beta";
 import { TextStudio } from "./text-studio.js?v=20261116-caption-preview3";
 import { initNumericScrub } from "./numeric-scrub.js?v=20261116-move2";
 import { ReelProposalReview, supportsReelReview } from "./reel-proposals.js?v=20261022";
-import { ClipBoard } from "./clip-board.js?v=20261122-clips10";
+import { ClipBoard } from "./clip-board.js?v=20261122-clips11-kit1";
 import { AiDraftReview } from "./ai-draft-review.js?v=20261116-ai-review2";
 import { CaptionAlternatives } from "./caption-alternatives.js?v=20261023";
 import { initCaptionPreview, captionPreviewIssue } from "./caption-preview.js?v=20261116-caption-preview3";
@@ -2199,6 +2199,14 @@ function storagePlanText(plan) {
   }).join("\n");
 }
 
+function storagePlanSummary(plan) {
+  if (!Array.isArray(plan?.filesystems)) return "";
+  return plan.filesystems.map((filesystem) => {
+    const locations = Array.isArray(filesystem.locations) ? filesystem.locations.join(" · ") : filesystem.location || filesystem.filesystem || "disk";
+    return `${locations} · ${formatBytes(filesystem.disk_free_bytes)} free, ${formatBytes(filesystem.available_bytes)} usable after the safety margin`;
+  }).join("; ");
+}
+
 function rememberUploadStorage(upload, plan) {
   if (!plan) return;
   upload.storagePlan = plan;
@@ -2211,7 +2219,9 @@ function rememberUploadStorage(upload, plan) {
 function renderUploadStorage() {
   if (!elements.uploadStorageInfo) return;
   const entries = [...state.uploadStorage.values()].filter((entry) => entry.projectId === state.project?.id);
-  elements.uploadStorageInfo.textContent = entries.map((entry) => `${entry.label}: ${storagePlanText(entry.plan)}`).join("\n");
+  // One readable line per volume; the full reserve arithmetic stays in the tooltip.
+  elements.uploadStorageInfo.textContent = entries.map((entry) => `${entry.label}: ${storagePlanSummary(entry.plan)}`).join("\n");
+  elements.uploadStorageInfo.title = entries.map((entry) => `${entry.label}: ${storagePlanText(entry.plan)}`).join("\n");
   elements.uploadStorageInfo.hidden = !elements.uploadStorageInfo.textContent;
 }
 
@@ -6387,7 +6397,7 @@ function renderSourceMixer() {
       ? uiCopy("ממתין למקור A", "Waiting for source A")
       : embeddedCameraIsActive()
         ? uiCopy("מצלמה פנימית מאושרת", "Embedded camera confirmed")
-        : uiCopy("מקור יחיד — אין שכפול אוטומטי", "One source — no automatic duplication");
+        : uiCopy("הקלטה אחת", "One recording");
     renderSceneLayoutEditor(false);
     return;
   }
@@ -12623,6 +12633,10 @@ async function openClipBoard() {
     openClip: openClipFromBoard,
     canPlace: () => Boolean(state.project?.editor_sequence && !state.project.editor_sequence.error),
     placeClip: placeClipFromBoard,
+    postingKit: (clip, useAi) => api(`/api/projects/${state.project.id}/posting-kit`, {
+      method: "POST",
+      body: JSON.stringify({ start: clip.start, end: clip.end, use_ai: Boolean(useAi), goal: state.project?.settings?.goal === "youtube" ? "youtube" : "short" }),
+    }).then(result => result.kit),
     pauseEditor: () => pauseAllMedia(),
     onClose: ({ handedOff }) => { if (!handedOff && !document.querySelector("dialog[open]")) document.getElementById("clipBoardButton")?.focus({ preventScroll: true }); },
   });

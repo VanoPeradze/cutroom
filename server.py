@@ -32,6 +32,7 @@ from cutroom.director import analyze_project, refine_project
 from cutroom.edit_styles import UnknownEditStyle, get_edit_style, public_edit_styles
 from cutroom.editing import ManualEditError, apply_manual_edit, apply_source_review_edit, strip_private_edit_history
 from cutroom.reel_proposals import reel_proposal
+from cutroom.posting_kit import PostingKitError, PostingKitUnavailable, ai_posting_kit, build_posting_kit
 from cutroom.clip_board import ClipBoardError, build_clip_board, DEFAULT_COUNT as DEFAULT_CLIP_COUNT, DEFAULT_LENGTH as DEFAULT_CLIP_LENGTH
 from cutroom.ai_draft_proposals import ai_draft_proposal, ai_draft_review_status
 from cutroom.review_candidates import media_identity as source_review_media_identity, checked_source_candidate
@@ -1336,6 +1337,34 @@ def create_app(settings: Settings | None = None) -> Flask:
         except ClipBoardError as error:
             raise APIInputError("invalid_field", str(error)) from error
         return jsonify({"board": board})
+
+    @app.post("/api/projects/<project_id>/posting-kit")
+    def clip_posting_kit(project_id: str):
+        # Titles/description/hashtags for one board moment. Read-only: the basic
+        # kit uses saved transcript/vision; use_ai asks the configured Story AI.
+        payload = _json_object()
+        _reject_unknown_fields(payload, {"start", "end", "use_ai", "goal"})
+        use_ai = payload.get("use_ai", False)
+        if not isinstance(use_ai, bool):
+            raise APIInputError("invalid_field", "use_ai must be true or false.")
+        goal = payload.get("goal", "short")
+        if goal not in {"short", "youtube"}:
+            raise APIInputError("invalid_field", "goal must be short or youtube.")
+        for key in ("start", "end"):
+            value = payload.get(key)
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+                raise APIInputError("invalid_field", f"{key} must be a number of seconds.")
+        project = store.load(project_id)
+        try:
+            if use_ai:
+                kit = ai_posting_kit(settings, project, payload["start"], payload["end"], goal=goal)
+            else:
+                kit = build_posting_kit(project, payload["start"], payload["end"], goal=goal)
+        except PostingKitError as error:
+            raise APIInputError("invalid_field", str(error)) from error
+        except PostingKitUnavailable as error:
+            raise APIInputError("posting_kit_unavailable", str(error), 409) from error
+        return jsonify({"kit": kit})
 
     @app.post("/api/projects/<project_id>/reel-proposal")
     def review_reel_candidate(project_id: str):
