@@ -16,7 +16,7 @@ import { initTrackProtection } from "./track-protection.js?v=1.2-beta";
 import { TextStudio } from "./text-studio.js?v=1.2-beta-20261019";
 import { initNumericScrub } from "./numeric-scrub.js?v=1.2-beta";
 import { ReelProposalReview, supportsReelReview } from "./reel-proposals.js?v=20261022";
-import { ClipBoard } from "./clip-board.js?v=20261122-clips8";
+import { ClipBoard } from "./clip-board.js?v=20261122-clips10";
 import { CaptionAlternatives } from "./caption-alternatives.js?v=20261023";
 import { reviewEditingRequest } from "./request-review.js?v=20261023";
 

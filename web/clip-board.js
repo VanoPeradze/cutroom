@@ -93,6 +93,7 @@ export class ClipBoard {
     this.board = null;
     this.playing = null;
     this.stillQueue = [];
+    this.thumbs = [];
   }
 
   el(tag, className, text) {
@@ -157,7 +158,9 @@ export class ClipBoard {
     this.batchPanel = this.el("section", "clip-batch");
     this.batchPanel.setAttribute("aria-live", "polite");
     this.batchPanel.hidden = true;
-    body.append(radar, this.batchPanel, this.status, this.grid, foot);
+    this.thumbPanel = this.el("section", "clip-thumbs");
+    this.thumbPanel.hidden = true;
+    body.append(radar, this.batchPanel, this.status, this.grid, this.thumbPanel, foot);
     dialog.append(head, body);
     dialog.addEventListener("close", () => this.teardown());
     dialog.addEventListener("cancel", (event) => {
@@ -269,10 +272,45 @@ export class ClipBoard {
     this.status.append(retry);
   }
 
+  // Full widescreen frames at the three strongest peaks, saved as PNG for a YouTube thumbnail.
+  renderThumbs(clips) {
+    this.thumbs = [];
+    if (!this.thumbPanel) return;
+    this.thumbPanel.hidden = !clips.length;
+    const row = this.el("div", "clip-thumbs-row");
+    for (const clip of clips) {
+      const figure = this.el("figure", "clip-thumb");
+      const canvas = this.el("canvas");
+      canvas.width = 1280; canvas.height = 720;
+      canvas.setAttribute("aria-label", `Frame at ${formatClock(clip.peak)}`);
+      const caption = this.el("figcaption");
+      const save = this.el("button", "button ghost compact", "Save PNG");
+      save.type = "button";
+      save.addEventListener("click", () => {
+        canvas.toBlob(blob => {
+          if (!blob) { this.options.notify?.("This frame could not be saved."); return; }
+          const link = this.el("a");
+          link.href = URL.createObjectURL(blob);
+          link.download = `thumbnail-${formatClock(clip.peak).replace(/:/g, "-")}.png`;
+          link.click();
+          setTimeout(() => URL.revokeObjectURL(link.href), 4000);
+        }, "image/png");
+      });
+      caption.append(this.el("span", null, `Clip ${clip.rank} · ${formatClock(clip.peak)}`), save);
+      figure.append(canvas, caption);
+      row.append(figure);
+      this.thumbs.push({ canvas, node: figure, clip: { peak: clip.peak, start: clip.start }, full: true });
+    }
+    const head = this.el("div", "clip-radar-head");
+    head.append(this.el("span", null, "Thumbnail ideas"), this.el("small", null, "Full frames at the strongest peaks. Add your title in an image editor."));
+    this.thumbPanel.replaceChildren(head, row);
+  }
+
   render(board) {
     this.board = board;
     this.cards.clear();
     this.selected = new Set();
+    if (this.thumbPanel) this.thumbPanel.hidden = true;
     this.batchSupported = Boolean(this.options.canBatch?.());
     this.syncBatchButton();
     this.grid.removeAttribute("aria-busy");
@@ -291,6 +329,7 @@ export class ClipBoard {
     this.status.hidden = true;
     this.renderRadar(board, clips);
     clips.forEach(clip => this.grid.append(this.card(clip)));
+    this.renderThumbs(clips.slice(0, 3));
     this.queueStills(clips);
   }
 
@@ -415,7 +454,7 @@ export class ClipBoard {
   }
 
   queueStills(clips) {
-    this.stillQueue = clips.map(clip => clip.id);
+    this.stillQueue = [...clips.map(clip => clip.id), ...this.thumbs];
     this.stillTicket = (this.stillTicket || 0) + 1;
     this.drawNextStill(this.stillTicket);
   }
@@ -424,7 +463,7 @@ export class ClipBoard {
     if (ticket !== this.stillTicket || !this.dialog?.open) return;
     const id = this.stillQueue.shift();
     if (!id) return;
-    const card = this.cards.get(id);
+    const card = typeof id === "string" ? this.cards.get(id) : id;
     if (!card) { this.drawNextStill(ticket); return; }
     const video = this.stillVideo;
     let settled = false;
@@ -437,7 +476,11 @@ export class ClipBoard {
       this.drawNextStill(ticket);
     };
     const onSeeked = () => {
-      if (ticket === this.stillTicket) this.paint(card.canvas, video);
+      if (ticket === this.stillTicket) {
+        if (card.full) {
+          try { drawCover(card.canvas.getContext("2d"), video, { x: 0, y: 0, w: 1, h: 1 }, { x: 0, y: 0, w: card.canvas.width, h: card.canvas.height }); } catch { /* unreadable frame */ }
+        } else this.paint(card.canvas, video);
+      }
       card.node.classList.add("has-still");
       done();
     };

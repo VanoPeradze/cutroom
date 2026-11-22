@@ -186,3 +186,10 @@ body.welcome-mode #clipBoardButton { display: none; }
 .clip-batch-results a { color: var(--cyan-text); }
 .clip-batch-results li.failed { color: var(--warning-text); }
 @media (prefers-reduced-motion: reduce) { .clip-batch-bar::after { transition: none; } }
+
+/* Thumbnail ideas. */
+.clip-thumbs { margin-top: 18px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-inset); }
+.clip-thumbs-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+.clip-thumb { margin: 0; }
+.clip-thumb canvas { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; border-radius: 6px; background: var(--ink); }
+.clip-thumb figcaption { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 6px; color: var(--paper-dim); font-size: 12px; font-variant-numeric: tabular-nums; }
