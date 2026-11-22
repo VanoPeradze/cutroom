@@ -297,6 +297,40 @@ def _embedded_candidate_from_clusters(
     return None
 
 
+FOCUS_TRACK_MIN_SPREAD = 0.06
+
+
+def focus_track(detections: list[dict[str, Any]]) -> list[dict[str, float]]:
+    """A smoothed per-sample focus path for the persistent face, or [].
+
+    One point per sampled time (median of that sample's detections), then a
+    running median of three to ignore a single misdetection. A path that
+    barely moves is returned as [] so the static focus stays in charge.
+    """
+    by_time: dict[float, list[dict[str, Any]]] = {}
+    for row in detections:
+        try:
+            time = float(row["time"]); cx = float(row["cx"]); cy = float(row["cy"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if math.isfinite(time) and math.isfinite(cx) and math.isfinite(cy):
+            by_time.setdefault(round(time, 3), []).append({"cx": cx, "cy": cy})
+    points = []
+    for time in sorted(by_time):
+        rows = by_time[time]
+        points.append((time, statistics.median(r["cx"] for r in rows), statistics.median(r["cy"] for r in rows)))
+    if len(points) < 3:
+        return []
+    smooth = []
+    for index, (time, _, _) in enumerate(points):
+        window = points[max(0, index - 1): index + 2]
+        smooth.append({"time": time,
+                       "x": round(min(1.0, max(0.0, statistics.median(p[1] for p in window))), 4),
+                       "y": round(min(1.0, max(0.0, statistics.median(p[2] for p in window))), 4)})
+    xs = [row["x"] for row in smooth]
+    return smooth if max(xs) - min(xs) >= FOCUS_TRACK_MIN_SPREAD else []
+
+
 def analyze_faces_and_embedded_camera(
     path: Path,
     duration: float,
@@ -423,6 +457,7 @@ def analyze_faces_and_embedded_camera(
         ],
         "focus": {"x": round(median_cx, 4), "y": round(median_cy, 4)},
         "focus_safe": focus_safe,
+        **({"focus_track": track} if focus_safe and (track := focus_track(best.get("detections") or [])) else {}),
         "coverage": round(float(best["coverage"]), 3),
         "stability": round(float(best["stability"]), 3),
         "embedded_camera": embedded,

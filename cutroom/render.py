@@ -499,6 +499,59 @@ def _cover_filter(width: int, height: int, focus: tuple[float, float, float]) ->
     )
 
 
+FOCUS_TRACK_MAX_POINTS = 48
+
+
+def _focus_track(project: dict[str, Any], slot: str, override: dict[str, float] | None) -> list[dict[str, float]]:
+    """The automatic face path for source A, only while the automatic focus is untouched.
+
+    A manual reframe (a crop that differs from the vision focus) or a per-clip
+    crop always wins, and the path is never applied to source B.
+    """
+    if slot != "A" or override is not None:
+        return []
+    vision = (project.get("analysis") or {}).get("vision") or {}
+    track = vision.get("focus_track") if isinstance(vision, dict) else None
+    focus = vision.get("focus") if isinstance(vision, dict) else None
+    crop = (project.get("manual") or {}).get("crop", {}).get("A") or {}
+    if not isinstance(track, list) or len(track) < 3 or not isinstance(focus, dict) or not crop:
+        return []
+    if abs(_finite_float(crop.get("x"), -1) - _finite_float(focus.get("x"), -2)) > 1e-4 or \
+            abs(_finite_float(crop.get("y"), -1) - _finite_float(focus.get("y"), -2)) > 1e-4 or \
+            abs(_finite_float(crop.get("zoom"), 1.0) - 1.0) > 1e-6:
+        return []
+    rows = []
+    for row in track[:FOCUS_TRACK_MAX_POINTS]:
+        if isinstance(row, dict):
+            time, x = _finite_float(row.get("time"), -1.0), _finite_float(row.get("x"), -1.0)
+            if time >= 0.0 and 0.0 <= x <= 1.0 and (not rows or time > rows[-1]["time"]):
+                rows.append({"time": time, "x": x})
+    return rows if len(rows) >= 3 else []
+
+
+def _track_x_expression(track: list[dict[str, float]], source_start: float) -> str:
+    """Piecewise-linear crop position on the source clock (segment t + start)."""
+    clock = f"(t+{source_start:.6f})"
+    expression = f"{track[-1]['x']:.5f}"
+    for left, right in reversed(list(zip(track, track[1:]))):
+        span = max(1e-6, right["time"] - left["time"])
+        segment = f"({left['x']:.5f}+({right['x'] - left['x']:.5f})*({clock}-{left['time']:.3f})/{span:.6f})"
+        expression = f"if(lt({clock},{right['time']:.3f}),{segment},{expression})"
+    return f"if(lt({clock},{track[0]['time']:.3f}),{track[0]['x']:.5f},{expression})"
+
+
+def _cover_track_filter(width: int, height: int, focus: tuple[float, float, float],
+                        track: list[dict[str, float]], source_start: float) -> str:
+    _x, y, zoom = focus
+    scaled_w = max(width, int(width * zoom))
+    scaled_h = max(height, int(height * zoom))
+    x_expr = _track_x_expression(track, source_start)
+    return (
+        f"scale={scaled_w}:{scaled_h}:force_original_aspect_ratio=increase:flags=lanczos,"
+        f"crop={width}:{height}:x='(iw-ow)*({x_expr})':y=(ih-oh)*{y:.5f},setsar=1"
+    )
+
+
 def _fit_filter(width: int, height: int) -> str:
     return (
         f"scale={width}:{height}:force_original_aspect_ratio=decrease:flags=lanczos,"
@@ -741,7 +794,10 @@ def _segment_nodes(
                 filters.append(f"[{inset_input}]{frame_trim},setpts=PTS-STARTPTS,{inset_filter}[inset{index}]")
                 filters.append(f"[base{index}][inset{index}]overlay={pip_x}:{pip_y}:shortest=1,format=yuv420p[{output}]")
     if camera == "A":
-        filters.append(f"[av{index}]{frame_trim},setpts=PTS-STARTPTS,{_creator_filter(mixer,"A",width,height,_cover_filter(width,height,a_focus),a_focus)},format=yuv420p[{output}]")
+        track = _focus_track(project, "A", item.get("crop", {}).get("A"))
+        a_cover = (_cover_track_filter(width, height, a_focus, track, start_frame / fps) if track
+                   else _cover_filter(width, height, a_focus))
+        filters.append(f"[av{index}]{frame_trim},setpts=PTS-STARTPTS,{_creator_filter(mixer,"A",width,height,a_cover,a_focus)},format=yuv420p[{output}]")
     elif camera == "B":
         filters.append(f"[bv{index}]{frame_trim},setpts=PTS-STARTPTS,{_creator_filter(mixer,"B",width,height,_cover_filter(width,height,b_focus),b_focus)},format=yuv420p[{output}]")
     return filters, output
