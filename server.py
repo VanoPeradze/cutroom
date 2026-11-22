@@ -32,6 +32,7 @@ from cutroom.director import analyze_project, refine_project
 from cutroom.edit_styles import UnknownEditStyle, get_edit_style, public_edit_styles
 from cutroom.editing import ManualEditError, apply_manual_edit, apply_source_review_edit, strip_private_edit_history
 from cutroom.reel_proposals import reel_proposal
+from cutroom.clip_board import ClipBoardError, build_clip_board, DEFAULT_COUNT as DEFAULT_CLIP_COUNT, DEFAULT_LENGTH as DEFAULT_CLIP_LENGTH
 from cutroom.review_candidates import media_identity as source_review_media_identity, checked_source_candidate
 from cutroom.sequence import SEQUENCE_ACTION_FIELDS, editor_sequence_snapshot
 from cutroom.source_tracks import SourceTrackError, TimelineVersionError, validate_sequence_version
@@ -1180,6 +1181,19 @@ def create_app(settings: Settings | None = None) -> Flask:
             stat = path.stat()
             identity[key] = [str(path), stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns]
         return reel_proposal(project, candidate_id, identity)
+
+    @app.get("/api/projects/<project_id>/clip-board")
+    def clip_board(project_id: str):
+        # Read-only ranking from saved analysis; no model, render or project save.
+        unknown = set(request.args) - {"length", "count"}
+        if unknown:
+            raise APIInputError("unknown_field", f"Unknown query field: {sorted(unknown)[0]}.")
+        try:
+            board = build_clip_board(store.load(project_id), length=request.args.get("length", DEFAULT_CLIP_LENGTH),
+                                     count=request.args.get("count", DEFAULT_CLIP_COUNT))
+        except ClipBoardError as error:
+            raise APIInputError("invalid_field", str(error)) from error
+        return jsonify({"board": board})
 
     @app.post("/api/projects/<project_id>/reel-proposal")
     def review_reel_candidate(project_id: str):

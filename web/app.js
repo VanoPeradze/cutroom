@@ -16,6 +16,7 @@ import { initTrackProtection } from "./track-protection.js?v=1.2-beta";
 import { TextStudio } from "./text-studio.js?v=1.2-beta-20261019";
 import { initNumericScrub } from "./numeric-scrub.js?v=1.2-beta";
 import { ReelProposalReview, supportsReelReview } from "./reel-proposals.js?v=20261022";
+import { ClipBoard } from "./clip-board.js?v=20261122-clips2";
 import { CaptionAlternatives } from "./caption-alternatives.js?v=20261023";
 import { reviewEditingRequest } from "./request-review.js?v=20261023";
 
@@ -1104,6 +1105,7 @@ function bindEvents() {
   elements.rebuildDraftButton.addEventListener("click", rebuildDraftFromStudio);
 
   elements.renderButton.addEventListener("click", openExportDialog);
+  document.getElementById("clipBoardButton")?.addEventListener("click", openClipBoard);
   elements.resultRenderButton.addEventListener("click", openExportDialog);
   elements.closeExportDialog.addEventListener("click", () => elements.exportDialog.close());
   elements.cancelExport.addEventListener("click", () => elements.exportDialog.close());
@@ -8150,6 +8152,100 @@ function openExportDialog({ progress = false } = {}) {
   elements.confirmExport.disabled = foregroundBusy();
   renderExportReview(progress ? null : latestExport?.review, "Checks of the previous export");
   if (!elements.exportDialog.open) elements.exportDialog.showModal();
+}
+
+// Clips board: read-only moment ranking. A chosen clip becomes an ordinary
+// timeline range selection; existing selection, export and guard paths own the rest.
+let clipBoard = null;
+
+function clipBoardAspect() {
+  const selected = String(state.project?.settings?.aspect || "16:9");
+  const [width, height] = (selected === "source" ? sourceAspect() : selected).split(":").map(Number);
+  return width > 0 && height > 0 ? width / height : 16 / 9;
+}
+
+function clipTimelineRange(clip) {
+  const start = Number(clip?.start), end = Number(clip?.end);
+  if (!state.project?.draft || !Number.isFinite(start) || !Number.isFinite(end) || end <= start) return null;
+  const project = editorProject();
+  if (project?.__timelineUnavailable) return null;
+  if (!hasSourceTracks(project)) return { start, end };
+  const pieces = [];
+  for (const item of trackClips(project, "A")) {
+    const sourceStart = Number(item.source_start), sourceEnd = sourceStart + Number(item.end) - Number(item.start);
+    const left = Math.max(start, sourceStart), right = Math.min(end, sourceEnd);
+    if (right > left) pieces.push({ start: Number(item.start) + left - sourceStart, end: Number(item.start) + right - sourceStart });
+  }
+  pieces.sort((a, b) => a.start - b.start || a.end - b.end);
+  const merged = [];
+  for (const piece of pieces) {
+    const last = merged.at(-1);
+    if (last && piece.start <= last.end + 1e-3) last.end = Math.max(last.end, piece.end);
+    else merged.push({ ...piece });
+  }
+  // Only one continuous span of the edit that holds (nearly) the whole moment.
+  if (merged.length !== 1 || merged[0].end - merged[0].start < (end - start) * .95) return null;
+  return merged[0];
+}
+
+// Marked-range export is a separate capability; without it Export would mean the whole edit.
+function clipRangeExportSupported() {
+  return typeof currentExportRangePlan === "function" && typeof refreshExportScope === "function" && Boolean(elements.exportScope);
+}
+
+async function openClipFromBoard(clip, range, { exportAfter = false } = {}) {
+  if (!state.project || !state.timeline) return;
+  if (!state.studio.open) setAdvanced(true);
+  if (!state.studio.open) return;
+  const current = clipTimelineRange(clip);
+  if (!current || Math.abs(current.start - range.start) > 1e-3 || Math.abs(current.end - range.end) > 1e-3) {
+    toast("The edit changed. Open Clips again to choose this moment.");
+    return;
+  }
+  if (hasSourceTracks(editorProject()) && !state.project.editor_sequence) setEditTarget("edit");
+  state.timeline.selectRange(range.start, range.end);
+  state.timeline.zoomToSelection?.();
+  updateZoomLabel();
+  seekSourcePreview(range.start);
+  if (!exportAfter) {
+    toast(`Clip ${clip.rank} is selected on the timeline. Trim, frame or caption it, then export the marked range.`, "success", 4200);
+    return;
+  }
+  openExportDialog();
+  if (!elements.exportDialog.open || !clipRangeExportSupported()) return;
+  if (currentExportRangePlan()) {
+    elements.exportScope.value = "selection";
+    refreshExportScope({ choose: true });
+  } else {
+    toast("This clip could not be marked for export. Check the selection in the edited timeline.");
+  }
+}
+
+function placeClipFromBoard(clip) {
+  if (!state.project?.sources?.A) return false;
+  if (!state.studio.open) setAdvanced(true);
+  const opened = state.studio.open && openSourceInsert({ projectId: state.project.id, slot: "A", scope: "edit", source_start: Number(clip.start), source_end: Number(clip.end) });
+  if (!opened) toast("Footage cannot be placed right now. Finish the current task, then try again.");
+  return opened;
+}
+
+async function openClipBoard() {
+  if (!state.project?.sources?.A) { toast("Add a main recording before looking for clips."); return; }
+  if (!(await flushCurrentProjectSaves())) return;
+  pauseAllMedia();
+  clipBoard ||= new ClipBoard({
+    api, notify: message => toast(message),
+    getProject: () => state.project,
+    mediaUrl: project => sourceMediaUrl(project.sources.A),
+    outputAspect: clipBoardAspect,
+    timelineRange: clipTimelineRange,
+    openClip: openClipFromBoard,
+    canPlace: () => Boolean(state.project?.editor_sequence && !state.project.editor_sequence.error),
+    placeClip: placeClipFromBoard,
+    pauseEditor: () => pauseAllMedia(),
+    onClose: ({ handedOff }) => { if (!handedOff && !document.querySelector("dialog[open]")) document.getElementById("clipBoardButton")?.focus({ preventScroll: true }); },
+  });
+  await clipBoard.open();
 }
 
 function showExportLayoutWarning(fallback, prefix = "") {

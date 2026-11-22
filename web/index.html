@@ -15,6 +15,7 @@
   <link rel="stylesheet" href="/assets/chroma-studio.css?v=1.3-beta-20261101-ui1">
   <link rel="stylesheet" href="/assets/text-studio.css?v=1.2-beta-20261019">
   <link rel="stylesheet" href="/assets/welcome.css?v=1.3-beta-20261111-transcription1">
+  <link rel="stylesheet" href="/assets/clip-board.css?v=20261122-clips2">
   <link rel="stylesheet" href="/assets/creator-ui.css?v=1.2-beta-20261024-ui-clarity1">
   <link rel="stylesheet" href="/assets/editor-panels.css?v=1.2-beta-20261019">
   <link rel="stylesheet" href="/assets/studio-design.css?v=1.2-beta-20261019">
@@ -43,6 +44,9 @@
       <button class="button ghost compact theme-toggle" id="themeToggle" type="button" aria-label="Night mode" aria-pressed="false" title="Switch to night mode"><span id="themeIcon" aria-hidden="true">☀</span><span id="themeLabel">Day</span></button>
       <span class="local-status"><i aria-hidden="true"></i><span id="processingBadge">Local AI</span></span>
       <button class="button ghost compact" id="advancedButton" aria-expanded="false" data-i18n="studio">Studio</button>
+      <button class="button ghost compact" id="clipBoardButton" type="button" title="Find the strongest moments in this recording">
+        <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3" y="4" width="7" height="16" rx="1.5"/><rect x="14" y="4" width="7" height="10" rx="1.5"/><path d="M14 18h7"/></svg><span>Clips</span>
+      </button>
       <button class="button render compact" id="renderButton" disabled>
         <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 15V3m-4 4 4-4 4 4M5 14v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5"/></svg><span data-i18n="render">Export</span>
       </button>
@@ -963,7 +967,7 @@
       <footer class="connection-actions"><button class="button ghost" id="forgetCloudKey" type="button">Forget session key</button><button class="button primary" id="saveAIConnection" type="submit">Use this connection</button></footer>
     </form>
   </dialog>
-  <script type="module" src="/assets/app.js?v=1.3-beta-20261111-hebrew-cloud1"></script>
+  <script type="module" src="/assets/app.js?v=1.3-beta-20261111-hebrew-cloud1-clips2"></script>
   <script src="/assets/studio-screens.js?v=20261108-studio1" defer></script>
 </body>
 </html>
