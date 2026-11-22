@@ -1069,6 +1069,37 @@ def _final_audio_filter(project: dict[str, Any]) -> str:
     return f"{result},{audio_ceiling_filter()}"
 
 
+PUNCH_IN_ZOOM = 1.12
+PUNCH_IN_MAX = 12
+
+
+def punch_in_filter(project: dict[str, Any], width: int, height: int, fps: float, duration: float) -> str | None:
+    """Hard punch-in zooms at the long-form draft's loudest instants.
+
+    Times are on the draft's output clock, so they are unusable after a manual
+    sequence rearrangement and are skipped then. Geometry and duration are
+    preserved: zoompan emits one frame per input frame at the export size.
+    """
+    if has_sequence(project) or (project.get("settings") or {}).get("punch_ins", True) is False:
+        return None
+    draft = project.get("draft") or {}
+    if draft.get("goal") != "youtube":
+        return None
+    windows = []
+    for row in draft.get("punch_ins") or []:
+        if not isinstance(row, dict):
+            continue
+        start, end = _finite_float(row.get("start")), _finite_float(row.get("end"))
+        if 0.0 <= start < end <= duration + 1e-6 and end - start <= 3.0:
+            windows.append((start, end))
+    windows = sorted(windows)[:PUNCH_IN_MAX]
+    if not windows or width <= 0 or height <= 0:
+        return None
+    gate = "+".join(f"between(in_time,{start:.3f},{end:.3f})" for start, end in windows)
+    return (f"zoompan=z='if({gate},{PUNCH_IN_ZOOM:.2f},1)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
+            f":d=1:s={int(width)}x{int(height)}:fps={fps}")
+
+
 def _render_effects_payload(project: dict[str, Any]) -> dict[str, Any]:
     # Automatic effects were authored against source-clock Story beats. Their
     # timestamps cannot be reused after arbitrary sequence rearrangement.
@@ -1135,6 +1166,9 @@ def build_filter_graph(project: dict[str, Any], width: int, height: int, caption
     output_frames = sum(int(item["_end_frame"]) - int(item["_start_frame"]) for item in plan)
     effects_payload = _render_effects_payload(project)
     effect_expression = effects_payload.get("filter_expression")
+    punch_expression = punch_in_filter(project, width, height, fps, output_frames / fps)
+    if punch_expression:
+        effect_expression = f"{effect_expression},{punch_expression}" if effect_expression else punch_expression
     finalized_video_label = "vbase" if effect_expression else "vout"
     finalize_video = (
         # Give fps enough EOF runway to emit the final planned frame; trim then

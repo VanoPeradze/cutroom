@@ -70,3 +70,30 @@ def test_only_the_youtube_gameplay_style_uses_it():
     assert uses_longform_gameplay("youtube", {"edit_style": "gameplay_youtube"})
     assert not uses_longform_gameplay("short", {"edit_style": "gameplay_youtube"})
     assert not uses_longform_gameplay("youtube", {"edit_style": "clean_vod"})
+
+
+def test_chapter_titles_come_from_what_is_said_without_vision():
+    segments = [{"start": 70.0, "end": 74.0, "text": "No way, we actually won that fight!"},
+                {"start": 905.0, "end": 909.0, "text": "Where is the last enemy hiding?"}]
+    result = condense_longform(duration=1800, target_duration=300, sound_profile=_waveform(1800, LOUD),
+                               segments=segments, visual=None)
+    titles = [chapter["title"] for chapter in result["chapters"]]
+    assert "No way, we actually won that fight!" in titles
+    assert "Where is the last enemy hiding?" in titles
+    assert all(len(title) <= 48 for title in titles)
+
+
+def test_punch_ins_sit_inside_the_output_and_are_spaced():
+    result = condense_longform(duration=1800, target_duration=300, sound_profile=_waveform(1800, LOUD),
+                               segments=[], visual=None)
+    punches = result["punch_ins"]
+    assert 1 <= len(punches) <= 12
+    assert all(0.0 <= row["start"] < row["end"] <= result["seconds"] for row in punches)
+    assert all(b["start"] - a["start"] >= 30 - 1e-6 for a, b in zip(punches, punches[1:]))
+    assert result["cold_open"]["source_end"] - result["cold_open"]["source_start"] == pytest.approx(6.0)
+
+
+def test_quiet_recording_gets_no_punch_ins():
+    result = condense_longform(duration=1800, target_duration=300, sound_profile=_waveform(1800, []),
+                               segments=[], visual=None)
+    assert result is None or not result.get("punch_ins")

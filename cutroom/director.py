@@ -4588,6 +4588,8 @@ def analyze_project(
         "duration_review": duration_review,
         **({"gameplay_moments": gameplay_review} if gameplay_review else {}),
         **({"chapters": longform["chapters"]} if longform and longform.get("chapters") else {}),
+        **({"punch_ins": longform["punch_ins"]} if longform and longform.get("punch_ins") else {}),
+        **({"cold_open": longform["cold_open"]} if longform and longform.get("cold_open") else {}),
         "source_duration": duration,
         "output_duration": output_duration,
         "removed_duration": round(max(0.0, duration - output_duration), 3),

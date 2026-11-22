@@ -215,3 +215,4 @@ body.welcome-mode #clipBoardButton { display: none; }
 .clip-thumb { margin: 0; }
 .clip-thumb canvas { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; border-radius: 6px; background: var(--ink); }
 .clip-thumb figcaption { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 6px; color: var(--paper-dim); font-size: 12px; font-variant-numeric: tabular-nums; }
+.draft-longform-extras { margin: 8px 0 0; color: var(--paper-dim); font-size: 12px; line-height: 1.45; }

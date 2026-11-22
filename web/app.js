@@ -45,7 +45,7 @@ import { initTrackProtection } from "./track-protection.js?v=1.2-beta";
 import { TextStudio } from "./text-studio.js?v=20261116-caption-preview3";
 import { initNumericScrub } from "./numeric-scrub.js?v=20261116-move2";
 import { ReelProposalReview, supportsReelReview } from "./reel-proposals.js?v=20261022";
-import { ClipBoard } from "./clip-board.js?v=20261122-clips11-kit1";
+import { ClipBoard } from "./clip-board.js?v=20261122-clips11-kit2";
 import { AiDraftReview } from "./ai-draft-review.js?v=20261116-ai-review2";
 import { CaptionAlternatives } from "./caption-alternatives.js?v=20261023";
 import { initCaptionPreview, captionPreviewIssue } from "./caption-preview.js?v=20261116-caption-preview3";
@@ -6045,6 +6045,20 @@ function renderDraftChapters() {
   section.hidden = false;
   const list = section.querySelector("ol");
   list.replaceChildren(...lines.map(line => { const item = document.createElement("li"); item.dir = "auto"; item.textContent = line.label; return item; }));
+  // Long-form extras: the strongest instant as a cold-open teaser idea, and
+  // how many punch-in zooms the export adds at the loudest moments.
+  let extra = section.querySelector(".draft-longform-extras");
+  if (!extra) { extra = document.createElement("p"); extra.className = "draft-longform-extras"; list.after(extra); }
+  const draft = state.project?.draft || {};
+  const notes = [];
+  const cold = draft.cold_open;
+  if (cold && Number.isFinite(Number(cold.source_start))) {
+    notes.push(`Cold open idea: the strongest moment, ${formatTime(Number(cold.source_start))}–${formatTime(Number(cold.source_end))} in the recording. Place a copy before 0:00 as a teaser.`);
+  }
+  const punches = Array.isArray(draft.punch_ins) ? draft.punch_ins.length : 0;
+  if (punches && !state.project?.manual?.sequence) notes.push(`Export adds ${punches} short punch-in zoom${punches === 1 ? "" : "s"} at the loudest moments.`);
+  extra.textContent = notes.join(" ");
+  extra.hidden = !notes.length;
 }
 
 // The gameplay moments a draft kept, with their on-screen evidence. A moment
