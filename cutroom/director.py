@@ -4305,7 +4305,20 @@ def analyze_project(
     # cleanup and defensible transcript cleanup inside those passages.
     duration_chain: list[dict[str, Any]] = [{"stage": "requested", "seconds": round(float(target_duration), 3)}]
     gameplay_review: list[dict[str, Any]] = []
-    if goal == "short" and (duration > target_duration or brief.get("duration_mode") == "target" or protected_selection):
+    longform = None
+    if goal == "youtube" and str(brief.get("edit_style") or "") == "gameplay_youtube" and duration > target_duration:
+        from .longform import condense_longform  # local import: longform reuses director helpers
+
+        longform = condense_longform(
+            duration=duration, target_duration=target_duration, sound_profile=sound_profile,
+            segments=segments, visual=visual_timeline, pace=pace, audio_candidates=audio_candidates,
+        )
+    if longform is not None:
+        cuts, counts = longform["cuts"], dict(longform["counts"])
+        decision["summary"] = longform["summary"]
+        engine = "gameplay_longform"
+        duration_chain.append({"stage": "gameplay_longform", "seconds": longform["seconds"], "passages": longform["stretches"]})
+    elif goal == "short" and (duration > target_duration or brief.get("duration_mode") == "target" or protected_selection):
         selection_policy = {**((brief.get("style_profile") or {}).get("selection_policy") or {}),
                             **({"duration_bounds": copy.deepcopy(duration_bounds)} if duration_bounds else {})}
         selection_segments = _with_visual_evidence(
@@ -4547,6 +4560,7 @@ def analyze_project(
         "target_duration": target_duration,
         "duration_review": duration_review,
         **({"gameplay_moments": gameplay_review} if gameplay_review else {}),
+        **({"chapters": longform["chapters"]} if longform and longform.get("chapters") else {}),
         "source_duration": duration,
         "output_duration": output_duration,
         "removed_duration": round(max(0.0, duration - output_duration), 3),

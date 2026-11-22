@@ -317,7 +317,8 @@ Object.assign(en, {
   visualAi: "Gameplay vision", visualAiAuto: "Automatic (Smart and streamer styles)", visualAiOn: "On for every Short", visualAiOff: "Off",
   decision_visual_ai: "Gameplay vision", visualMomentsWatched: "moments watched",
   decision_dead_screen: "Silent menus and loading screens removed",
-  decision_gameplay_moments: "Gameplay moments chosen by on-screen action and sound"
+  decision_gameplay_moments: "Gameplay moments chosen by on-screen action and sound",
+  decision_longform_selection: "Weaker stretches removed, original order kept"
 });
 Object.assign(he, {
   visualAi: "ראייה של המשחק", visualAiAuto: "אוטומטי (Smart וסגנונות סטרימר)", visualAiOn: "פעיל בכל Short", visualAiOff: "כבוי",
