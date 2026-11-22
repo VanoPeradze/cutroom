@@ -1,0 +1,264 @@
+name: CUTROOM PR 130 supplemental package qualification
+
+on:
+  push:
+    branches: ['release-qualification/pr130-324a6a3']
+    paths: ['.github/workflows/pr130-package-qualification.yml']
+
+permissions:
+  contents: read
+
+env:
+  REVIEWED_PR_HEAD: '17ae8c8b0593f8041ec399eea1e669ae9728f400'
+  APPLICATION_SOURCE: '324a6a33f968b9d90a9e37b25b3ca5c6a83e7d5a'
+  WINDOWS_NAME: 'CUTROOM-1.3-Beta-Windows-324a6a3.zip'
+  WINDOWS_URL: 'https://cutroom-studio--o2cbay1w81.expo.app/downloads/CUTROOM-1.3-Beta-Windows-324a6a3.zip'
+  WINDOWS_BYTES: '6427570'
+  WINDOWS_SHA256: 'e8ca94aa8fb22b582ba902630660051b12b01731154e6a554acbd64246347ba6'
+  WINDOWS_MANIFEST_SHA256: 'a4faca4f1537e302af013afcce35e1c2f41c6036b18385b5eba9af6212a214a8'
+  COMBINED_SHA256: '8fa4913fd719b65c3828f585c389133c6cde7a245a0559d63d2ba8d861e8a546'
+  COMBINED_MANIFEST_SHA256: '9c8836ab92eaa0c9b6656a7d9e5d3bc349e3282afa8e419385d7b22cdf7b8029'
+  CUTROOM_NO_BROWSER: '1'
+  HF_HUB_OFFLINE: '1'
+  TRANSFORMERS_OFFLINE: '1'
+  HF_HUB_DISABLE_TELEMETRY: '1'
+  PIP_DISABLE_PIP_VERSION_CHECK: '1'
+  PYTHONDONTWRITEBYTECODE: '1'
+  PYTHONUTF8: '1'
+
+jobs:
+  macos_fresh:
+    if: github.repository == 'VanoPeradze/cutroom'
+    name: Exact fresh App / macOS 15 / ${{ matrix.architecture }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            architecture: arm64
+          - runner: macos-15-intel
+            architecture: x64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 32
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+      HOMEBREW_NO_INSTALL_CLEANUP: '1'
+      HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: '1'
+    steps:
+      - name: Check out the exact isolated qualification revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          fetch-depth: 5
+      - name: Prove the only difference is this qualification workflow
+        shell: bash
+        run: |
+          git diff --exit-code "$REVIEWED_PR_HEAD" "$GITHUB_SHA" -- . ":(exclude).github/workflows/pr130-package-qualification.yml"
+          test "$(git rev-parse HEAD^)" = "$REVIEWED_PR_HEAD"
+          test "$(git diff --name-only HEAD^ HEAD)" = ".github/workflows/pr130-package-qualification.yml"
+          git merge-base --is-ancestor "$APPLICATION_SOURCE" "$REVIEWED_PR_HEAD"
+
+      - name: Set up native Python 3.12
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with:
+          python-version: '3.12'
+          architecture: ${{ matrix.architecture }}
+      - name: Install matching FFmpeg 7 from official Homebrew
+        timeout-minutes: 10
+        run: |
+          brew install ffmpeg@7
+          echo "$(brew --prefix ffmpeg@7)/bin" >> "$GITHUB_PATH"
+      - name: Verify the exact source-bound staged candidate bytes
+        timeout-minutes: 3
+        run: |
+          python scripts/verify_published_package.py --release packaging/mac/release-candidate.json --output "$RUNNER_TEMP/candidate.zip"
+          python - <<'PY'
+          import hashlib, json, os, pathlib, zipfile
+          pin = json.loads(pathlib.Path("packaging/mac/release-candidate.json").read_bytes())
+          path = pathlib.Path(os.environ["RUNNER_TEMP"]) / "candidate.zip"
+          assert pin["source_commit"] == os.environ["APPLICATION_SOURCE"]
+          assert pin["sha256"] == hashlib.sha256(path.read_bytes()).hexdigest() == os.environ["COMBINED_SHA256"]
+          with zipfile.ZipFile(path) as archive:
+              assert hashlib.sha256(archive.read("mac/App/TEST_BUILD.json")).hexdigest() == pin["manifest_sha256"] == os.environ["COMBINED_MANIFEST_SHA256"]
+          PY
+      - name: Fresh App install, export and reopen of the exact candidate
+        timeout-minutes: 18
+        env:
+          EXPECTED_MAC_ARCHITECTURE: ${{ matrix.architecture }}
+        run: |
+          python scripts/smoke_macos.py --archive "$RUNNER_TEMP/candidate.zip" --report "$RUNNER_TEMP/macos-fresh.json"
+          python - <<'PY'
+          import hashlib, json, os, pathlib
+          root = pathlib.Path(os.environ["RUNNER_TEMP"])
+          report = root / "macos-fresh.json"
+          r = json.loads(report.read_bytes())
+          assert r["fresh_install"] is True and r["installation_scenario"] == "empty_app_install"
+          assert r["package_sha256"] == os.environ["COMBINED_SHA256"] and r["missing_pip_recovery"] == "not_run"
+          assert r["unicode_and_spaces_path"] is True
+          assert r["machine"] == {"arm64": "arm64", "x64": "x86_64"}[os.environ["EXPECTED_MAC_ARCHITECTURE"]]
+          assert r["transcription"]["status"] == r["manual_finder_gatekeeper_test"] == r["ollama_and_cloud_ai"] == "not_run"
+          for key in ("status", "launcher_health_and_api", "restart_persistence", "repeat_launch", "different_data_port_collision", "source_audio_and_caption_checks", "offline_ready_setup", "installed_packages_unchanged"):
+              assert r[key] == "passed", key
+          provenance = {"schema": "cutroom-supplemental-exact-package-v1", "run_id": int(os.environ["GITHUB_RUN_ID"]), "workflow_sha": os.environ["GITHUB_SHA"], "reviewed_pr_head": os.environ["REVIEWED_PR_HEAD"], "application_source_commit": os.environ["APPLICATION_SOURCE"], "archive_sha256": r["package_sha256"], "report_sha256": hashlib.sha256(report.read_bytes()).hexdigest(), "kind": "exact_mac_fresh_app_install"}
+          (root / "macos-fresh-provenance.json").write_text(json.dumps(provenance,indent=2)+"\n",encoding="utf-8")
+          PY
+      - name: Retain exact fresh App reports
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: CUTROOM-pr130-fresh-${{ matrix.architecture }}
+          path: |
+            ${{ runner.temp }}/macos-fresh.json
+            ${{ runner.temp }}/macos-fresh-provenance.json
+          if-no-files-found: error
+          retention-days: 30
+
+  windows_exact:
+    if: github.repository == 'VanoPeradze/cutroom'
+    name: Exact installed package smoke / Windows
+    runs-on: windows-2022
+    timeout-minutes: 38
+    env:
+      TESTED_HEAD_SHA: ${{ github.sha }}
+    steps:
+      - name: Check out the exact isolated qualification revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          fetch-depth: 5
+      - name: Prove the only difference is this qualification workflow
+        shell: bash
+        run: |
+          git diff --exit-code "$REVIEWED_PR_HEAD" "$GITHUB_SHA" -- . ":(exclude).github/workflows/pr130-package-qualification.yml"
+          test "$(git rev-parse HEAD^)" = "$REVIEWED_PR_HEAD"
+          test "$(git diff --name-only HEAD^ HEAD)" = ".github/workflows/pr130-package-qualification.yml"
+          git merge-base --is-ancestor "$APPLICATION_SOURCE" "$REVIEWED_PR_HEAD"
+
+      - name: Set up native Python 3.12
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with:
+          python-version: '3.12'
+          architecture: x64
+      - name: Obtain and verify FFmpeg in temporary runner storage
+        timeout-minutes: 8
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $archive = Join-Path $env:RUNNER_TEMP 'ffmpeg-9.0.2-essentials.zip'
+          Invoke-WebRequest -Uri 'https://www.gyan.dev/ffmpeg/builds/packages/ffmpeg-9.0.2-essentials_build.zip' -OutFile $archive
+          $actual = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne '60f467265b1e312373dbcd92200c2618a74850f98d3d078e94296bb3fa2047ba') { throw 'FFmpeg archive checksum mismatch' }
+          $dest = Join-Path $env:RUNNER_TEMP 'ffmpeg-extracted'
+          Expand-Archive -LiteralPath $archive -DestinationPath $dest
+          $files = @(Get-ChildItem -LiteralPath $dest -Filter ffmpeg.exe -File -Recurse)
+          if ($files.Count -ne 1 -or -not (Test-Path -LiteralPath (Join-Path $files[0].DirectoryName 'ffprobe.exe'))) { throw 'FFmpeg binaries missing or ambiguous' }
+          $files[0].DirectoryName | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          "CUTROOM_EXPECTED_FFMPEG=$($files[0].FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "CUTROOM_FFMPEG=$($files[0].FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "CUTROOM_FFPROBE=$(Join-Path $files[0].DirectoryName 'ffprobe.exe')" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          $filters = & $files[0].FullName -nostdin -hide_banner -filters
+          if ($LASTEXITCODE -ne 0 -or -not ($filters -match 'vidstabdetect') -or -not ($filters -match 'vidstabtransform')) { throw 'Downloaded FFmpeg lacks the required stabilization filters' }
+      - name: Download and verify exact approved Windows ZIP, without rebuilding
+        timeout-minutes: 4
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $archive = Join-Path $env:RUNNER_TEMP $env:WINDOWS_NAME
+          Invoke-WebRequest -Uri $env:WINDOWS_URL -OutFile $archive
+          if ((Get-Item -LiteralPath $archive).Length -ne [long]$env:WINDOWS_BYTES -or (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne $env:WINDOWS_SHA256) { throw 'Exact Windows archive mismatch' }
+          python scripts/build_test_package.py --verify $archive
+          if ($LASTEXITCODE -ne 0) { throw 'Approved Windows package failed inventory verification' }
+          python -c 'from pathlib import Path; import hashlib,json,os,sys,zipfile; pin=json.loads(Path("packaging/windows/release-baseline.json").read_bytes()); z=zipfile.ZipFile(sys.argv[1]); assert hashlib.sha256(z.read("App/TEST_BUILD.json")).hexdigest()==pin["manifest_sha256"]==os.environ["WINDOWS_MANIFEST_SHA256"]; assert pin["sha256"]==os.environ["WINDOWS_SHA256"]; assert pin["source_commit"]==os.environ["APPLICATION_SOURCE"]' $archive
+          if ($LASTEXITCODE -ne 0) { throw 'Windows manifest or source provenance mismatch' }
+          $packageRoot = Join-Path $env:RUNNER_TEMP 'cutroom-pr130-windows-extracted'
+          Expand-Archive -LiteralPath $archive -DestinationPath $packageRoot
+          "CUTROOM_CANDIDATE_ARCHIVE=$archive" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "CUTROOM_EXTRACTED_APP=$packageRoot\App" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Validate the packaged Windows installer source
+        shell: pwsh
+        run: |
+          & (Join-Path $env:CUTROOM_EXTRACTED_APP 'scripts\verify_windows_installer.ps1')
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged installer source validation failed' }
+      - name: Run unmodified setup only when it cannot start Ollama
+        timeout-minutes: 15
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $setup = Join-Path $env:CUTROOM_EXTRACTED_APP 'setup_windows.ps1'
+          $setupHash = (Get-FileHash -LiteralPath $setup -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($setupHash -ne '2aa086a4b1e4922f85c27023e3053cd46a79a0a64d5bbaebf3aeb230b77fae3e') { throw 'Setup changed since its optional installs were reviewed' }
+          $config = Get-Content -LiteralPath (Join-Path $env:CUTROOM_EXTRACTED_APP 'config.json') -Raw | ConvertFrom-Json
+          if ($config.ai.download_models_on_setup) { throw 'Model downloads must remain disabled' }
+          if ((Get-Command ffmpeg.exe).Source -ne $env:CUTROOM_EXPECTED_FFMPEG) { throw 'Unexpected FFmpeg on PATH' }
+          function Test-SetupExecutable([string]$Name) {
+            $command = Get-Command $Name -ErrorAction SilentlyContinue
+            if ($command -and $command.Source -and (Test-Path -LiteralPath $command.Source -PathType Leaf)) { return $true }
+            $directories = @()
+            if ($env:LOCALAPPDATA) { $directories += (Join-Path $env:LOCALAPPDATA 'Microsoft\WindowsApps'), (Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Links'), (Join-Path $env:LOCALAPPDATA 'Programs\Ollama') }
+            if ($env:ProgramFiles) { $directories += (Join-Path $env:ProgramFiles 'Ollama'), (Join-Path $env:ProgramFiles 'FFmpeg\bin') }
+            if (${env:ProgramFiles(x86)}) { $directories += (Join-Path ${env:ProgramFiles(x86)} 'FFmpeg\bin') }
+            if ($env:ChocolateyInstall) { $directories += (Join-Path $env:ChocolateyInstall 'bin') }
+            if ($env:USERPROFILE) { $directories += (Join-Path $env:USERPROFILE 'scoop\shims') }
+            $paths = @([Environment]::GetEnvironmentVariable('Path', 'Machine'), [Environment]::GetEnvironmentVariable('Path', 'User'), $env:PATH) -join ';'
+            $directories += @($paths -split ';' | Where-Object { $_ })
+            foreach ($directory in $directories) { if (Test-Path -LiteralPath (Join-Path $directory $Name) -PathType Leaf) { return $true } }
+            if ($env:LOCALAPPDATA) {
+              $packages = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages'
+              if (Test-Path -LiteralPath $packages -PathType Container) {
+                if (Get-ChildItem -LiteralPath $packages -Filter $Name -File -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1) { return $true }
+              }
+            }
+            return $false
+          }
+          $result = Join-Path $env:RUNNER_TEMP 'cutroom-setup-result.txt'
+          if (Test-SetupExecutable 'ollama.exe') {
+            'not_run_optional_ollama_could_be_started' | Set-Content -LiteralPath $result -Encoding utf8
+            Write-Host 'Setup not run because it could start an unapproved optional service.'
+          } else {
+            python -c 'import sys; assert sys.version_info[:2] == (3,12)'
+            if ($LASTEXITCODE -ne 0) { throw 'Expected Python 3.12 is unavailable' }
+            & (Get-Command pwsh).Source -NoProfile -NonInteractive -File $setup
+            if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath (Join-Path $env:CUTROOM_EXTRACTED_APP '.setup-complete') -PathType Leaf)) { throw 'Unmodified first-run setup failed' }
+            'passed_direct_unmodified_setup_without_ollama' | Set-Content -LiteralPath $result -Encoding utf8
+          }
+      - name: Install test runtime in a runner-only virtual environment
+        timeout-minutes: 15
+        shell: pwsh
+        run: |
+          $venv = Join-Path $env:RUNNER_TEMP 'cutroom-test-venv'
+          python -m venv $venv
+          if ($LASTEXITCODE -ne 0) { throw 'Could not create test virtual environment' }
+          $python = Join-Path $venv 'Scripts\python.exe'
+          & $python -m pip install -r (Join-Path $env:CUTROOM_EXTRACTED_APP 'tests\requirements.txt')
+          if ($LASTEXITCODE -ne 0) { throw 'Test dependencies failed to install' }
+          "CUTROOM_TEST_PYTHON=$python" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Test synthetic portrait, audio and process restart
+        timeout-minutes: 12
+        shell: pwsh
+        run: |
+          & $env:CUTROOM_TEST_PYTHON .github/scripts/windows_candidate_smoke.py --app $env:CUTROOM_EXTRACTED_APP --archive $env:CUTROOM_CANDIDATE_ARCHIVE --report (Join-Path $env:RUNNER_TEMP 'cutroom-windows-smoke.json')
+          if ($LASTEXITCODE -ne 0) { throw 'Candidate synthetic smoke failed' }
+          python scripts/build_test_package.py --verify $env:CUTROOM_CANDIDATE_ARCHIVE
+          if ($LASTEXITCODE -ne 0) { throw 'Candidate archive changed during tests' }
+      - name: Verify exact setup and export evidence for this Windows archive
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $report = Join-Path $env:RUNNER_TEMP 'cutroom-windows-smoke.json'
+          $r = Get-Content -Raw -LiteralPath $report | ConvertFrom-Json
+          if ($r.head_sha -ne $env:GITHUB_SHA -or $r.candidate_sha256 -ne $env:WINDOWS_SHA256 -or $r.checks.direct_setup -ne 'passed_direct_unmodified_setup_without_ollama' -or $r.checks.full_decode -ne 'passed' -or $r.checks.saved_project_and_export_after_server_restart -ne 'passed') { throw 'The exact Windows runtime check did not establish direct setup, decoded export and persistence' }
+          if ($r.checks.portrait_width -ne 720 -or $r.checks.portrait_height -ne 1280 -or $r.checks.two_source_stacked_30_70_pixels -ne 'passed' -or $r.checks.source_B_audio_rms -lt .01 -or [math]::Abs([double]$r.checks.source_B_audio_frequency_hz-660) -gt 15) { throw 'Windows synthetic picture or source-B audio evidence incomplete' }
+          $out = Join-Path $env:RUNNER_TEMP 'windows-exact-provenance.json'
+          @{
+            schema='cutroom-supplemental-exact-package-v1'; run_id=[long]$env:GITHUB_RUN_ID; workflow_sha=$env:GITHUB_SHA
+            reviewed_pr_head=$env:REVIEWED_PR_HEAD; application_source_commit=$env:APPLICATION_SOURCE; archive_sha256=$r.candidate_sha256
+            report_sha256=(Get-FileHash -LiteralPath $report -Algorithm SHA256).Hash.ToLowerInvariant(); kind='exact_windows_configured_runner_smoke'
+          } | ConvertTo-Json | Set-Content -LiteralPath $out -Encoding utf8
+      - name: Retain exact Windows synthetic reports
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: CUTROOM-pr130-windows-exact
+          path: |
+            ${{ runner.temp }}/cutroom-windows-smoke.json
+            ${{ runner.temp }}/windows-exact-provenance.json
+          if-no-files-found: error
+          retention-days: 30
