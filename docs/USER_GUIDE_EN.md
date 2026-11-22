@@ -113,6 +113,8 @@ Choose **Build my first cut** when the readiness message is satisfied. Transcrip
 
 **Clean VOD** keeps natural, chronological cleanup rather than forcing fast highlight cuts. Presets guide the result; review the selected content yourself.
 
+**Gameplay YouTube video** (choose the **YouTube** result first) condenses a long gameplay recording into a widescreen video. Set the length in minutes (5, 8, 10 or 15). CUTROOM keeps the strongest stretches in their original order, removes silent menus, loading screens and dead air inside what it keeps, and proposes **YouTube chapters** in **What changed** with a **Copy** button for the video description. Chapter names come from gameplay vision when it ran; otherwise they read "Part 1", "Part 2" and should be renamed. If you already edited the timeline, the result arrives as a new draft and your edit stays until you apply it.
+
 If a job fails, read the explanation and fix that cause. Original recordings are not overwritten. A larger model cannot fix wrong source routing or recover inaudible speech.
 
 ## 5. Review the first cut
@@ -124,6 +126,12 @@ The overview shows the draft, before/after duration and **What changed**. If **R
 If an AI rebuild reports **New draft ready; your manual timeline was kept**, playback/export still use your manual edit. Choose **Apply new AI draft** and confirm to replace it, or **Keep manual timeline** to leave it in place. Undo can restore the previous manual timeline after applying.
 
 **Gameplay moments.** When a Short is built from gameplay moments, **Edit → AI suggestions** lists them under **Gameplay moments in this draft**, each with its time range and the model's short description; click a row to jump to it. **Uncertain** means weak evidence: no analyzed frames cover the moment, its main screen was not read as gameplay, or it shows little action. If a moment is a replay, a camera feed or a cutscene, choose **Not live gameplay** and then **Rebuild Draft**: the next draft leaves that range out and fills the time with other moments. **Undo mark** removes the correction. The mark is saved with the project and can be undone; it does not change the model's stored answers.
+
+### Find clips in a long recording
+
+Choose **Clips** in the editor's top bar. CUTROOM ranks the strongest moments of the main recording by measured sound, plus spoken reactions and on-screen action when that analysis exists. Choose the clip length (15, 30, 45 or 60 seconds). The **moment radar** shows strength across the whole recording; select a number to jump to that clip. Strength compares moments inside this recording only; it does not predict views.
+
+On a card, play the preview, then choose **Open in editor** to select that moment on the timeline for trimming, framing and captions, or **Export clip** to open Export with that range marked. To export several, tick **Select** on each card and choose **Export N clips**; they render one after another and each gets a download link. **Stop** ends the batch after the current step. A moment that is not in your current edit offers **Place in timeline**, which opens the placement form with its In/Out filled in; review it, place it, and use Undo if needed. **Thumbnail ideas** at the bottom saves full frames at the strongest peaks as PNG files.
 
 ## 6. Find your way around Studio
 
