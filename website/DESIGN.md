@@ -1,4 +1,15 @@
-# CUTROOM / The screening room
+# CUTROOM / Night Drive
+
+The current opening is a small editing desk, not a picture of a desktop app. Visitors see the product and both downloads beside a real choice: the same three illustrated shots read differently when the story opens at the lake instead of the mountain pass. A road, a bridge and a sunrise give visitors continuity to recognize across the two cuts. The edit never plays automatically. The real October UI capture has its own clearly dated place below.
+
+- Graphite background `#11121b`, pale cyan action `#8ae1dc`, violet display text `#c7b5fa`. English uses locally installed system serif italics against the self-hosted Geist display face; Hebrew is composed in Noto Sans Hebrew, not imitation Latin italics.
+- Original SVG landscapes are shipped locally, without external assets or footage. Background geometry, borders and small timeline details borrow the angle of the CUTROOM mark.
+- Two edits use equal total time (8 s) but different rhythm and order: pass (3), bridge (2), lake (3); lake (2), pass (4.5), bridge (1.5). Direct seeking, replay and shot selection stay synchronized. All actions work with a keyboard.
+- Mobile preserves both primary downloads, then the full playable study. Hebrew mirrors the page, but the media time axis keeps its normal left-to-right direction. Navigation and language switches preserve their existing behavior.
+- With reduced motion, the background and pan are static. A visitor can explicitly choose to play the three still shots. Without script the original poster, real application captures, documentation and downloads remain. New assets have no third-party dependencies.
+- No published package or AI capability is implied by the artwork. No visitor files are requested. No analytics or storage were added.
+
+## Historical brief: the screening room, 12 November 2026
 
 ## Surface and direction
 

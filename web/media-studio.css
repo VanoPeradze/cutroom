@@ -262,3 +262,37 @@
 #studioShelfMedia .media-asset > button { grid-column:1 / -1; grid-row:auto; justify-self:stretch; white-space:normal; overflow-wrap:anywhere; }
 
 .library-shot-insert-help { grid-column:1/-1; }
+/* Shared-cut controls stay inside the existing resizable inspector. */
+#studioInspector :is([data-roll-cut],[data-slide-cut]) { min-width:0; max-width:100%; }
+#studioInspector :is([data-roll-cut],[data-slide-cut]) > :is(label,p,.media-actions) { box-sizing:border-box; width:auto; min-width:0; max-width:100%; margin-inline:10px; }
+#studioInspector :is([data-roll-cut],[data-slide-cut]) label { display:grid; gap:4px; }
+#studioInspector :is([data-roll-cut],[data-slide-cut]) [data-roll-edge] { box-sizing:border-box; width:100%; max-width:100%; min-width:0; margin:0; }
+#studioInspector :is([data-roll-cut],[data-slide-cut]) p { overflow-wrap:anywhere; }
+#studioInspector :is([data-roll-cut],[data-slide-cut]) .media-actions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; }
+#studioInspector :is([data-roll-cut],[data-slide-cut]) :is([data-roll],[data-slide]) { min-width:0; max-width:100%; white-space:normal; }
+#studioInspector :is([data-roll-cut],[data-slide-cut]) :is([data-roll=playhead],[data-slide=playhead]) { grid-column:1/-1; }
+
+#studioInspector .take-replacement { min-width:0; }
+#studioInspector .take-replacement > :is(label,p,.media-actions) { display:block; margin-inline:10px; min-width:0; max-width:100%; overflow-wrap:anywhere; }
+#studioInspector .take-replacement :is(select,input) { display:block; box-sizing:border-box; width:100%; max-width:100%; min-width:0; margin:4px 0; }
+#studioInspector .take-replacement .media-actions { display:flex; flex-wrap:wrap; gap:6px; }
+#studioInspector .take-replacement button { white-space:normal; }
+#studioInspector .take-replacement [hidden] { display:none; }
+
+#studioInspector .library-source-monitor .source-track-overwrite { grid-column:1/-1; min-width:0; max-width:100%; border-top:1px solid var(--line); }
+#studioInspector .source-track-overwrite summary { min-height:36px; padding-block:8px; cursor:pointer; }
+#studioInspector .source-track-overwrite p { overflow-wrap:anywhere; margin:4px 0 8px; }
+#studioInspector .source-track-overwrite button { max-width:100%; min-height:34px; white-space:normal; }
+@media (max-width:700px) { #studioInspector .source-track-overwrite :is(summary,button) { min-height:44px; } }
+
+/* Keep the primary group cut aligned with the full-width placement control in either theme. */
+#studioInspector .layer-group-controls :is([data-group-split="playhead"],[data-group-join]) {
+  display: block; box-sizing: border-box; width: 100%; min-height: 32px;
+  margin: 6px 0 3px; padding: 5px 8px; border: 1px solid var(--line-strong); border-radius: 3px;
+  color: var(--paper); background: var(--surface-chrome); font: 500 11px/1.4 var(--font);
+  white-space: normal; cursor: pointer;
+}
+/* The atomic group split stays a comfortable touch target in the stacked inspector. */
+@media (max-width: 600px) {
+  #studioInspector .layer-group-controls button:is([data-group-split="playhead"],[data-group-join]) { min-height: 44px; }
+}

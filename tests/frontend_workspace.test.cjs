@@ -38,7 +38,7 @@ class Element extends Target {
   contains(el) { return this === el || this.descendants().includes(el); }
   descendants() { return this.children.flatMap((el) => [el, ...el.descendants()]); }
   querySelector(selector) { return this.descendants().find((el) => selector.startsWith(".") ? el.classList.contains(selector.slice(1)) : selector === "dialog[open]" && el.tagName === "dialog" && el.open) || null; }
-  getBoundingClientRect() { return this.rect; }
+  getBoundingClientRect() { return this.classList.contains("workspace-divider") ? {height:8} : this.rect; }
   focus() { this.doc.activeElement = this; }
   click() { this.emit("click"); }
   showModal() { this.open = true; }
@@ -49,7 +49,7 @@ class Element extends Target {
 }
 const event = (extra = {}) => ({ preventDefault() {}, stopPropagation() {}, stopImmediatePropagation() {}, ...extra });
 
-function harness({ fullscreen = "supported", savedHeight = null, storageDenied = false, inspector = false, savedWidth = null, savedWidths = {}, savedCollapsed = null, width = 1280, translate } = {}) {
+function harness({ fullscreen = "supported", savedHeight = null, storageDenied = false, inspector = false, savedWidth = null, savedWidths = {}, savedCollapsed = null, width = 1280, translate, resizeIssue } = {}) {
   const doc = new Target(); doc.ids = new Map(); doc.getElementById = (id) => doc.ids.get(id) || null;
   doc.createElement = (tag) => new Element(tag, doc); doc.documentElement = doc.createElement("html"); doc.body = doc.createElement("body"); doc.documentElement.appendChild(doc.body);
   const add = (parent, tag, id, className = "") => { const el = doc.createElement(tag); if (id) el.id = id; el.className = className; parent.appendChild(el); return el; };
@@ -58,6 +58,8 @@ function harness({ fullscreen = "supported", savedHeight = null, storageDenied =
   if (inspector) add(panel, "div", "studioInspector", "advanced-content");
   const header = add(panel, "header", "", "studio-header"); header.rect = { height: 44 };
   const actions = add(header, "div", "", "studio-header-actions");
+  const navigation = add(panel, "div", "", "timeline-navigation");
+  add(navigation, "button", "timelineIndexButton");
   const dock = add(panel, "div", "studioPreviewDock");
   const preview = add(dock, "div", "previewColumn", "preview-column");
   const stage = add(preview, "div", "previewStage", "preview-stage");
@@ -72,6 +74,7 @@ function harness({ fullscreen = "supported", savedHeight = null, storageDenied =
   win.localStorage = { getItem: (k) => { if (storageDenied) throw Error("Denied"); return store.get(k) ?? null; },
     setItem: (k, v) => { if (storageDenied) throw Error("Denied"); store.set(k, v); }, removeItem: (k) => store.delete(k) };
   let observerCallback; win.MutationObserver = class { constructor(fn) { observerCallback = fn; } observe() {} disconnect() { observerCallback = null; } };
+  let sizeCallback; win.ResizeObserver = class { constructor(fn) { sizeCallback = fn; } observe() {} disconnect() { sizeCallback = null; } };
   let finishRequest;
   doc.documentElement.requestFullscreen = () => assert.fail("Never expand the editor document");
   if (fullscreen !== "unsupported") preview.requestFullscreen = async () => {
@@ -81,9 +84,9 @@ function harness({ fullscreen = "supported", savedHeight = null, storageDenied =
     doc.fullscreenElement = preview; doc.emit("fullscreenchange");
   };
   doc.exitFullscreen = async () => { exits++; doc.fullscreenElement = null; doc.emit("fullscreenchange"); };
-  const controller = context.initWorkspace({ document: doc, window: win, translate, onResize: () => redraws++, openShortcuts: () => shortcuts++ });
+  const controller = context.initWorkspace({ document: doc, window: win, translate, resizeIssue, onResize: () => redraws++, openShortcuts: () => shortcuts++ });
   return { doc, win, panel, actions, dock, preview, stage, a, b, caption, controls, controller, store, el: (id) => doc.getElementById(id),
-    observe: () => observerCallback?.(), finishRequest: () => finishRequest?.(),
+    observe: () => observerCallback?.(), resizePanel: () => sizeCallback?.(), finishRequest: () => finishRequest?.(),
     flush: () => { for (const [id, fn] of frames) { frames.delete(id); fn(); } }, counts: () => ({ redraws, shortcuts, requests, exits }) };
 }
 
@@ -164,8 +167,8 @@ test("divider resizing is bounded, keyboard accessible, persistent and resettabl
   assert.equal(divider.getAttribute("data-editor-shortcuts"), "off", "resize arrows must not seek the editing timeline");
   const initial = Number(divider.getAttribute("aria-valuenow"));
   divider.emit("keydown", event({ key: "ArrowUp" })); assert.equal(Number(divider.getAttribute("aria-valuenow")), initial + 24);
-  divider.emit("keydown", event({ key: "End" })); assert.equal(Number(divider.getAttribute("aria-valuenow")), 348);
-  assert.equal(h.controller.setTimelineHeight(9999), 348); assert.equal(h.controller.setTimelineHeight(-10), 184);
+  divider.emit("keydown", event({ key: "End" })); assert.equal(Number(divider.getAttribute("aria-valuenow")), 528);
+  assert.equal(h.controller.setTimelineHeight(9999), 528); assert.equal(h.controller.setTimelineHeight(-10), 184);
   divider.emit("dblclick"); assert.equal(Number(divider.getAttribute("aria-valuenow")), initial);
   assert.equal(h.store.has("cutroom-timeline-height-v4"), false);
 });
@@ -182,7 +185,7 @@ test("divider drag updates live and cancellation restores previous preference", 
 });
 
 test("invalid display preferences or blocked storage do not break the editor", () => {
-  const invalid = harness({ savedHeight: "NaN" }); assert.equal(invalid.el("workspaceDivider").getAttribute("aria-valuenow"), "256");
+  const invalid = harness({ savedHeight: "NaN" }); assert.equal(invalid.el("workspaceDivider").getAttribute("aria-valuenow"), "284");
   const h = harness({ storageDenied: true }); assert.doesNotThrow(() => h.controller.setTimelineHeight(320));
   assert.equal(h.el("workspaceDivider").getAttribute("aria-valuenow"), "320");
 });
@@ -229,7 +232,7 @@ test("inspector keyboard bounds preserve room for preview and restore a wider sa
 });
 
 test("inspector drag, RTL arrows, cancellation and double-click use display preferences only", () => {
-  const h = harness({inspector:true}), d=h.el("workspaceInspectorDivider");
+  const h = harness({inspector:true,savedWidth:"400"}), d=h.el("workspaceInspectorDivider");
   d.emit("pointerdown",event({button:0,pointerId:4,clientX:400}));
   d.emit("pointermove",event({pointerId:5,clientX:470})); assert.equal(d.getAttribute("aria-valuenow"),"400");
   d.emit("pointermove",event({pointerId:4,clientX:384})); assert.equal(d.getAttribute("aria-valuenow"),"416");
@@ -241,7 +244,7 @@ test("inspector drag, RTL arrows, cancellation and double-click use display pref
   d.emit("keydown",event({key:"Escape"})); assert.equal(d.getAttribute("aria-valuenow"),"400");
   assert.equal(h.store.get("cutroom-inspector-width-v3"),"400");
   assert.equal(h.panel.classList.contains("inspector-resizing"),false);
-  d.emit("dblclick"); assert.equal(d.getAttribute("aria-valuenow"),"400");
+  d.emit("dblclick"); assert.equal(d.getAttribute("aria-valuenow"),"320");
   assert.equal(h.store.has("cutroom-inspector-width-v3"),false);
   assert.equal(h.a.parentElement,h.stage); assert.equal(h.b.parentElement,h.stage);
 });
@@ -266,7 +269,7 @@ test("tool labels and separator announcements refresh through the injected live 
   h.doc.documentElement.lang="he";h.doc.documentElement.dir="rtl";h.observe();h.flush();
   assert.equal(h.el("workspaceToolsToggle").textContent,dictionary.inspectorHide);
   assert.equal(h.el("workspaceInspectorDivider").getAttribute("aria-label"),dictionary.inspectorResize);
-  assert.equal(h.el("workspaceInspectorDivider").getAttribute("aria-valuetext"),"רוחב: 400 פיקסלים");
+  assert.equal(h.el("workspaceInspectorDivider").getAttribute("aria-valuetext"),"רוחב: 320 פיקסלים");
   h.controller.setInspectorCollapsed(true);assert.equal(h.el("workspaceToolsToggle").textContent,dictionary.inspectorShow);
 });
 
@@ -317,8 +320,8 @@ test("Edit effects and context tabs retain the shared width without moving or re
 
 test("oversized legacy display settings fall back without deleting old keys or changing media", () => {
   const h=harness({inspector:true,savedWidth:"860",savedHeight:"800"});
-  assert.equal(h.el("workspaceInspectorDivider").getAttribute("aria-valuenow"),"400");
-  assert.equal(h.el("workspaceDivider").getAttribute("aria-valuenow"),"256");
+  assert.equal(h.el("workspaceInspectorDivider").getAttribute("aria-valuenow"),"320");
+  assert.equal(h.el("workspaceDivider").getAttribute("aria-valuenow"),"284");
   assert.equal(h.store.get("cutroom-inspector-width-v1"),"860");
   assert.equal(h.store.get("cutroom-timeline-height-v3"),"800");
   assert.equal(h.a.parentElement,h.stage); assert.equal(h.b.parentElement,h.stage);
@@ -343,7 +346,7 @@ test("saved shared width wins over old context widths and defaults stay stable w
   }
   const denied=harness({inspector:true,storageDenied:true});
   for(const mode of ['timeline','audio','framing','transcript','settings']){
-    denied.controller.setWorkspace(mode);assert.equal(denied.el('workspaceInspectorDivider').getAttribute('aria-valuenow'),'400');
+    denied.controller.setWorkspace(mode);assert.equal(denied.el('workspaceInspectorDivider').getAttribute('aria-valuenow'),'320');
   }
 });
 
@@ -369,4 +372,135 @@ test("900 by 600 laptop keeps both resizers active within truthful bounds and re
   assert.equal(vertical.getAttribute('aria-valuenow'),'296');
   h.controller.setWorkspace('audio');assert.equal(vertical.getAttribute('aria-valuenow'),'296');
   assert.equal(h.a.parentElement,h.stage);assert.equal(h.preview.parentElement,h.dock);
+});
+
+test('timeline expansion is an accessible display button in existing navigation, not a new header tool',()=>{
+ const h=harness();h.flush();const b=h.el('workspaceTimelineExpand');
+ assert.ok(b.parentElement.classList.contains('timeline-navigation'));
+ assert.equal(b.parentElement.children[0].id,'timelineIndexButton');assert.equal(b.parentElement.children[1],b);
+ assert.equal(b.getAttribute('data-editor-shortcuts'),'off');assert.equal(b.getAttribute('aria-controls'),'studioTimelineDock studioPreviewDock');assert.equal(b.getAttribute('aria-pressed'),'false');assert.equal(b.textContent,'Expand timeline');assert.equal(h.actions.children.length,1);
+});
+
+test('new desktop default balances editing room and expansion keeps a220px monitor dock',()=>{
+ const h=harness();const tabs=h.doc.createElement('nav');tabs.className='advanced-tabs';tabs.rect={height:48};h.panel.append(tabs);
+ for(const[height,expected,maximum]of[[848,284,528],[1028,353,708]]){
+  h.panel.rect.height=height;h.win.innerHeight=height+52;h.win.emit('resize');h.flush();
+  assert.equal(Number(h.el('workspaceDivider').getAttribute('aria-valuenow')),expected);
+  h.controller.setTimelineExpanded(true);assert.equal(Number(h.el('workspaceDivider').getAttribute('aria-valuenow')),maximum);
+  assert.equal(height-44-48-8-maximum,220);h.controller.setTimelineExpanded(false);
+ }
+});
+
+test('temporary expand and restore retain an exact saved v4 preference without writing it',()=>{
+ const h=harness({savedWidths:{'cutroom-timeline-height-v4':'312'}});const b=h.el('workspaceTimelineExpand');
+ b.click();assert.equal(b.getAttribute('aria-pressed'),'true');assert.equal(b.textContent,'Restore layout');assert.equal(h.el('workspaceDivider').getAttribute('aria-valuenow'),'528');
+ assert.equal(h.store.get('cutroom-timeline-height-v4'),'312');b.click();assert.equal(h.el('workspaceDivider').getAttribute('aria-valuenow'),'312');assert.equal(h.store.get('cutroom-timeline-height-v4'),'312');
+});
+
+test('expansion without saved preference restores adaptive default and creates no stored layout',()=>{
+ const h=harness();h.controller.setTimelineExpanded(true);h.win.emit('resize');h.flush();h.controller.setTimelineExpanded(false);
+ assert.equal(h.el('workspaceDivider').getAttribute('aria-valuenow'),'284');assert.equal(h.store.has('cutroom-timeline-height-v4'),false);
+});
+
+test('expanded resizing remains transient across window changes and preserves a larger normal preference',()=>{
+ const h=harness({savedWidths:{'cutroom-timeline-height-v4':'500'}});h.controller.setTimelineExpanded(true);
+ h.panel.rect.height=668;h.win.innerHeight=720;h.win.emit('resize');h.flush();assert.equal(h.el('workspaceDivider').getAttribute('aria-valuenow'),'396');
+ h.controller.setTimelineExpanded(false);assert.equal(h.el('workspaceDivider').getAttribute('aria-valuenow'),'396');assert.equal(h.store.get('cutroom-timeline-height-v4'),'500');
+ h.panel.rect.height=1000;h.win.emit('resize');h.flush();assert.equal(h.el('workspaceDivider').getAttribute('aria-valuenow'),'500');
+});
+
+test('context tabs and inspector collapse never resize expanded or ordinary timeline',()=>{
+ const h=harness({inspector:true,savedWidths:{'cutroom-timeline-height-v4':'312'}});h.controller.setTimelineExpanded(true);
+ for(const mode of['media','timeline','audio','framing','settings','transcript']){h.controller.setWorkspace(mode);h.flush();assert.equal(h.el('workspaceDivider').getAttribute('aria-valuenow'),'528')}
+ h.controller.setInspectorCollapsed(true);h.flush();assert.equal(h.el('workspaceDivider').getAttribute('aria-valuenow'),'528');h.controller.setTimelineExpanded(false);assert.equal(h.el('workspaceDivider').getAttribute('aria-valuenow'),'312');
+});
+
+test('explicit arrow resize from expanded adopts new normal preference while restore is not persisted',()=>{
+ const h=harness({savedWidths:{'cutroom-timeline-height-v4':'312'}});h.controller.setTimelineExpanded(true);h.el('workspaceDivider').emit('keydown',event({key:'ArrowDown'}));
+ assert.equal(h.el('workspaceTimelineExpand').getAttribute('aria-pressed'),'false');assert.equal(h.store.get('cutroom-timeline-height-v4'),'504');assert.equal(h.el('workspaceDivider').getAttribute('aria-valuenow'),'504');
+ h.controller.setTimelineExpanded(true);h.controller.setTimelineExpanded(false);assert.equal(h.el('workspaceDivider').getAttribute('aria-valuenow'),'504');
+});
+
+test('cancelled divider drag restores both original expanded mode and normal saved size',()=>{
+ const h=harness({savedWidths:{'cutroom-timeline-height-v4':'312'}});h.controller.setTimelineExpanded(true);const d=h.el('workspaceDivider');
+ d.emit('pointerdown',event({button:0,pointerId:3,clientY:300}));d.emit('pointermove',event({pointerId:3,clientY:360}));assert.equal(d.getAttribute('aria-valuenow'),'468');
+ d.emit('keydown',event({key:'Escape'}));assert.equal(h.doc.activeElement,d);assert.equal(d.getAttribute('aria-valuenow'),'528');assert.equal(h.el('workspaceTimelineExpand').getAttribute('aria-pressed'),'true');assert.equal(h.store.get('cutroom-timeline-height-v4'),'312');
+ d.emit('pointerup',event({pointerId:3}));h.controller.setTimelineExpanded(false);assert.equal(d.getAttribute('aria-valuenow'),'312');
+});
+
+test('successful expanded divider drag persists only deliberate final normal height',()=>{
+ const h=harness();h.controller.setTimelineExpanded(true);const d=h.el('workspaceDivider');d.emit('pointerdown',event({button:0,pointerId:3,clientY:300}));d.emit('pointermove',event({pointerId:3,clientY:360}));d.emit('pointerup',event({pointerId:3}));
+ assert.equal(h.store.get('cutroom-timeline-height-v4'),'468');assert.equal(h.el('workspaceTimelineExpand').getAttribute('aria-pressed'),'false');
+});
+
+test('explicit geometry changes refuse owned editor gestures without cancelling them or altering layout',()=>{
+ let reason='Finish the current clip drag first.';const h=harness({resizeIssue:()=>reason,savedWidths:{'cutroom-timeline-height-v4':'312'}}),d=h.el('workspaceDivider');
+ h.el('workspaceTimelineExpand').click();d.emit('keydown',event({key:'End'}));d.emit('dblclick');d.emit('pointerdown',event({button:0,pointerId:2,clientY:100}));d.emit('pointermove',event({pointerId:2,clientY:50}));d.emit('pointerup',event({pointerId:2}));
+ assert.equal(d.getAttribute('aria-valuenow'),'312');assert.equal(h.store.get('cutroom-timeline-height-v4'),'312');assert.equal(d.capture,null);assert.equal(h.el('workspaceDisplayStatus').textContent,reason);
+ reason='';h.el('workspaceTimelineExpand').click();assert.equal(d.getAttribute('aria-valuenow'),'528');
+});
+
+test('ordinary redraw does not consult explicit gesture gate or change selection/media nodes',()=>{
+ let calls=0;const h=harness({resizeIssue:()=>{calls++;return 'Busy'}});h.win.emit('resize');h.flush();h.controller.setWorkspace('audio');h.flush();assert.equal(calls,0);
+ assert.equal(h.a.parentElement,h.stage);assert.equal(h.b.parentElement,h.stage);assert.equal(h.caption.parentElement,h.stage);assert.equal(h.preview.parentElement,h.dock);
+});
+
+test('mobile and short viewport leave expansion without replacing normal preference or hiding timeline',()=>{
+ const h=harness({savedWidths:{'cutroom-timeline-height-v4':'312'}});for(const[w,vh]of[[899,900],[1280,539]]){
+  h.win.innerWidth=1280;h.win.innerHeight=900;h.win.emit('resize');h.flush();h.controller.setTimelineExpanded(true);
+  h.win.innerWidth=w;h.win.innerHeight=vh;h.win.emit('resize');h.flush();assert.equal(h.el('workspaceTimelineExpand').hidden,true);assert.equal(h.el('workspaceTimelineExpand').getAttribute('aria-pressed'),'false');assert.equal(h.store.get('cutroom-timeline-height-v4'),'312');assert.equal(h.controller.setTimelineExpanded(true),false);
+ }
+});
+
+test('leaving editor restores normal layout and return does not resurrect temporary expansion',()=>{
+ const h=harness({savedWidths:{'cutroom-timeline-height-v4':'312'}});h.controller.setTimelineExpanded(true);h.panel.hidden=true;h.observe();h.flush();assert.equal(h.el('workspaceTimelineExpand').getAttribute('aria-pressed'),'false');assert.equal(h.el('workspaceDivider').getAttribute('aria-valuenow'),'312');h.panel.hidden=false;h.observe();h.flush();assert.equal(h.el('workspaceDivider').getAttribute('aria-valuenow'),'312');
+});
+
+test('Expand Escape is local and does not steal ordinary editor Escape',()=>{
+ const h=harness();let prevented=0;const ev=event({key:'Escape',preventDefault:()=>prevented++});h.el('workspaceTimelineExpand').emit('keydown',ev);assert.equal(prevented,0);h.controller.setTimelineExpanded(true);h.el('workspaceTimelineExpand').emit('keydown',ev);assert.equal(prevented,1);assert.equal(h.el('workspaceTimelineExpand').getAttribute('aria-pressed'),'false');
+});
+
+test('navigation can arrive after workspace initialization without cloning existing controls',()=>{
+ const h=harness();const nav=h.el('workspaceTimelineExpand').parentElement;nav.remove();h.el('workspaceTimelineExpand').remove();const later=h.doc.createElement('div');later.className='timeline-navigation';h.panel.append(later);h.win.emit('resize');h.flush();assert.equal(h.el('workspaceTimelineExpand').parentElement,later);h.win.emit('resize');h.flush();assert.equal(later.children.length,1);
+});
+
+test('destroy removes temporary display state/button while retaining saved proportions and media identity',()=>{
+ const h=harness({savedWidths:{'cutroom-timeline-height-v4':'312'}});const b=h.el('workspaceTimelineExpand');h.controller.setTimelineExpanded(true);h.controller.destroy();assert.equal(b.parentElement,null);assert.equal(h.panel.classList.contains('timeline-expanded'),false);assert.equal(h.store.get('cutroom-timeline-height-v4'),'312');assert.equal(h.a.parentElement,h.stage);assert.equal(h.b.parentElement,h.stage);
+});
+
+test('restore returns the prior scroll anchor after automatic growth clamp, without setting horizontal scroll',()=>{
+ const h=harness();const scroll=h.doc.createElement('div');scroll.id='timelineScroll';Object.assign(scroll,{scrollTop:321,scrollLeft:73,scrollHeight:498,clientHeight:177});h.panel.append(scroll);
+ h.controller.setTimelineExpanded(true);scroll.clientHeight=444;scroll.scrollTop=54;h.controller.setTimelineExpanded(false);assert.equal(scroll.scrollTop,321);assert.equal(scroll.scrollLeft,73);
+});
+
+test('new deliberate timeline navigation wins over a remembered normal scroll position',()=>{
+ const h=harness();const scroll=h.doc.createElement('div');scroll.id='timelineScroll';Object.assign(scroll,{scrollTop:321,scrollHeight:498,clientHeight:177});h.panel.append(scroll);
+ h.controller.setTimelineExpanded(true);scroll.clientHeight=444;scroll.scrollTop=54;h.doc.emit('pointerdown',{type:'pointerdown',target:scroll});h.controller.setTimelineExpanded(false);assert.equal(scroll.scrollTop,54);
+});
+
+test('programmatic reveal with changed vertical position is not undone by restoring layout',()=>{
+ const h=harness();const scroll=h.doc.createElement('div');scroll.id='timelineScroll';Object.assign(scroll,{scrollTop:321,scrollHeight:498,clientHeight:177});h.panel.append(scroll);
+ h.controller.setTimelineExpanded(true);scroll.clientHeight=444;scroll.scrollTop=0;h.controller.setTimelineExpanded(false);assert.equal(scroll.scrollTop,0);
+});
+
+test('keyboard focus navigation alone does not discard the old scroll anchor',()=>{
+ const h=harness();const scroll=h.doc.createElement('div');scroll.id='timelineScroll';Object.assign(scroll,{scrollTop:321,scrollHeight:498,clientHeight:177});h.panel.append(scroll);
+ h.controller.setTimelineExpanded(true);scroll.clientHeight=444;scroll.scrollTop=54;h.doc.emit('keydown',{type:'keydown',key:'Tab',target:scroll});h.controller.setTimelineExpanded(false);assert.equal(scroll.scrollTop,321);
+});
+
+test('late wrapped header height updates true panel bounds without window resize',()=>{
+ const h=harness();h.panel.rect.height=500;h.resizePanel();h.flush();assert.equal(h.el('workspaceDivider').getAttribute('aria-valuemax'),'228');assert.equal(h.el('workspaceDivider').getAttribute('aria-valuenow'),'228');assert.equal(h.el('workspaceTimelineExpand').disabled,true);assert.match(h.el('workspaceTimelineExpand').title,/already uses the available space/);assert.equal(h.controller.setTimelineExpanded(true),false);
+ h.panel.rect.height=848;h.resizePanel();h.flush();assert.equal(h.el('workspaceTimelineExpand').disabled,false);assert.ok(Number(h.el('workspaceDivider').getAttribute('aria-valuenow'))<Number(h.el('workspaceDivider').getAttribute('aria-valuemax')));
+});
+
+test('Restore stays actionable when short viewport reaches the same height as normal',()=>{
+ const h=harness({savedWidths:{'cutroom-timeline-height-v4':'312'}});h.controller.setTimelineExpanded(true);h.panel.rect.height=500;h.resizePanel();h.flush();assert.equal(h.el('workspaceTimelineExpand').disabled,false);h.el('workspaceTimelineExpand').click();assert.equal(h.el('workspaceTimelineExpand').getAttribute('aria-pressed'),'false');assert.equal(h.el('workspaceTimelineExpand').disabled,true);assert.equal(h.store.get('cutroom-timeline-height-v4'),'312');
+});
+
+test('workspace size observation is disconnected on destroy and cannot redraw disposed editor',()=>{
+ const h=harness();h.flush();h.controller.destroy();const count=h.counts().redraws;h.resizePanel();h.flush();assert.equal(h.counts().redraws,count);
+});
+
+test('successful display change clears its obsolete refusal but preserves another display error',()=>{
+ let issue='Finish the current drag.';const h=harness({resizeIssue:()=>issue});h.el('workspaceTimelineExpand').click();assert.equal(h.el('workspaceDisplayStatus').textContent,issue);issue='';h.el('workspaceTimelineExpand').click();assert.equal(h.el('workspaceDisplayStatus').textContent,'');h.el('workspaceTimelineExpand').click();issue='Wait for save.';h.el('workspaceTimelineExpand').click();h.el('workspaceDisplayStatus').textContent='Fullscreen failed.';issue='';h.el('workspaceTimelineExpand').click();assert.equal(h.el('workspaceDisplayStatus').textContent,'Fullscreen failed.');
 });

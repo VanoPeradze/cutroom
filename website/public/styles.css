@@ -1,5 +1,5 @@
 /* Shared accessible foundation. The public site and privacy page use local assets only. */
-:root{--bg:#141619;--panel:#202328;--line:#45474d;--text:#f5f1e9;--dim:#c9c7c3;--muted:#adaeaf;--cyan:#efb28d;--cyan-text:#efb28d;--violet:#b7a6de;--ink:#201c19;--paper:#f0eee8;--paper-ink:#28282d;--paper-muted:#55565e;--font:Geist,'Segoe UI',sans-serif;--display:Geist,'Segoe UI',sans-serif}
+:root{--bg:#11121b;--panel:#222431;--line:#414454;--text:#f5f3fa;--dim:#cecedc;--muted:#acafc2;--cyan:#8ae1dc;--cyan-text:#8ae1dc;--violet:#c7b5fa;--ink:#152128;--paper:#e9e7f2;--paper-ink:#262535;--paper-muted:#515365;--font:Geist,'Segoe UI',sans-serif;--display:Geist,'Segoe UI',sans-serif}
 *{box-sizing:border-box}
 html{color-scheme:dark;scroll-behavior:smooth;scroll-padding-top:100px;scrollbar-color:#696b73 var(--bg)}
 body{margin:0;background:var(--bg);color:var(--text);font:16px/1.65 var(--font);-webkit-font-smoothing:antialiased}

@@ -20,11 +20,60 @@ function functionSource(name) {
 const functions = ['renderCaptionItemPreview', 'updatePreviewCaption'].map(functionSource).join('\n');
 const rtl = app.match(/const RTL_CHARACTERS = (.+);/)[1];
 const styles = fs.readFileSync(path.join(root, 'web/styles.css'), 'utf8');
-const output = path.resolve(process.argv[2] || path.join(root, 'validation-work/caption-bidi-browser'));
-fs.mkdirSync(output, { recursive: true });
+const authoredOnly = process.argv.includes('--authored-only');
+const output = authoredOnly ? null : path.resolve(process.argv[2] || path.join(root, 'validation-work/caption-bidi-browser'));
+if (output) fs.mkdirSync(output, { recursive: true });
+
+// --authored-only runs actual TextStudio preview layout offline and writes no file.
+async function validateAuthored(browser) {
+  const page = await browser.newPage(), errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.route('**/*', route => route.abort());
+  await page.setContent('<aside id="tools" hidden></aside><div id="stage" style="position:relative"></div>');
+  await page.addStyleTag({content:fs.readFileSync(path.join(root,'web/text-studio.css'),'utf8')});
+  await page.addScriptTag({content:fs.readFileSync(path.join(root,'web/text-studio.js'),'utf8').replace(/^export /gm,'')+'\nwindow.AuthoredStudio=TextStudio;'});
+  const count = await page.evaluate(() => {
+    const stage=document.querySelector('#stage'), p={id:'qa',draft:{},manual:{text_clips:[]}};
+    let size, checked=0;
+    const studio=new window.AuthoredStudio(document.querySelector('#tools'),stage,{
+      project:()=>p,busy:()=>false,dimensions:()=>size,preview:()=>{},time:()=>1,
+      edit:()=>{throw Error('Layout must not edit the project');}
+    });
+    const he='מצלמים ב 4K 60fps היום.', en='Filmed in 4K today.';
+    const fail=(msg)=>{throw Error(msg);};
+    function x(span,offset) {
+      const range=document.createRange();range.setStart(span.firstChild,offset);range.setEnd(span.firstChild,offset+1);
+      const box=range.getBoundingClientRect();if(!box.width)fail('Missing rendered glyph');
+      return box.left;
+    }
+    function line(span,start,text) {
+      const dot=x(span,start+text.length-1), first=x(span,start);
+      if(text===en ? dot<=first : dot>=first)fail('Misplaced '+text+' under '+span.parentElement.dataset.template);
+      if(text===he && x(span,start+text.indexOf('4K'))>=x(span,start+text.indexOf('60fps')))fail('Reversed Latin phrase');
+    }
+    for(const dims of [[960,540],[390,844]])for(const dir of ['ltr','rtl']){
+      size=dims;stage.style.width=dims[0]+'px';stage.style.height=dims[1]+'px';document.documentElement.dir=dir;
+      for(const template of ['plain','chapter','lower_third','highlight','callout'])for(const [a,b] of [[he,en],[en,he]]){
+        for(const separate of ['chapter','lower_third'].includes(template)?[false,true]:[false]){
+          const text=separate?a:a+'\n'+b, row={id:'text_qa',kind:'title',template,position:'center',style:'clean',scale:75,start:0,end:2,text,...(separate?{subtext:b}:{})};
+          p.manual.text_clips=[row];const before=JSON.stringify(p);studio.sync(1);
+          const main=stage.querySelector('.custom-text-main'),sub=stage.querySelector('.custom-text-sub');
+          if(main.textContent!==text || (separate&&sub.textContent!==b))fail('Authored text changed');
+          line(main,0,a);line(separate?sub:main,separate?0:a.length+1,b);
+          if(template==='callout' && stage.querySelector('.custom-text-accent')?.textContent.trim()!=='▌')fail('Callout accent lost');
+          if(JSON.stringify(p)!==before)fail('Project was mutated');checked++;
+        }
+      }
+    }
+    return checked;
+  });
+  assert.deepEqual(errors,[]);
+  console.log(JSON.stringify({passed:count,browser:browser.version(),case:'authored preview paragraph order',filesWritten:0}));
+}
 (async () => {
   const browser = await chromium.launch({ headless: true, ...(process.env.CUTROOM_CHROMIUM_EXECUTABLE ? { executablePath: process.env.CUTROOM_CHROMIUM_EXECUTABLE } : {}) });
   try {
+  if (authoredOnly) { await validateAuthored(browser); return; }
   fs.writeFileSync(path.join(output,'report.json'),JSON.stringify({status:'running'})+'\n');
   const page = await browser.newPage({ viewport: { width: 1400, height: 1500 } });
   const errors = [];
@@ -111,7 +160,7 @@ fs.mkdirSync(output, { recursive: true });
   fs.writeFileSync(path.join(output,'report.json'),JSON.stringify(report,null,2)+'\n');
   console.log(JSON.stringify({passed:report.passed,browser:report.browser,output}));
   } catch(error) {
-    fs.writeFileSync(path.join(output,'report.json'),JSON.stringify({status:'failed',error:String(error)},null,2)+'\n');
+    if (output) fs.writeFileSync(path.join(output,'report.json'),JSON.stringify({status:'failed',error:String(error)},null,2)+'\n');
     throw error;
   } finally { await browser.close(); }
 })().catch(error=>{console.error(error);process.exitCode=1;});

@@ -26,6 +26,9 @@ def shelf(api):
             {'id':'selected2','start':35.,'end':60.,'text':'Second unverified source statement.'},
             {'id':'after','start':60.,'end':70.,'text':'Later reference.'}]}
         p['draft']=None
+        # The shared Reel fixture deliberately has a manual cut. This shelf
+        # exercises the fresh first-edit flow, not a retained timeline.
+        p['manual']['cuts']=[]
     store.update(pid,setup)
     options={'review_candidates':[{'id':'native_candidate','playback_ranges':[{'start':10.,'end':60.}],
                                   'segment_ids':['selected1','selected2'],'false_model_claim':'invented accusation'}]}
@@ -52,6 +55,29 @@ def test_unapproved_preview_leaves_project_bytes_and_source_unchanged(shelf):
     assert 'invented accusation' not in str(p)
     assert path.read_bytes()==before and source.read_bytes()==media
     assert store.load(pid)['draft'] is None
+
+
+def test_retained_cut_blocks_fresh_preview_and_direct_apply(shelf):
+    api, options = shelf
+    _, client, store, pid, source = api
+    store.update(pid, lambda p: p["manual"]["cuts"].append({"start": 7., "end": 8.}))
+    saved = publish_failed_review(store, pid, REQUEST, options, "source-v1")
+    item = saved["analysis"]["review_candidates"]["items"][0]
+    revision = saved["revision"]
+    state = store.state_path(pid)
+    before, original = state.read_bytes(), source.read_bytes()
+
+    response = preview(shelf)
+    assert response.status_code == 409, response.get_json()
+    assert response.get_json()["error"] == "invalid_reel_proposal"
+    assert "retained edit" in response.get_json()["message"]
+    response = client.post(f"/api/projects/{pid}/manual/edit", json={
+        "action": "apply_review_candidate", "candidate_id": item["id"],
+        "proposal_id": "0" * 64, "expected_revision": revision,
+    })
+    assert response.status_code == 409, response.get_json()
+    assert response.get_json()["error"] == "retained_edit_requires_resume"
+    assert state.read_bytes() == before and source.read_bytes() == original
 
 
 def test_apply_undo_redo_restores_no_draft_and_preserves_manual_and_source(shelf):

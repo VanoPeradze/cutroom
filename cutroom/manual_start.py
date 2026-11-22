@@ -10,6 +10,9 @@ from .utils import now_iso
 def start_manual_draft(project):
     if project.get("draft"):
         raise ManualEditError("This project already has an edit. Open it instead of replacing it.")
+    from .retained_edit import has_retained_edit
+    if has_retained_edit(project):
+        raise ManualEditError("This project contains a retained edit. Resume it instead of replacing it.")
     source = (project.get("sources") or {}).get("A") or {}
     duration = float(source.get("duration") or 0)
     if not math.isfinite(duration) or duration <= 0:

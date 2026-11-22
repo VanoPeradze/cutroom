@@ -54,8 +54,8 @@ def setup(tmp_path, monkeypatch):
             video = {"codec_type": "video", "width": 320 if path.name == "thumbnail.jpg" else 640,
                      "height": 180 if path.name == "thumbnail.jpg" else 360,
                      "codec_name": "mjpeg" if extension == ".jpg" else "png" if extension == ".png" else "h264"}
-            streams = ([video] if extension in {".mp4", ".png", ".jpg"} else [])
-            if extension in {".mp4", ".m4a"}:
+            streams = ([video] if extension in {".mp4", ".png", ".jpg"} or (path.name == "original.wav" and store.load(pid)["assets"][ASSET]["kind"] == "video") else [])
+            if extension in {".mp4", ".m4a", ".wav"}:
                 streams.append({"codec_type": "audio", "codec_name": "aac"})
             return subprocess.CompletedProcess(args, 0, json.dumps({"streams": streams, "format": {"duration": "2.0"}}), "")
         if args[-1] == "pipe:1":
@@ -94,7 +94,7 @@ def test_reuses_only_complete_validated_generation_without_transcoding(setup):
     commands = len(setup[-1]["encode"])
     assert prepare(setup)["preparation_reused"] is True
     assert len(setup[-1]["encode"]) == commands
-    assert len(setup[-1]["probe"]) == 2
+    assert len(setup[-1]["probe"]) == 4
     assert asset(setup)["preview_path"] == before["preview_path"]
     assert len(generations(setup)) == 1
 

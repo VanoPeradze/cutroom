@@ -73,7 +73,10 @@ def prepare_stabilized_asset(context, project_id: str, asset_id: str, store, set
 
         def pin_check():
             context.check_cancelled()
-            return pinned_stabilization_source(project_dir, store.load(project_id), descriptor)
+            from .layer_tracks import require_layer_asset_unlocked
+            current = store.load(project_id)
+            require_layer_asset_unlocked(current, asset_id)
+            return pinned_stabilization_source(project_dir, current, descriptor)
 
         source = pin_check()
         if any(path.exists() for path in (target, target.parent / "preview.mp4", target.parent / "thumbnail.jpg")):

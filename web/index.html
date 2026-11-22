@@ -3,25 +3,35 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#081013">
+  <meta name="theme-color" content="#22252a">
   <meta name="color-scheme" content="dark light">
-  <script src="/assets/ui-shell.js?v=1.2-beta-20261019"></script>
+  <script src="/assets/ui-shell.js?v=20261112-workbench1"></script>
   <title>CUTROOM 1.3 Beta — Your editing workspace</title>
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/assets/styles.css?v=1.3-beta-20261111-bidi1">
   <link rel="stylesheet" href="/assets/workspace.css?v=1.2-beta-20261019">
-  <link rel="stylesheet" href="/assets/media-studio.css?v=1.3-beta-20261107-source-marks1">
+  <link rel="stylesheet" href="/assets/media-studio.css?v=1.3-beta-20261107-source-marks1-roll1-slide1-take1-ow1-groupsplit1-join1">
   <link rel="stylesheet" href="/assets/stabilization-studio.css?v=1.2-beta-20261019">
   <link rel="stylesheet" href="/assets/chroma-studio.css?v=1.3-beta-20261101-ui1">
-  <link rel="stylesheet" href="/assets/text-studio.css?v=1.2-beta-20261019">
+  <link rel="stylesheet" href="/assets/text-studio.css?v=20261116-caption-preview3-authoredbidi1">
   <link rel="stylesheet" href="/assets/welcome.css?v=1.3-beta-20261111-transcription1">
+  <link rel="stylesheet" href="/assets/range-export.css?v=20261117-1">
+  <link rel="stylesheet" href="/assets/review-markers.css?v=20261117-1">
+  <link rel="stylesheet" href="/assets/clip-board.css?v=20261122-clips10">
   <link rel="stylesheet" href="/assets/creator-ui.css?v=1.2-beta-20261024-ui-clarity1">
   <link rel="stylesheet" href="/assets/editor-panels.css?v=1.2-beta-20261019">
   <link rel="stylesheet" href="/assets/studio-design.css?v=1.2-beta-20261019">
   <link rel="stylesheet" href="/assets/studio-chrome.css?v=1.2-beta-20261019">
   <link rel="stylesheet" href="/assets/studio-screens.css?v=1.2-beta-20261019">
   <link rel="stylesheet" href="/assets/ui-polish.css?v=1.3-beta-20261107-monitor1">
-  <link rel="stylesheet" href="/assets/studio-finish.css?v=20261108-studio1">
+  <link rel="stylesheet" href="/assets/studio-finish.css?v=20261112-workbench1-20261115-edit-suite1">
+  <link rel="stylesheet" href="/assets/studio-workbench.css?v=20261117-urgent-alignment2">
+  <link rel="stylesheet" href="/assets/studio-console.css?v=20261119-export1">
+  <link rel="stylesheet" href="/assets/timeline-command-strip.css?v=20261118-geometry1">
+  <link rel="stylesheet" href="/assets/source-view.css?v=20261120-handoff1">
+  <link rel="stylesheet" href="/assets/track-lift.css?v=20261118-lift1">
+  <link rel="stylesheet" href="/assets/clip-opacity.css?v=20261118-opacity1">
+  <link rel="stylesheet" href="/assets/mark-selection.css?v=20261118-markrange1">
 </head>
 <body class="welcome-mode">
   <a class="skip-link" href="#main" data-i18n="skip">Skip to content</a>
@@ -33,7 +43,7 @@
     </button>
     <div class="project-head" id="projectHead" hidden>
       <input id="projectName" dir="auto" class="project-name" value="" maxlength="120" aria-label="Project name">
-      <span class="save-state" id="saveState" role="status" aria-live="polite" aria-atomic="true" data-i18n="saved">Saved</span>
+      <button type="button" class="save-state" id="saveState" data-save-state="saved" aria-live="polite" aria-atomic="true" disabled>Saved</button>
     </div>
     <nav class="top-actions" aria-label="Primary actions">
       <button class="button ghost compact" id="welcomeHelpButton" type="button" title="Help & guide">Help</button>
@@ -43,6 +53,9 @@
       <button class="button ghost compact theme-toggle" id="themeToggle" type="button" aria-label="Night mode" aria-pressed="false" title="Switch to night mode"><span id="themeIcon" aria-hidden="true">☀</span><span id="themeLabel">Day</span></button>
       <span class="local-status"><i aria-hidden="true"></i><span id="processingBadge">Local AI</span></span>
       <button class="button ghost compact" id="advancedButton" aria-expanded="false" data-i18n="studio">Studio</button>
+      <button class="button ghost compact" id="clipBoardButton" type="button" title="Find the strongest moments in this recording">
+        <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3" y="4" width="7" height="16" rx="1.5"/><rect x="14" y="4" width="7" height="10" rx="1.5"/><path d="M14 18h7"/></svg><span>Clips</span>
+      </button>
       <button class="button render compact" id="renderButton" disabled>
         <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 15V3m-4 4 4-4 4 4M5 14v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5"/></svg><span data-i18n="render">Export</span>
       </button>
@@ -67,7 +80,7 @@
           <span>1.3 BETA · OPEN SOURCE</span>
         </div>
         <h1>Your footage.<br><em>Your next edit.</em></h1>
-        <p class="welcome-lead">Choose how you want to start.</p>
+        <p class="welcome-lead">Open the editor, import your footage, and build your timeline.</p>
         <div class="welcome-actions">
           <button class="button primary large" id="newProjectButton">
             <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 5v14M5 12h14"/></svg>
@@ -82,23 +95,24 @@
         </ul>
       </div>
       <section class="home-services" id="welcomeServices" aria-labelledby="welcomeServicesTitle" tabindex="-1">
-        <div class="home-section-head"><div><p class="eyebrow">START A PROJECT</p><h2 id="welcomeServicesTitle">Pick your starting point.</h2></div><p>Every path leads to an editable timeline.</p></div>
+        <div class="home-section-head"><div><p class="eyebrow">START A PROJECT</p><h2 id="welcomeServicesTitle">Your editing workspace.</h2></div><p>Start manually. AI drafts are optional.</p></div>
         <div class="service-grid">
+          <button class="service-card" type="button" data-start-workflow="manual">
+            <span class="service-index" aria-hidden="true">MANUAL</span>
+            <span class="service-art manual-art" aria-hidden="true"><span class="art-ruler"></span><span class="art-lanes"><i class="lane-video"></i><i class="lane-audio"></i><i class="lane-voice"></i><i class="lane-text">Title</i></span><span class="art-playhead"></span></span>
+            <span class="service-copy"><strong>Edit it yourself</strong><span>Full manual control. No AI required.</span><small>No AI required · Full manual control</small></span><span class="service-start">Open editor</span>
+          </button>
           <button class="service-card" type="button" data-start-workflow="short">
-            <span class="service-index" aria-hidden="true">01 / SHORTS</span>
+            <span class="service-index" aria-hidden="true">SHORTS</span>
             <span class="service-art short-art" aria-hidden="true"><span class="art-scene-wide"></span><span class="art-reel"><span class="art-scene"></span><span class="art-ratio">9:16</span><span class="art-caption"></span></span><span class="art-platforms"><i></i><i></i><i></i></span></span>
             <span class="service-copy"><strong>Create a Short / Reel</strong><span>Find a moment. Make it vertical.</span><small>AI draft · Vertical video · Editable captions</small></span><span class="service-start primary">Start</span>
           </button>
           <button class="service-card" type="button" data-start-workflow="youtube">
-            <span class="service-index" aria-hidden="true">02 / YOUTUBE</span>
+            <span class="service-index" aria-hidden="true">YOUTUBE</span>
             <span class="service-art youtube-art" aria-hidden="true"><span class="art-wide"><span class="art-scene"></span><span class="art-play"></span></span><span class="art-strip"><i></i><i></i><i></i><i class="on"></i><i></i><i></i><i></i></span></span>
             <span class="service-copy"><strong>Edit a YouTube video</strong><span>Build a focused first draft.</span><small>AI-assisted cleanup · Horizontal video</small></span><span class="service-start">Start</span>
           </button>
-          <button class="service-card" type="button" data-start-workflow="manual">
-            <span class="service-index" aria-hidden="true">03 / MANUAL</span>
-            <span class="service-art manual-art" aria-hidden="true"><span class="art-ruler"></span><span class="art-lanes"><i class="lane-video"></i><i class="lane-audio"></i><i class="lane-voice"></i><i class="lane-text">Title</i></span><span class="art-playhead"></span></span>
-            <span class="service-copy"><strong>Edit it yourself</strong><span>Full manual control. No AI required.</span><small>No AI required · Full manual control</small></span><span class="service-start">Open editor</span>
-          </button>
+
         </div>
       </section>
       <div class="recent-strip" id="recentProjects" hidden>
@@ -225,7 +239,7 @@
             <select id="durationMode" aria-describedby="durationLimitHelp"><option value="target" data-i18n="durationTargetMode">Highlight sequence — aim for this length</option><option value="style" data-i18n="durationStyleMode">Follow style — maximum length</option></select>
             <small id="durationLimitHelp" data-i18n="durationLimitHelp">Aim for the chosen length, or let the style finish earlier. Useful footage only; no filler.</small>
             <div class="duration-control">
-              <input id="targetDuration" type="range" min="15" max="180" step="5" value="60" aria-describedby="durationLimitHelp">
+              <input id="targetDuration" type="range" min="8" max="180" step="any" value="60" aria-describedby="durationLimitHelp">
               <output id="durationOutput">60s</output>
             </div>
             <div class="quick-values">
@@ -319,7 +333,7 @@
       <section class="result-panel" id="resultPanel" hidden>
         <p id="directorOutcomeNotice" class="ai-draft-notice" role="status" dir="auto" hidden></p>
         <details id="durationReview" class="ai-draft-notice duration-review" hidden><summary><span class="duration-review-summary"></span><small>Details</small></summary><p></p><button type="button" class="button ghost compact" id="reviewDurationSettings" data-i18n="reviewDurationSettings">Review style &amp; length</button></details>
-        <div id="aiDraftNotice" class="ai-draft-notice" role="status" hidden><p data-i18n="aiDraftKept">New draft ready; your manual timeline was kept.</p><button id="applyAiDraftButton" type="button" class="button ghost compact" data-i18n="aiDraftApply">Apply new AI draft</button></div>
+        <div id="aiDraftNotice" class="ai-draft-notice" role="status" hidden><p >Your current timeline is kept. Review the saved AI draft before applying it.</p><button id="applyAiDraftButton" type="button" class="button ghost compact" >Review AI draft</button></div>
         <div id="streamerLayoutTip" class="ai-draft-notice streamer-layout-tip" role="status" hidden><p>Your facecam was found in this recording. The streamer layout puts your camera on top and the game below, the usual look for gaming Shorts.</p><span class="streamer-layout-actions"><button type="button" class="button primary compact" id="streamerLayoutReview">Preview streamer layout</button><button type="button" class="button ghost compact" id="streamerLayoutDismiss">Not now</button></span></div>
         <div class="result-header">
           <div><p class="eyebrow" data-i18n="firstDraft">First edit</p><span id="draftEngineBadge" class="engine-badge"></span><h2 id="draftTitle">CUTROOM Draft</h2><p id="draftSummary"></p></div>
@@ -333,7 +347,24 @@
 
         <div class="result-grid" id="resultGrid">
           <div class="preview-column" id="previewColumn">
+            <section id="firstRecordingGuide" class="first-recording-guide" aria-labelledby="firstRecordingTitle" hidden>
+              <div class="first-recording-body">
+                <svg class="first-recording-mark" viewBox="0 0 88 54" fill="none" aria-hidden="true" focusable="false">
+                  <rect x="1" y="3" width="86" height="47" rx="5" class="first-recording-outline"/>
+                  <path d="M2 15h84M10 26h12m-12 11h12" class="first-recording-rule"/>
+                  <rect x="28" y="21" width="23" height="8" rx="2" class="first-recording-strip"/><rect x="54" y="21" width="20" height="8" rx="2" class="first-recording-strip"/>
+                  <rect x="28" y="33" width="36" height="8" rx="2" class="first-recording-audio"/>
+                  <path d="M43 10v36" class="first-recording-head"/><path d="M39 5h8v4l-4 4-4-4z" class="first-recording-cap"/>
+                </svg>
+                <h2 id="firstRecordingTitle">Start your timeline</h2>
+                <p>Drop a video here to start editing. Add more clips, audio or images from the media pool.</p>
+                <button type="button" class="button primary" data-first-choose>Import video</button>
+                <input type="file" accept="video/*,.mp4,.mov,.mkv,.webm,.avi,.m4v,.mpg,.mpeg,.mts,.m2ts,.ts,.wmv,.flv" multiple hidden>
+                <span class="first-recording-status" data-first-status role="status" aria-live="polite" aria-atomic="true"></span>
+              </div>
+            </section>
             <div class="preview-stage" id="previewStage" data-aspect="9:16">
+              <div id="retainedEditPreview" class="retained-edit-preview" role="status" hidden></div>
               <div class="preview-pane" id="previewPaneA"><video id="previewA" playsinline preload="metadata"></video></div>
               <div class="preview-pane" id="previewPaneB" hidden><video id="previewB" playsinline preload="metadata" hidden></video></div>
               <div class="safe-lines" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
@@ -440,7 +471,7 @@
             <form class="clip-trim-bar" id="sourceInsertForm" hidden aria-describedby="sourceInsertStatus">
               <strong id="sourceInsertTitle">Place source footage</strong>
               <label>Source <select id="sourceInsertSlot" aria-label="Footage source"><option value="A">A</option><option value="B">B</option></select></label>
-              <label>Operation <select id="sourceInsertMode"><option value="insert">Insert (shift source tracks)</option><option value="overwrite">Overwrite (keep timing)</option></select></label>
+              <label>Operation <select id="sourceInsertMode"><option value="insert">Insert (sources only)</option><option value="insert_all">Insert (ripple all layers)</option><option value="overwrite">Overwrite (keep timing)</option></select></label>
               <label>Placement <select id="sourceInsertZone"><option value="playhead">At edit position</option><option value="selection" disabled>Selected edit range</option></select></label>
               <label>Source in <input id="sourceInsertIn" type="text" inputmode="decimal" value="0" required></label>
               <label>Source out <input id="sourceInsertOut" type="text" inputmode="decimal" required></label>
@@ -467,6 +498,16 @@
             <span id="timelineRangeStatus" class="source-range-status" role="status">Source timeline time · seconds or mm:ss.mmm</span>
             <div class="source-range-actions"><button type="button" data-range-point="timeline:start">Start at playhead</button><button type="button" data-range-point="timeline:end">End at playhead</button></div>
           </form>
+            <details id="trackLift" class="track-lift">
+              <summary>Lift range from one track</summary>
+              <div class="track-lift-body">
+                <p>Leave a hole in one visual track. Lower layers show through; the timeline does not ripple.</p>
+                <label for="trackLiftLane">Visual track</label><select id="trackLiftLane" aria-describedby="trackLiftStatus"><option value="">Choose a visual track</option></select>
+                <p id="trackLiftStatus" role="status">Mark a range on the edited timeline, then choose a track.</p>
+                <button type="button" id="trackLiftApply" aria-describedby="trackLiftStatus" disabled>Lift this range</button>
+                <p id="trackLiftReceipt" role="status" hidden></p>
+              </div>
+            </details>
             <details class="editor-ai-suggestions"><summary>AI suggestions</summary><div id="studioDirectorDock"></div></details>
             </div>
             <section id="editVideoEffects" aria-label="Video effects" hidden>
@@ -672,6 +713,16 @@
           </div>
           <div class="tab-panel" id="studioPanelTranscript" role="tabpanel" aria-labelledby="studioTabTranscript" tabindex="0" data-panel="transcript">
             <header class="studio-tool-intro"><div><p>TEXT &amp; CAPTIONS</p><h3>Captions</h3></div><span>Add text to the edit, or work with the recorded speech below.</span></header>
+            <section id="manualTranscription" class="caption-versions" aria-labelledby="manualTranscriptionTitle" hidden>
+              <h4 id="manualTranscriptionTitle">Transcribe audio</h4>
+              <p id="manualTranscriptionHelp">Create an editable transcript from source A audio. Your timeline and export settings stay as they are.</p>
+              <div class="caption-version-controls">
+                <label for="manualTranscriptionLanguage" id="manualTranscriptionLanguageLabel">Spoken language</label>
+                <select id="manualTranscriptionLanguage"><option value="auto">Auto-detect / אוטומטי</option><option value="he">עברית / Hebrew</option><option value="en">English / אנגלית</option><option value="ar">العربية / Arabic</option><option value="es">Español / Spanish</option><option value="fr">Français / French</option><option value="ru">Русский / Russian</option></select>
+                <button type="button" id="manualTranscriptionStart" class="button primary compact" aria-describedby="manualTranscriptionHelp manualTranscriptionStatus">Transcribe locally</button>
+              </div>
+              <p id="manualTranscriptionStatus" role="status" aria-live="polite"></p>
+            </section>
             <form id="captionItemEditor" class="caption-item-editor" aria-labelledby="captionItemTitle" hidden>
               <div class="caption-item-head"><div><h4 id="captionItemTitle">Selected caption</h4><p id="captionItemMeta"></p></div><button type="button" id="captionItemClose">Done</button></div>
               <label class="caption-item-text" for="captionItemText">Caption text</label>
@@ -696,8 +747,9 @@
             <section class="caption-control-panel" aria-labelledby="captionControlTitle">
               <div class="caption-control-head">
                 <div><h4 id="captionControlTitle">Subtitle output</h4><p id="captionControlStatus">Burned captions are enabled.</p></div>
-                <span class="caption-live-badge">LIVE PREVIEW</span>
+                <span class="caption-live-badge">SUBTITLE PREVIEW</span>
               </div>
+              <p id="captionPreviewStatus" class="caption-preview-status" role="status" aria-live="polite" hidden></p>
               <div class="caption-switch-grid">
                 <label class="caption-toggle-card"><span><b>Burn AI subtitles</b><small>Render transcript subtitles into the MP4. Your custom text and imported captions are always included.</small></span><input id="studioBurnCaptionsToggle" type="checkbox" checked></label>
                 <label class="caption-toggle-card"><span><b>Export SRT file</b><small>Save an editable subtitle file beside the video.</small></span><input id="captionsToggle" type="checkbox"></label>
@@ -706,7 +758,7 @@
                 <label class="caption-language-control"><span><b>Speech language</b><small>Auto-detect checks evidence across the recording.</small><small class="rebuild-chip" data-rebuild-chip>Draft rebuild</small></span><select id="spokenLanguageSelect"><option value="auto">Auto-detect</option><option value="he">Hebrew</option><option value="en">English</option><option value="ar">Arabic</option><option value="es">Spanish</option><option value="fr">French</option><option value="ru">Russian</option></select><em id="captionLanguageStatus">Detected after analysis</em></label>
                 <label><span><b>Style</b><small>Visual treatment in the final video.</small></span><select id="captionStyleSelect"><option value="highlight">Word highlight</option><option value="clean">Clean</option><option value="bold" selected>Bold</option><option value="boxed">Boxed</option></select></label>
                 <label><span><b>Position</b><small>Auto avoids faces in stacked layouts.</small></span><select id="captionPositionSelect"><option value="auto" selected>Automatic safe area</option><option value="top">Top</option><option value="center">Center</option><option value="bottom">Bottom</option></select></label>
-                <label><span><b>Size</b><small>Scale relative to the output frame.</small></span><div class="caption-range"><input id="captionScale" type="range" min="75" max="150" step="5" value="100"><output id="captionScaleOut">100%</output></div></label>
+                <label><span><b>Size</b><small>Scale relative to the output frame.</small></span><div class="caption-range"><input id="captionScale" type="range" min="75" max="150" step="1" value="100"><output id="captionScaleOut">100%</output></div></label>
                 <label><span><b>Words per caption</b><small>Fewer words create faster, punchier captions.</small></span><div class="caption-range"><input id="captionWordsPerLine" type="range" min="2" max="12" step="1" value="9"><output id="captionWordsPerLineOut">9</output></div></label>
               </div>
             </section></details>
@@ -719,6 +771,13 @@
               <div class="transcript-list" id="transcriptList" role="group" aria-label="Transcript lines"></div>
               <form id="transcriptEditForm" class="transcript-detail-editor" hidden>
                 <div class="transcript-detail-heading"><label for="transcriptEditText">Correct selected line</label><span id="transcriptEditTime"></span></div>
+                <div id="transcriptSections" data-editor-shortcuts="off" hidden>
+                  <label for="transcriptSectionChoice">Jump to timeline section</label>
+                  <select id="transcriptSectionChoice" aria-describedby="transcriptSectionsHelp transcriptSectionsStatus"></select>
+                  <div class="transcript-line-navigation"><button id="transcriptSectionGo" type="button">Go to section</button></div>
+                  <p id="transcriptSectionsHelp" class="connection-note">Moves the playhead only; timeline selection is unchanged. To remove footage, select a Range on the timeline.</p>
+                  <p id="transcriptSectionsStatus" class="connection-note" role="status"></p>
+                </div>
                 <textarea id="transcriptEditText" dir="auto" rows="5" maxlength="4000" placeholder="Correct the transcript here…"></textarea>
                 <div class="transcript-detail-footer"><span id="transcriptEditStatus" role="status">Saved</span><button id="transcriptDiscard" type="button">Discard changes</button><button id="transcriptSave" class="button primary compact" type="submit">Save text</button></div>
                 <div class="transcript-line-navigation"><button id="transcriptPrevious" type="button">← Previous line</button><button id="transcriptNext" type="button">Next line →</button><button id="transcriptSaveAll" type="button">Save all changes</button></div>
@@ -791,7 +850,7 @@
         </div>
         <section class="studio-timeline-dock" id="studioTimelineDock" aria-label="Timeline and manual editing">
           <div class="editor-tools editor-toolbar-main">
-            <div class="timeline-tools" role="group" aria-label="Timeline tools"><button type="button" data-timeline-tool="select" aria-pressed="true" title="Drag a clip to reorder; select it and drag its white edges to trim or extend into a gap">Select / Move</button><button type="button" data-timeline-tool="range" aria-pressed="false" title="Drag to select a time range">Range</button><button type="button" data-timeline-tool="blade" aria-pressed="false" title="Click to cut; drag to move a cut">Cut</button></div>
+            <div class="timeline-tools" role="group" aria-label="Timeline tools"><button type="button" data-timeline-tool="select" aria-pressed="true" title="Drag a clip to reorder; select it and drag its white edges to trim or extend into a gap">Select / Move</button><button type="button" data-timeline-tool="slip" aria-pressed="false" title="Slip imported video/audio content without moving or resizing the clip">Slip</button><button type="button" data-timeline-tool="range" aria-pressed="false" title="Drag to select a time range">Range</button><button type="button" data-timeline-tool="blade" aria-pressed="false" title="Click to cut; drag to move a cut">Cut</button></div>
             <label class="keyboard-profile-label" id="timelineTargetField" hidden>Edit <select id="timelineTarget" aria-label="Edit target"><option value="edit">Together (A+B)</option><option value="A">A only</option><option value="B">B only</option></select></label>
             <button id="manualDelete" type="button" disabled>Remove</button>
             <button id="reviewSourceButton" type="button" disabled title="See the entire original video and restore removed footage">Original footage</button>
@@ -811,6 +870,24 @@
     </section>
   </main>
 
+  <dialog id="timelineMarkersDialog" aria-labelledby="timelineMarkersTitle">
+    <div class="marker-shell">
+      <header><div><small>EDITED TIMELINE</small><h2 id="timelineMarkersTitle">Review markers</h2></div><button type="button" class="button ghost" data-marker-close>Close</button></header>
+      <p>Markers stay at their timeline time when clips move. They never appear in exports.</p>
+      <section class="marker-columns">
+        <div><h3>Saved markers <span data-marker-count></span></h3><p data-marker-empty>No markers yet.</p><ol data-marker-list aria-label="Saved timeline markers"></ol></div>
+        <form data-marker-form><h3 data-marker-heading>Add at playhead</h3><p data-marker-position></p>
+          <label>Name<input data-marker-label maxlength="80" required placeholder="e.g. Check this cut" dir="auto"></label>
+          <label><span class="marker-field-label">Note <small>(optional)</small></span><textarea data-marker-note maxlength="320" rows="2" dir="auto"></textarea></label>
+          <label>Color<select data-marker-color><option value="amber">Amber</option><option value="teal">Teal</option><option value="violet">Violet</option><option value="coral">Coral</option></select></label>
+          <div class="marker-actions"><button class="button primary" data-marker-save type="submit">Add marker</button><button class="button ghost" data-marker-new type="button" hidden>New marker</button><button class="button ghost" data-marker-reset type="button" hidden>Discard changes</button></div>
+          <div class="marker-actions"><button class="button ghost" data-marker-move type="button" hidden>Move to playhead</button><button class="button ghost" data-marker-remove type="button" hidden>Remove marker</button></div>
+          <p data-marker-status role="status" aria-live="polite"></p>
+        </form>
+      </section>
+    </div>
+  </dialog>
+
   <dialog id="keyboardDialog" class="sheet-dialog keyboard-dialog" aria-labelledby="keyboardTitle">
     <form method="dialog" class="dialog-shell">
       <header><div><p class="eyebrow">YOUR WORKSPACE</p><h2 id="keyboardTitle">Keyboard shortcuts</h2></div><button class="icon-button" value="cancel" aria-label="Close shortcuts">×</button></header>
@@ -822,18 +899,19 @@
     </form>
   </dialog>
   <dialog id="sourceReviewDialog" class="source-review-dialog" aria-labelledby="sourceReviewTitle">
-    <div class="source-review-shell">
-      <header><div><h2 id="sourceReviewTitle">Original footage</h2><p data-review="summary"></p></div><button type="button" data-review="close" aria-label="Close original footage">Done</button></header>
-      <div class="source-review-player"><video data-review="video" controls playsinline preload="metadata" aria-label="Original source preview"></video><p data-review="quote" dir="auto"></p></div>
-      <div class="source-review-toolbar"><label>View <select data-review="slot" aria-label="Original recording"><option value="A">Source A</option><option value="B">Source B</option></select></label><span class="source-review-legend"><span>■ In edit</span><span>▧ Removed</span></span><button data-review="previous" type="button">← Previous removed</button><button data-review="next" type="button">Next removed →</button><div><button data-review="zoomOut" type="button" aria-label="Zoom out original timeline">−</button><button data-review="zoomIn" type="button" aria-label="Zoom in original timeline">＋</button><button data-review="fit" type="button">Fit</button></div></div>
-      <div class="timeline-scroll source-review-timeline" data-review="scroll"><canvas data-review="canvas" height="180" tabindex="0" role="slider" aria-label="Original footage timeline" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"></canvas></div>
-      <div class="source-review-actions"><p data-review="selection" aria-live="polite"></p><div><select data-review="scope" aria-label="Original footage edit scope"><option value="edit">Together (A+B)</option><option value="source">This source only</option></select><button class="button primary" data-review="restore" type="button">Restore to edit</button><button data-review="remove" type="button">Remove from edit</button><button data-review="undo" type="button">Undo</button><button class="source-review-exact" data-review="exact" type="button">Place selected footage...</button></div><p data-review="effect"></p><button type="button" class="button ghost" data-review="retry" hidden>Retry preview</button><p data-review="status" role="status">Click a section to preview it. Drag to select your own range. Use the ruler to seek anywhere.</p></div>
-    </div>
-  </dialog>
+      <div class="source-review-shell">
+        <header><div><h2 id="sourceReviewTitle">Original footage</h2><p data-review="summary"></p></div><button type="button" data-review="close" aria-label="Close original footage">Done</button></header>
+        <div class="source-review-player"><video data-review="video" controls playsinline preload="metadata" aria-label="Original source preview"></video></div>
+        <div class="source-review-toolbar"><label>View <select data-review="slot" aria-label="Original recording"><option value="A">Source A</option><option value="B">Source B</option></select></label><span class="source-review-legend"><i class="kept"></i>In edit <i class="removed"></i>Removed</span></div>
+        <div class="timeline-scroll source-review-timeline" data-review="scroll"><canvas data-review="canvas" height="180" tabindex="0" role="slider" aria-label="Original recording timeline" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" aria-valuetext="00:00"></canvas></div>
+        <div class="source-review-actions"><p data-review="selection" aria-live="polite"></p><div><select data-review="scope" aria-label="Original footage edit scope"><option value="edit">Together (A+B)</option><option value="source">This source only</option></select><button type="button" class="button primary" data-review="restore">Restore to edit</button><button type="button" class="button ghost" data-review="remove">Remove from edit</button><button type="button" class="button ghost" data-review="undo">Undo</button><button type="button" class="button ghost source-review-exact" data-review="exact">Place selected footage...</button></div><p data-review="effect"></p><button type="button" class="button ghost" data-review="retry" hidden>Retry preview</button><p data-review="status" role="status">Click a section to preview it. Drag to select your own range.</p><p data-review="context"></p><button type="button" class="button ghost" data-review="refresh" hidden>Use current edit</button></div>
+        <details class="source-review-help"><summary>Source navigation &amp; help</summary><div class="source-review-toolbar"><button type="button" data-review="previous">Previous removed</button><button type="button" data-review="next">Next removed</button><div><button type="button" data-review="zoomOut" aria-label="Zoom out original footage">−</button><button type="button" data-review="zoomIn" aria-label="Zoom in original footage">+</button><button type="button" data-review="fit">Fit</button></div></div><p data-review="quote" dir="auto"></p><p>Review original A/B footage without changing your edited preview. Restore and Remove use source time and the selected scope, not imported-layer insertion. Place selected footage opens the exact Timeline placement form. Original files are never changed.</p></details>
+      </div>
+    </dialog>
   <dialog id="projectsDialog" class="sheet-dialog" aria-labelledby="projectsTitle">
     <div class="dialog-shell">
       <header><div><p class="eyebrow">YOUR WORKSPACE</p><h2 id="projectsTitle" data-i18n="projects">Projects</h2></div><button type="button" class="icon-button" id="closeProjectsDialog" aria-label="Close projects">×</button></header>
-      <p>Open an edit, give it a clearer name, or remove a project you no longer need.</p>
+      <p>Open an edit, save an independent copy, rename it, or remove a project you no longer need.</p>
       <div class="project-library-tools">
         <label class="project-library-search">Find a project<input id="projectSearch" type="search" placeholder="Search project names" autocomplete="off"></label>
         <label class="project-library-sort">Sort by<select id="projectSort"><option value="recent">Recently edited</option><option value="name">Name A–Z</option><option value="oldest">Oldest first</option></select></label>
@@ -854,11 +932,28 @@
     </form>
   </dialog>
 
-  <dialog id="aiDraftApplyDialog" class="sheet-dialog project-confirm-dialog" aria-labelledby="aiDraftApplyTitle" aria-describedby="aiDraftApplyCopy">
-    <div class="dialog-shell"><header><h2 id="aiDraftApplyTitle" data-i18n="aiDraftApplyTitle">Apply the new AI draft?</h2><button type="button" class="icon-button" id="closeApplyAiDraft" aria-label="Close draft confirmation">x</button></header>
-      <p id="aiDraftApplyCopy" data-i18n="aiDraftApplyCopy">This replaces your manual timeline with the latest AI draft. You can Undo to restore your manual edit.</p>
-      <div class="project-rename-actions"><button type="button" class="button ghost" id="cancelApplyAiDraft" autofocus data-i18n="aiDraftKeep">Keep manual timeline</button><button type="button" class="button primary" id="confirmApplyAiDraft" data-i18n="aiDraftApply">Apply new AI draft</button></div>
-    </div>
+
+
+  <dialog id="projectCopyDialog" class="sheet-dialog project-confirm-dialog project-copy-dialog" aria-labelledby="projectCopyTitle" aria-describedby="projectCopyHelp projectCopyNavigation">
+    <form id="projectCopyForm" class="dialog-shell">
+      <header><div><p class="eyebrow">INDEPENDENT EDIT</p><h2 id="projectCopyTitle">Save a copy</h2></div><button type="button" class="icon-button" id="closeProjectCopy" aria-label="Close copy details">x</button></header>
+      <p id="projectCopySource" class="project-copy-source" dir="auto"></p>
+      <p id="projectCopyHelp">Copy the saved timeline, settings, captions, saved AI proposal and independently owned media/previews. The copy starts with fresh Undo history and no previous exports. No AI runs. Your original stays separate.</p>
+      <label for="projectCopyName">Copy name</label><input id="projectCopyName" name="name" type="text" maxlength="120" required autocomplete="off" dir="auto" aria-describedby="projectCopyHelp projectCopyError">
+      <progress id="projectCopyProgress" max="1" value="0" aria-label="Copy progress" hidden></progress>
+      <p id="projectCopyStatus" role="status" aria-live="polite" aria-atomic="true" tabindex="-1"></p>
+      <p id="projectCopyError" class="project-action-error" role="alert" hidden></p>
+      <p id="projectCopyNavigation" class="project-copy-navigation">You choose when to open the copy. Saved media needs additional disk space; active imports or processing must finish first.</p>
+      <div class="project-copy-actions">
+        <button type="button" class="button ghost" id="projectCopyBack" hidden>Back to Projects</button>
+        <button type="button" class="button ghost" id="cancelProjectCopy">Cancel</button>
+        <button type="button" class="button danger" id="projectCopyCancel" hidden>Cancel copy</button>
+        <button type="button" class="button ghost" id="projectCopyCheck" hidden>Check status</button>
+        <button type="button" class="button ghost" id="projectCopyRetry" hidden>Retry same request</button>
+        <button type="button" class="button primary" id="projectCopyOpen" hidden>Open copy</button>
+        <button type="submit" class="button primary" id="projectCopyCreate">Create copy</button>
+      </div>
+    </form>
   </dialog>
 
   <dialog id="projectDeleteDialog" class="sheet-dialog project-confirm-dialog" aria-labelledby="projectDeleteTitle" aria-describedby="projectDeleteCopy">
@@ -871,21 +966,28 @@
     </div>
   </dialog>
 
-  <dialog id="exportDialog" class="export-dialog">
+  <dialog id="exportDialog" class="export-dialog" aria-labelledby="exportTitle" aria-describedby="exportDescription">
     <div class="dialog-shell export-shell">
-      <button class="icon-button dialog-close" id="closeExportDialog" aria-label="Close">×</button>
-      <p class="eyebrow" data-i18n="export">Export</p>
-      <h2 id="exportTitle" data-i18n="readyToExport">Ready to export?</h2>
+      <header class="export-header">
+        <h2 id="exportTitle" data-i18n="readyToExport">Ready to export?</h2>
+        <button class="icon-button" id="closeExportDialog" aria-label="Close export">×</button>
+      </header>
+      <div class="export-body">
       <p id="exportDescription" data-i18n="exportHelp">Export uses the original full-quality files, not a proxy.</p>
       <button class="button ghost full" id="reviewExportLayout" type="button" hidden>Fix source timing &amp; layout</button>
       <p id="exportStorageInfo" class="export-storage-info" role="status" dir="auto" hidden></p>
       <p id="exportLayoutWarning" class="export-storage-info" role="status" dir="auto" hidden></p>
-      <ul id="exportReview" class="export-review" aria-label="Checks of the finished video" hidden></ul>
       <div class="export-summary" id="exportSummary"></div>
+      <button class="button ghost compact" id="reviewOutputSettings" type="button">Change output settings</button>
+      <label class="export-fps-field" id="exportScopeField"><span id="exportScopeLabel">Export range</span><select id="exportScope" aria-labelledby="exportScopeLabel" aria-describedby="exportScopeHelp"><option value="whole" selected>Entire timeline</option><option value="selection" disabled>Marked range</option></select><small id="exportScopeHelp" dir="auto" aria-live="polite">Exports the entire edited timeline.</small></label>
       <label class="export-fps-field" id="exportFrameRateField"><span id="exportFpsLabel">Frame rate</span><select id="exportFpsSelect" aria-labelledby="exportFpsLabel" aria-describedby="exportFpsHelp"><option value="24">24 FPS</option><option value="25">25 FPS</option><option value="30" selected>30 FPS</option><option value="50">50 FPS</option><option value="60">60 FPS</option></select><small id="exportFpsHelp">30 FPS balances smooth playback and render time.</small></label>
       <div class="export-progress" id="exportProgress" hidden><span></span><b>0%</b><small></small><button class="button danger compact" id="cancelExportJobButton" type="button" data-i18n="stopProcess">Stop process</button></div>
-      <div class="export-actions" id="exportActions"><button class="button ghost" id="cancelExport" data-i18n="cancel">Cancel</button><button class="button render" id="confirmExport" data-i18n="startExport">Start export</button></div>
+
       <a class="button primary full" id="downloadExport" hidden data-i18n="downloadVideo">Download video</a>
+      <a class="button ghost full" id="downloadExportCaptions" hidden>Download subtitles (.srt)</a>
+      <ul id="exportReview" class="export-review" aria-label="Checks of the finished video" hidden></ul>
+      </div>
+      <div class="export-actions" id="exportActions"><button class="button ghost" id="cancelExport">Back to edit</button><button class="button render" id="confirmExport" data-i18n="startExport">Start export</button></div>
     </div>
   </dialog>
 
@@ -900,7 +1002,7 @@
         <details data-help-topic><summary>Cloud AI: free accounts, compatible APIs and privacy</summary><p>Online — Free tier uses your own Groq Free account, free within Groq's quotas. My own API account supports Groq or a compatible public HTTPS API: JSON-object chat responses and verbose_json audio transcription with word timestamps, on the same base URL. A chat subscription alone is not compatible. Local/private-network URLs are not supported by this cloud connection.</p><p>A paid account may incur charges, even when you select “Free tier” here. CUTROOM does not upgrade accounts or switch plans. It sends selected audio, transcript and editing instructions to your chosen provider only when you start AI processing. Video frames are not sent.</p><p>Your pasted API key lives in the running CUTROOM session. Reconnect after restarting. Changing provider or endpoint requires a fresh key and consent. Choosing cloud AI reduces local AI work, but previews and video export still run on your computer. The app is not a hosted cloud renderer.</p></details>
         <details data-help-topic><summary>Sources A and B, camera layouts and synchronization</summary><p>A is your main recording and defines the starting timeline. B is an optional second recording. In Layout, assign which is the screen, which is the camera and which supplies the audio. Inspect sync and adjust its offset if the sources do not line up.</p><p>Stacked puts camera and screen into separate parts of the frame. Side by side, picture-in-picture and single-source options give different compositions. A camera embedded in a single file is cropped from that file; it is not a recovered independent source. Select a clip to adjust its framing only, or choose Entire edit to apply your next layout throughout.</p></details>
         <details data-help-topic><summary>Spoken language, transcript and captions</summary><p>Spoken language means the language actually spoken, not the language you want as an output. Automatic detection can be wrong on short or noisy audio. Set the exact language when you know it. Transcription is not automatic translation.</p><p>Review the transcript after AI analysis. Select a line, correct the text, and Save. Text correction changes captions; timeline tools change the video. Caption appearance and placement are in Captions. Burned captions are permanent pixels in the exported video. Manual starts do not create a transcript or captions automatically.</p></details>
-        <details data-help-topic><summary>Timeline: select, cut, remove, move and restore</summary><p><strong>Select / Move:</strong> select a clip and drag its middle to reorder it. <strong>Cut:</strong> click at the split point. <strong>Range:</strong> drag across a section, then remove it. These are different tools, so check the active tool before dragging.</p><p><strong>Together</strong> edits A and B as a pair. A only or B only changes that source and may leave gaps. Trim a clip's white edges to reveal available original footage; Close gaps in Together removes time empty on every layer and moves later sources, added media/audio and text together. Spanning clips keep their time. One Undo restores all layers.</p><p><strong>Original footage</strong> shows the complete source with included and removed areas, so you can preview a missing section and restore it. Full source preview does not switch your editing target. Zoom follows the playhead. “How to edit” inside Studio has detailed controls.</p></details>
+        <details data-help-topic><summary>Timeline: select, cut, remove, move and restore</summary><p><strong>Select / Move:</strong> select a clip and drag its middle to reorder it. <strong>Cut:</strong> click at the split point. <strong>Range:</strong> drag across a section, then remove it. These are different tools, so check the active tool before dragging.</p><p><strong>Together</strong> edits A and B as a pair. A only or B only changes that source and may leave gaps. Trim a clip's white edges to reveal available original footage; Close gaps in Together removes time empty on every layer and moves later sources, added media/audio and text together. Spanning clips keep their time. One Undo restores all layers.</p><p><strong>Loop range</strong> repeats a marked edit range of at least a quarter second with picture, titles and mixed sound. Click it again or pause to stop. This does not set an export range.</p><p><strong>Original footage</strong> shows the complete source with included and removed areas, so you can preview a missing section and restore it. Full source preview does not switch your editing target. Zoom follows the playhead. “How to edit” inside Studio has detailed controls.</p></details>
         <details data-help-topic><summary>Keyboard shortcuts and the editing workspace</summary><p>Space plays and pauses when you are not typing. Shortcut profiles adapt CUTROOM's supported actions to familiar editing habits; they are not a complete copy of another program. Open Keyboard shortcuts to choose a profile and see its exact commands.</p><p>Use the video/timeline divider to change the space each gets. Full screen shows just the composed video. Escape returns to the editor. Tool explanations stay available in Help & guide.</p></details>
         <details data-help-topic><summary>Output format, resolution, frame rate and export</summary><p>Short / Reel starts at 9:16. YouTube starts at 16:9. Output settings control the actual export format, resolution and frame rate. Selecting a style does not replace those choices.</p><p>60 FPS is supported. It does not invent new motion detail when your original footage is lower-frame-rate. Larger resolutions and frame rates need more processing and produce larger files. Watch the full preview, then Export and check the exported file before sharing.</p></details>
         <details data-help-topic><summary>Saving, rebuilds, cancellation and recovery</summary><p>Project edits save automatically; check the Saved indicator before closing. Original recordings are not overwritten. A draft rebuild runs AI again and may replace its earlier choices, so review the confirmation and preserve work you care about.</p><p>Stop process cancels an edit or export. Model downloads have their own Cancel button in local setup. Closing a model panel does not cancel its download. Cloud cancellation cannot reverse provider usage already accepted.</p><p>If AI fails, read the stage and error, check the selected connection, language, available model and account quota. Do not keep retrying a paid request blindly. You can still choose a manual project. This is beta software: keep copies of important footage.</p></details>
@@ -963,7 +1065,11 @@
       <footer class="connection-actions"><button class="button ghost" id="forgetCloudKey" type="button">Forget session key</button><button class="button primary" id="saveAIConnection" type="submit">Use this connection</button></footer>
     </form>
   </dialog>
-  <script type="module" src="/assets/app.js?v=1.3-beta-20261111-hebrew-cloud1"></script>
-  <script src="/assets/studio-screens.js?v=20261108-studio1" defer></script>
+  <script type="module" src="/assets/app.js?v=20261117-transcript-sections1-console1-firstrecording1-mixer1-range2-export1-markers1-roll1-slide1-take1-ow1-sourceview1-lift1-opacity1-markrange1-groupsplit1-join1-titleclock1-ripplechapter1-matchseam1-editorflow1-sourcedrag1-frame1-handoff1-manualtranscript1-clips10"></script>
+  <script src="/assets/studio-screens.js?v=20261119-output1" defer></script>
+  <script type="module" src="/assets/studio-workbench.js?v=20261116-ai-pane2"></script>
+  <script type="module" src="/assets/studio-console.js?v=20261117-console1"></script>
+  <script type="module" src="/assets/timeline-command-strip.js?v=20261118-geometry1"></script>
+  <script type="module" src="/assets/source-view.js?v=20261118-sourceview1-frame1"></script>
 </body>
 </html>

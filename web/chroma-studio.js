@@ -15,6 +15,10 @@ const copies = {
   chromaReplacement:'Replacement background', chromaSolid:'Solid color', chromaImport:'Add an image in Media', chromaImageMissing:'Unavailable image — choose another or reset',
   chromaToleranceHelp:'Higher values remove a wider range of colors.', chromaEdgeHelp:'Higher values blend the edges into the replacement color.',
   chromaOpaque:'Video underneath reveals earlier timeline layers. Color or image replaces the background inside this video. The final MP4 combines all layers.',
+  chromaDiscard:'Discard changes', chromaSourceConflict:'The foreground video changed or is unavailable. Your unapplied settings are kept, but cannot be applied. Discard changes to review the current source.',
+  chromaSettingsConflict:'Saved Chroma Key settings changed elsewhere. Your unapplied settings are kept. Discard changes to review the current saved settings.',
+  chromaBackgroundConflict:'The replacement image changed or is unavailable. Your unapplied settings are kept. Discard changes and choose the current image again.',
+  chromaDiscarded:'Unapplied changes discarded. Saved settings and the edit were not changed.',
   chromaApply:'Apply & preview', chromaReset:'Reset this source', chromaOff:'Off', chromaOn:'On',
   chromaReady:'Applies to this source throughout the edit. Changes support Undo.',
   chromaPending:'Changes are not saved yet. Apply them to use them in export.',
@@ -38,7 +42,7 @@ const copies = {
 
 export class ChromaStudio {
   constructor(root, options) {
-    this.options = options; this.drafts = new Map(); this.selections = new Map(); this.times = new Map(); this.identities = new Map(); this.saving = false; this.capability = null; this.previewGeneration = 0;
+    this.options = options; this.drafts = new Map(); this.draftBases = new Map(); this.selections = new Map(); this.times = new Map(); this.identities = new Map(); this.saving = false; this.capability = null; this.previewGeneration = 0;
     this.node = document.createElement('section'); this.node.className = 'chroma-tool'; this.node.id = 'chromaKeyTool';
     this.node.dataset.editorShortcuts = 'off'; this.node.setAttribute('aria-labelledby', 'chromaTitle');
     this.node.innerHTML = `
@@ -64,7 +68,7 @@ export class ChromaStudio {
         </div></details>
         <p class="chroma-warning" data-chroma-warning data-chroma-copy="chromaHighTolerance" role="status" hidden></p>
       </div>
-      <div class="chroma-actions"><button type="button" data-chroma-apply data-chroma-copy="chromaApply"></button><button type="button" data-chroma-reset data-chroma-copy="chromaReset"></button></div>
+      <div class="chroma-actions"><button type="button" data-chroma-apply data-chroma-copy="chromaApply"></button><button type="button" data-chroma-reset data-chroma-copy="chromaReset"></button><button type="button" data-chroma-discard data-chroma-copy="chromaDiscard" hidden></button></div>
       <p class="media-status" data-chroma-status role="status" aria-live="polite"></p>
       </div>
       <details class="chroma-preview" aria-label="Current-frame key preview">
@@ -78,13 +82,15 @@ export class ChromaStudio {
       <details class="chroma-help"><summary data-chroma-copy="chromaHow"></summary><p class="media-help" data-chroma-copy="chromaLayerHelp"></p><p class="media-help" data-chroma-copy="chromaTargetHelp"></p><p class="media-help" data-chroma-copy="chromaOpaque"></p></details>`;
     root.append(this.node);
     this.source = this.node.querySelector('[data-chroma-source]'); this.status = this.node.querySelector('[data-chroma-status]');
+    this.discard = this.node.querySelector('[data-chroma-discard]');
     this.apply = this.node.querySelector('[data-chroma-apply]'); this.reset = this.node.querySelector('[data-chroma-reset]');
     this.refresh = this.node.querySelector('[data-chroma-refresh]'); this.previewStatus = this.node.querySelector('[data-chroma-preview-status]');
     this.frame = this.node.querySelector('[data-chroma-frame]');
     this.background = this.node.querySelector('[data-chroma-background]');
     this.node.querySelector('[data-chroma-defaults]').onclick = () => {
       if (!this.validSource() || this.saving || this.options.busy() || this.project()?.manual?.track_locks?.[this.source.value] || !this.capability?.available) return;
-      this.drafts.set(this.source.value, {...CHROMA_DEFAULTS,enabled:true,background_mode:['A','B'].includes(this.source.value) ? 'replace' : 'transparent'});
+      if (this.draftIssue() || this.protectionIssue()) return;
+      this.setDraft(this.source.value, {...CHROMA_DEFAULTS,enabled:true,background_mode:['A','B'].includes(this.source.value) ? 'replace' : 'transparent'});
       this.options.pause(); this.message=null; this.invalidatePreview(); this.render();
     };
     this.node.querySelector('[data-chroma-import]').onclick = () => { if (!this.saving && !this.options.busy()) this.options.openMedia?.(); };
@@ -101,7 +107,7 @@ export class ChromaStudio {
     };
     this.node.addEventListener('input', event => {
       const key = event.target.dataset.chroma;
-      if (!key || this.saving || this.options.busy()) return;
+      if (!key || this.saving || this.options.busy() || this.draftIssue() || this.protectionIssue()) return;
       const value = event.target.type === 'checkbox' ? event.target.checked : ['tolerance','edge_softness'].includes(key) ? Number(event.target.value) : key === 'background_asset_id' ? event.target.value || null : event.target.value;
       if (!this.validSource() || this.project()?.manual?.track_locks?.[this.source.value] === true
         || (key === 'background_mode' && value === 'transparent' && ['A','B'].includes(this.source.value))
@@ -110,10 +116,11 @@ export class ChromaStudio {
       this.options.pause();
       const settings={...this.settings(), [key]:value};
       if (key === 'enabled' && value && !['A','B'].includes(this.source.value) && !this.project()?.manual?.chroma_key?.[this.source.value]) settings.background_mode='transparent';
-      this.drafts.set(this.source.value, chromaSettings(settings));
+      this.setDraft(this.source.value, chromaSettings(settings));
       this.message = null; this.invalidatePreview(); this.render();
     });
     this.apply.onclick = () => this.save(false); this.reset.onclick = () => this.save(true);
+    this.discard.onclick = () => this.discardDraft();
     this.refresh.onclick = () => this.refreshFrame();
     this.render();
     this.ready = this.checkCapability();
@@ -125,6 +132,9 @@ export class ChromaStudio {
     if (['A','B'].includes(slot)) return this.project()?.sources?.[slot];
     const asset = this.project()?.assets?.[slot];
     return /^asset_[0-9a-f]{32}$/.test(slot) && asset?.id === slot && asset.kind === 'video' ? asset : null;
+  }
+  protectionIssue(slot = this.source.value) {
+    return this.options.assetMutationIssue?.(slot) || '';
   }
   sourceIdentity(slot) {
     const source = this.targetSource(slot);
@@ -142,6 +152,8 @@ export class ChromaStudio {
     for (const [id, source] of Object.entries(project?.assets || {})) {
       if (/^asset_[0-9a-f]{32}$/.test(id) && source?.id === id && source.kind === 'video') rows.push({...source,id});
     }
+    // Removed assets still expose their retained candidate for local discard.
+    if (this.projectId === project?.id) for (const id of this.drafts.keys()) if (!rows.some(row=>row.id===id)) rows.push({id,missing:true});
     return rows;
   }
   targetLabel(slot = this.source.value) {
@@ -159,7 +171,7 @@ export class ChromaStudio {
       const ready = this.validSource(target.id), label = document.createElement('label'); label.className = 'chroma-source-card';
       label.dataset.selected = String(target.id === selected);
       const radio = document.createElement('input'); radio.type = 'radio'; radio.name = 'chroma-video-target';
-      radio.dataset.chromaTarget = target.id; radio.value = target.id; radio.checked = target.id === selected; radio.disabled = busy || !ready;
+      radio.dataset.chromaTarget = target.id; radio.value = target.id; radio.checked = target.id === selected; radio.disabled = busy || (!ready && !this.drafts.has(target.id));
       radio.onchange = () => { if (!radio.disabled) { this.source.value = target.id; this.source.onchange(); } };
       label.append(radio);
       const thumbnail = target.thumbnail_url || target.thumbnail_urls?.[0];
@@ -170,7 +182,7 @@ export class ChromaStudio {
       caption.textContent = this.targetLabel(target.id); label.append(caption);
       if (!ready) { const state = document.createElement('small'); state.textContent = this.copy(target.status === 'preparing' || target.status === 'queued' ? 'chromaPreparing' : target.status === 'failed' || target.status === 'cancelled' ? 'chromaFailedVideo' : 'chromaUnavailable'); label.append(state); }
       list.append(label);
-      const option = document.createElement('option'); option.value = target.id; option.textContent = this.targetLabel(target.id); option.disabled = !ready; this.source.append(option);
+      const option = document.createElement('option'); option.value = target.id; option.textContent = this.targetLabel(target.id); option.disabled = !ready && !this.drafts.has(target.id); this.source.append(option);
     }
     this.source.value = selected;
     this.node.querySelector('[data-chroma-selected]').textContent = this.targetLabel();
@@ -183,7 +195,37 @@ export class ChromaStudio {
   }
   saved(slot = this.source.value) { return chromaSettings(this.project()?.manual?.chroma_key?.[slot]); }
   settings(slot = this.source.value) { return this.drafts.get(slot) || this.saved(slot); }
-  dirty(slot = this.source.value) { return JSON.stringify(this.settings(slot)) !== JSON.stringify(this.saved(slot)); }
+  backgroundIdentity(id) {
+    const asset = id ? this.project()?.assets?.[id] : null;
+    return JSON.stringify(id ? [id,asset?.kind,asset?.status,asset?.path,asset?.relative_path,asset?.generation,asset?.width,asset?.height] : null);
+  }
+  setDraft(slot, settings) {
+    const previous = this.drafts.get(slot);
+    if (!this.draftBases.has(slot)) this.draftBases.set(slot, {saved:JSON.stringify(this.saved(slot)), source:this.sourceIdentity(slot)});
+    const base = this.draftBases.get(slot);
+    if (!previous || previous.background_asset_id !== settings.background_asset_id) base.background = this.backgroundIdentity(settings.background_asset_id);
+    this.drafts.set(slot, settings); this.saveError = null;
+  }
+  draftIssue(slot = this.source.value) {
+    const draft = this.drafts.get(slot), base = this.draftBases.get(slot);
+    if (!draft || !base) return '';
+    if (!this.validSource(slot) || base.source !== this.sourceIdentity(slot)) return this.copy('chromaSourceConflict');
+    const saved = JSON.stringify(this.saved(slot));
+    if (base.saved !== saved && JSON.stringify(draft) !== saved) return this.copy('chromaSettingsConflict');
+    if (draft.background_asset_id && (base.background !== this.backgroundIdentity(draft.background_asset_id)
+      || !this.images().some(asset=>asset.id===draft.background_asset_id))) return this.copy('chromaBackgroundConflict');
+    return '';
+  }
+  dirty(slot = this.source.value) { return Boolean(this.draftIssue(slot)) || JSON.stringify(this.settings(slot)) !== JSON.stringify(this.saved(slot)); }
+  pendingDrafts() {
+    if (this.projectId !== this.project()?.id) return [];
+    return [...this.drafts.keys()].filter(slot=>this.dirty(slot)).map(slot=>({slot,label:this.targetLabel(slot),issue:this.draftIssue(slot)}));
+  }
+  discardDraft(slot = this.source.value) {
+    if (this.saving || this.options.busy() || !this.drafts.has(slot)) return false;
+    this.drafts.delete(slot); this.draftBases.delete(slot); this.saveError=null;
+    this.message=this.copy('chromaDiscarded'); this.invalidatePreview(); this.render(); return true;
+  }
 
   render() {
     const project = this.project(), changedProject = this.projectId !== project?.id;
@@ -200,19 +242,17 @@ export class ChromaStudio {
     }
     const changedMedia = [...this.identities].some(([slot, identity]) => this.sourceIdentity(slot) !== identity);
     if (changedProject || this.revision !== project?.revision || changedMedia) {
-      this.drafts.clear();
-      if (this.saving && this.saveProjectId === project?.id) {
-        for (const [slot, candidate] of this.otherDrafts || []) {
-          if (candidate.saved === JSON.stringify(this.saved(slot)) && candidate.source === this.sourceIdentity(slot)) this.drafts.set(slot, candidate.settings);
-        }
-      }
+      if (changedProject) { this.drafts.clear(); this.draftBases.clear(); this.saveError=null; }
+      // Same-project saves do not own these explicit drafts. A changed source or
+      // saved effect is a visible conflict, never a silent rebase or deletion.
       this.message = null; this.invalidatePreview(); this.projectId = project?.id; this.revision = project?.revision;
     }
+    for (const slot of this.drafts.keys()) if (!this.dirty(slot)) { this.drafts.delete(slot); this.draftBases.delete(slot); }
     this.identities = new Map(this.targets().map(row => [row.id, this.sourceIdentity(row.id)]));
     const settings = this.settings(), hasSource = Boolean(project?.draft && this.validSource());
     const available = hasSource && this.capability?.available === true;
-    const locked = project?.manual?.track_locks?.[this.source.value] === true;
-    const busy = this.saving || this.options.busy();
+    const protection=this.protectionIssue(), locked = project?.manual?.track_locks?.[this.source.value] === true || Boolean(protection);
+    const busy = this.saving || this.options.busy(), issue=this.draftIssue();
     this.renderTargets(busy);
     this.node.querySelector('[data-chroma-add-video]').disabled = busy;
     const nativeTime = !['A','B'].includes(this.source.value);
@@ -232,23 +272,25 @@ export class ChromaStudio {
     this.node.querySelector('[data-chroma-solid]').hidden = transparent || Boolean(settings.background_asset_id);
     this.node.querySelector('[data-chroma-import]').hidden = transparent;
     this.node.querySelector('[data-chroma-warning]').hidden = !settings.enabled || settings.tolerance < .5;
-    this.node.querySelector('[data-chroma-defaults]').disabled = !available || busy || locked;
+    this.node.querySelector('[data-chroma-defaults]').disabled = !available || busy || locked || Boolean(issue);
     this.node.querySelector('[data-chroma-import]').disabled = busy;
     for (const node of this.node.querySelectorAll('[data-chroma-copy]')) node.textContent = this.copy(node.dataset.chromaCopy);
     this.node.querySelector('[data-chroma-summary]').textContent = this.copy(settings.enabled ? 'chromaOn' : 'chromaOff');
     for (const input of this.node.querySelectorAll('[data-chroma]')) {
       const key = input.dataset.chroma;
       if (input.type === 'checkbox') input.checked = settings[key]; else input.value = settings[key] ?? '';
-      input.disabled = !hasSource || busy || locked || (!this.capability?.available && (key !== 'enabled' || !settings.enabled));
+      input.disabled = !hasSource || busy || locked || Boolean(issue) || (!this.capability?.available && (key !== 'enabled' || !settings.enabled));
       const output = this.node.querySelector(`[data-chroma-value="${key}"]`);
       if (output) output.textContent = ['tolerance','edge_softness'].includes(key) ? `${Math.round(settings[key] * 100)}%` : settings[key];
     }
     this.source.disabled = busy || !this.targets().length;
-    this.apply.disabled = !hasSource || busy || locked || (settings.enabled && !this.capability?.available) || !this.dirty();
-    this.reset.disabled = !hasSource || busy || locked || JSON.stringify(settings) === JSON.stringify(CHROMA_DEFAULTS);
+    this.apply.disabled = !hasSource || busy || locked || Boolean(issue) || (settings.enabled && !this.capability?.available) || !this.dirty();
+    this.reset.disabled = !hasSource || busy || locked || Boolean(issue) || JSON.stringify(settings) === JSON.stringify(CHROMA_DEFAULTS);
+    this.discard.hidden = !this.dirty(); this.discard.disabled = busy;
     this.refresh.disabled = !available || busy || this.previewing || this.dirty();
-    this.status.textContent = this.message || (hasSource && !this.capability?.available && !this.dirty() ? this.capability?.message || this.copy('chromaChecking') : this.copy(this.saving ? 'chromaSaving' : !hasSource ? (this.source.value && !this.validSource() ? 'chromaUnavailable' : 'chromaNeedsSource') : locked ? 'chromaLocked' : this.dirty() ? 'chromaPending' : 'chromaReady'));
+    this.status.textContent = issue || protection || this.message || (hasSource && !this.capability?.available && !this.dirty() ? this.capability?.message || this.copy('chromaChecking') : this.copy(this.saving ? 'chromaSaving' : !hasSource ? (this.source.value && !this.validSource() ? 'chromaUnavailable' : 'chromaNeedsSource') : locked ? 'chromaLocked' : this.dirty() ? 'chromaPending' : 'chromaReady'));
     if (this.dirty()) this.previewStatus.textContent = this.copy('chromaApplyFirst');
+    this.options.saveStateChanged?.();
   }
 
   async checkCapability() {
@@ -286,17 +328,27 @@ export class ChromaStudio {
 
   async save(reset) {
     const project = this.project(), slot = this.source.value;
-    if (!project?.draft || !this.validSource(slot) || project.manual?.track_locks?.[slot] === true || (!reset && this.settings(slot).enabled && !this.capability?.available) || this.saving || this.options.busy() || (!reset && !this.dirty())) return;
+    if (this.draftIssue(slot) || this.protectionIssue(slot) || !project?.draft || !this.validSource(slot) || project.manual?.track_locks?.[slot] === true || (!reset && this.settings(slot).enabled && !this.capability?.available) || this.saving || this.options.busy() || (!reset && !this.dirty())) return;
     const projectId = project.id, settings = {...this.settings(slot)};
     this.saveProjectId = projectId;
-    this.otherDrafts = new Map([...this.drafts].filter(([key]) => key !== slot).map(([key, value]) => [key, {settings:{...value}, saved:JSON.stringify(this.saved(key)), source:this.sourceIdentity(key)}]));
-    this.saving = true; this.message = null; this.options.pause(); this.render();
+    const submitted = this.drafts.get(slot), submittedBase = this.draftBases.get(slot), source = this.sourceIdentity(slot), saved = JSON.stringify(this.saved(slot)), background = this.backgroundIdentity(settings.background_asset_id);
+    const isCurrent = () => this.project()?.id === projectId && this.sourceIdentity(slot) === source
+      && JSON.stringify(this.saved(slot)) === saved && this.backgroundIdentity(settings.background_asset_id) === background;
+    this.saving = true; this.message = null; this.saveError = null; this.options.pause(); this.render();
     try {
-      const result = await this.options.edit(reset ? 'reset_chroma_key' : 'set_chroma_key', reset ? {slot} : {slot, ...settings}, {isCurrent:() => this.project()?.id === projectId});
+      const result = await this.options.edit(reset ? 'reset_chroma_key' : 'set_chroma_key', reset ? {slot} : {slot, ...settings}, {isCurrent});
       if (this.project()?.id !== projectId) return;
       if (!result) throw new Error(this.copy('chromaFailed'));
-      this.drafts.delete(slot); this.revision = this.project()?.revision; this.message = this.copy('chromaSaved');
-    } catch (error) { if (this.project()?.id === projectId) this.message = error.message || this.copy('chromaFailed'); }
+      // The host may return a successful but stale receipt without installing it.
+      // Never discard the user's candidate or claim Saved for a different target.
+      if (this.sourceIdentity(slot) !== source || this.backgroundIdentity(settings.background_asset_id) !== background
+        || JSON.stringify(this.saved(slot)) !== JSON.stringify(reset ? CHROMA_DEFAULTS : settings)) {
+        if (submitted && !this.drafts.has(slot)) { this.drafts.set(slot,submitted); this.draftBases.set(slot,submittedBase); }
+        throw new Error('The source or saved effect changed while saving. Your unapplied changes are kept; review them before trying again.');
+      }
+      if (this.drafts.get(slot) === submitted) { this.drafts.delete(slot); this.draftBases.delete(slot); }
+      this.revision = this.project()?.revision; this.message = this.copy('chromaSaved');
+    } catch (error) { if (this.project()?.id === projectId) this.saveError = this.message = error.message || this.copy('chromaFailed'); }
     finally { this.saving = false; this.saveProjectId = null; this.otherDrafts = null; this.render(); }
     if (this.options.autoPreview && this.project()?.id === projectId && this.source.value === slot && !this.dirty() && this.message === this.copy('chromaSaved')) await this.refreshFrame();
   }

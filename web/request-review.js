@@ -9,7 +9,7 @@ export function requestReviewSettings(base, fields) {
     edit_style:fields.edit_style.value, instruction:fields.instruction.value};
 }
 
-export function reviewEditingRequest({settings, styles=[], projectId, revision, check, isCurrent}) {
+export function reviewEditingRequest({settings, styles=[], projectId, revision, check, isCurrent, preserveCurrentEdit=false}) {
   if(activeReview)return Promise.resolve(null);
   return new Promise(resolve=>{
     const make=(tag,text)=>{const e=document.createElement(tag);if(text!=null)e.textContent=text;return e;};
@@ -17,13 +17,14 @@ export function reviewEditingRequest({settings, styles=[], projectId, revision, 
     dialog.setAttribute('aria-labelledby','editingRequestTitle');
     const title=make('h2','Review your editing request');title.id='editingRequestTitle';
     const note=make('p','One finished main edit per generation. One output may contain several cuts. Only a continuous-source request forbids internal cuts. Style is a preference; explicit instructions remain authoritative.');
+    if(preserveCurrentEdit)note.textContent += ' This generates a separate source-cut proposal. Current output format, mix and framing stay unchanged. The current timeline stays in use until you review and apply the proposal. A new result replaces any earlier unapplied proposal, not your edit. Style guides selection; it does not change saved effects.';
     const form=make('form'),fields={},grid=make('div');grid.className='request-review-grid';
     function field(key,label,choices,value){
       const row=make('label',label),e=make(choices?'select':key==='instruction'?'textarea':'input');
       e.dataset.requestField=key;
       if(choices)for(const [id,name]of choices){const option=make('option',name);option.value=id;e.append(option);}
       else if(key==='instruction'){e.rows=4;e.maxLength=8000;e.dir='auto';}
-      else{e.type='number';e.required=true;e.min=key==='output_count'?'1':'8';e.max=key==='output_count'?'10':'86400';e.step=key==='output_count'?'1':'.01';}
+      else{e.type='number';e.required=true;e.min=key==='output_count'?'1':'8';e.max=key==='output_count'?'10':'86400';e.step=key==='output_count'?'1':'any';}
       e.value=String(value??'');fields[key]=e;row.append(e);grid.append(row);return e;
     }
     field('output_count','Finished outputs (currently 1 supported)',null,settings.output_count??1);
@@ -34,6 +35,7 @@ export function reviewEditingRequest({settings, styles=[], projectId, revision, 
       grid.append(make('p','This mode edits the whole recording. Highlight length controls apply to Short/Reel mode; explicit unsupported lengths will be blocked.'));
     }
     field('aspect','Output aspect ratio',[['9:16','9:16 portrait'],['16:9','16:9 landscape'],['1:1','1:1 square'],['4:5','4:5 portrait'],['source','Original aspect']],settings.aspect||'9:16');
+    if(preserveCurrentEdit)fields.aspect.disabled=true;
     field('source_continuity','Source arrangement',[['unspecified','Follow written request; cuts allowed by default'],['required','One continuous source range — no internal cuts'],['cuts_allowed','Cuts / montage permitted within one output']],settings.source_continuity||'unspecified');
     const styleRows=styles.map(s=>[s.id,typeof s.name==='string'?s.name:s.name?.en||s.id]);
     if(!styleRows.some(r=>r[0]===settings.edit_style))styleRows.unshift([settings.edit_style||'smart',settings.edit_style||'CUTROOM Smart']);

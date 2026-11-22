@@ -12,18 +12,20 @@ import time
 from pathlib import Path
 from typing import Any
 
+from .layer_tracks import validate_layer_tracks, ordered_layer_clips, layer_tracks_render_identity
 from .config import Settings
-from .caption_items import caption_items, caption_lines
-from .captions import build_ass, build_srt, normalize_caption_settings
+from .caption_items import caption_items, caption_lines, _anchor_overlap
+from .captions import build_ass, build_srt, normalize_caption_settings, automatic_caption_plan
 from .composition import chroma_video_targets, select_embedded_candidate, source_chroma_key
 from .effects import build_chroma_key_nodes, chroma_key_capability, compile_automatic_effects
 from .frame_rates import project_export_fps, with_export_options
+from .range_export import ExportRange, validate_range
 from .ffmpeg_compat import export_capabilities
 from .cache_keys import stable_fingerprint
 from .jobs import JobCancelled, JobContext
 from .media import probe_media
 from .media_render import append_media_graph, library_input_args, library_clips, library_has_audio, master_gain_db
-from .render_inventory import RenderInputInventory, chroma_background_slots, compile_render_inputs
+from .render_inventory import RenderInputInventory, chroma_background_slots, compile_render_inputs, qualify_library_pictures
 from .output_review import remaining_picture_gaps, review_export
 from .projects import ProjectStore
 from .sequence import editor_keep_ranges
@@ -630,7 +632,7 @@ def _segment_nodes(
     filters: list[str] = []
     output = f"v{index}"
     if camera == "black":
-        return [f"color=c=black:s={width}x{height}:r={fps},trim=end_frame={end_frame - start_frame},setpts=N/{fps}/TB,format=yuv420p[{output}]"], output
+        return [f"color=c=black:s={width}x{height}:r={fps},trim=end_frame={end_frame - start_frame},settb=1/{fps},setpts=N,format=yuv420p[{output}]"], output
 
     if camera == "embedded_stack":
         draft = project.get("draft") or {}
@@ -888,6 +890,63 @@ def caption_context(project: dict[str, Any], *, aligned: bool = True) -> dict[st
     return {"slot": "A", "offset": 0.0, "keeps": ranges, "duration": duration}
 
 
+def caption_preview_scene(project: dict[str, Any]) -> dict[str, Any]:
+    """Read-only saved export-clock automatic caption scene; never writes caches."""
+    result = {"version": 1, "available": False, "issue": "Caption preview is unavailable for this edit.",
+              "project_id": project.get("id"), "revision": project.get("revision"), "clock": "edited",
+              "width": None, "height": None, "fps": None, "settings": {}, "events": []}
+    try:
+        validate_sequence_version(project)
+        validate_layer_tracks(project)
+        if not isinstance(project.get("draft"), dict):
+            return result
+        ranges = _caption_ranges(project)  # Strict admission before caption_context's fallback.
+        width, height = _dimensions(project)
+        settings = normalize_caption_settings(project.get("settings"))
+        items = project_caption_items(project, include_hidden=False, aligned=True)
+        lines = caption_lines(items, settings["caption_words_per_line"], default_style=settings["caption_style"])
+        _, events = automatic_caption_plan(lines, ranges, width, height,
+            layout_ranges=_frame_aligned_plan(project), caption_style=settings["caption_style"],
+            caption_position=settings["caption_position"], caption_scale=settings["caption_scale"])
+        # Export frame alignment can retain a boundary word absent from the
+        # editor clock. Bind by source provenance only, never by displayed text
+        # or the ordinal IDs which can differ between those two clocks.
+        editor_items = project_caption_items(project, include_hidden=True, aligned=False)
+        def lineage_keys(item):
+            anchor = item.get("_caption_anchor") or {}
+            prefix = tuple(anchor.get(key) for key in ("segment", "source", "speech"))
+            return {(*prefix, span.get("origin")) for span in anchor.get("spans", [])}
+        editor_index = {}
+        for index, candidate in enumerate(editor_items):
+            for key in lineage_keys(candidate):
+                editor_index.setdefault(key, set()).add(index)
+        bindings = {}
+        for item in items:
+            candidate_indices = set()
+            for key in lineage_keys(item):
+                candidate_indices.update(editor_index.get(key, ()))
+            matches = [editor_items[index]["id"] for index in candidate_indices
+                       if _anchor_overlap(item.get("_caption_anchor"), editor_items[index].get("_caption_anchor")) > 0]
+            bindings[item["id"]] = matches[0] if len(matches) == 1 else None
+        public_events = []
+        for event in events:
+            if event["end"] <= event["start"]:
+                continue
+            public_event = {k:v for k,v in event.items() if not k.startswith("_")}
+            export_id = event["item_id"]
+            editor_id = bindings.get(export_id)
+            public_event.update(export_item_id=export_id, item_id=editor_id,
+                selectable=editor_id is not None,
+                selection_issue="" if editor_id is not None else
+                    "This export-aligned caption has no unique matching editor item.")
+            public_events.append(public_event)
+        result.update(available=True, issue="", width=width, height=height, fps=project_export_fps(project),
+                      settings=settings, events=public_events)
+    except (ValueError, TypeError, KeyError, IndexError, OverflowError):
+        pass
+    return result
+
+
 def project_caption_items(project: dict[str, Any], *, include_hidden: bool = True, aligned: bool = True) -> list[dict[str, Any]]:
     """Automatic caption items shared by the timeline, the preview and the export.
 
@@ -961,7 +1020,7 @@ def _source_track_master(project: dict[str, Any], slot: str, *, audio: bool, out
                 chain = (f"[{prefix}in{real_index}]trim=start={source_start:.9f}:end={source_start + length * speed + 1/fps:.9f},"
                          f"setpts=(PTS-STARTPTS)/{speed:.9f},fps={fps},scale={width}:{height},setsar=1,"
                          f"tpad=stop_mode=clone:stop_duration={length + 2/fps:.9f}")
-            filters.append(f"{chain},trim=end_frame={frames},setpts=N/{fps}/TB,format=yuv420p[{label}]")
+            filters.append(f"{chain},trim=end_frame={frames},settb=1/{fps},setpts=N,format=yuv420p[{label}]")
         if source_start is not None:
             real_index += 1
     concat = "".join(f"[{prefix}piece{i}]" for i in range(len(pieces)))
@@ -1080,8 +1139,10 @@ def build_filter_graph(project: dict[str, Any], width: int, height: int, caption
     finalize_video = (
         # Give fps enough EOF runway to emit the final planned frame; trim then
         # enforces the exact frame budget so this padding never leaks out.
+        # Give each frame an integer tick: N/fps/TB can round 46.999... to
+        # tick 46 at 25/50 fps, duplicating a picture or deferring a cut.
         f"tpad=stop_mode=clone:stop_duration={2 / fps:.6f},"
-        f"fps={fps},trim=end_frame={output_frames},setpts=N/{fps}/TB"
+        f"fps={fps},trim=end_frame={output_frames},settb=1/{fps},setpts=N"
     )
     filters: list[str] = []
     video_inputs = {entry.target: entry.label("v") for entry in inventory.inputs("source")}
@@ -1114,7 +1175,7 @@ def build_filter_graph(project: dict[str, Any], width: int, height: int, caption
         filters.append(
             f"{video_inputs['A']}setpts=PTS-STARTPTS,fps={fps},"
             f"tpad=stop_mode=clone:stop_duration={source_duration:.6f},"
-            f"trim=duration={source_duration:.6f},setpts=N/{fps}/TB,setsar=1[amasterv]"
+            f"trim=duration={source_duration:.6f},settb=1/{fps},setpts=N,setsar=1[amasterv]"
         )
     if has_b and not independent:
         b_width = max(2, int(_finite_float(source_b.get("width"))) // 2 * 2)
@@ -1135,7 +1196,7 @@ def build_filter_graph(project: dict[str, Any], width: int, height: int, caption
         filters.append(
             f"[bcanvas][bshifted]overlay=x=0:y=0:eof_action=pass:shortest=0,"
             f"trim=duration={source_duration:.6f},fps={fps},"
-            f"setpts=N/{fps}/TB[bmaster]"
+            f"settb=1/{fps},setpts=N[bmaster]"
         )
     if has_audio and not independent:
         if audio_slot == "B":
@@ -1249,6 +1310,15 @@ def build_filter_graph(project: dict[str, Any], width: int, height: int, caption
     return ";\n".join(filters), maps, has_audio
 
 
+def resolve_export_range(project: dict[str, Any], options: dict[str, Any]) -> ExportRange | None:
+    if "range" not in options:
+        return None
+    effective = with_export_options(project, options)
+    count = sum(row["_end_frame"] - row["_start_frame"] for row in _frame_aligned_plan(effective))
+    return validate_range(options["range"], fps=project_export_fps(effective),
+                          revision=project.get("revision"), total_frames=count)
+
+
 def _expected_output_duration(project: dict[str, Any]) -> float:
     try:
         return sum(max(0.0, float(item["end"]) - float(item["start"])) for item in _frame_aligned_plan(project))
@@ -1325,6 +1395,7 @@ def _estimate_render_storage(
     height: int,
     quality: str,
     settings: Settings,
+    *, scope: ExportRange | None = None,
 ) -> dict[str, Any]:
     """Estimate peak additional disk allocation for one render.
 
@@ -1335,7 +1406,8 @@ def _estimate_render_storage(
     """
 
     plan = _frame_aligned_plan(project)
-    duration = sum(max(0.0, float(item["end"]) - float(item["start"])) for item in plan)
+    whole_duration = sum(max(0.0, float(item["end"]) - float(item["start"])) for item in plan)
+    duration = scope.duration if scope else whole_duration
     if not math.isfinite(duration) or duration <= 0.0:
         raise ValueError("The edit has no valid output duration to render")
     if width <= 0 or height <= 0:
@@ -1364,7 +1436,7 @@ def _estimate_render_storage(
     transcript = _caption_transcript(project)
     segments = transcript.get("segments") if isinstance(transcript.get("segments"), list) else []
     transcript_bytes = _serialized_size(transcript, fallback=len(segments) * 256)
-    text_clips = validated_text_clips(project)
+    text_clips = ordered_layer_clips(project, "text", validated_text_clips(project, enabled_only=True))
     text_bytes = _serialized_size(text_clips, fallback=len(text_clips) * 4096)
     manual_captions = [row for row in text_clips if row["kind"] == "caption"]
     project_settings = project.get("settings") or {}
@@ -1384,7 +1456,7 @@ def _estimate_render_storage(
     normalize_audio = has_audio and _final_audio_filter(project) != "anull"
     # The normalization stage keeps the mix as lossless 24-bit PCM (288 kB/s),
     # so the final export encodes the audio once.
-    normalization_stage_bytes = (output_bytes - audio_bytes + int(math.ceil(duration * STAGE_PCM_BYTES_PER_SECOND))
+    normalization_stage_bytes = (output_bytes - audio_bytes + int(math.ceil(whole_duration * STAGE_PCM_BYTES_PER_SECOND))
                                  if normalize_audio else 0)
     export_work_bytes = output_bytes + normalization_stage_bytes + srt_bytes
     project_work_bytes = filter_graph_bytes + ass_bytes + project_commit_bytes
@@ -1438,10 +1510,11 @@ def _ensure_render_storage(
     width: int,
     height: int,
     quality: str,
+    *, scope: ExportRange | None = None,
 ) -> dict[str, Any]:
     """Require enough free space on every volume touched by the render."""
 
-    estimate = _estimate_render_storage(project, width, height, quality, settings)
+    estimate = _estimate_render_storage(project, width, height, quality, settings, scope=scope)
     volumes: dict[tuple[Any, ...], dict[str, Any]] = {}
     allocations = (
         ("export and normalization stage", Path(settings.exports_dir), int(estimate["export_work_bytes"])),
@@ -1492,15 +1565,17 @@ def ensure_render_storage(
     """Public preflight used by both HTTP admission and the render worker."""
 
     options = options or {}
+    scope = resolve_export_range(project, options)
     project = with_export_options(project, options)
     _validate_caption_timeline(project)
     width, height = _dimensions(project)
     quality = str(options.get("quality") or project.get("settings", {}).get("quality", "balanced"))
-    return _ensure_render_storage(project, settings, project_dir, width, height, quality)
+    return _ensure_render_storage(project, settings, project_dir, width, height, quality, scope=scope)
 
 
 def _render_input_fingerprint(project: dict[str, Any]) -> str:
     """Identify every project field that can change the rendered pixels/audio."""
+    validate_layer_tracks(project)
     settings = project.get("settings") or {}
     analysis = project.get("analysis") or {}
     manual = project.get("manual") or {}
@@ -1508,7 +1583,7 @@ def _render_input_fingerprint(project: dict[str, Any]) -> str:
         "render-input-2026-09-05.fps",
         {
             "sources": project.get("sources"),
-            "assets": project.get("assets"),
+            "assets": ({key: ({k: v for k, v in asset.items() if k != "_original_content_proof"} if isinstance(asset, dict) else asset) for key, asset in project["assets"].items()} if isinstance(project.get("assets"), dict) else project.get("assets")),
             "draft": project.get("draft"),
             "settings": {
                 key: settings.get(key)
@@ -1529,6 +1604,8 @@ def _render_input_fingerprint(project: dict[str, Any]) -> str:
                 "media_clips": manual.get("media_clips"),
                 "text_clips": manual.get("text_clips"),
                 "audio_mixer": manual.get("audio_mixer"),
+                **({"layer_tracks": layer_tracks_render_identity(project)}
+                   if "layer_tracks" in manual else {}),
                 # Only present once the user edits a caption, so older exports stay current.
                 **({key: manual.get(key) for key in ("caption_corrections", "caption_overrides", "caption_override_anchors") if manual.get(key)}
                    if settings.get("captions") or settings.get("burn_captions") else {}),
@@ -1659,11 +1736,14 @@ def render_project(context: JobContext, project_id: str, store: ProjectStore, se
     options = options or {}
     project = store.load(project_id)
     validate_sequence_version(project)
+    scope = resolve_export_range(project, options)
     saved_input_fingerprint = _render_input_fingerprint(project)
     project = with_export_options(project, options)
     layout_fallback = (require_layout_coverage(project) if options.get("_require_layout_coverage")
                        else _layout_fallback_notice(composition_layout_coverage(project)))
     render_input_fingerprint = _render_input_fingerprint(project)
+    if scope:
+        render_input_fingerprint = stable_fingerprint("range-export-v1", {"input": render_input_fingerprint, **scope.public()})
     fps = project_export_fps(project)
     if not project.get("sources", {}).get("A"):
         raise ValueError("Source A is required")
@@ -1676,6 +1756,7 @@ def render_project(context: JobContext, project_id: str, store: ProjectStore, se
     source_b = store.project_dir(project_id) / source_b_info["relative_path"] if source_b_info else None
     if source_b is not None and not source_b.is_file():
         raise FileNotFoundError(f"Source B media is missing: {source_b.name}")
+    project = qualify_library_pictures(project, store.project_dir(project_id), settings, context.check_cancelled)
     input_inventory = compile_render_inputs(project)
     # Resolve every current input before capability checks or output creation.
     # The graph consumes this exact inventory; no independent suffix arithmetic.
@@ -1695,7 +1776,7 @@ def render_project(context: JobContext, project_id: str, store: ProjectStore, se
     caption_ass: Path | None = None
     caption_ranges = _caption_ranges(project)
     caption_settings = normalize_caption_settings(project.get("settings"))
-    text_clips = validated_text_clips(project)
+    text_clips = ordered_layer_clips(project, "text", validated_text_clips(project, enabled_only=True))
     # The same items the timeline shows, with the user's caption edits applied.
     automatic_captions = project_caption_items(project, include_hidden=False)
     burn_lines = caption_lines(automatic_captions, caption_settings["caption_words_per_line"],
@@ -1719,6 +1800,10 @@ def render_project(context: JobContext, project_id: str, store: ProjectStore, se
                 caption_lines=burn_lines if burn_transcript else [],
             )
         graph, maps, has_audio = build_filter_graph(project, width, height, caption_ass, input_inventory)
+        if scope:
+            # Keep the entire PCM mix in normalized staging. Its full-context loudness/limiter
+            # filter runs first in the second pass; only then trim and rebase the audio.
+            graph, maps = scope.mapped_graph(graph, maps, trim_audio=not normalizes_audio(project))
         needs_source_b_input = input_inventory.needs_source_b(graph)
         input_demand = input_inventory.demand(graph, include_source_b=needs_source_b_input)
         input_args = input_inventory.input_args(store.project_dir(project_id), include_source_b=needs_source_b_input)
@@ -1727,7 +1812,8 @@ def render_project(context: JobContext, project_id: str, store: ProjectStore, se
             caption_ass.unlink(missing_ok=True)
         raise
     safe_name = sanitize_filename(project.get("name", "cutroom-edit"))
-    output = settings.exports_dir / f"{safe_name}-{export_id[-8:]}.mp4"
+    suffix = f"-range-{scope.start_frame}-{scope.end_frame}" if scope else ""
+    output = settings.exports_dir / f"{safe_name}{suffix}-{export_id[-8:]}.mp4"
     partial = output.with_suffix(".partial.mp4")
     # QuickTime holds the lossless PCM mix next to the encoded picture and keeps
     # exact frame timing (Matroska's millisecond clock gave 30.001 FPS on copy).
@@ -1743,9 +1829,11 @@ def render_project(context: JobContext, project_id: str, store: ProjectStore, se
             caption_ass.unlink(missing_ok=True)
         graph_path.unlink(missing_ok=True)
         raise
-    expected_duration = _expected_output_duration(project)
+    whole_duration = _expected_output_duration(project)
+    expected_duration = scope.duration if scope else whole_duration
     normalization_filter = _final_audio_filter(project) if has_audio else "anull"
     normalize_audio = has_audio and normalization_filter != "anull"
+    stage_duration = whole_duration if normalize_audio else expected_duration
     render_target = normalization_stage if normalize_audio else partial
     command = [capabilities.executable, "-hide_banner", "-loglevel", "error", "-y",
                *input_args]
@@ -1767,14 +1855,14 @@ def render_project(context: JobContext, project_id: str, store: ProjectStore, se
         "-movflags", "+faststart", "-map_metadata", "-1", "-map_chapters", "-1",
         # Both graph streams are bounded and padded. An explicit edit duration
         # avoids AAC packet boundaries dropping the final planned video frame.
-        "-t", f"{expected_duration:.6f}",
+        "-t", f"{stage_duration:.6f}",
         "-progress", "pipe:1", "-nostats", str(render_target),
     ]
     context.update(0.04, f"Rendering with {encoder}")
     process_returncode = None
     try:
         render_context = _ScaledProgressContext(context, 0.04, 0.82, "Rendering") if normalize_audio else context
-        process_returncode, stderr = _run_ffmpeg_process(render_context, command, expected_duration)
+        process_returncode, stderr = _run_ffmpeg_process(render_context, command, stage_duration)
         if process_returncode != 0:
             if encoder != "libx264" and not options.get("_force_software"):
                 render_target.unlink(missing_ok=True)
@@ -1789,7 +1877,7 @@ def render_project(context: JobContext, project_id: str, store: ProjectStore, se
                 capabilities.executable, "-hide_banner", "-loglevel", "error", "-y",
                 "-i", str(normalization_stage),
                 "-map", "0:v:0", "-map", "0:a:0", "-c:v", "copy",
-                "-af", normalization_filter,
+                "-af", f"{normalization_filter},{scope.audio_trim()}" if scope else normalization_filter,
                 "-c:a", "aac", "-b:a", str(settings.render.get("audio_bitrate", "192k")),
                 "-movflags", "+faststart", "-map_metadata", "-1", "-map_chapters", "-1",
                 "-t", f"{expected_duration:.6f}",
@@ -1817,7 +1905,13 @@ def render_project(context: JobContext, project_id: str, store: ProjectStore, se
             expected_audio=has_audio,
             expected_fps=fps,
         )
+        if scope and round(float(metadata["video_duration"]) * fps) != scope.end_frame - scope.start_frame:
+            raise RuntimeError("The exported video duration does not match the requested output frames.")
+        output_text = scope.rows(text_clips) if scope else text_clips
+        output_burn = scope.rows(burn_lines) if scope else burn_lines
+        output_effects = _render_effects_payload(project).get("effects", [])
         record = {
+            **({"range": scope.public()} if scope else {}),
             "id": export_id,
             "name": output.name,
             "relative_path": output.name,
@@ -1830,9 +1924,9 @@ def render_project(context: JobContext, project_id: str, store: ProjectStore, se
             "size": metadata["size"],
             "encoder": encoder,
             "quality": quality,
-            "captions_burned": bool(caption_ass),
-            "manual_text_count": len(text_clips),
-            "editorial_effects": _render_effects_payload(project).get("effects", []),
+            "captions_burned": bool(output_text or (burn_transcript and output_burn)) if scope else bool(caption_ass),
+            "manual_text_count": len(output_text),
+            "editorial_effects": scope.rows(output_effects) if scope else output_effects,
             "input_fingerprint": render_input_fingerprint,
             "input_demand": input_demand,
         }
@@ -1843,22 +1937,23 @@ def render_project(context: JobContext, project_id: str, store: ProjectStore, se
         context.update(0.98, "Checking the finished video")
         policy = (project.get("draft") or {}).get("audio_policy") or {}
         try:
+            gaps = remaining_picture_gaps(
+                [(float(row["start"]), float(row["end"])) for row in _frame_aligned_plan(project)
+                 if row.get("camera") == "black"],
+                [(float(clip["start"]), float(clip["end"]))
+                 for clip, asset in library_clips(project) if asset["kind"] in {"video", "image"}],
+            ) if has_sequence(project) else None
             record["review"] = review_export(
                 settings.ffmpeg, output, duration=float(metadata["duration"]), has_audio=has_audio,
                 ceiling_dbtp=AUDIO_CEILING_DBTP,
                 # Master moves the normalized level on purpose; check against that.
                 target_lufs=(max(-24.0, min(-10.0, _finite_float(policy.get("target_lufs"), -16.0))) + master_gain_db(project)
                              if normalizes_audio(project) else None),
-                caption_lines=burn_lines if burn_transcript else [], text_clips=text_clips,
+                caption_lines=output_burn if burn_transcript else [], text_clips=output_text,
                 caption_position=caption_settings["caption_position"],
                 # Added video/images occupy edit time beyond A/B coverage.
                 # Pixel blackness/alpha is independently checked on the output.
-                timeline_gaps=remaining_picture_gaps(
-                    [(float(row["start"]), float(row["end"])) for row in _frame_aligned_plan(project)
-                     if row.get("camera") == "black"],
-                    [(float(clip["start"]), float(clip["end"]))
-                     for clip, asset in library_clips(project) if asset["kind"] in {"video", "image"}],
-                ) if has_sequence(project) else None,
+                timeline_gaps=scope.gaps(gaps) if scope and gaps is not None else gaps,
             )
         except Exception as exc:  # Advice only: a failed check never fails the export.
             record["review"] = {"version": 1, "error": type(exc).__name__, "warnings": 0, "checks": []}
@@ -1866,27 +1961,27 @@ def render_project(context: JobContext, project_id: str, store: ProjectStore, se
             record["review"]["checks"].insert(0, {"id": "layout_fallback", "status": "warn", "detail": layout_fallback["warning"]})
             record["review"]["warnings"] += 1
         srt_lines = caption_lines(automatic_captions, caption_settings["caption_words_per_line"])
-        if project.get("settings", {}).get("captions") and (srt_lines or any(row["kind"] == "caption" for row in text_clips)):
+        if scope:
+            srt_lines = scope.rows(srt_lines)
+        if project.get("settings", {}).get("captions") and (srt_lines or any(row["kind"] == "caption" for row in output_text)):
             caption_path = output.with_suffix(".srt")
             build_srt(
                 {},
                 caption_ranges,
                 caption_path,
                 words_per_caption=caption_settings["caption_words_per_line"],
-                text_clips=text_clips,
+                text_clips=output_text,
                 caption_lines=srt_lines,
             )
             record["captions_name"] = caption_path.name
             record["captions_url"] = f"/api/exports/{caption_path.name}"
-        stale_exports: list[dict[str, Any]] = []
 
         def commit_export(latest: dict[str, Any]) -> None:
-            nonlocal stale_exports
             if _render_input_fingerprint(latest) != saved_input_fingerprint:
                 raise RuntimeError("project_changed_during_render")
+            # Completed deliveries are user output, not disposable cache. Keep
+            # every record and file until an explicit project deletion/cleanup.
             latest.setdefault("exports", []).insert(0, record)
-            stale_exports = list(latest["exports"][20:])
-            latest["exports"] = latest["exports"][:20]
 
         # This is the irreversible boundary: a cancellation racing after the
         # export record is saved must not report "cancelled" while leaving a valid
@@ -1894,17 +1989,6 @@ def render_project(context: JobContext, project_id: str, store: ProjectStore, se
         context.commit()
         project = store.update(project_id, commit_export)
         output_committed = True
-        for stale in stale_exports:
-            for key in ("name", "captions_name"):
-                name = Path(str(stale.get(key) or "")).name
-                if name:
-                    try:
-                        (settings.exports_dir / name).unlink(missing_ok=True)
-                    except OSError:
-                        # Retention cleanup is best-effort. A player can briefly
-                        # lock an old file on Windows; that must not relabel the
-                        # newly committed export as failed.
-                        pass
         context.update(1.0, "Export ready")
         return {"project_id": project_id, "export": record, "url": f"/api/exports/{output.name}"}
     finally:

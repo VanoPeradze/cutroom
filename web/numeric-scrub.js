@@ -1,7 +1,12 @@
 // Stage numeric gestures in the control, then use its existing save path once.
 // This keeps a long drag (or a wheel burst) a single undoable edit.
+function explicitScrubStep(field) {
+  const step=Number(field?.dataset?.scrubStep);
+  return field?.type==='number' && field.step==='any' && Number.isFinite(step) && step>0 ? step : null;
+}
+
 export function numericStep(field) {
-  const step = Number(field.step);
+  const step = explicitScrubStep(field) ?? Number(field.step);
   return Number.isFinite(step) && step > 0 ? step : 1;
 }
 
@@ -9,7 +14,7 @@ export function steppedValue(field, value, steps) {
   const step = numericStep(field);
   const min = field.min === '' ? -Infinity : Number(field.min);
   const max = field.max === '' ? Infinity : Number(field.max);
-  const base = Number.isFinite(min) ? min : Number(field.getAttribute('value')) || 0;
+  const base = explicitScrubStep(field) ? value : Number.isFinite(min) ? min : Number(field.getAttribute('value')) || 0;
   const next = base + Math.round((value + steps * step - base) / step) * step;
   return String(Number(Math.max(Number.isFinite(min) ? min : -Infinity,
     Math.min(Number.isFinite(max) ? max : Infinity, next)).toFixed(10)));
@@ -72,7 +77,7 @@ export function initNumericScrub({document:doc = document, window:win = window, 
     if (event.button !== 0 || event.ctrlKey || event.metaKey || event.altKey || !available(field)) return;
     // Horizontal range dragging and native number steppers keep their own behavior.
     if (field.type === 'range' && event.target === field) return;
-    if (field.type === 'number' && event.target === field) {
+    if (field.type === 'number' && event.target === field && !explicitScrubStep(field)) {
       const rect = field.getBoundingClientRect();
       if (doc.documentElement.dir === 'rtl' ? event.clientX < rect.left + 18 : event.clientX > rect.right - 18) return;
     }
@@ -113,9 +118,23 @@ export function initNumericScrub({document:doc = document, window:win = window, 
     win.clearTimeout(wheelTimer); wheelTimer = win.setTimeout(() => finish(true), 300);
   }, {capture:true, passive:false});
   listen(doc,'keydown',event => {
-    if (!gesture) return;
-    if (event.key === 'Escape') { event.preventDefault(); event.stopImmediatePropagation(); finish(false); }
-    else if (gesture.kind === 'wheel') finish(true);
+    if (gesture) {
+      if (event.key === 'Escape') { event.preventDefault(); event.stopImmediatePropagation(); finish(false); return; }
+      if (gesture.kind === 'wheel') finish(true);
+    }
+    const field=control(event.target);
+    // Only explicit fractional timing controls opt in. `step=any` keeps saved
+    // frame positions valid; this preserves their .01-second input affordance
+    // without snapping an older fractional anchor or taking a native 1s step.
+    if (gesture || !['ArrowUp','ArrowDown'].includes(event.key) || event.ctrlKey || event.metaKey || event.altKey
+      || !explicitScrubStep(field) || doc.activeElement!==field || !available(field)) return;
+    event.preventDefault();
+    const next=steppedValue(field,Number(field.value),event.key==='ArrowUp'?1:-1);
+    if (next===field.value) return;
+    field.value=next;
+    field.dispatchEvent(new win.Event('input',{bubbles:true}));
+    field.dispatchEvent(new win.Event('change',{bubbles:true}));
+    onCommit(field);
   }, true);
   listen(doc,'focusout',event => {
     if (gesture?.field === event.target) finish(gesture.kind === 'wheel');

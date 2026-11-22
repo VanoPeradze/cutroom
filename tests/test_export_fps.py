@@ -39,7 +39,7 @@ def test_supported_export_rates_drive_every_video_branch_and_frame_grid(fps):
     plan = render._frame_aligned_plan(project)
     assert has_audio
     assert f"fps={fps}," in graph
-    assert f"setpts=N/{fps}/TB" in graph
+    assert f"settb=1/{fps},setpts=N" in graph
     assert f":r={fps}:d=" in graph
     assert all(item["start"] * fps == pytest.approx(item["_start_frame"]) for item in plan)
     assert all(item["end"] * fps == pytest.approx(item["_end_frame"]) for item in plan)

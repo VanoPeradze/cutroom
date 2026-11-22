@@ -64,7 +64,7 @@ def test_project_choices_precede_optional_ai_setup_and_preserve_controls():
     page = Page()
     page.feed((ROOT / "web/index.html").read_text(encoding="utf-8"))
     assert len(page.ids) == len(set(page.ids))
-    assert page.workflows == ["short", "youtube", "manual"]
+    assert page.workflows == ["manual", "short", "youtube"]
     assert all(tag == "button" and attrs.get("type") == "button" and "disabled" not in attrs
                for tag, attrs, _ in page.elements if "data-start-workflow" in attrs)
     assert page.ids.index("welcomeServices") < page.ids.index("homeSetupTitle")
@@ -115,12 +115,17 @@ def test_visual_layer_is_shipped_after_existing_geometry_styles():
     # follows that skin so inspector sizing and the separate Master win the cascade.
     # The studio design system and its editor chrome follow; the layout and
     # overlap fixes stay intact. The final presentation layer does not own
-    # monitor geometry or the user-controlled panel sizes.
+    # monitor geometry or the user-controlled panel sizes. The workbench layer
+    # adds scoped Inspector/AI navigation and the media-pool collapse state.
+    # The console refines chrome and native disclosures after those layers.
     style_paths = [urlsplit(href).path for href in page.styles]
-    assert style_paths[-7:] == ["/assets/creator-ui.css", "/assets/editor-panels.css",
+    assert style_paths[-14:] == ["/assets/creator-ui.css", "/assets/editor-panels.css",
                                 "/assets/studio-design.css", "/assets/studio-chrome.css",
                                 "/assets/studio-screens.css", "/assets/ui-polish.css",
-                                "/assets/studio-finish.css"]
+                                "/assets/studio-finish.css", "/assets/studio-workbench.css",
+                                "/assets/studio-console.css", "/assets/timeline-command-strip.css",
+                                "/assets/source-view.css", "/assets/track-lift.css",
+                                "/assets/clip-opacity.css", "/assets/mark-selection.css"]
     assert len(style_paths) == len(set(style_paths))
     for href in page.styles:
         assert href.startswith("/assets/")

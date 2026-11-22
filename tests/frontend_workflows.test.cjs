@@ -143,6 +143,9 @@ function app() {
   run(fs.readFileSync(path.join(__dirname, "../web/source-tracks.js"), "utf8").replace(/^export /gm, ""));
   run(fs.readFileSync(path.join(__dirname, "../web/timeline.js"), "utf8").replace(/^export /gm, ""));
   run(fs.readFileSync(path.join(__dirname, "../web/caption-alternatives.js"), "utf8").replace(/^export /gm, ""));
+  // Load the real read-only draft-view helper for stale single-line recovery.
+  const protocol = fs.readFileSync(path.join(__dirname, "../web/transcript-batch.js"), "utf8");
+  run(protocol.slice(protocol.indexOf("export function retainedDraftViews(")).replace(/^export /gm, ""));
   run(source);
   run(`cacheElements();
     state.project = { id: "p", sources: { A: { duration: 100 } }, settings: { goal: "short" }, draft: { goal: "short", keep_ranges: [{ start: 0, end: 10 }] } };
@@ -380,18 +383,20 @@ test("changing FPS in the export dialog persists without an AI rebuild", () => {
   assert.equal(run("fpsPatch.requiresRebuild"), false);
 });
 
-test("export submits the selected frame rate after saving", async () => {
+test("export uses the accepted saved frame rate without stale form overrides", async () => {
   const { run } = settingsApp();
   run(`
     pauseAllMedia = () => {};
-    flushProjectSaves = async () => { updateFrameRateControls(60); };
+    flushProjectSaves = async () => { state.project.settings.fps = 60; globalThis.fpsSaved = true; };
     api = async (url, options) => { globalThis.renderBody = JSON.parse(options.body); return { job: {id: "r"} }; };
     setActiveJob = () => {};
     pollExportJob = async () => ({});
     completeExportJob = async () => {};
   `);
   await run('startExport()');
-  assert.equal(run("renderBody.fps"), 60);
+  assert.equal(run("fpsSaved"), true);
+  assert.equal(run("state.project.settings.fps"), 60);
+  assert.equal(run("JSON.stringify(renderBody)"), "{}");
 });
 
 for (const code of ["layout_coverage_incomplete", "other_export_problem"]) {
@@ -569,6 +574,8 @@ test("generation reads the current brief after saving and preflights that same g
     globalThis.operation = generateDraft();
     setChoiceValue(elements.goalChoices, "youtube"); applyGoalMode("youtube", true);
     elements.directorInstruction.value = "The latest brief"; updateDurationControl(135);
+    // Model the completed accepted save, not just an unrelated form mutation.
+    state.project = {...state.project, revision: 2, settings: currentSettings()};
     finishSave();
   `);
   await context.operation;
@@ -583,6 +590,7 @@ test("navigation during the save flush cannot submit another project's controls"
   const { context, run } = settingsApp();
   run(`
     renderReadiness = renderReelCandidates = pauseAllMedia = showAnalysis = () => {};
+    flushCurrentProjectSaves = async () => { await flushProjectSaves(); return true; };
     flushProjectSaves = () => new Promise((resolve) => { globalThis.finishSave = resolve; });
     globalThis.requests = [];
     ensureStoryAIReady = async () => requests.push("AI");
@@ -856,17 +864,17 @@ test('manual edit busy transitions re-enable transcript controls without replaci
   assert.equal(run('state.project.analysis.transcript.segments[0].text'), 'Original first line');
 });
 
-test('failed transcript saves preserve typed text and permit retry', async () => {
+test('failed individual transcript saves preserve typed text and permit retry', async () => {
   const {run} = transcriptApp();
   run(`selectTranscriptLine(state.project.analysis.transcript.segments[0]);
     elements.transcriptEditText.value = 'Keep this correction'; bufferTranscriptText();
     applyManualEdit = async () => null;`);
-  assert.equal(await run('saveTranscriptBuffers()'), false);
+  assert.equal(await run('saveTranscriptBuffers(false)'), false);
   assert.equal(run('elements.transcriptEditText.value'), 'Keep this correction');
   assert.equal(run('state.transcriptSaving'), false);
   assert.equal(run('pendingTranscriptBuffers().length'), 1);
   run(`applyManualEdit = async (_action, payload) => {state.project.analysis.transcript.segments[0].text=payload.text;return state.project;};`);
-  assert.equal(await run('saveTranscriptBuffers()'), true);
+  assert.equal(await run('saveTranscriptBuffers(false)'), true);
   assert.equal(run('pendingTranscriptBuffers().length'), 0);
 });
 
@@ -876,10 +884,10 @@ test('transcript save cannot overwrite a changed underlying line or accept empty
     elements.transcriptEditText.value = 'My correction'; bufferTranscriptText();
     state.project.analysis.transcript.segments[0].text='Newer server correction';
     applyManualEdit=async()=>{throw new Error('must not submit');};`);
-  assert.equal(await run('saveTranscriptBuffers()'), false);
+  assert.equal(await run('saveTranscriptBuffers(false)'), false);
   assert.equal(run('elements.transcriptEditText.value'), 'My correction');
   run("discardTranscriptBuffer(); elements.transcriptEditText.value = ' '; bufferTranscriptText();");
-  assert.equal(await run('saveTranscriptBuffers()'), false);
+  assert.equal(await run('saveTranscriptBuffers(false)'), false);
   assert.equal(run('pendingTranscriptBuffers().length'), 1);
 });
 
@@ -1216,6 +1224,7 @@ for (const action of ["generateDraft()", 'refineDraft("new_variation")', "startE
       globalThis.calls = [];
       api = async (url) => { calls.push(url); return { job: { id: "new" } }; };
       ensureStoryAIReady = async () => calls.push("prepare AI");
+      flushCurrentProjectSaves = async () => { await flushProjectSaves(); return true; };
       flushProjectSaves = () => new Promise((resolve) => { globalThis.finishSave = resolve; });
       globalThis.operation = ${action};
       state.cancelBeforeStart = true;
@@ -1485,7 +1494,8 @@ test("dirty settings disable candidate/variation controls and reject direct acti
   run('api = async () => { throw new Error("must not submit a stale edit"); };');
   await run('refineDraft("new_variation")');
   assert.equal(await run('applyManualEdit("apply_reel_candidate", { candidate_id: "alternate" })'), null);
-  await run("startExport()");
+  // Exporting the current edit is tested separately: an AI-only preference
+  // must not unlock applying a stale AI candidate or refining stale analysis.
   assert.equal(run("state.jobStartLocks.size"), 0);
   run("state.draftDirtyReasons.clear(); renderDraftActions();");
   assert.equal(variation.disabled, false);
@@ -1763,4 +1773,249 @@ test("workspace navigation leaves the persistent timeline and selection intact",
   run('window.matchMedia = () => ({ matches: true }); selectAdvancedTab("timeline");');
   assert.equal(timelineDock.scrollOptions.block, 'start');
   assert.equal(run("state.timeline.selection.start"), 12);
+});
+
+
+function currentEditExportApp() {
+  const fixture = settingsApp();
+  fixture.run(`
+    globalThis.exportRequests = [];
+    globalThis.dialogOpened = 0;
+    elements.exportDialog.showModal = () => { dialogOpened++; elements.exportDialog.open = true; };
+    pauseAllMedia = () => {};
+    flushProjectSaves = async () => {};
+    api = async (url, options) => { exportRequests.push({url, body: JSON.parse(options.body)}); return {job:{id:'export-current'}}; };
+    setActiveJob = () => {};
+    pollExportJob = async () => ({});
+    completeExportJob = async () => {};
+    renderAiDraftNotice = renderDraftActions = renderManualControls = renderActiveJobBar = renderModelStatus = () => {};
+    state.project.settings.workflow = 'manual';
+    state.project.draft.output_duration = 10;
+  `);
+  return fixture;
+}
+
+for (const reason of ['brief', 'rough-cut fallback', 'pace', 'language', 'performance', 'visual_ai', 'duration intent', 'duration']) {
+  test(`pending next-AI ${reason} leaves current-edit export available without AI or timeline changes`, async () => {
+    const {run, nodes} = currentEditExportApp();
+    run(`state.draftDirtyReasons.add(${JSON.stringify(reason)}); globalThis.beforeExport = JSON.stringify(state.project); renderReadiness();`);
+    for (const id of ['renderButton','resultRenderButton','studioRenderButton']) assert.equal(nodes.get(id).disabled, false);
+    run('openExportDialog();');
+    assert.equal(run('dialogOpened'), 1);
+    assert.match(nodes.get('exportDescription').textContent, /Export your current edit.*Pending AI preferences are not applied/);
+    await run('startExport();');
+    assert.deepEqual(JSON.parse(run('JSON.stringify(exportRequests.map(row => row.url))')), ['/api/projects/p/render']);
+    assert.equal(run('JSON.stringify(state.project)'), run('beforeExport'));
+    assert.equal(run('state.draftDirtyReasons.size'), 1);
+    assert.equal(run('state.jobStartLocks.size'), 0);
+  });
+}
+
+for (const reasons of [['goal'], ['edit_style'], ['framing'], ['audio'], ['visual'], ['unknown'], ['language','audio']]) {
+  test(`output-sensitive or unknown pending changes retain export guard: ${reasons.join(', ')}`, async () => {
+    const {run,nodes} = currentEditExportApp();
+    run(`state.draftDirtyReasons = new Set(${JSON.stringify(reasons)}); renderReadiness(); openExportDialog();`);
+    assert.equal(nodes.get('renderButton').disabled, true);
+    assert.equal(run('dialogOpened'), 0);
+    await run('startExport();');
+    assert.equal(run('exportRequests.length'), 0);
+  });
+}
+
+test('output-sensitive preference changed while saving cannot slip through current-edit export', async () => {
+  const {run} = currentEditExportApp();
+  run(`state.draftDirtyReasons.add('language'); flushProjectSaves=async()=>state.draftDirtyReasons.add('audio');`);
+  await run('startExport();');
+  assert.equal(run('exportRequests.length'), 0);
+  assert.equal(run('state.jobStartLocks.size'), 0);
+});
+
+test('draft-only pending notice does not claim the existing edit requires an AI rebuild', () => {
+  const {run,nodes} = currentEditExportApp();
+  run(`state.draftDirtyReasons.add('language'); renderDraftRebuildNotice(); updateStudioStatus();`);
+  assert.equal(nodes.get('draftRebuildTitle').textContent, 'AI preferences pending');
+  assert.match(nodes.get('draftRebuildText').textContent, /current edit can still be exported/);
+  assert.match(nodes.get('studioDraftStatus').textContent, /AI preferences pending/);
+  run(`state.draftDirtyReasons.add('framing'); renderDraftRebuildNotice(); updateStudioStatus();`);
+  assert.equal(nodes.get('draftRebuildTitle').textContent, 'Draft rebuild required');
+  assert.match(nodes.get('studioDraftStatus').textContent, /Rebuild required/);
+});
+
+
+test("empty manual workspaces are intentional saved projects, not disposable setup", () => {
+  const {run} = app();
+  run(`globalThis.emptyProject = {id:'empty',name:'New project',sources:{A:null,B:null},assets:{},
+    settings:{workflow:'manual'},manual:{cuts:[],keep_ranges:[],camera_plan:[],crop:{},source_mixer:{}}};`);
+  assert.equal(run('untouchedProject(emptyProject)'),false);
+  run('emptyProject.settings.workflow="ai"');
+  assert.equal(run('untouchedProject(emptyProject)'),true);
+});
+
+test("manual editor opens without footage or an AI draft and does not call the API", async () => {
+  const {run} = app();
+  run(`state.project={id:'empty',settings:{workflow:'manual'},sources:{A:null,B:null},draft:null};
+    globalThis.opened=0;globalThis.requests=0;showEmptyManualEditor=()=>{opened++;return true;};
+    foregroundBusy=()=>false;api=async()=>{requests++;};`);
+  await run('openManualDraft()');
+  assert.equal(run('opened'),1);assert.equal(run('requests'),0);assert.equal(run('state.project.draft'),null);
+});
+
+test("empty workbench initializes existing panels without making a fake draft", () => {
+  const {run} = app();
+  run(`state.project={id:'empty',settings:{workflow:'manual'},sources:{A:null,B:null},draft:null};
+    globalThis.steps=[];globalThis.tabs=[];globalThis.opened=[];
+    pauseAllMedia=setupPreviewSources=renderDirectorOutcomeNotice=renderReelCandidates=renderManualControls=()=>{};
+    state.timeline={setProject(project){globalThis.timelineProject=project;}};
+    state.mediaStudio={render(){globalThis.poolRendered=true;}};
+    setStep=value=>steps.push(value);setAdvanced=value=>opened.push(value);selectAdvancedTab=value=>tabs.push(value);`);
+  assert.equal(run('showEmptyManualEditor()'),true);
+  assert.equal(run('elements.setupPanel.hidden'),true);
+  assert.equal(run('elements.resultPanel.hidden'),false);
+  assert.equal(run('poolRendered'),true);
+  assert.equal(run('timelineProject.draft'),null);
+  assert.equal(run('opened[0]'),true);assert.equal(run('tabs[0]'),'timeline');
+  assert.match(run('elements.studioDraftStatus.textContent'),/Empty timeline/);
+  run('state.project.draft={engine:"manual"}');
+  assert.equal(run('showEmptyManualEditor()'),false,'a saved edit must not be replaced by empty state');
+});
+
+test("first manual pool import uses source transport only, without AI or a second draft request", async () => {
+  const {run} = app();
+  run(`state.project={id:'empty',settings:{workflow:'manual'},sources:{A:null,B:null},draft:null};
+    globalThis.imports=[];uploadSource=async(slot,file)=>{imports.push([slot,file.name]);state.project.draft={engine:'manual'};};
+    api=async()=>{throw new Error('No API draft request expected');};`);
+  assert.equal(await run(`importIntoEmptyManualEditor({name:'first.mp4',type:'video/mp4'})`),true);
+  assert.equal(run('JSON.stringify(imports)'),JSON.stringify([['A','first.mp4']]));
+  assert.equal(run('state.project.draft.engine'),'manual');
+});
+
+test("audio and image first import explain the video-first limit without mutating a project", async () => {
+  for(const file of [{name:'sound.wav',type:'audio/wav'},{name:'title.png',type:'image/png'}]) {
+    const {run}=app();
+    run(`state.project={id:'empty',settings:{workflow:'manual'},sources:{A:null,B:null},draft:null};
+      uploadSource=async()=>{throw new Error('must not import')};globalThis.before=JSON.stringify(state.project);`);
+    await assert.rejects(run(`importIntoEmptyManualEditor(${JSON.stringify(file)})`),/Start with a video recording/);
+    assert.equal(run('JSON.stringify(state.project)'),run('before'));
+  }
+});
+
+test("legacy manual recording is opened before additional media instead of replaced", async () => {
+  const {run}=app();
+  run(`state.project={id:'legacy',settings:{workflow:'manual'},sources:{A:{name:'original.mp4'}},draft:null};
+    uploadSource=async()=>{throw new Error('must not replace source')};
+    openManualDraft=async()=>{state.project.draft={engine:'manual'};};`);
+  assert.equal(await run(`importIntoEmptyManualEditor({name:'additional.mp4',type:'video/mp4'})`),false);
+  assert.equal(run('state.project.sources.A.name'),'original.mp4');
+  run(`state.project.draft=null;openManualDraft=async()=>{state.project={id:'other',draft:{}};};`);
+  assert.equal(await run(`importIntoEmptyManualEditor({name:'additional.mp4',type:'video/mp4'})`),true,
+    'switching projects must consume the old request rather than import into the new project');
+});
+
+test("opening an empty project clears both previous viewer media URLs and captions", () => {
+  const {run}=app();
+  run(`state.project={id:'empty',settings:{workflow:'manual'},sources:{A:null,B:null},draft:null};
+    globalThis.cleared=[];globalThis.paused=0;globalThis.loaded=0;
+    for(const key of ['previewA','previewB']) {elements[key].dataset.url='previous.mp4';
+      elements[key].pause=()=>paused++;elements[key].load=()=>loaded++;
+      elements[key].removeAttribute=name=>cleared.push([key,name]);}
+    elements.previewCaption.textContent='Previous project caption';updatePreviewUI=time=>{globalThis.previewTime=time;};`);
+  run('setupPreviewSources()');
+  assert.equal(run('paused'),2);assert.equal(run('loaded'),2);assert.equal(run('cleared.length'),2);
+  assert.equal(run('elements.previewA.dataset.url'),'');assert.equal(run('elements.previewB.dataset.url'),'');
+  assert.equal(run('elements.previewCaption.textContent'),'');assert.equal(run('elements.previewCaption.hidden'),true);
+  assert.equal(run('previewTime'),0);
+});
+
+
+test("first source batch waits for cancellable preparation before the asset queue can advance", async () => {
+  const {run}=app();
+  run(`state.project={id:'empty',settings:{workflow:'manual'},sources:{A:null,B:null},draft:null};
+    globalThis.prepared=false;globalThis.uploadOptions=null;
+    uploadSource=async(slot,file,options)=>{uploadOptions=options;state.project.draft={engine:'manual'};return {job:{id:'prepare-one'}};};
+    pollJob=async(id,options)=>{globalThis.preparationId=id;globalThis.preparationOptions=options;
+      await new Promise(resolve=>{globalThis.finishPreparation=resolve;});prepared=true;};`);
+  let completed=false;const importing=run(`importIntoEmptyManualEditor({name:'first.mp4',type:'video/mp4'})`).then(()=>{completed=true;});
+  for(let i=0;i<5;i++)await Promise.resolve();
+  assert.equal(completed,false);assert.equal(run('uploadOptions.prepareInForeground'),true);
+  assert.equal(run('preparationId'),'prepare-one');assert.equal(run('preparationOptions.projectId'),'empty');
+  run('finishPreparation()');await importing;assert.equal(completed,true);assert.equal(run('prepared'),true);
+});
+
+test("stopped or deferred first recording cannot silently advance a mixed import batch", async () => {
+  for(const outcome of ['stopped','deferred']){
+    const {run}=app();
+    run(`state.project={id:'empty',settings:{workflow:'manual'},sources:{A:null,B:null},draft:null};
+      globalThis.calls=0;uploadSource=async()=>{calls++;return {preparation_deferred:true};};
+      pollJob=async()=>{throw new Error('no preparation should start');};`);
+    if(outcome==='stopped'){
+      assert.equal(await run(`importIntoEmptyManualEditor({name:'first.mp4',type:'video/mp4'},{shouldContinue:()=>false})`),true);
+      assert.equal(run('calls'),0);
+    } else await assert.rejects(run(`importIntoEmptyManualEditor({name:'first.mp4',type:'video/mp4'})`),/recording is saved.*preparation was deferred/);
+  }
+});
+
+test("global Stop marks the queued imports before cancelling the current upload", async () => {
+  const {run}=app();
+  run(`globalThis.order=[];state.mediaStudio={stopImports(options){order.push(['queue',options.cancelCurrent]);}};
+    activeUploadsForProject=()=>[{}];cancelUpload=()=>{order.push(['upload']);};`);
+  await run('cancelActiveJob()');assert.equal(run('JSON.stringify(order)'),JSON.stringify([['queue',false],['upload']]));
+});
+
+
+test("saved request lengths remain exact instead of silently clamping on hydration", () => {
+  const { run } = settingsApp();
+  for (const value of [8,8.125,45.75,900]) {
+    run(`state.project.settings.target_duration=${value};state.project.sources.A.duration=8;hydrateSettings();`);
+    assert.equal(Number(run("elements.targetDuration.value")),value);
+    assert.equal(Number(run("elements.targetDuration.min")),8);
+    assert.equal(run("elements.targetDuration.step"),"any");
+    assert.ok(Number(run("elements.targetDuration.max"))>=value);
+  }
+});
+
+
+test("in-pane request admission locks original brief controls and restores truthful idle readiness", () => {
+  const {run,nodes}=settingsApp();
+  run(`renderProjectSaveState=renderAiDraftNotice=renderDraftActions=renderManualControls=renderActiveJobBar=renderModelStatus=()=>{};state.studio.open=true;state.directorRequestPending=true;`);
+  nodes.get("advancedPanel").dataset.aiRequestContext="editor";
+  run("renderReadiness()");
+  for(const id of ["directorInstruction","targetDuration","durationMode","allowExtractiveRoughCut","generateButton"])assert.equal(nodes.get(id).disabled,true);
+  run("state.directorRequestPending=false;renderReadiness()");
+  for(const id of ["directorInstruction","targetDuration","durationMode","allowExtractiveRoughCut","generateButton"])assert.equal(nodes.get(id).disabled,false);
+  assert.equal(nodes.get("readiness").querySelector("p").textContent,"Ready to review a new AI request");
+});
+
+
+test("duration presets stay disabled when their labels exceed the actual request range", () => {
+  const {run,selectors}=settingsApp();
+  const buttons=[30,60,90,180].map(seconds=>{const b=node();b.dataset.seconds=String(seconds);return b;});
+  selectors.set(".quick-values button",buttons);
+  run(`state.project.settings.target_duration=8;state.project.sources.A.duration=8;hydrateSettings();`);
+  for(const b of buttons){assert.equal(b.disabled,true);assert.match(b.title,/8 to 15 seconds/);}
+  run(`renderProjectSaveState=renderAiDraftNotice=renderDraftActions=renderManualControls=renderActiveJobBar=renderModelStatus=()=>{};renderReadiness();`);
+  for(const b of buttons)assert.equal(b.disabled,true,"idle readiness must retain range restriction");
+  assert.equal(Number(run("elements.targetDuration.value")),8);
+});
+
+test("stale or invalid duration preset never silently saves a clamped length", () => {
+  const {run}=settingsApp();
+  run(`state.project.settings.target_duration=8;state.project.sources.A.duration=8;hydrateSettings();globalThis.patches=[];scheduleSettingsPatch=patch=>patches.push(patch);`);
+  for(const value of [30,180,7,NaN,Infinity])assert.equal(run(`chooseDurationPreset(${value})`),false);
+  assert.equal(run("patches.length"),0);assert.equal(Number(run("elements.targetDuration.value")),8);
+});
+
+test("available duration preset saves its exact label once and busy dispatch does nothing", () => {
+  const {run,selectors}=settingsApp();const button=node();button.dataset.seconds="30";selectors.set(".quick-values button",[button]);
+  run(`state.project.settings.target_duration=8;state.project.sources.A.duration=90;hydrateSettings();globalThis.patches=[];scheduleSettingsPatch=patch=>patches.push(patch);`);
+  assert.equal(button.disabled,false);assert.equal(run("chooseDurationPreset(30)"),true);
+  assert.equal(Number(run("elements.targetDuration.value")),30);assert.equal(run("patches.length"),1);
+  run("state.directorRequestPending=true;renderDurationPresets()");assert.equal(button.disabled,true);
+  assert.equal(run("chooseDurationPreset(60)"),false);assert.equal(run("patches.length"),1);
+  run("state.directorRequestPending=false;renderDurationPresets()");assert.equal(button.disabled,false);
+});
+
+test("saved long request expands the permitted presets without changing its precise value", () => {
+  const {run,selectors}=settingsApp();const button=node();button.dataset.seconds="180";selectors.set(".quick-values button",[button]);
+  run(`state.project.settings.target_duration=900.125;state.project.sources.A.duration=8;hydrateSettings();`);
+  assert.equal(button.disabled,false);assert.equal(Number(run("elements.targetDuration.value")),900.125);
 });

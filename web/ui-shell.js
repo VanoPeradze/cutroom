@@ -12,7 +12,7 @@
     theme = value;
     root.dataset.theme = theme;
     root.style.colorScheme = theme;
-    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", theme === "dark" ? "#171817" : "#f2f0e9");
+    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", theme === "dark" ? "#22252a" : "#c2c6cb");
     const button = document.getElementById("themeToggle");
     if (button) {
       button.setAttribute("aria-pressed", String(theme === "dark"));

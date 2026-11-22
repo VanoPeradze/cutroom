@@ -407,4 +407,4 @@ def test_exact_large_threshold_keeps_legacy_small_preview_path(large, monkeypatc
     ready = asset(large)
     assert len(calls) == 1 and calls[0].samefile(large.source) and ready["preview_mode"] == "prepared"
     assert ready["preview_path"] != ready["path"] and ready["waveform"] == [.25, 1]
-    assert large.source not in large.probes and not large.commands
+    assert large.probes.count(large.source) == 1 and not large.commands

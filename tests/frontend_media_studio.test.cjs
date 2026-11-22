@@ -149,7 +149,7 @@ test('video cards expose a separately gated append control and preserve Add over
     if(state === 'ready')assert.equal(overlay.textContent,'+ Overlay');
     const append=card.children.find(node=>node.dataset.append);
     if(state === 'audio')assert.equal(append,undefined);
-    else {assert.equal(append.dataset.append,'video');assert.equal(append.textContent,'Append video');assert.equal(Boolean(append.disabled),state!=='ready');}
+    else {assert.equal(append.dataset.append,'video');assert.equal(append.textContent,'Append');assert.equal(Boolean(append.disabled),state!=='ready');}
   }
 });
 
@@ -603,7 +603,7 @@ test('mixer rows offer a typed value, a 0 dB mark and reset, and explain normali
   assert.equal(typed.value, '-3.5');
   assert.equal(reset.disabled, false); assert.equal(masterReset.disabled, true, 'reset is only offered away from 0 dB');
   assert.match(note.textContent, /normalization is on \(-16 LUFS\).*balance.*Master/i);
-  assert.match(note.textContent, /Original is the only track playing/, 'a lone track explains why its fader does not change the export');
+  assert.match(note.textContent, /Original is the only role group playing/, 'a lone track explains why its fader does not change the export');
   assert.equal(rows.get('source').row.dataset.normalizedAlone, 'true');
   project = {...project, draft:{}};
   studio.renderMixer();
@@ -616,4 +616,133 @@ test('mixer rows offer a typed value, a 0 dB mark and reset, and explain normali
   studio.change({dataset:{mixNumber:'music_db'}, value:'40', hasAttribute: () => false});
   studio.change({dataset:{mixNumber:'music_db'}, value:'', hasAttribute: () => false});
   assert.deepEqual(JSON.parse(JSON.stringify(queued)), [{music_db:-7.3}, {music_db:12}]);
+});
+
+test('successful media import rerenders ready review and append controls after uploading clears', async () => {
+  const {studio,activate}=studioHarness(async()=>null);activate(appendProject());
+  const paints=[];studio.render=()=>paints.push(studio.uploading);
+  studio.flush=async()=>true;studio.options.flushSettings=async()=>{};
+  studio.options.uploadFile=async()=>({});studio.options.acceptUpload=async()=>{};
+  await studio.upload({name:'Synthetic.mp4'});
+  assert.equal(studio.uploading,false);assert.equal(paints.at(-1),false);
+  assert.ok(paints.includes(true),'the acceptance render is followed by an unlocked render');
+  assert.equal(studio.status.textContent,'Ready. Add the file at the playhead.');
+});
+test('media import failure refreshes controls but preserves its actionable error', async () => {
+  const {studio,activate}=studioHarness(async()=>null);activate(appendProject());
+  const paints=[];studio.render=()=>paints.push(studio.uploading);studio.flush=async()=>true;
+  studio.options.flushSettings=async()=>{};studio.options.uploadFile=async()=>{throw Error('Import failed. Retry this file.');};
+  await studio.upload({name:'Synthetic.mp4'});
+  assert.equal(studio.uploading,false);assert.equal(paints.at(-1),false);assert.equal(studio.status.textContent,'Import failed. Retry this file.');
+});
+test('late import completion does not rerender a different project library', async () => {
+  const {studio,activate}=studioHarness(async()=>null);activate(appendProject());
+  let paints=0;studio.render=()=>paints++;studio.flush=async()=>true;studio.options.flushSettings=async()=>{};
+  studio.options.uploadFile=async()=>{activate({...appendProject(),id:'another'});return {};};studio.options.acceptUpload=async()=>{};
+  await studio.upload({name:'Synthetic.mp4'});
+  assert.equal(studio.uploading,false);assert.equal(paints,0);
+});
+
+
+test('compact media actions retain file-specific accessible names and source metadata', () => {
+  const document = {createElement(tag) {
+    const node = mediaControlNode(); node.tag = tag; node.attributes = {};
+    node.setAttribute = (name,value) => { node.attributes[name] = value; };
+    node.querySelectorAll = selector => selector === 'button' ? node.children.filter(item=>item.tag==='button') : [];
+    return node;
+  }};
+  for (const state of ['ready','failed']) {
+    const {studio,activate}=studioHarness(async()=>null,{document});
+    const project=appendProject();project.assets.video.name='Interview 01.mp4';project.assets.video.status=state;
+    activate(project);studio.projectId=project.id;studio.root=mediaControlNode();studio.library=mediaControlNode();studio.options.busy=()=>false;
+    Object.getPrototypeOf(studio).render.call(studio);
+    const card=studio.library.children[0], buttons=card.querySelectorAll('button');
+    assert.equal(card.children[1].textContent,'Interview 01.mp4');
+    assert.equal(card.children[2].textContent,'Video · 00:03');
+    assert.equal(buttons.find(b=>b.dataset.reviewShot).textContent,'In / Out');
+    assert.match(buttons.find(b=>b.dataset.reviewShot).title,/Review shot/);
+    for(const button of buttons)assert.equal(button.attributes['aria-label'],`${button.textContent}: Interview 01.mp4`);
+    if(state==='failed')assert.equal(buttons.find(b=>b.dataset.retry).attributes['aria-label'],'Retry: Interview 01.mp4');
+  }
+});
+
+
+test('empty manual media import consumes first footage without duplicate asset upload', async () => {
+  const {studio,activate}=studioHarness(async()=>null);
+  activate({id:'one',settings:{workflow:'manual'},draft:null});
+  let prepared=0,uploaded=0;
+  studio.options.prepareEmptyImport=async file=>{prepared++;assert.equal(file.name,'first.mp4');activate({id:'one',draft:{engine:'manual'}});return true;};
+  studio.options.uploadFile=async()=>{uploaded++;};
+  await studio.upload({name:'first.mp4'});
+  assert.equal(prepared,1);assert.equal(uploaded,0);assert.match(studio.status.textContent,/Recording ready in the timeline/);
+});
+
+test('empty media import reports errors and ignores results from a different project', async () => {
+  for(const outcome of ['error','switched','not-ready']) {
+    const {studio,activate}=studioHarness(async()=>null);
+    activate({id:'one',settings:{workflow:'manual'},draft:null});
+    studio.status.textContent='Original status';let uploaded=0;
+    studio.options.prepareEmptyImport=async()=>{
+      if(outcome==='error')throw new Error('Start with a video recording.');
+      if(outcome==='switched')activate({id:'two',draft:{}});
+      return false;
+    };
+    studio.options.uploadFile=async()=>{uploaded++;};
+    await studio.upload({name:'file.mp4'});
+    assert.equal(uploaded,0);
+    assert.equal(studio.status.textContent,outcome==='error'?'Start with a video recording.':'Original status');
+  }
+});
+
+test('legacy manual source starts its timeline then imports additional media once', async () => {
+  const {studio,activate}=studioHarness(async()=>null);
+  activate({id:'one',settings:{workflow:'manual'},sources:{A:{}},draft:null});
+  let uploaded=0,accepted=0;
+  studio.options.prepareEmptyImport=async()=>{activate({id:'one',draft:{}});return false;};
+  studio.flush=async()=>true;studio.options.flushSettings=async()=>{};
+  studio.options.uploadFile=async()=>{uploaded++;return {};};studio.options.acceptUpload=async()=>{accepted++;};
+  await studio.upload({name:'more.mp4'});
+  assert.equal(uploaded,1);assert.equal(accepted,1);assert.equal(studio.uploading,false);
+});
+
+
+function rangeDragHost() {
+  const entries=new Map(),storage={getItem:k=>entries.get(k)??null,setItem:(k,v)=>entries.set(k,v)};
+  const {MediaStudio}=load({localStorage:storage}),studio=Object.create(MediaStudio.prototype),calls=[];
+  let p={id:'drag-project',revision:4,draft:{output_duration:8},editor_sequence:{duration:8},manual:{sequence:{duration:8},media_clips:[]},
+    assets:{v:{id:'v',name:'Same.mp4',kind:'video',status:'ready',duration:10,width:160,height:90,url:'/v'},b:{id:'b',name:'Same.mp4',kind:'video',status:'ready',duration:10,width:160,height:90,url:'/b'},a:{id:'a',kind:'audio',status:'ready',duration:10,url:'/a'}}};
+  const audioScope=vm.createContext({});vm.runInContext(fs.readFileSync(path.join(__dirname,'../web/audio-source.js'),'utf8').replace(/^import .*\r?\n/gm,'').replace(/^export /gm,'')+'\nglobalThis.api={audioSourceRange,readAudioSourceMarks,saveAudioSourceMarks};',audioScope);
+  const {audioSourceRange,readAudioSourceMarks,saveAudioSourceMarks}=audioScope.api;
+  Object.assign(studio,{status:{textContent:''},pending:new Map(),flush:async()=>true,updateImportAvailability(){},syncSourceMonitor(){},render(){},options:{project:()=>p,busy:()=>false,pause(){},flushSettings:async()=>{},
+    audioSource:{range:audioSourceRange,readMarks:(p,id)=>readAudioSourceMarks(p,id,storage)},
+    placementPreview:(id,time,o)=>({issue:'',start:o.append?p.editor_sequence.duration:time,end:(o.append?p.editor_sequence.duration:time)+(o.sourceEnd??p.assets[id].duration)-(o.sourceStart??0)}),
+    edit:async(action,payload,guard)=>{assert.equal(guard?.isCurrent?.(),true);calls.push({action,payload:JSON.parse(JSON.stringify(payload)),guard});p={...p,revision:p.revision+1};return p;}}});
+  studio.insertionIssue=(_id,_time,o)=>{assert.equal(o.sourceEnd-o.sourceStart,2);return '';};
+  return{studio,calls,entries,storage,audio:{saveAudioSourceMarks},get p(){return p},set p(x){p=x}};
+}
+for(const kind of ['v','a'])test('marked '+kind+' Overlay payload uses exact source_start and bounded timeline end',async()=>{
+ const h=rangeDragHost();await h.studio.place(kind,7,{sourceStart:3,sourceEnd:5},{isCurrent:()=>true});
+ assert.equal(h.calls.length,1);assert.equal(h.calls[0].action,'media_add');assert.deepEqual(h.calls[0].payload,{asset_id:kind,start:7,source_start:3,end:8});assert.equal(h.calls[0].guard.strictRevision,true);
+});
+for(const mode of ['append','insert'])test('marked video '+mode+' uses both exact source endpoints and the same readiness interval',async()=>{
+ const h=rangeDragHost();await h.studio.place('v',2,{[mode]:true,sourceStart:3,sourceEnd:5},{isCurrent:()=>true});
+ assert.equal(h.calls.length,1);assert.deepEqual(h.calls[0].payload,{asset_id:'v',...(mode==='append'?{}:{start:2}),source_start:3,source_end:5});
+});
+test('drag snapshot is rechecked after both flushes and no stale request is sent',async()=>{
+ for(const step of ['flush','settings'])for(const mutation of ['selection','asset','revision','project']){
+  const h=rangeDragHost();let current=true;const mutate=()=>{if(mutation==='selection')current=false;else if(mutation==='asset')h.p.assets.v.duration=11;else if(mutation==='revision')h.p.revision++;else h.p.id='changed';return true;};
+  if(step==='flush')h.studio.flush=async()=>mutate();else h.studio.options.flushSettings=async()=>mutate();
+  const result=await h.studio.place('v',2,{sourceStart:3,sourceEnd:5},{isCurrent:()=>current});assert.equal(result,null);assert.deepEqual(h.calls,[]);assert.equal(h.studio.placing,false);
+ }
+});
+test('exact-asset video and audio saved marks stay separate and never bleed from active other-source marks',()=>{
+ const h=rangeDragHost(),videoKey=id=>'cutroom.library-source-marks.v1:'+JSON.stringify([h.p.id,id]);
+ h.storage.setItem(videoKey('v'),JSON.stringify({identity:JSON.stringify([1,h.p.id,'v',10,160,90,'video']),source_start:3,source_end:5}));
+ h.audio.saveAudioSourceMarks(h.p,'a',{source_start:1.25,source_end:2.75},h.storage);
+ h.studio.shotReview={sourceSelection:id=>id==='b'?{source_start:6,source_end:8}:null};
+ assert.deepEqual(JSON.parse(JSON.stringify(h.studio.dragSelection('v'))),{sourceStart:3,sourceEnd:5});
+ assert.deepEqual(JSON.parse(JSON.stringify(h.studio.dragSelection('a'))),{sourceStart:1.25,sourceEnd:2.75});
+ assert.deepEqual(JSON.parse(JSON.stringify(h.studio.dragSelection('b'))),{sourceStart:6,sourceEnd:8});
+ h.studio.shotReview=null;assert.equal(h.studio.dragSelection('b'),null);
+ h.p.assets.v.duration=11;assert.equal(h.studio.dragSelection('v'),null);h.p.id='new-project';assert.equal(h.studio.dragSelection('a'),null);
 });

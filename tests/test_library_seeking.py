@@ -72,6 +72,15 @@ def assert_seek(options, expected):
         assert float(options[offset + 1]) == expected
 
 
+def assert_sample(graph, label, residual, length, speed, *, padded=False):
+    upper = residual + (length + 2 / FPS) * speed
+    assert label + f"trim=end={upper:.9f}," in graph
+    marker = f"settb=1/1000000000,setpts=(PTS-{residual:.9f}/TB)/{speed:.9f}-4,fps={FPS}:start_time=0:round=up"
+    assert marker in graph
+    if padded:
+        assert "tpad=stop_mode=clone:stop_duration=" in graph and f"trim=end={upper:.9f},"+marker in graph
+
+
 def graph_for(value, inventory):
     return render.build_filter_graph(value, 320, 180, None, inventory)[0]
 
@@ -92,7 +101,8 @@ def test_fractional_late_range_seeks_its_own_input_and_preserves_local_fades_and
     assert_seek(options[entry.index], 1800)
     assert Path(options[entry.index][-1]).name == "original.mp4"
     graph = graph_for(value, inventory)
-    assert "[2:v]trim=start=0.250000000:end=2.283333333" in graph
+    assert "-noaccurate_seek" in options[entry.index]
+    assert_sample(graph, "[2:v]", .25, 2, 1)
     assert "[2:a]atrim=start=0.250000000:end=2.250000000" in graph
     assert "afade=t=in:st=0:d=0.300000000" in graph
     assert "afade=t=out:st=1.600000000:d=0.400000000" in graph
@@ -102,7 +112,7 @@ def test_fractional_late_range_seeks_its_own_input_and_preserves_local_fades_and
     # doing so only at the end loses the padding and shifts speech earlier.
     delayed_audio = graph.split("adelay=48000S:all=1,", 1)[1].split("[libaudio0]", 1)[0]
     assert delayed_audio.startswith("asetpts=N/48000/TB,apad,atrim=")
-    assert "trim=end_frame=60,setpts=N/30/TB" in graph
+    assert "trim=end_frame=60,settb=1/30,setpts=N" in graph
     assert value == before, "Seeking is transient command metadata, never a saved timeline rewrite"
     assert entry.clip["source_start"] == entry.clip["video_source_start"] == 1800.25
 
@@ -126,8 +136,7 @@ def test_seek_uses_earliest_consumed_clock_without_speeding_speech(audio_start, 
     assert entry.seek_start == seek
     graph = graph_for(value, inventory)
     picture_residual = picture_start - seek
-    assert (f"[{entry.index}:v]trim=start={picture_residual:.9f}:end={picture_residual + 4 + 1 / FPS:.9f},"
-            "setpts=(PTS-STARTPTS)/2.000000000") in graph
+    assert_sample(graph, f"[{entry.index}:v]", picture_residual, 2, 2)
     if enabled and has_audio:
         audio_residual = audio_start - seek
         assert f"[{entry.index}:a]atrim=start={audio_residual:.9f}:end={audio_residual + 2:.9f},asetpts=PTS-STARTPTS" in graph
@@ -146,8 +155,8 @@ def test_held_picture_is_clamped_before_floor_and_legacy_audio_tail_keeps_paddin
     entry = inventory.inputs("library")[0]
     assert entry.seek_start == 3669
     graph = graph_for(value, inventory)
-    picture_residual = 3669.44 - 1 / FPS - 3669
-    assert f"[1:v]trim=start={picture_residual:.9f}:end={picture_residual + 4 + 1 / FPS:.9f}" in graph
+    picture_residual = 3669.44 - 1e-6 - 3669
+    assert_sample(graph, "[1:v]", picture_residual, 2, 2, padded=True)
     assert "tpad=stop_mode=clone:" in graph and "trim=end_frame=60" in graph
     assert "[1:a]atrim=start=1.250000000:end=3.250000000" in graph
     assert "apad,atrim=duration=2.000000000" in graph
@@ -169,8 +178,8 @@ def test_repeated_asset_occurrences_keep_independent_seek_positions_and_decoder_
     assert_seek(options[3], 2400)
     assert options[2][-1] == options[3][-1], "Repeated occurrences share source bytes, not decoder clocks"
     graph = graph_for(value, inventory)
-    assert "[2:v]trim=start=0.250000000" in graph
-    assert "[3:v]trim=start=1.250000000" in graph
+    assert_sample(graph, "[2:v]", .25, 1, 1)
+    assert_sample(graph, "[3:v]", 1.25, 1, 1)
     assert "[3:a]atrim=start=0.750000000:end=1.750000000" in graph
     assert graph.index("[libcomposite0]") < graph.index("[libcomposite1]")
 
@@ -216,7 +225,7 @@ def test_keyed_video_and_shared_image_backgrounds_preserve_their_original_pts_cl
     for entry in inventory.inputs("chroma_background"):
         assert "-loop" in options[entry.index]
     graph = graph_for(value, inventory)
-    assert "trim=start=1800.250000000:end=1802.283333333" in graph
+    assert_sample(graph, "", 1800.25, 2, 1)
     assert "[2:a]atrim=start=1800.250000000:end=1802.250000000" in graph
 
 
@@ -249,3 +258,47 @@ def test_stale_inventory_is_rejected_after_a_seek_relevant_input_changes(change)
         value["manual"]["chroma_key"] = {VIDEO: {"enabled": True}}
     with pytest.raises(ValueError, match="no longer matches"):
         graph_for(value, inventory)
+
+@pytest.mark.parametrize(("stream","container","expected"), [
+    ({"start_time":"0","duration":".5"}, {"start_time":"0"}, .5),
+    ({"start_time":"2.25","duration":".5"}, {"start_time":"2"}, .75),
+    ({"start_time":"-.25","duration":".5"}, {"start_time":"-.5"}, .75),
+    ({"start_time":"0","duration":"N/A","duration_ts":"15","time_base":"1/30"}, {"start_time":"0"}, .5),
+    ({"start_time":"0","duration":"N/A"}, {"start_time":"0"}, None),
+    ({"start_time":"0","duration_ts":"123","time_base":"1/0"}, {"start_time":"0"}, None),
+    ({"duration":".5"}, {"start_time":"1"}, None),
+    ({"start_time":"NaN","duration":".5"}, {"start_time":"0"}, None),
+    ({"start_time":"0","tags":{"DURATION":"00:00:00.500000000"}}, {"start_time":"0","format_name":"matroska,webm"}, .5),
+    ({"start_time":"2.3","tags":{"DURATION":"00:00:02.800000000"}},
+     {"start_time":"2","format_name":"matroska,webm","tags":{"ENCODER":"Lavf61.7.100"}}, .8),
+    ({"start_time":"2.3","tags":{"DURATION":"00:00:02.800000000"}}, {"start_time":"2","format_name":"matroska,webm"}, None),
+    ({"start_time":"0","tags":{"DURATION":"00:00:00.500000000"}}, {"start_time":"0","format_name":"mov,mp4"}, None),
+])
+def test_picture_endpoint_is_stream_evidence_not_audio_container_length(stream, container, expected):
+    from cutroom.media_library import _picture_end
+    assert _picture_end(stream, container, 3.) == expected
+
+
+@pytest.mark.parametrize("endpoint,expected_seek", [(3669.44, 1800), (10.25, 10), (None, 0)])
+def test_legacy_export_qualifies_once_without_changing_edit_or_seek_for_full_picture(tmp_path, monkeypatch, endpoint, expected_seek):
+    import cutroom.render_inventory as ri
+    value = project()
+    first = value["manual"]["media_clips"][0]
+    value["manual"]["media_clips"].append({**first, "id":"another-use"})
+    before = copy.deepcopy(value)
+    path_placeholders(value, tmp_path)
+    calls = []
+    def probe(path, kind, settings, cancel_check):
+        calls.append(path)
+        return {"picture_end": endpoint}
+    monkeypatch.setattr(ri, "probe_asset", probe)
+    from types import SimpleNamespace
+    settings = SimpleNamespace(ffprobe="stub")
+    qualified = ri.qualify_library_pictures(value, tmp_path, settings)
+    inventory = compile_render_inputs(qualified)
+    assert len(calls) == 1 and value == before
+    assert [row.seek_start for row in inventory.inputs("library")] == [expected_seek, expected_seek]
+    inventory.validate(qualified)
+    assert all(row.clip["source_start"] == 1800.25 for row in inventory.inputs("library"))
+    value["assets"][VIDEO]["picture_end"] = endpoint
+    assert ri.qualify_library_pictures(value, tmp_path, settings) is value and len(calls) == 1

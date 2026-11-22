@@ -192,7 +192,7 @@ test('central readiness keeps fresh source review usable without a draft', () =>
   const sourceButton={dataset:{candidateId:'review-a'}},normalButton={dataset:{candidateId:'alternative'}};
   const state={project:{revision:4,draft:null,analysis:{review_candidates:{revision:4,items:[{id:'review-a'}]}}},draftDirtyReasons:new Set()};
   let busy=false;
-  const context=vm.createContext({state,elements:{reelCandidateList:{}},document:{},foregroundBusy:()=>busy,
+  const context=vm.createContext({state,elements:{reelCandidateList:{}},document:{},foregroundBusy:()=>busy,savedLayerTrackIssue:()=>'',
     $$:selector=>selector.startsWith('button[data-candidate-id]')?[sourceButton,normalButton]:[],t:()=>'',canVaryDraft:()=>false});
   vm.runInContext(source.slice(start,end)+'\nrenderDraftActions()',context);
   assert.equal(sourceButton.disabled,false);assert.equal(normalButton.disabled,true);

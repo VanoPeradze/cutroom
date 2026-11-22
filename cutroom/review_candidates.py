@@ -82,7 +82,18 @@ def validate_ranges(project,request,ranges,segment_ids):
     return clean,output,selected
 
 
-def build_review_shelf(project,request,options,identity,*,revision=None):
+def _join_touching_ranges(ranges):
+    """The edit clock has no cut between two exactly touching source spans."""
+    joined = []
+    for row in ranges:
+        if joined and joined[-1]["end"] == row["start"]:
+            joined[-1]["end"] = row["end"]
+        else:
+            joined.append(dict(row))
+    return joined
+
+
+def build_review_shelf(project,request,options,identity,*,revision=None,join_touching=False):
     require_supported(project)
     brief={k:copy.deepcopy(request[k]) for k in REQUEST_FIELDS if k in request}
     rows=options.get('review_candidates') or []
@@ -90,8 +101,12 @@ def build_review_shelf(project,request,options,identity,*,revision=None):
     items=[]
     for row in rows:
         ranges,seconds,segments=validate_ranges(project,brief,row['playback_ranges'],row['segment_ids'])
+        if join_touching:
+            ranges = _join_touching_ranges(ranges)
         identifier='review_'+stable_fingerprint('source-review-v1',{'source':project['sources']['A'].get('generation'),
             'request':brief,'segments':row['segment_ids'],'ranges':ranges})[:24]
+        if join_touching and any(item['id'] == identifier for item in items):
+            continue
         items.append({'id':identifier,'kind':'unverified_source_candidate','rank':len(items)+1,
             'ranges':ranges,'segment_ids':list(row['segment_ids']),'output_duration':seconds,
             'preview':'ASR (unverified): '+' '.join(str(r['text']) for r in segments)[:240],
@@ -116,10 +131,60 @@ def checked_source_candidate(project,candidate_id,identity):
     return copy.deepcopy(row),copy.deepcopy(shelf['request'])
 
 
-def publish_failed_review(store,project_id,request,options,expected_source_generation):
+def _keep_placeable_first_pass_items(project, shelf, cancel_check):
+    """Use the editor's own detached preview; never advertise a dead Apply."""
+    from .editing import ManualEditError, apply_source_review_edit
+
+    accepted = []
+    for item in shelf["items"]:
+        if cancel_check is not None:
+            cancel_check()
+        staged = copy.deepcopy(project)
+        try:
+            apply_source_review_edit(staged, item, shelf["request"])
+        except ManualEditError:
+            continue
+        if staged["draft"]["keep_ranges"] != item["ranges"]:
+            continue
+        accepted.append({**item, "rank": len(accepted) + 1,
+                         "output_duration": staged["draft"]["output_duration"]})
+    if not accepted:
+        raise ValueError("No source candidate can be placed unchanged in the editor.")
+    shelf["items"] = accepted
+
+
+def publish_failed_review(
+    store, project_id, request, options, expected_source_generation, *, first_pass=None, cancel_check=None,
+):
+    """Save an unapplied shelf, optionally bound to the exact interrupted job."""
     def publish(current):
-        if (current.get('sources') or {}).get('A',{}).get('generation')!=expected_source_generation:
-            raise ValueError('Source changed during candidate preparation.')
-        shelf=build_review_shelf(current,request,options,media_identity(current,store.project_dir(project_id)),revision=current['revision']+1)
-        current.setdefault('analysis',{})['review_candidates']=shelf
-    return store.update(project_id,publish)
+        if ((current.get("sources") or {}).get("A") or {}).get("generation") != expected_source_generation:
+            raise ValueError("Source changed during candidate preparation.")
+        identity = media_identity(current, store.project_dir(project_id))
+        if first_pass is not None:
+            from .retained_edit import has_retained_edit
+            from .story_candidates import source_identity_rows
+
+            manual = current.get("manual") or {}
+            history = manual.get("_history") or {}
+            if (current.get("draft") is not None or has_retained_edit(current)
+                    or first_pass[1] != identity
+                    or any(manual.get(key) for key in ("camera_plan", "camera_overrides", "crop",
+                                                       "visual_overrides", "chroma_key"))
+                    or history.get("undo") or history.get("redo")):
+                raise ValueError("Existing work or source changed; no source review was prepared.")
+            segments = ((current.get("analysis") or {}).get("transcript") or {}).get("segments") or []
+            if not segments or source_identity_rows(segments) != options.get("source_segments"):
+                raise ValueError("The exact source transcript is no longer available.")
+        shelf = build_review_shelf(
+            current, request, options, identity, revision=current["revision"] + 1,
+            join_touching=first_pass is not None,
+        )
+        if first_pass is not None:
+            _keep_placeable_first_pass_items(current, shelf, cancel_check)
+        if cancel_check is not None:
+            cancel_check()
+        current.setdefault("analysis", {})["review_candidates"] = shelf
+
+    revision = first_pass[0] if first_pass is not None else None
+    return store.update(project_id, publish, expected_revision=revision)

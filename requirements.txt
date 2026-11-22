@@ -10,3 +10,5 @@ av>=18.1.0,<19
 ctranslate2==4.8.3; sys_platform == "win32"
 # The embedded-camera detector uses the Haar APIs/XML assets removed from main OpenCV 5.
 opencv-python-headless==4.14.0.94
+# Hugging Face model-cache locks: reject versions affected by the 2026 local-lock advisories.
+filelock>=4.2.1,<5

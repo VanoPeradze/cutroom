@@ -1,0 +1,360 @@
+/* CUTROOM console: one calm instrument surface. The geometry controller owns
+   resizing; no video pixels, rendering planes or timeline coordinates change. */
+:root {
+  --ink:#17181c; --ink-2:#202126; --ink-3:#282a30; --ink-4:#30333b;
+  --paper:#e9eaf0; --paper-dim:#c1c4ce; --muted:#a7acb8;
+  --surface-chrome:#202126; --surface-panel:#25272d; --surface-inset:#18191e;
+  --surface-raised:#30333b; --surface-hover:#3a3e48; --surface-selected:#353143;
+  --line:#383b44; --line-strong:#666d7c; --control-line:#666d7c; --control-border:#727b8b;
+  --cyan:#90bcc8; --cyan-text:#b6d8e0; --signal:#b5a1eb; --signal-text:#c7b6f2;
+  --primary-fill:#b5a1eb; --room-accent:#b5a1eb; --lobby-accent:#b5a1eb;
+  --focus-ring:#a7cdd8; --room-rule:#383b44; --room-soft:#202126;
+  --timeline-bg:#17181c; --timeline-ruler:#202228; --timeline-lane:#24262d; --timeline-lane-alt:#292c34;
+  --timeline-grid:#3c414d; --timeline-text:#c2c8d5; --timeline-clip:#345461; --timeline-clip-b:#5c4c73;
+  --timeline-clip-edge:#8aa8bc; --timeline-selected:#baa5f0; --timeline-label:#f3f5fa;
+  --timeline-wave:#a9c9c2; --timeline-wave-bg:#2d4445; --timeline-layout:#4b6175;
+}
+html[data-theme=light] {
+  --ink:#b4bac3; --ink-2:#bec4cc; --ink-3:#b8bec7; --ink-4:#aeb6c0;
+  --paper:#222731; --paper-dim:#343c49; --muted:#3b4452;
+  --surface-chrome:#bdc3cb; --surface-panel:#cbd0d6; --surface-inset:#b5bdc7;
+  --surface-raised:#d7dbe0; --surface-hover:#a9b3c0; --surface-selected:#bcb7cf;
+  --line:#96a0af; --line-strong:#6f7b8d; --control-line:#6f7b8d; --control-border:#626f83;
+  --cyan:#3b6579; --cyan-text:#254e65; --signal:#69528e; --signal-text:#513772;
+  --primary-fill:#665084; --room-accent:#665084; --lobby-accent:#665084;
+  --focus-ring:#315c76; --room-rule:#96a0af; --room-soft:#b8bec7;
+  --timeline-bg:#aeb7c3; --timeline-ruler:#bcc4cf; --timeline-lane:#bec6d0; --timeline-lane-alt:#c9d0d9;
+  --timeline-grid:#909dac; --timeline-text:#2c394b; --timeline-clip:#4b6c81; --timeline-clip-b:#715d87;
+  --timeline-clip-edge:#354e67; --timeline-selected:#655080; --timeline-label:#ffffff;
+  --timeline-wave:#2e5156; --timeline-wave-bg:#a4b7bb; --timeline-layout:#849aaa;
+}
+body.console-shell { background:var(--ink); }
+/* Project, history, library and delivery are direct. Setup/help are one menu. */
+body.studio-open.console-shell .app-chrome .topbar { display:flex; align-items:center; gap:12px; height:48px; min-height:48px; padding:0 14px; background:var(--ink); border-color:var(--line); }
+body.studio-open.console-shell .topbar .brand { flex:none; margin:0; padding-inline-end:16px; border-inline-end:1px solid var(--line); gap:9px; }
+body.studio-open.console-shell .topbar .brand strong { font-size:14px; letter-spacing:.045em; font-weight:760; }
+body.studio-open.console-shell .topbar .brand-mark,body.studio-open.console-shell .topbar .brand-mark i { height:19px; }
+body.studio-open.console-shell .topbar .project-head { display:flex; flex:1 1 260px; min-width:0; max-width:none; margin:0; gap:5px; }
+body.studio-open.console-shell .topbar .project-name { field-sizing:fixed; min-width:0; width:100%; flex:1; font-size:12px; font-weight:550; text-overflow:ellipsis; }
+body.studio-open.console-shell .topbar .save-state { flex:none; font-size:10px; padding-inline:5px; }
+body.studio-open.console-shell .topbar .top-actions { flex:none; gap:4px; overflow:visible; }
+body.studio-open.console-shell .top-actions > #projectsButton { padding-inline:9px; font-size:12px; }
+body.studio-open.console-shell .top-actions > .manual-history-actions { padding-inline:5px; margin-inline:3px; border-color:var(--line); }
+body.studio-open.console-shell .topbar #renderButton { min-width:88px; min-height:30px; height:30px; padding:5px 12px; margin-inline-start:7px; font-size:12px; border-radius:5px; }
+.console-menu { position:relative; order:1; color:var(--paper-dim); }
+.console-menu[hidden] { display:none; }
+.console-menu > summary { display:flex; align-items:center; gap:8px; min-height:32px; padding:5px 9px; border-radius:4px; font-size:12px; font-weight:500; cursor:pointer; list-style:none; }
+.console-menu > summary::-webkit-details-marker { display:none; }
+.console-menu > summary::after { content:''; width:5px; height:5px; border-inline-end:1px solid currentColor; border-block-end:1px solid currentColor; transform:rotate(45deg) translateY(-2px); }
+.console-menu[open] > summary,.console-menu > summary:hover { background:var(--surface-hover); color:var(--paper); }
+.console-menu-panel { position:absolute; z-index:320; inset-block-start:calc(100% + 7px); inset-inline-end:0; width:220px; padding:6px; border:1px solid var(--line-strong); border-radius:7px; background:var(--surface-panel); box-shadow:0 16px 36px #0005; }
+body.studio-open.console-shell #consoleMenu .console-menu-panel > button { display:flex !important; align-items:center; justify-content:flex-start; width:100%; min-height:36px; height:auto; padding:8px 10px; margin:0; border:0; border-radius:3px; background:transparent; color:var(--paper-dim); font:500 12px/1.5 var(--font); text-align:start; }
+body.studio-open.console-shell #consoleMenu .console-menu-panel > button[hidden] { display:none !important; }
+body.studio-open.console-shell #consoleMenu .console-menu-panel > button:hover { background:var(--surface-hover); color:var(--paper); }
+body.studio-open.console-shell #consoleMenu #transcriptionButton { border-block-start:1px solid var(--line); border-radius:0; margin-block-start:4px; padding-block-start:12px; }
+/* Balanced default split remains adjustable with the existing native dividers. */
+@media (min-width:900px) and (min-height:540px) {
+  body.studio-open #advancedPanel.console-ready:not([hidden]) { grid-template-columns:clamp(210px,18vw,272px) minmax(0,1fr) 6px var(--workspace-inspector-width,320px); grid-template-rows:38px minmax(0,1fr) 6px var(--workspace-timeline-height,280px) 44px; }
+  body.studio-open #advancedPanel.console-ready.inspector-collapsed:not([hidden]) { grid-template-columns:clamp(210px,18vw,272px) minmax(0,1fr) 0 0; }
+  body.studio-open #advancedPanel.console-ready.media-pool-collapsed:not([hidden]) { grid-template-columns:0 minmax(0,1fr) 6px var(--workspace-inspector-width,320px); }
+  body.studio-open #advancedPanel.console-ready.media-pool-collapsed.inspector-collapsed:not([hidden]) { grid-template-columns:0 minmax(0,1fr) 0 0; }
+  #advancedPanel.console-ready > .advanced-tabs { height:44px; padding-inline:max(12px,calc((100% - 780px)/2)); }
+  #advancedPanel.console-ready > .advanced-tabs button { height:43px; }
+  #advancedPanel.console-ready > #studioPreviewDock { padding:8px 14px 10px; }
+  #advancedPanel.console-ready > #studioInspector { padding-inline:14px; }
+  #advancedPanel.console-ready > #studioInspector > .workbench-inspector-switch { margin-inline:-14px; padding-inline:8px; }
+}
+/* Four distinct material planes, quiet dividers, no ornamental dashboard cards. */
+#advancedPanel.console-ready > .studio-header { background:var(--surface-chrome); padding-inline:14px; }
+#advancedPanel.console-ready > #studioPreviewDock { background:var(--surface-inset); }
+#advancedPanel.console-ready > #studioShelf { background:var(--surface-chrome); padding-inline:10px; }
+#advancedPanel.console-ready > #studioInspector { background:var(--surface-panel); }
+#advancedPanel.console-ready .workbench-pool-toggle { min-height:25px; padding:3px 6px; font-size:10px; }
+#advancedPanel.console-ready .workbench-pool-toggle[aria-pressed=true] { background:var(--surface-raised); border-color:transparent; color:var(--paper-dim); }
+#advancedPanel.console-ready .monitor-title { font-size:11px; color:var(--paper); }
+#advancedPanel.console-ready .studio-monitor-info { font-size:10px; color:var(--muted); }
+#advancedPanel.console-ready .workspace-divider,#advancedPanel.console-ready .inspector-divider { background:var(--ink); border-color:var(--line); }
+#advancedPanel.console-ready .workspace-divider::after,#advancedPanel.console-ready .inspector-divider::after { background:var(--line-strong); opacity:.7; }
+#advancedPanel.console-ready .workbench-inspector-switch { background:var(--surface-chrome); border-color:var(--line); margin-bottom:14px; }
+#advancedPanel.console-ready #studioInspector .workbench-inspector-switch button { font-size:11px; font-weight:600; padding-inline:6px; }
+#advancedPanel.console-ready #workbenchAIButton { color:var(--signal-text); }
+#advancedPanel.console-ready #workbenchAIButton::before { content:''; display:inline-block; width:8px; height:8px; margin-inline-end:6px; border:1px solid currentColor; border-radius:2px; transform:rotate(45deg); }
+#advancedPanel.console-ready #workbenchAIButton[aria-pressed=true] { background:var(--surface-selected); }
+/* Browse media before reading options. Filenames and thumbnails get the space. */
+#advancedPanel.console-ready #studioShelf .shelf-heading { position:sticky; top:0; z-index:5; margin:0 -10px 10px; padding-inline:10px; background:var(--surface-chrome); }
+#advancedPanel.console-ready #studioShelf .shelf-heading h3 { font-size:12px; font-weight:650; }
+#advancedPanel.console-ready #studioShelfMedia .shelf-add { height:25px; min-height:25px; padding:3px 7px; font-size:11px; background:var(--surface-raised); border-radius:4px; }
+#advancedPanel.console-ready #studioShelfMedia .library-tools { grid-template-columns:minmax(0,1fr) auto auto; gap:7px 6px; margin-bottom:8px; }
+#advancedPanel.console-ready #studioShelfMedia .library-search { grid-column:1/-1; height:30px; min-height:30px; border-color:var(--line); padding-inline:10px; background:var(--surface-inset); font-size:11px; }
+#advancedPanel.console-ready #studioShelfMedia .library-filter { gap:3px; border:0; background:var(--surface-inset); padding:2px; border-radius:4px; }
+#advancedPanel.console-ready #studioShelfMedia .library-filter button { min-height:25px; padding:4px 3px; font-size:10px; border-radius:3px; }
+#advancedPanel.console-ready #studioShelfMedia .library-filter button[aria-pressed=true] { color:var(--paper); background:var(--surface-raised); }
+#advancedPanel.console-ready #studioShelfMedia .library-filter button[aria-pressed=true]::after { display:none; }
+#advancedPanel.console-ready #studioShelfMedia .library-result-count { grid-row:3; grid-column:1; font-size:10px; }
+#advancedPanel.console-ready #studioShelfMedia .library-view { grid-row:3; grid-column:3; background:transparent; border:0; }
+#advancedPanel.console-ready #studioShelfMedia .library-view button { min-height:25px; padding:4px 6px; font-size:10px; }
+.console-library-options { grid-row:3; grid-column:2; position:relative; font-size:10px; color:var(--muted); }
+.console-library-options > summary { cursor:pointer; list-style:none; padding:5px 6px; min-height:25px; box-sizing:border-box; border-radius:3px; }
+.console-library-options > summary::after { content:' +'; font-size:11px; }
+.console-library-options[open] > summary::after { content:' −'; }
+.console-library-options.has-filter > summary { color:var(--signal-text); background:var(--surface-selected); }
+#advancedPanel.console-ready #studioShelfMedia .console-library-options > .library-usage-label { position:absolute; z-index:8; inset-inline-end:0; inset-block-start:29px; width:180px; padding:10px; border:1px solid var(--line-strong); border-radius:5px; background:var(--surface-panel); box-shadow:0 8px 20px #0004; }
+#advancedPanel.console-ready #studioShelfMedia .library-group-heading { margin:12px 0 6px; padding:0 2px; font-size:10px; font-weight:600; letter-spacing:.025em; }
+#advancedPanel.console-ready #studioShelfMedia :is(.source-library,.media-library) { gap:3px; }
+#advancedPanel.console-ready #studioShelfMedia[data-library-view] :is(.source-library-card,.media-asset) { background:transparent; border-color:transparent; border-radius:4px; padding:6px; gap:3px 8px; }
+#advancedPanel.console-ready #studioShelfMedia[data-library-view=list] :is(.source-library-card,.media-asset) { grid-template-columns:50px minmax(0,1fr); grid-template-rows:auto auto auto; }
+#advancedPanel.console-ready #studioShelfMedia[data-library-view=list] .source-library-card { min-height:46px; grid-template-rows:auto auto; }
+#advancedPanel.console-ready #studioShelfMedia[data-library-view=list] :is(.source-library-card,.media-asset) > .library-thumb { height:32px; }
+#advancedPanel.console-ready #studioShelfMedia[data-library-view] :is(.source-library-card,.media-asset) > span:not(.library-thumb) { font-size:11px; font-weight:500; }
+#advancedPanel.console-ready #studioShelfMedia[data-library-view] :is(.source-library-card,.media-asset) > small { font-size:10px; }
+#advancedPanel.console-ready #studioShelfMedia[data-library-view] :is(.source-library-card,.media-asset):hover { background:var(--surface-panel); border-color:var(--line); }
+#advancedPanel.console-ready #studioShelfMedia[data-library-view] .media-asset:has(.console-asset-actions[open]) { background:var(--surface-panel); border-color:var(--line); }
+#advancedPanel.console-ready #studioShelfMedia .source-library-card > b { inset-block-start:8px; inset-inline-start:8px; }
+#advancedPanel.console-ready .console-asset-actions { grid-column:1/-1; grid-row:3; min-width:0; border:0; background:none; }
+#advancedPanel.console-ready .console-asset-actions > summary { display:flex; align-items:center; justify-content:space-between; gap:6px; min-height:25px; padding:3px 1px; list-style:none; color:var(--cyan-text); font:500 10px/1.5 var(--font); cursor:pointer; }
+#advancedPanel.console-ready .console-asset-actions > summary > span::before { content:'›'; display:inline-block; margin-inline-end:5px; font-size:13px; }
+#advancedPanel.console-ready .console-asset-actions[open] > summary > span::before { transform:rotate(90deg); }
+#advancedPanel.console-ready .console-asset-actions > summary small { color:var(--muted); font-size:10px; font-weight:400; }
+#advancedPanel.console-ready .console-asset-action-body { display:flex; flex-wrap:wrap; gap:5px; padding:6px 0 3px; border-top:1px solid var(--line); }
+#advancedPanel.console-ready .console-asset-action-body > button { flex:1 1 52px; min-width:0; min-height:28px; padding:5px; border:1px solid var(--line-strong); border-radius:3px; background:var(--surface-inset); color:var(--paper); font:500 10px/1.4 var(--font); white-space:normal; }
+#advancedPanel.console-ready .console-asset-action-body > :is(.media-asset-usage,.media-preview-repair,a) { flex-basis:100%; }
+#advancedPanel.console-ready .console-asset-action-body :is([data-find-uses],[data-repair-preview],[data-repair-check],[data-repair-cancel]) { min-height:28px; font-size:10px; padding:5px 7px; }
+#advancedPanel.console-ready .console-asset-action-body .media-asset-usage { padding:5px 0 0; }
+#advancedPanel.console-ready .console-asset-action-body .media-preview-repair { padding-top:7px; }
+#advancedPanel.console-ready #studioShelfMedia[data-library-view=grid] .console-asset-actions { grid-row:auto; }
+#advancedPanel.console-ready #studioShelfMedia .media-help { margin:4px 0; padding:8px 4px; border:0; font-size:10px; }
+/* Inspector: essentials first, technical sections calm and clearly grouped. */
+#advancedPanel.console-ready #studioInspector .studio-tool-intro { margin:0 0 12px; padding:0 0 12px; gap:8px; }
+#advancedPanel.console-ready #studioInspector :is(.panel-title,.studio-tool-intro h3) { font-size:14px; letter-spacing:-.015em; font-weight:600; }
+#advancedPanel.console-ready #studioInspector .studio-tool-intro > span { line-height:1.5; font-size:11px; }
+#advancedPanel.console-ready #studioInspector :is(.inspector-section,.editor-more,.framing-disclosure,.caption-settings-disclosure) { border:0; border-bottom:1px solid var(--line); border-radius:0; background:transparent; margin-block:0 8px; }
+#advancedPanel.console-ready #studioInspector :is(.inspector-section,.editor-more,.framing-disclosure,.caption-settings-disclosure) > summary { min-height:36px; padding:10px 2px; font-size:11px; font-weight:600; }
+#advancedPanel.console-ready #studioInspector .editor-more-panel { padding:4px 0 12px; gap:5px; }
+#advancedPanel.console-ready #studioInspector .editor-more-panel > button { min-height:31px; font-size:11px; border-color:var(--line); border-radius:4px; background:var(--surface-inset); }
+#advancedPanel.console-ready #studioInspector :is(input:not([type=range]):not([type=checkbox]):not([type=radio]),select) { min-height:31px; font-size:11px; border-color:var(--line-strong); background:var(--surface-inset); }
+#advancedPanel.console-ready #studioInspector label { font-size:11px; }
+#advancedPanel.console-ready #studioInspector .media-selected-name { font-size:13px; font-weight:600; padding-block:4px 12px; border-bottom:1px solid var(--line); }
+#advancedPanel.console-ready #studioInspector .layer-enabled-control { margin-top:10px; font-size:11px; }
+#advancedPanel.console-ready #studioInspector .layer-enabled-note { font-size:10px; line-height:1.5; margin-bottom:10px; }
+#advancedPanel.console-ready #studioInspector .media-selection-empty { border:0; padding:18px 8px; border-radius:4px; background:var(--surface-inset); color:var(--muted); font-size:12px; line-height:1.65; text-align:center; }
+#advancedPanel.console-ready #studioInspector .media-selection-empty::before { content:''; display:block; width:30px; height:22px; margin:0 auto 13px; border:1px solid var(--line-strong); border-inline-start:4px solid var(--cyan); border-radius:3px; }
+#advancedPanel.console-ready #studioInspector .edit-tool-switch { margin-bottom:12px; }
+/* AI is a working request beside the edit, never an ornamental chatbot. */
+#advancedPanel.console-ready #workbenchAIPanel .workbench-ai-intro { padding:1px 0 14px; border-bottom:1px solid var(--line); margin-bottom:14px; }
+#advancedPanel.console-ready #workbenchAIPanel .workbench-ai-intro h3 { font-size:19px; letter-spacing:-.03em; margin-bottom:6px; }
+#advancedPanel.console-ready #workbenchAIPanel .workbench-ai-intro p { font-size:11px; line-height:1.55; margin:0; }
+#advancedPanel.console-ready #workbenchAIBrief .instruction-group textarea { min-height:132px; padding:12px; border-color:var(--line-strong); border-radius:6px; background:var(--surface-inset); font-size:12px; line-height:1.6; }
+#advancedPanel.console-ready #workbenchAIBrief #generateButton { border-radius:5px; min-height:44px; }
+#advancedPanel.console-ready #workbenchAIPanel .workbench-ai-request-status { border:0; border-inline-start:2px solid var(--signal); padding:0 0 0 9px; background:transparent; color:var(--paper-dim); }
+[dir=rtl] #advancedPanel.console-ready #workbenchAIPanel .workbench-ai-request-status { padding:0 9px 0 0; }
+/* Transport and timeline look related but remain independent real controls. */
+#advancedPanel.console-ready #studioPreviewDock .preview-controls { background:transparent; }
+#advancedPanel.console-ready #studioPreviewDock #playButton { border-color:transparent; background:var(--surface-raised); border-radius:4px; }
+#advancedPanel.console-ready #studioPreviewDock #previewMode { font-size:11px; border-color:var(--line); border-radius:4px; }
+#advancedPanel.console-ready .editor-toolbar-main { min-height:40px; background:var(--surface-chrome); border-bottom:1px solid var(--line); padding-inline:10px; gap:7px; }
+#advancedPanel.console-ready .timeline-tools { gap:2px; border:0; padding-inline-end:8px; margin-inline-end:2px; border-inline-end:1px solid var(--line); }
+#advancedPanel.console-ready .timeline-tools button { border-color:transparent; border-radius:4px; }
+#advancedPanel.console-ready .timeline-tools button[aria-pressed=true] { color:var(--signal-text); background:var(--surface-selected); border-color:var(--signal); }
+#advancedPanel.console-ready .timeline-navigation { background:var(--surface-inset); border-color:var(--line); padding-inline:10px; }
+#advancedPanel.console-ready .timeline-navigation button { border-color:var(--line); border-radius:3px; }
+#advancedPanel.console-ready #timelineTimecode { background:var(--surface-chrome); border-color:var(--line); font-size:11px; font-weight:600; color:var(--paper); }
+#advancedPanel.console-ready .track-header { background:var(--surface-chrome); border-color:var(--line); }
+#advancedPanel.console-ready .track-header .track-name { font-weight:500; font-size:11px; }
+#advancedPanel.console-ready > .advanced-tabs { background:var(--ink); border-top:1px solid var(--line); }
+#advancedPanel.console-ready > .advanced-tabs button { gap:8px; font-size:11px; }
+#advancedPanel.console-ready > .advanced-tabs button span { font-size:11px; }
+#advancedPanel.console-ready > .advanced-tabs button.active { background:var(--surface-panel); box-shadow:inset 0 2px var(--signal); color:var(--paper); }
+#advancedPanel.console-ready > .advanced-tabs button.active .ui-icon { color:var(--signal-text); }
+/* Consistent neutral-gray day material, including the inherited monitor tokens. */
+html[data-theme=light] #advancedPanel.console-ready :is(.studio-preview-dock,.timeline-scroll) { --paper:#222731; --paper-dim:#343c49; --muted:#3b4452; --surface-chrome:#bdc3cb; --surface-panel:#cbd0d6; --surface-inset:#b5bdc7; --surface-raised:#d7dbe0; --surface-hover:#a9b3c0; --line:#96a0af; --line-strong:#6f7b8d; --cyan-text:#254e65; }
+/* Home is a project launcher in the same application, not a sales page. */
+.console-shell .welcome-shell.home-hub { padding-top:40px; gap:28px 48px; }
+.console-shell .home-hub .welcome-copy h1 { font-size:clamp(30px,3.2vw,43px); max-width:9em; font-weight:550; }
+.console-shell .home-hub .welcome-copy h1 em { color:var(--signal-text); }
+.console-shell .home-hub .service-card { border-color:var(--line); border-radius:6px; background:var(--surface-chrome); }
+.console-shell .home-hub .service-card:hover { border-color:var(--line-strong); background:var(--surface-panel); }
+.console-shell .home-hub .service-copy strong { font-size:15px; }
+.console-shell .home-hub .recent-project-card { border-color:var(--line); border-radius:6px; }
+/* Compact devices keep every action reachable and native 44px hit targets. */
+@media (max-width:1100px) and (min-width:900px) {
+  body.studio-open.console-shell .app-chrome .topbar { gap:8px; padding-inline:10px; }
+  body.studio-open.console-shell .topbar .brand { padding-inline-end:10px; }
+  body.studio-open.console-shell .topbar .brand strong { font-size:12px; }
+  body.studio-open.console-shell .topbar .project-head { flex-basis:190px; }
+  body.studio-open.console-shell .topbar .project-name { font-size:11px; }
+}
+@media (max-width:899px),(max-height:539px) {
+  body.studio-open.console-shell .app-chrome .topbar { height:auto; min-height:48px; display:grid; grid-template-columns:auto minmax(0,1fr); grid-template-rows:44px 36px; gap:2px 8px; padding:4px 10px; }
+  body.studio-open.console-shell .topbar .brand { grid-row:1; grid-column:1; border:0; padding:0; }
+  body.studio-open.console-shell .topbar .top-actions { grid-row:1; grid-column:2; justify-self:end; }
+  body.studio-open.console-shell .topbar .project-head { grid-row:2; grid-column:1/-1; width:100%; min-width:0; }
+  body.studio-open.console-shell .topbar .save-state { display:inline-flex; }
+  body.studio-open.console-shell .console-menu > summary { min-height:40px; font-size:11px; padding-inline:6px; }
+  body.studio-open.console-shell .topbar #renderButton { min-height:36px; min-width:74px; padding-inline:9px; }
+  body.studio-open.console-shell .top-actions > #projectsButton { display:none; }
+  body.studio-open.console-shell .top-actions > .manual-history-actions { display:none; }
+  .console-menu-panel { position:fixed; inset-block-start:48px; inset-inline-end:10px; width:min(260px,calc(100vw - 32px)); }
+  body.studio-open.console-shell #consoleMenu .console-menu-panel > button { min-height:44px; }
+  #advancedPanel.console-ready #studioShelfMedia .library-search { min-height:40px; font-size:16px; }
+  #advancedPanel.console-ready #studioShelfMedia .library-filter button,#advancedPanel.console-ready #studioShelfMedia .library-view button,.console-library-options > summary { min-height:36px; }
+  #advancedPanel.console-ready .console-asset-actions > summary,#advancedPanel.console-ready .console-asset-action-body > button,#advancedPanel.console-ready .console-asset-action-body :is([data-find-uses],[data-repair-preview],[data-repair-check],[data-repair-cancel]) { min-height:44px; }
+  #advancedPanel.console-ready #studioInspector :is(input:not([type=range]):not([type=checkbox]):not([type=radio]),select),#advancedPanel.console-ready #studioInspector .editor-more-panel > button { min-height:44px; font-size:14px; }
+  #advancedPanel.console-ready #studioShelf .shelf-heading { position:static; }
+  #advancedPanel.console-ready #workbenchAIBrief .instruction-group textarea { font-size:16px; }
+}
+@media (max-width:420px) {
+  body.studio-open.console-shell .topbar .brand strong { font-size:11px; }
+  body.studio-open.console-shell .topbar .brand-mark { display:none; }
+  body.studio-open.console-shell .topbar .top-actions { gap:2px; }
+  body.studio-open.console-shell .topbar #themeToggle { min-width:28px; width:28px; padding-inline:0; }
+  body.studio-open.console-shell .console-menu > summary { font-size:10px; }
+}
+.console-ready :is(button,input,select,textarea,summary):focus-visible,.console-menu > summary:focus-visible { outline:2px solid var(--focus-ring); outline-offset:2px; }
+@media (prefers-reduced-motion:reduce) { .console-shell :is(button,summary,input,select,textarea) { transition:none; } }
+@media (forced-colors:active) {
+  .console-menu-panel,.console-library-options > .library-usage-label { border:1px solid ButtonText; background:Canvas; }
+  .console-ready :is(button,input,select,textarea,summary):focus-visible,.console-menu > summary:focus-visible { outline-color:Highlight; }
+  #advancedPanel.console-ready .timeline-tools button[aria-pressed=true],#advancedPanel.console-ready > .advanced-tabs button.active { border:1px solid Highlight; }
+}
+/* Compact header retains native Projects and history in the same menu. */
+body.studio-open.console-shell #consoleMenu .manual-history-actions { display:flex; gap:6px; padding:8px 10px; margin:4px 0 0; border:0; border-top:1px solid var(--line); }
+body.studio-open.console-shell #consoleMenu .manual-history-actions button { min-height:40px; min-width:44px; border:1px solid var(--line); border-radius:4px; background:var(--surface-inset); }
+/* Legacy phone chrome used absolute Export and a third-row project ID. Own the
+   compact composition explicitly so native actions cannot overlap each other. */
+@media (max-width:899px),(max-height:539px) {
+  body.studio-open.console-shell #appChrome .topbar { grid-template-columns:minmax(76px,1fr) auto; grid-template-rows:44px 36px; }
+  body.studio-open.console-shell #appChrome #homeButton { grid-column:1; grid-row:1; width:auto; min-width:0; }
+  body.studio-open.console-shell #appChrome #projectHead { grid-column:1/-1; grid-row:2; width:100%; max-width:none; height:36px; margin:0; }
+  body.studio-open.console-shell #appChrome #projectName { min-height:32px; height:32px; width:100%; margin:0; }
+  body.studio-open.console-shell #appChrome #renderButton { position:static; inset:auto; height:36px; min-height:36px; min-width:74px; width:auto; margin-inline-start:3px; }
+  #advancedPanel.console-ready #workbenchMediaToggle { font-size:0; width:30px; min-width:30px; padding:4px; }
+}
+/* Preserve the native icon-only pool toggle below the desktop-wide breakpoint. */
+@media (max-width:1199px),(max-height:539px) {
+  #advancedPanel.console-ready #workbenchMediaToggle { font-size:0; gap:0; width:30px; min-width:30px; padding:4px; }
+}
+#advancedPanel.console-ready .console-asset-actions > summary small::before { display:none; }
+
+/* First recording: a useful work surface instead of an empty black player.
+   The guide and file picker never cover real, retained or partially imported media. */
+.first-recording-guide[hidden] { display:none !important; }
+.first-recording-guide:not([hidden]) { display:flex; align-items:stretch; justify-content:center; inline-size:100%; block-size:100%; min-block-size:0; box-sizing:border-box; overflow:auto; padding:clamp(6px,2vw,20px); color:var(--paper); background:var(--surface-inset); border:1px dashed var(--line-strong); border-radius:6px; }
+.first-recording-body { display:flex; align-items:center; flex-direction:column; align-self:safe center; max-inline-size:40ch; text-align:center; }
+.first-recording-mark { width:78px; height:48px; flex:none; color:var(--line-strong); margin-block-end:14px; }
+.first-recording-outline { stroke:var(--line-strong); fill:var(--surface-panel); }
+.first-recording-rule { stroke:var(--line-strong); }
+.first-recording-strip { fill:var(--signal); }
+.first-recording-audio { fill:var(--cyan); }
+.first-recording-head { stroke:var(--paper); }
+.first-recording-cap { fill:var(--paper); }
+.first-recording-body h2 { color:var(--paper); font-size:clamp(19px,2vw,28px); line-height:1.1; letter-spacing:-.035em; font-weight:600; margin:0; }
+.first-recording-body p { color:var(--paper-dim); font-size:13px; line-height:1.5; max-inline-size:36ch; margin:8px 0 16px; }
+.first-recording-body [data-first-choose] { flex:none; min-height:44px; padding:0 20px; border:1px solid transparent; border-radius:5px; background:var(--primary-fill); color:var(--ink); font-size:13px; font-weight:650; }
+html[data-theme=light] .first-recording-body [data-first-choose] { color:#fff; }
+.first-recording-body [data-first-choose]:focus-visible { outline:2px solid var(--focus-ring); outline-offset:3px; }
+.first-recording-body [data-first-choose]:disabled { cursor:wait; opacity:.6; }
+.first-recording-status { display:block; font-size:12px; line-height:1.45; color:var(--paper); overflow-wrap:anywhere; }
+.first-recording-status:not(:empty) { margin-block-start:9px; }
+.first-recording-guide[data-dragging] { border-style:solid; border-color:var(--cyan); box-shadow:inset 0 0 0 1px var(--cyan); }
+.first-recording-guide:not([hidden]) + .preview-stage,
+#advancedPanel:has(.first-recording-guide:not([hidden])) #emptyTimeline { display:none; }
+#studioPreviewDock .preview-column:has(.first-recording-guide:not([hidden])) .preview-controls { visibility:hidden; }
+@container (max-height:250px) { .first-recording-mark { height:26px; width:44px; margin-block-end:6px; } .first-recording-body p { margin:4px 0 8px; } }
+@container (max-height:165px) { .first-recording-mark { display:none; } .first-recording-body h2 { font-size:18px; } }
+@media (forced-colors:active) { .first-recording-guide[data-dragging], .first-recording-body [data-first-choose] { border:2px solid Highlight; } .first-recording-mark { display:none; } }
+
+/* Master and the four actual input faders lead the Audio workspace. */
+#advancedPanel.console-ready #studioPanelAudio > .panel-title { font-size:17px; font-weight:600; letter-spacing:-.02em; margin-block:0 4px; }
+#advancedPanel.console-ready #studioPanelAudio > .mixer-save-status { margin-block:0 10px; color:var(--muted); line-height:1.4; }
+#advancedPanel.console-ready #studioPanelAudio .mixer-body { gap:10px; }
+#advancedPanel.console-ready #studioPanelAudio .mixer-bank-label { display:flex; flex-wrap:wrap; align-items:baseline; justify-content:space-between; gap:3px 8px; margin-block:4px -2px; }
+#advancedPanel.console-ready #studioPanelAudio .mixer-bank-label h4 { margin:0; color:var(--paper); font-size:13px; font-weight:650; }
+#advancedPanel.console-ready #studioPanelAudio .mixer-bank-label small { color:var(--paper-dim); font-size:11px; line-height:1.35; }
+#advancedPanel.console-ready #studioPanelAudio .mixer-master .mixer-channel { margin:0; border-inline-start:3px solid var(--cyan); border-radius:5px; background:var(--surface-panel); }
+#advancedPanel.console-ready #studioPanelAudio .mixer-reference { border-block-start:1px solid var(--line); padding-block:3px; }
+#advancedPanel.console-ready #studioPanelAudio .mixer-reference > summary { display:list-item; color:var(--paper-dim); font-size:12px; padding-block:8px; cursor:pointer; }
+#advancedPanel.console-ready #studioPanelAudio .mixer-reference[open] > summary { color:var(--paper); }
+#advancedPanel.console-ready #studioPanelAudio .mixer-reference > p { margin-block:4px; }
+#advancedPanel.console-ready #studioPanelAudio .track-level-mount { margin-block-start:13px; }
+#advancedPanel.console-ready #studioPanelAudio .track-level-controls > summary { color:var(--paper-dim); }
+#advancedPanel.console-ready #studioPanelAudio .track-level-controls[open] > summary { color:var(--paper); }
+@media (min-width:900px) and (pointer:fine) {
+  @container audio-mixer (min-width:248px) and (max-width:330px) {
+    #advancedPanel.console-ready #studioPanelAudio .audio-mixer .mixer-channels { grid-template-columns:repeat(4,minmax(0,1fr)); gap:3px; }
+    #advancedPanel.console-ready #studioPanelAudio .mixer-channels .mixer-channel { --fader-height:115px; margin:0; padding:7px 3px 5px; grid-template-columns:minmax(0,1fr) 5px; grid-template-rows:50px var(--fader-height) 17px auto; gap:4px 1px; }
+    #advancedPanel.console-ready #studioPanelAudio .mixer-channels .mixer-channel-heading { gap:3px; }
+    #advancedPanel.console-ready #studioPanelAudio .mixer-channels .mixer-channel-heading > span[data-channel-name] { font-size:10px; }
+    #advancedPanel.console-ready #studioPanelAudio .mixer-channels .mixer-db { gap:1px; font-size:9px; }
+    #advancedPanel.console-ready #studioPanelAudio .mixer-channels .mixer-db input { width:35px; padding-inline:1px; }
+    #advancedPanel.console-ready #studioPanelAudio .mixer-channels .mixer-fader-lane { grid-template-columns:14px 23px; gap:0; }
+    #advancedPanel.console-ready #studioPanelAudio .mixer-channels .mixer-fader-scale { font-size:8px; }
+    #advancedPanel.console-ready #studioPanelAudio .mixer-channels .mixer-fader-control { width:23px; }
+    #advancedPanel.console-ready #studioPanelAudio .mixer-channels .mixer-signal-value { font-size:9px; }
+    #advancedPanel.console-ready #studioPanelAudio .mixer-channels .mixer-channel-meter { width:5px; }
+    #advancedPanel.console-ready #studioPanelAudio .mixer-channels .mixer-channel-actions { gap:2px; }
+    #advancedPanel.console-ready #studioPanelAudio .mixer-channels .mixer-channel-actions button { min-height:25px; height:25px; padding:0; }
+  }
+}
+@media (max-width:899px) {
+  #advancedPanel.console-ready #studioPanelAudio .mixer-reference > summary,
+  #advancedPanel.console-ready #studioPanelAudio .track-level-controls > summary { min-height:44px; padding-block:12px; box-sizing:border-box; }
+}
+
+/* Touch input fields are 44px tall: reserve their full label row instead of
+   flex-shrinking the channel name to zero, and do not crowd M/S buttons. */
+@media (max-width:899px) {
+  @container audio-mixer (max-width:430px) {
+    #advancedPanel.console-ready #studioPanelAudio .audio-mixer .mixer-channels { grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+    #advancedPanel.console-ready #studioPanelAudio .mixer-channels .mixer-channel { --fader-height:115px; grid-template-rows:72px var(--fader-height) 18px auto; }
+    #advancedPanel.console-ready #studioPanelAudio .mixer-channels .mixer-channel-heading > [data-channel-name] { flex:none; line-height:1.3; }
+    #advancedPanel.console-ready #studioPanelAudio .mixer-channels .mixer-channel-actions button { min-height:44px; height:44px; }
+  }
+}
+
+/* Session-only playback state, independent of timeline snapping/edit tools. */
+.timeline-navigation #timelineLoopRange { min-inline-size:86px; }
+.timeline-navigation #timelineLoopRange[aria-pressed="true"] {
+  color:var(--cyan-text); background:var(--surface-selected); border-color:var(--cyan); font-weight:650;
+}
+.timeline-navigation #timelineLoopRange[aria-pressed="true"]::before { content:'\2713'; margin-inline-end:4px; }
+.timeline-navigation #timelineLoopRange:focus-visible { outline:2px solid var(--focus-ring); outline-offset:1px; }
+.timeline-navigation #timelineLoopRange[hidden] { display:none; }
+@media (forced-colors:active) {
+  .timeline-navigation #timelineLoopRange[aria-pressed="true"] { outline:2px solid Highlight; }
+}
+
+/* Delivery stays inside the editing workflow: true output facts, native controls,
+   and a stable action row even when a previous export has a long review. */
+#advancedPanel .output-review-summary { display:grid; grid-template-columns:minmax(0,1fr); gap:10px; margin:0 0 14px; padding:12px; border:1px solid var(--line); border-radius:4px; background:var(--surface-inset); }
+#advancedPanel .output-review-summary > div { display:grid; gap:4px; min-width:0; }
+#advancedPanel .output-review-summary small { color:var(--muted); font:400 11px/1.4 var(--font); }
+#advancedPanel .output-review-summary b { color:var(--paper); font:600 13px/1.5 var(--font); font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+#exportDialog { width:min(560px,calc(100vw - 24px)); padding:0; overflow:hidden; text-align:start; background:var(--surface-panel); }
+#exportDialog .export-shell { display:flex; flex-direction:column; max-height:min(780px,calc(100dvh - 24px)); padding:0; overflow:hidden; text-align:start; }
+#exportDialog .export-header { display:flex; flex:none; align-items:center; justify-content:space-between; gap:16px; padding:18px 22px; border-bottom:1px solid var(--line); background:var(--surface-chrome); }
+#exportDialog .export-header h2 { margin:0; font:600 21px/1.25 var(--font); letter-spacing:-.02em; }
+#exportDialog .export-header .icon-button { flex:none; width:36px; height:36px; }
+#exportDialog .export-body { min-height:0; min-width:0; overflow:auto; overscroll-behavior:contain; scrollbar-gutter:stable; padding:16px 22px 20px; }
+#exportDialog .export-body > p:first-child { margin-top:0; color:var(--paper-dim); font-size:13px; line-height:1.5; }
+#exportDialog .export-summary { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); padding:0; margin:16px 0 10px; border:1px solid var(--line); border-radius:4px; background:var(--surface-inset); }
+#exportDialog .export-summary > div { display:flex; flex-direction:column; gap:4px; justify-content:center; min-width:0; padding:12px 10px; border:0; }
+#exportDialog .export-summary > div + div { border-inline-start:1px solid var(--line); }
+#exportDialog .export-summary b { font:600 14px/1.45 var(--font); font-variant-numeric:tabular-nums; direction:ltr; unicode-bidi:plaintext; }
+#exportDialog .export-summary small { font:400 11px/1.4 var(--font); color:var(--muted); margin:0; }
+#exportDialog #reviewOutputSettings { margin:0 0 10px; padding:7px 0; min-height:32px; color:var(--cyan-text); }
+#exportDialog .export-fps-field { margin-block:12px; text-align:start; }
+#exportDialog .export-actions { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.4fr); flex:none; gap:10px; padding:14px 22px; border-top:1px solid var(--line); background:var(--surface-chrome); }
+#exportDialog .export-actions button { min-height:42px; }
+#exportDialog [hidden] { display:none !important; }
+#exportDialog:has(#exportActions:not([hidden])) #downloadExport:not([hidden]) { margin-top:16px; background:transparent; color:var(--paper); border:1px solid var(--line-strong); }
+#exportDialog :is(button,select,a):focus-visible { outline:2px solid var(--focus-ring); outline-offset:2px; }
+@media (max-width:600px) {
+  #exportDialog .export-header { padding:12px 14px; }
+  #exportDialog .export-header h2 { font-size:19px; }
+  #exportDialog .export-body { padding:14px; }
+  #exportDialog .export-actions { padding:12px 14px; gap:8px; }
+  #exportDialog .export-actions button,#exportDialog .export-header .icon-button,#exportDialog #reviewOutputSettings { min-height:44px; }
+  #exportDialog .export-summary > div { padding:9px 7px; }
+  #exportDialog .export-summary b { font-size:12px; }
+}
+@media (forced-colors:active) { #exportDialog :is(button,select,a):focus-visible { outline-color:Highlight; } }

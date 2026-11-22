@@ -200,7 +200,7 @@ def resolve_visual_pass(
 
     if mode == "off":
         return skip("off")
-    if str(brief.get("goal") or "short") != "short":
+    if str(brief.get("goal") or "short") != "short" and str(brief.get("edit_style") or "") != "gameplay_youtube":
         return skip("not_short")
     if cloud:
         return skip("cloud_connection")

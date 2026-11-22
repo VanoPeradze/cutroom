@@ -398,7 +398,7 @@ def test_no_audio_in_either_source_builds_a_video_only_export_graph():
     graph, maps, has_audio = render.build_filter_graph(value, 1280, 720)
 
     assert "concat=n=1:v=1:a=0[vcat]" in graph
-    assert "trim=end_frame=300,setpts=N/30/TB[vout]" in graph
+    assert "trim=end_frame=300,settb=1/30,setpts=N[vout]" in graph
     assert maps == ["-map", "[vout]"]
     assert has_audio is False
 
@@ -968,7 +968,7 @@ def test_late_cancellation_after_export_commit_keeps_success_authoritative(
     assert (settings.exports_dir / result["export"]["name"]).is_file()
 
 
-def test_locked_stale_export_cleanup_cannot_fail_a_new_committed_export(
+def test_existing_export_path_is_untouched_by_new_export(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ):
@@ -992,6 +992,8 @@ def test_locked_stale_export_cleanup_cannot_fail_a_new_committed_export(
 
     assert result["export"]["id"] == store.project["exports"][0]["id"]
     assert (settings.exports_dir / "locked.mp4").is_dir()
+    assert len(store.project["exports"]) == 21
+    assert store.project["exports"][-1]["name"] == "locked.mp4"
 
 
 def test_cancellable_media_runner_terminates_a_long_process_quickly(tmp_path: Path):

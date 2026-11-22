@@ -1,3 +1,17 @@
+// Plot appearance is independent of measurement, quiet ranges and seek coordinates.
+export function audioThresholdPaint(canvas) {
+  let style;
+  try { style = typeof getComputedStyle === "function" ? getComputedStyle(canvas) : null; } catch {}
+  const color = (token, fallback) => style?.getPropertyValue?.(token)?.trim() || fallback;
+  return {
+    background: color("--timeline-bg", "#191b1f"), grid: color("--timeline-grid", "#3e434c"),
+    text: color("--timeline-text", "#c6c9cf"), wave: color("--timeline-wave", "#aac8c3"),
+    marker: color("--timeline-selected", "#efb28d"), danger: color("--timeline-danger", "#eea0a5"),
+    dangerSoft: color("--timeline-danger-soft", "rgba(238,160,165,.20)"),
+    font: 'Geist, "Noto Sans Hebrew", "Segoe UI", sans-serif',
+  };
+}
+
 export class AudioThresholdView {
   constructor(canvas) {
     this.canvas = canvas;
@@ -9,6 +23,12 @@ export class AudioThresholdView {
     this.dpr = Math.min(1.5, window.devicePixelRatio || 1);
     this.resizeObserver = new ResizeObserver(() => this.draw());
     this.resizeObserver.observe(canvas.parentElement || canvas);
+    // A paused plot follows the theme too. No audio graph, playback or project changes.
+    if (typeof MutationObserver === "function" && typeof document !== "undefined" && document.documentElement) {
+      this.themeObserver = new MutationObserver(() => this.draw());
+      this.themeObserver.observe(document.documentElement, {attributes: true, attributeFilter: ["data-theme"]});
+    }
+    if (typeof document !== "undefined") document.fonts?.ready?.then?.(() => this.draw(), () => {});
     this.plot = null;
     canvas.addEventListener("pointerdown", (event) => {
       if (!this.plot || !this.profile) return;
@@ -73,22 +93,23 @@ export class AudioThresholdView {
     this.canvas.height = Math.round(height * dpr);
     this.canvas.style.height = `${height}px`;
     const ctx = this.ctx;
+    const paint = audioThresholdPaint(this.canvas);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.fillStyle = "#081013"; ctx.fillRect(0, 0, width, height);
+    ctx.fillStyle = paint.background; ctx.fillRect(0, 0, width, height);
     const left = 42, right = 12, top = 12, bottom = 24;
     const graphW = width - left - right, graphH = height - top - bottom;
     const minDb = -72, maxDb = 0;
     const yForDb = (db) => top + (maxDb - Math.max(minDb, Math.min(maxDb, db))) / (maxDb - minDb) * graphH;
     for (const db of [-60, -48, -36, -24, -12, 0]) {
       const y = yForDb(db);
-      ctx.strokeStyle = "rgba(235,240,242,.09)"; ctx.lineWidth = 1;
+      ctx.strokeStyle = paint.grid; ctx.lineWidth = 1;
       ctx.beginPath(); ctx.moveTo(left, y); ctx.lineTo(width - right, y); ctx.stroke();
-      ctx.fillStyle = "#8da1a6"; ctx.font = "10px ui-monospace,Consolas,monospace"; ctx.textAlign = "right";
+      ctx.fillStyle = paint.text; ctx.font = `10px ${paint.font}`; ctx.textAlign = "right";
       ctx.fillText(`${db}`, left - 7, y + 3);
     }
     const bins = this.profile?.waveform || [];
     if (!bins.length) {
-      ctx.fillStyle = "#8da1a6"; ctx.textAlign = "center"; ctx.font = "12px system-ui,sans-serif";
+      ctx.fillStyle = paint.text; ctx.textAlign = "center"; ctx.font = `12px ${paint.font}`;
       ctx.fillText("Measuring audio…", width / 2, height / 2);
       return;
     }
@@ -96,34 +117,34 @@ export class AudioThresholdView {
     const xForTime = (time) => left + Number(time) / Math.max(duration, .001) * graphW;
     this.plot = { left, graphW, duration };
     const thresholdY = yForDb(this.threshold);
-    ctx.fillStyle = "rgba(255,91,73,.07)"; ctx.fillRect(left, thresholdY, graphW, top + graphH - thresholdY);
+    ctx.fillStyle = paint.dangerSoft; ctx.fillRect(left, thresholdY, graphW, top + graphH - thresholdY);
     // Mark complete quiet candidates as vertical bands so the user can see where
     // a cut would happen, not only how low each waveform bin is.
     for (const range of this.quietRanges()) {
       const x1 = xForTime(range.start), x2 = xForTime(range.end);
-      ctx.fillStyle = "rgba(255,91,73,.105)";
+      ctx.fillStyle = paint.dangerSoft;
       ctx.fillRect(x1, top, Math.max(1, x2 - x1), graphH);
-      ctx.fillStyle = "rgba(255,117,95,.9)";
+      ctx.fillStyle = paint.danger;
       ctx.fillRect(x1, top + graphH - 3, Math.max(2, x2 - x1), 3);
     }
     for (const bin of bins) {
       const start = Number(bin.start || 0), end = Number(bin.end || start);
       const x = xForTime((start + end) / 2);
       const rms = Number(bin.rms_dbfs ?? -72), peak = Number(bin.peak_dbfs ?? rms);
-      ctx.strokeStyle = rms < this.threshold ? "rgba(255,117,95,.90)" : "rgba(68,185,198,.82)";
+      ctx.strokeStyle = rms < this.threshold ? paint.danger : paint.wave;
       ctx.lineWidth = Math.max(1, graphW / bins.length * .72);
       ctx.beginPath(); ctx.moveTo(x, yForDb(Math.max(minDb, rms))); ctx.lineTo(x, yForDb(Math.min(0, peak))); ctx.stroke();
     }
-    ctx.strokeStyle = "#c9b62c"; ctx.lineWidth = 1.5; ctx.setLineDash([6,4]);
+    ctx.strokeStyle = paint.marker; ctx.lineWidth = 1.5; ctx.setLineDash([6,4]);
     ctx.beginPath(); ctx.moveTo(left, thresholdY); ctx.lineTo(width - right, thresholdY); ctx.stroke(); ctx.setLineDash([]);
-    ctx.fillStyle = "#c9b62c"; ctx.font = "700 10px ui-monospace,Consolas,monospace"; ctx.textAlign = "left";
+    ctx.fillStyle = paint.marker; ctx.font = `700 10px ${paint.font}`; ctx.textAlign = "left";
     ctx.fillText(`${this.threshold.toFixed(0)} dB`, left + 7, Math.max(11, thresholdY - 5));
-    ctx.fillStyle = "#8da1a6"; ctx.font = "10px ui-monospace,Consolas,monospace";
+    ctx.fillStyle = paint.text; ctx.font = `10px ${paint.font}`;
     for (let index = 0; index <= 4; index += 1) {
       const ratio = index / 4;
       const x = left + graphW * ratio;
       if (index > 0 && index < 4) {
-        ctx.strokeStyle = "rgba(235,240,242,.055)"; ctx.lineWidth = 1;
+        ctx.strokeStyle = paint.grid; ctx.lineWidth = 1;
         ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, top + graphH); ctx.stroke();
       }
       ctx.textAlign = index === 0 ? "left" : index === 4 ? "right" : "center";

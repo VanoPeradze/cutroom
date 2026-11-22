@@ -1,0 +1,136 @@
+/* Local geometry and access only. The timeline canvas, scene pixels, timing,
+   native edit controls and dashboard navigation stay in their original systems. */
+#studioTimelineDock .timeline-track-pager {
+  display:inline-flex; align-items:center; gap:3px; flex:0 0 auto; min-width:0;
+  padding-inline-start:7px; margin-inline-start:4px; border-inline-start:1px solid var(--line-strong);
+  color:var(--paper-dim); font:500 11px/1.2 var(--font); white-space:nowrap;
+}
+#studioTimelineDock .timeline-track-pager[hidden], #timelineCommandTrigger[hidden],
+#timelineCommandDialog:not([open]), #timelineCommandDialog [hidden] { display:none !important; }
+#studioTimelineDock .track-pager-count {
+  color:var(--muted); font-size:10px; font-variant-numeric:tabular-nums; direction:ltr; unicode-bidi:isolate; margin-inline-end:3px;
+}
+#studioTimelineDock .timeline-track-pager button {
+  display:grid; place-items:center; width:28px; min-width:28px; height:25px; min-height:25px; margin:0; padding:0;
+  color:var(--paper-dim); background:var(--surface-inset); border:1px solid var(--line); border-radius:3px;
+}
+#studioTimelineDock .timeline-track-pager button::before {
+  content:""; width:7px; height:7px; border-block-start:1.5px solid currentColor; border-inline-start:1.5px solid currentColor; transform:translateY(2px) rotate(45deg);
+}
+#studioTimelineDock .timeline-track-pager .track-pager-down::before { transform:translateY(-2px) rotate(225deg); }
+[dir=rtl] #studioTimelineDock .timeline-track-pager button::before { transform:translateY(2px) rotate(-45deg); }
+[dir=rtl] #studioTimelineDock .timeline-track-pager .track-pager-down::before { transform:translateY(-2px) rotate(135deg); }
+#studioTimelineDock .timeline-track-pager button:disabled { opacity:.42; cursor:default; }
+#studioTimelineDock .timeline-track-pager button:not(:disabled):hover { color:var(--paper); background:var(--surface-hover); }
+#studioTimelineDock .timeline-track-pager button:focus-visible, #timelineCommandTrigger:focus-visible,
+#timelineCommandDialog :is(button,select):focus-visible { outline:2px solid var(--focus-ring); outline-offset:-2px; }
+/* Keep the established monitor tracks and the user's original divider preference.
+   Only the compact, scrolling timeline gets a minimum usable track viewport. */
+body.studio-open #advancedPanel:is([data-timeline-strip=small],[data-timeline-strip=medium]) {
+  --workspace-timeline-height:max(var(--timeline-command-natural-height,256px),var(--timeline-command-min-height,0px)) !important;
+}
+#advancedPanel:is([data-timeline-strip=small],[data-timeline-strip=medium]) #studioTimelineDock { scroll-margin-block-start:0; }
+/* A single stable tools row. Original rarer commands move to the labeled sheet
+   only when needed; at tablet sizes the zoom controls still fit directly. */
+#advancedPanel:is([data-timeline-strip=small],[data-timeline-strip=medium]) #studioTimelineDock .editor-toolbar-main {
+  display:flex; flex-flow:row nowrap; align-items:center; justify-content:flex-start; gap:6px;
+  width:100%; min-width:0; height:48px; min-height:48px; flex:0 0 48px; padding:2px 8px; box-sizing:border-box;
+  overflow:visible; border-bottom:1px solid var(--line); background:var(--surface-chrome);
+}
+#advancedPanel:is([data-timeline-strip=small],[data-timeline-strip=medium]) .editor-toolbar-main > .timeline-tools {
+  display:inline-flex; flex:0 0 auto; align-items:center; gap:1px; margin:0; padding:0; border:0;
+}
+#advancedPanel:is([data-timeline-strip=small],[data-timeline-strip=medium]) .editor-toolbar-main .timeline-tools button,
+#advancedPanel:is([data-timeline-strip=small],[data-timeline-strip=medium]) #timelineSnap {
+  box-sizing:border-box; width:44px; min-width:44px; max-width:44px; height:44px; min-height:44px;
+}
+#advancedPanel:is([data-timeline-strip=small],[data-timeline-strip=medium]) #timelineSnap { flex:none; margin:0; }
+#advancedPanel:is([data-timeline-strip=small],[data-timeline-strip=medium]) .editor-toolbar-main > .timeline-context {
+  position:absolute; width:1px; height:1px; padding:0; margin:-1px; clip-path:inset(50%); overflow:hidden; white-space:nowrap;
+}
+#advancedPanel:is([data-timeline-strip=small],[data-timeline-strip=medium]):not([hidden]) #timelineCommandTrigger {
+  display:inline-flex; align-items:center; justify-content:center; flex:none; gap:8px; box-sizing:border-box;
+  min-width:0; min-height:44px; height:44px; margin-inline-start:auto; padding:0 11px;
+  border:1px solid var(--control-line); border-radius:4px; color:var(--paper); background:var(--surface-raised);
+  font:600 12px/1.2 var(--font); white-space:nowrap;
+}
+#timelineCommandTrigger::after { content:""; width:6px; height:6px; border-block-end:1.5px solid currentColor; border-inline-end:1.5px solid currentColor; transform:translateY(-2px) rotate(45deg); }
+[dir=rtl] #timelineCommandTrigger::after { transform:translateY(-2px) rotate(-45deg); }
+#advancedPanel[data-timeline-strip=medium] .editor-toolbar-main > .timeline-zoom-controls { margin-inline-start:auto; }
+#advancedPanel[data-timeline-strip=medium]:not([hidden]) #timelineCommandTrigger { margin-inline-start:4px; }
+#advancedPanel[data-timeline-strip=medium] .editor-toolbar-main > .timeline-zoom-controls button { min-width:40px; height:40px; }
+/* The original title, state, focus and events stay on each real control. */
+#timelineCommandDialog {
+  position:fixed; inset:0; box-sizing:border-box; width:min(420px,calc(100vw - 24px)); max-width:none;
+  max-height:calc(100dvh - 32px); height:max-content; margin:auto; padding:0; overflow:auto; overscroll-behavior:contain;
+  border:1px solid var(--line-strong); border-radius:8px; background:var(--surface-panel); color:var(--paper);
+  box-shadow:0 16px 54px #0005; text-align:start; white-space:normal;
+}
+#timelineCommandDialog::backdrop { background:rgb(12 15 20 / .57); }
+#timelineCommandDialog .command-heading {
+  display:flex; align-items:center; justify-content:space-between; gap:10px; position:sticky; inset-block-start:0; z-index:1;
+  margin:0; padding:8px 12px 8px 16px; background:var(--surface-chrome); border-block-end:1px solid var(--line);
+}
+#timelineCommandDialog h2 { margin:0; color:var(--paper); font:650 17px/1.25 var(--font); }
+#timelineCommandDialog h3 { margin:0 0 8px; color:var(--paper-dim); font:600 12px/1.35 var(--font); }
+#timelineCommandDialog .command-section { display:block; margin:0; padding:12px 16px; border:0; border-block-end:1px solid var(--line); }
+#timelineCommandDialog .command-section:last-child { border-block-end:0; }
+#timelineCommandDialog .command-target:not(:has(#timelineTargetField:not([hidden]))) { display:none; }
+#timelineCommandDialog .command-items { display:grid; grid-template-columns:minmax(0,1fr); gap:6px; }
+#timelineCommandDialog .command-heading button, #timelineCommandDialog .command-items :is(button,select) {
+  box-sizing:border-box; display:inline-flex; align-items:center; justify-content:center; gap:7px;
+  min-height:44px; height:auto; width:auto; max-width:100%; min-width:0; padding:7px 10px;
+  border:1px solid var(--control-line); border-radius:4px; color:var(--paper); background:var(--surface-raised);
+  font:500 12px/1.35 var(--font) !important; letter-spacing:normal; white-space:normal; text-align:start;
+}
+#timelineCommandDialog .command-actions .command-items { grid-template-columns:repeat(2,minmax(0,1fr)); }
+#timelineCommandDialog .command-actions .command-items button { justify-content:flex-start; }
+#timelineCommandDialog .command-actions .command-items button::before { flex:none; margin-inline-end:3px; width:16px; height:16px; }
+#timelineCommandDialog .command-items :is(button,select):disabled { opacity:.5; }
+#timelineCommandDialog .command-items button:not(:disabled):hover, #timelineCommandDialog .command-close:hover { background:var(--surface-hover); }
+#timelineCommandDialog #timelineTargetField { display:flex; align-items:center; justify-content:space-between; gap:12px; min-width:0; margin:0; padding:0; color:var(--muted); font:12px/1.4 var(--font); }
+#timelineCommandDialog #timelineTarget { flex:1; max-width:calc(100% - 3.2em); width:100%; }
+#timelineCommandDialog .timeline-zoom-controls { display:grid; grid-template-columns:44px minmax(4em,1fr) 44px minmax(3.5em,1fr); align-items:center; gap:4px; width:100%; margin:0; padding:0; border:0; background:transparent; }
+#timelineCommandDialog #timelineZoomLabel { color:var(--paper); text-align:center; font:600 13px/1.2 var(--font); font-variant-numeric:tabular-nums; }
+/* The gutter preserves track names and native mute/lock targets without consuming
+   136px of every small display. No canvas time or row position is hard-coded. */
+@media(max-width:599px) {
+  #advancedPanel[data-timeline-strip=small] #studioTimelineDock { --compact-track-rail:clamp(94px,26vw,124px); }
+  #advancedPanel[data-timeline-strip=small] .timeline-track-headers { flex-basis:var(--compact-track-rail); }
+  #advancedPanel[data-timeline-strip=small] .track-header { gap:2px; padding-inline:5px 2px; }
+  #advancedPanel[data-timeline-strip=small] .track-header .track-actions { gap:1px; }
+  #advancedPanel[data-timeline-strip=small] .track-header .track-manage { padding-inline:1px; }
+  #advancedPanel[data-timeline-strip=small] .timeline-drop-feedback { inset-inline-start:calc(var(--compact-track-rail) + 9px); max-width:calc(100% - var(--compact-track-rail) - 18px); }
+  #advancedPanel[data-timeline-strip=small] .timeline-navigation { align-items:center; align-content:start; gap:2px 4px; padding-inline:6px; }
+  #advancedPanel[data-timeline-strip=small] .timeline-navigation > .timeline-track-pager { order:2; padding-inline-start:0; margin:0; border:0; gap:2px; }
+  #advancedPanel[data-timeline-strip=small] .timeline-navigation > .timeline-timecode-form { order:3; margin-inline-start:auto; margin-inline-end:0; }
+  #advancedPanel[data-timeline-strip=small] .timeline-navigation:has(> .timeline-track-pager:not([hidden]))::after { content:""; order:1; flex:0 0 100%; height:0; }
+  #advancedPanel[data-timeline-strip=small] .timeline-navigation .timeline-track-pager button,
+  #advancedPanel[data-timeline-strip=small] .timeline-timecode-form :is(#timelineTimecode,button) { min-height:32px; height:32px; }
+}
+@media(max-width:379px), (min-width:600px) and (max-width:759px) and (max-height:539px) {
+  #advancedPanel:is([data-timeline-strip=small],[data-timeline-strip=medium]) .timeline-navigation :is(#timelinePreviousEdit,#timelineNextEdit) {
+    position:relative; display:inline-flex; align-items:center; justify-content:center; width:38px; min-width:38px; height:30px; padding:0; font-size:0; line-height:0;
+  }
+  #advancedPanel:is([data-timeline-strip=small],[data-timeline-strip=medium]) .timeline-navigation #timelinePreviousEdit::before,
+  #advancedPanel:is([data-timeline-strip=small],[data-timeline-strip=medium]) .timeline-navigation #timelineNextEdit::after {
+    content:""; position:absolute; top:50%; left:50%; width:8px; height:8px; padding:0; border-left:1.5px solid currentColor; border-bottom:1.5px solid currentColor; transform:translate(-32%,-50%) rotate(45deg);
+  }
+  #advancedPanel:is([data-timeline-strip=small],[data-timeline-strip=medium]) .timeline-navigation #timelineNextEdit::after { transform:translate(-67%,-50%) rotate(225deg); }
+}
+@media(min-width:600px) and (max-width:759px) and (max-height:539px) {
+  #advancedPanel[data-timeline-strip=medium] .timeline-timecode-rate { position:absolute; width:1px; height:1px; clip-path:inset(50%); overflow:hidden; white-space:nowrap; }
+}
+/* Edit's native room jump targets the timeline itself: the work area already begins below app chrome. */
+body.studio-open #advancedPanel:is([data-timeline-strip=small],[data-timeline-strip=medium])[data-workspace=timeline] { scroll-padding-block-start:0; }
+@media(max-width:359px) {
+  #advancedPanel[data-timeline-strip=small] #studioTimelineDock .editor-toolbar-main { gap:4px; padding-inline:5px; }
+  #advancedPanel[data-timeline-strip=small] .editor-toolbar-main .timeline-tools button { min-width:40px; width:40px; max-width:40px; }
+  #advancedPanel[data-timeline-strip=small] .timeline-navigation { column-gap:2px; }
+  #advancedPanel[data-timeline-strip=small] .timeline-navigation .timeline-track-pager button { min-width:26px; width:26px; }
+}
+@media(forced-colors:active) {
+  #timelineCommandDialog, #timelineCommandTrigger, #timelineCommandDialog button, #studioTimelineDock .timeline-track-pager button { border-color:ButtonText; }
+  #studioTimelineDock .timeline-track-pager button:focus-visible, #timelineCommandDialog :focus-visible, #timelineCommandTrigger:focus-visible { outline:2px solid Highlight; }
+  #studioTimelineDock .timeline-track-pager button:disabled { color:GrayText; }
+}

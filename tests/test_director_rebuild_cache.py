@@ -1104,7 +1104,12 @@ def test_preset_rebuild_reports_preserved_manual_timeline_and_keeps_undo(semanti
         job_context, project_id, store, settings, {"edit_style": "competitive_clutch"},
     )
     after = store.load(project_id)
-    assert after["draft"]["edit_style"] == "competitive_clutch"
+    assert after["draft"] == before["draft"]
+    assert after["analysis"] == before["analysis"]
+    assert after["settings"] == before["settings"]
+    assert after["name"] == before["name"]
+    assert result["draft"]["edit_style"] == "competitive_clutch"
+    assert result["proposal_only"] is True
     assert editor_sequence_snapshot(after) == before_timeline
     assert result["applied_to_timeline"] is False
     assert result["timeline_preserved"] is True
@@ -1114,7 +1119,7 @@ def test_preset_rebuild_reports_preserved_manual_timeline_and_keeps_undo(semanti
     assert after["manual"]["history"] == before["manual"]["history"]
     # The explicit application changes the actual editor projection. Undo/redo
     # restore the user's clip boundaries, rather than merely toggling a badge.
-    store.update(project_id, lambda current: apply_manual_edit(current, {"action": "sequence_reset"}))
+    store.update(project_id, lambda current: apply_manual_edit(current, {"action": "sequence_reset"}, apply_isolated_proposal=True))
     applied = editor_sequence_snapshot(store.load(project_id))
     assert applied["active"] is False
     assert applied["duration"] == after["draft"]["output_duration"] == 60.0
@@ -1250,8 +1255,14 @@ def test_compatible_refinement_preserves_media_and_mixer_on_effective_edit_clock
     assert after["manual"]["media_clips"] == before["manual"]["media_clips"]
     assert after["manual"]["audio_mixer"] == before["manual"]["audio_mixer"]
     assert after["assets"] == before["assets"]
-    assert after["settings"]["pace"] == "dynamic"
-    assert after["draft"]["output_duration"] == 20
+    if sequence:
+        assert after["settings"] == before["settings"]
+        assert after["draft"] == before["draft"]
+        assert after["analysis"] == before["analysis"]
+        assert after["_ai_draft_proposal"]["candidate"]["draft"]["output_duration"] == 20
+    else:
+        assert after["settings"]["pace"] == "dynamic"
+        assert after["draft"]["output_duration"] == 20
 
 
 def test_compatible_focus_refinement_commits_staged_routing_with_media(semantic_project, monkeypatch):

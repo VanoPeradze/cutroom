@@ -433,7 +433,9 @@ def _text_template(row: dict[str, Any], width: int, height: int, font_size: int)
     every word comes from the user and is escaped.
     """
     top = max(32, round(height * .075))
-    text, sub = _ass_escape(row["text"]), _ass_escape(row.get("subtext") or "")
+    # Imported cues and authored titles need the same paragraph direction as speech.
+    # Shape only the two user strings, before adding template tags; saved text and SRT stay logical.
+    text, sub = _ass_plain_caption(row["text"]), _ass_plain_caption(row.get("subtext") or "")
     small = max(14, round(font_size * .62))
     template = row.get("template") or "plain"
     if template == "lower_third":
@@ -451,6 +453,70 @@ def _text_template(row: dict[str, Any], width: int, height: int, font_size: int)
     y = {"top": top, "center": round(height / 2), "bottom": height - top}[row["position"]]
     colour = f"\\c{TEMPLATE_ACCENT}" if template == "highlight" else ""
     return f"{{\\q0\\pos({round(width / 2)},{y}){colour}}}{text}"
+
+
+def automatic_caption_plan(caption_lines, keep_ranges, width, height, *, layout_ranges=None,
+                           caption_style="bold", caption_position="auto", caption_scale=100):
+    """Pure automatic ASS event plan; export and read-only preview share expansion."""
+    default_key = (caption_style, caption_position, caption_scale)
+    style_line, font_size, margin_v, outline = _ass_style("Default", width, height, *default_key)
+    caption_styles: dict[tuple[str, str, int], tuple[str, int, int, int]] = {default_key: ("Default", font_size, margin_v, outline)}
+    projected_layouts = _project_layout_ranges(layout_ranges, keep_ranges)
+    events: list[dict[str, Any]] = []
+    for line in caption_lines:
+        # Per-line values pass through the same finite presets as the project.
+        key_values = normalize_caption_settings({
+            "caption_style": line.get("style") or caption_style,
+            "caption_position": line.get("position") or caption_position,
+            "caption_scale": line.get("scale") or caption_scale,
+        })
+        key = (key_values["caption_style"], key_values["caption_position"], key_values["caption_scale"])
+        if key not in caption_styles:
+            name = f"Caption{len(caption_styles)}"
+            extra, size, margin, border = _ass_style(name, width, height, *key)
+            style_line += extra
+            caption_styles[key] = (name, size, margin, border)
+        name, size, margin, border = caption_styles[key]
+        style, position, _ = key
+        line_start, line_end, line_text = float(line["start"]), float(line["end"]), str(line.get("text") or "")
+        # Estimated timing (corrected text with a different word count) must not
+        # colour words that are not being said yet.
+        if style == "highlight" and not any(word.get("estimated") for word in line.get("words") or []):
+            words = [(float(word["start"]), float(word["end"]), str(word.get("word") or "").strip())
+                     for word in line.get("words") or [] if str(word.get("word") or "").strip()]
+            values = _highlight_entries([(line_start, line_end, line_text)], [words])
+        else:
+            values = [(line_start, line_end, line_text)]
+        # Shorts/Reels place their own title and buttons over the bottom of the
+        # frame, and gameplay often has subtitles there. The social style sits at
+        # about two thirds of the height instead; older styles keep their position.
+        social_ratio = HIGHLIGHT_VERTICAL_POSITION if style == "highlight" and position == "auto" and height > width else None
+        for start, end, value, layout in _entries_with_layout(values, projected_layouts if position == "auto" else []):
+            if not value:
+                continue
+            override = _layout_override(layout, width, height, size, margin, border, social_ratio)
+            tokens, active = value if isinstance(value, tuple) else (None, None)
+            positioned = bool(override)
+            anchor = re.search(r"pos\((\d+),(\d+)\)", override)
+            event = {
+                "id": f"{line.get('item_id') or 'caption'}:{len(events)}",
+                "item_id": line.get("item_id"),
+                "start": max(0, int(round(start * 100))) / 100,
+                "end": max(0, int(round(end * 100))) / 100,
+                "text": " ".join(tokens) if tokens is not None else str(value),
+                "tokens": list(tokens) if tokens is not None else None, "active_index": active,
+                "style": style, "position": position, "scale": key[2], "layout": layout,
+                "font_size": size, "margin_v": margin, "outline": border,
+                "shadow": max(1, round(size * .025)) if style == "clean" else max(1, round(size * .03)) if style == "highlight" else 0,
+                "positioned": positioned,
+                "alignment": 8 if positioned else {"auto":2,"bottom":2,"center":5,"top":8}[position],
+                "layer": 0, "order": len(events),
+                "_ass": f"Dialogue: 0,{_ass_timestamp(start)},{_ass_timestamp(end)},{name},,0,0,0,,{override}{_ass_caption_text(value)}\n",
+            }
+            if anchor:
+                event.update(x=int(anchor[1]), y=int(anchor[2]))
+            events.append(event)
+    return style_line, events
 
 
 def build_ass(
@@ -504,47 +570,10 @@ def build_ass(
              "words": [{"start": left, "end": right, "word": label} for left, right, label in words]}
             for (row_start, row_end, row_text), words in zip(rows, word_timings)
         ]
-    default_key = (caption_style, caption_position, caption_scale)
-    style_line, font_size, margin_v, outline = _ass_style("Default", width, height, *default_key)
-    caption_styles: dict[tuple[str, str, int], tuple[str, int, int, int]] = {default_key: ("Default", font_size, margin_v, outline)}
-    projected_layouts = _project_layout_ranges(layout_ranges, keep_ranges)
-    events: list[str] = []
-    for line in caption_lines:
-        # Per-line values pass through the same finite presets as the project.
-        key_values = normalize_caption_settings({
-            "caption_style": line.get("style") or caption_style,
-            "caption_position": line.get("position") or caption_position,
-            "caption_scale": line.get("scale") or caption_scale,
-        })
-        key = (key_values["caption_style"], key_values["caption_position"], key_values["caption_scale"])
-        if key not in caption_styles:
-            name = f"Caption{len(caption_styles)}"
-            extra, size, margin, border = _ass_style(name, width, height, *key)
-            style_line += extra
-            caption_styles[key] = (name, size, margin, border)
-        name, size, margin, border = caption_styles[key]
-        style, position, _ = key
-        line_start, line_end, line_text = float(line["start"]), float(line["end"]), str(line.get("text") or "")
-        # Estimated timing (corrected text with a different word count) must not
-        # colour words that are not being said yet.
-        if style == "highlight" and not any(word.get("estimated") for word in line.get("words") or []):
-            words = [(float(word["start"]), float(word["end"]), str(word.get("word") or "").strip())
-                     for word in line.get("words") or [] if str(word.get("word") or "").strip()]
-            values = _highlight_entries([(line_start, line_end, line_text)], [words])
-        else:
-            values = [(line_start, line_end, line_text)]
-        # Shorts/Reels place their own title and buttons over the bottom of the
-        # frame, and gameplay often has subtitles there. The social style sits at
-        # about two thirds of the height instead; older styles keep their position.
-        social_ratio = HIGHLIGHT_VERTICAL_POSITION if style == "highlight" and position == "auto" and height > width else None
-        for start, end, value, layout in _entries_with_layout(values, projected_layouts if position == "auto" else []):
-            if not value:
-                continue
-            override = _layout_override(layout, width, height, size, margin, border, social_ratio)
-            events.append(
-                f"Dialogue: 0,{_ass_timestamp(start)},{_ass_timestamp(end)},{name},,0,0,0,,"
-                f"{override}{_ass_caption_text(value)}\n"
-            )
+    style_line, planned = automatic_caption_plan(caption_lines, keep_ranges, width, height,
+        layout_ranges=layout_ranges, caption_style=caption_style,
+        caption_position=caption_position, caption_scale=caption_scale)
+    events = [event["_ass"] for event in planned]
     manual_styles: dict[tuple[str, str, int], str] = {}
     for row in text_clips or []:
         key = (_template_style(row), row["position"], row["scale"])

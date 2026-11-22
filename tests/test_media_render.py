@@ -287,3 +287,67 @@ def test_real_ffmpeg_high_resolution_all_aspects(media, tmp_path, resolution, as
     streams = json.loads(subprocess.check_output([media[2], "-v", "error", "-show_streams", "-of", "json", str(output)]))["streams"]
     assert (streams[0]["width"], streams[0]["height"]) == dims
     assert int(streams[0]["nb_frames"]) == 2
+
+def test_short_picture_long_audio_survives_split_and_undo_without_changing_any_frame_or_sample(tmp_path):
+    """A real last picture distinct from its predecessor; no on-disk render outputs."""
+    from types import SimpleNamespace
+    from cutroom.editing import apply_manual_edit
+    from cutroom.media_library import probe_asset
+    from cutroom.media_render import append_media_graph
+    from cutroom.render_inventory import compile_render_inputs, qualify_library_pictures
+
+    ff, probe = shutil.which("ffmpeg"), shutil.which("ffprobe")
+    if not ff or not probe:
+        pytest.skip("Requires FFmpeg and FFprobe")
+    settings = SimpleNamespace(ffprobe=probe)
+    def run(args, data=None):
+        return subprocess.run(args, input=data, capture_output=True, check=True, timeout=20).stdout
+
+    path = tmp_path / "short-picture.mp4"
+    run([ff, "-v", "error", "-f", "lavfi", "-i",
+         r"color=blue:s=64x48:r=30:d=0.5,drawbox=color=lime:x=0:y=0:w=iw:h=ih:t=fill:enable=gte(n\,14)",
+         "-f", "lavfi", "-i", "sine=frequency=523:sample_rate=48000:duration=3",
+         "-c:v", "libx264", "-crf", "0", "-g", "4", "-bf", "0", "-threads", "1", "-c:a", "aac", str(path)])
+    meta = probe_asset(path, "video", settings)
+    assert meta["duration"] == 3 and meta["picture_end"] == .5
+    asset_id = "asset_" + "c"*32
+    value = project()
+    value["assets"][asset_id] = {**meta, "id":asset_id, "path":path.name, "status":"ready"}
+    apply_manual_edit(value, {"action":"media_add", "asset_id":asset_id, "start":0, "end":2.5})
+    occurrence = value["manual"]["media_clips"][0]["id"]
+
+    def decode(p):
+        snapshot = copy.deepcopy(p)
+        qualified = qualify_library_pictures(p, tmp_path, settings)
+        inventory = compile_render_inputs(qualified, include_chroma=False)
+        filters, video, audio = append_media_graph(qualified, 64, 48, 2.5, "[0:v]", None, input_inventory=inventory)
+        encoded = run([ff, "-v", "error", "-filter_complex_threads", "1", "-threads", "1", "-f", "lavfi",
+                       "-i", "color=red:s=64x48:r=30:d=2.5", *inventory.input_args(tmp_path, category="library"),
+                       "-filter_complex", ";".join(filters), "-map", video, "-map", audio,
+                       "-c:v", "ffv1", "-pix_fmt", "yuv420p", "-c:a", "pcm_s16le", "-threads", "1", "-f", "matroska", "pipe:1"])
+        def stream(label, args):
+            return run([ff, "-v", "error", "-i", "pipe:0", "-map", label, *args, "-threads", "1", "pipe:1"], encoded)
+        assert p == snapshot
+        return stream("0:v:0", ["-pix_fmt","rgb24","-f","rawvideo"]), stream("0:a:0", ["-f","s16le"])
+
+    frames, pcm = expected = decode(value)
+    stride = 64*48*3
+    assert len(frames) == 75*stride and len(pcm) == 120000*2*2
+    color = lambda i: tuple(frames[i*stride+3*(64*24+32):i*stride+3*(64*24+32)+3])
+    assert color(13)[2] > 240 and all(color(i)[1] > 240 for i in (14, 15, 30, 74))
+    assert max(array("h", pcm)[48000*2:]) > 1000
+    for mode, at in [("measured", .7), ("legacy", 1.8), ("unknown", 1.1)]:
+        p = copy.deepcopy(value)
+        if mode == "legacy":
+            p["assets"][asset_id].pop("picture_end")
+        elif mode == "unknown":
+            p["assets"][asset_id]["picture_end"] = None
+        original = copy.deepcopy(p["manual"]["media_clips"])
+        apply_manual_edit(p, {"action":"media_split", "clip_id":occurrence, "time":at})
+        split = copy.deepcopy(p["manual"]["media_clips"])
+        assert split[1]["source_start"] == at
+        assert decode(p) == expected, mode
+        apply_manual_edit(p, {"action":"undo"})
+        assert p["manual"]["media_clips"] == original
+        apply_manual_edit(p, {"action":"redo"})
+        assert p["manual"]["media_clips"] == split

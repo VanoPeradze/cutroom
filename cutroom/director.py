@@ -6,6 +6,7 @@ import re
 from pathlib import Path
 from typing import Any, Callable
 
+from .ai_draft_proposals import record_ai_draft_proposal, record_isolated_ai_draft
 from .cache_keys import build_analysis_cache_fingerprints, cache_fingerprints_match, stable_fingerprint
 from .composition import default_reels_stack, select_embedded_candidate
 from .config import Settings
@@ -16,7 +17,8 @@ from .editing import SOURCE_MIXER_DEFAULT_LAYOUTS, apply_camera_overrides, apply
 from .audio import analyze_audio, audio_policy, build_audio_actions, constrain_gain_ranges_to_speech, protect_silence_ranges_from_speech
 from .intelligence import (
     CRITIC_REVIEW_CONTRACT, EXTRACTIVE_ROUGH_CUT_AUTHORITY, EXTRACTIVE_ROUGH_CUT_ENGINE,
-    PACE_LIMITS, StoryPlanningError, _source_selection_target_interval, build_story_beats, language_from_text, plan_edit,
+    PACE_LIMITS, StoryAIUnavailableError, StoryPlanningError, _source_selection_target_interval,
+    build_story_beats, language_from_text, plan_edit,
 )
 from .jobs import JobCancelled, JobContext
 from .media import detect_scenes
@@ -40,7 +42,7 @@ from .instruction_contract import (
 )
 from .source_continuity import validate_explicit_source_continuity, continuous_source_playback
 from .story_search_identity import story_search_source_context
-from .review_candidates import publish_failed_review
+from .review_candidates import media_identity as source_review_media_identity, publish_failed_review
 from .sync import MIN_AUTOMATIC_SYNC_CONFIDENCE, synchronize_sources
 from .transcription import cuda_available, transcribe, transcript_quality_report
 from .cloud_ai import CloudAIError, enabled as cloud_enabled
@@ -3449,6 +3451,7 @@ def analyze_project(
     source_mixer_patch: dict[str, Any] | None = None,
     experimental_plan_validation: dict[str, Any] | None = None,
     expected_project_revision: int | None = None,
+    preserve_current_edit: bool = False,
 ) -> dict[str, Any]:
     context.checkpoint()
     project = store.load(project_id)
@@ -3547,6 +3550,15 @@ def analyze_project(
     analysis_source_duration = max(0.0, _finite_number(analysis_source_info.get("duration"), duration))
     transcription_duration = _transcription_duration(analysis_source_info, analysis_source_duration)
     brief = _effective_brief(project)
+    # Pin the original and the starting revision before analysis. An interrupted
+    # review must not rebind to later footage, settings, or a retained edit.
+    first_pass_review = None
+    if brief.get("goal", "short") == "short" and source_b is None and project.get("draft") is None:
+        try:
+            first_pass_review = (project["revision"], source_review_media_identity(project, store.project_dir(project_id)))
+        except (KeyError, ValueError, OSError):
+            pass
+
     # Reject only provable request conflicts before ASR/vision/model work. The
     # request stays verbatim, and an unsuccessful refinement does not alter the
     # settings or edit that the user already has.
@@ -4074,7 +4086,11 @@ def analyze_project(
             latest["analysis"] = copy.deepcopy(context_snapshot)
 
         context.checkpoint()
-        store.update(project_id, commit_context)
+        saved_context = store.update(project_id, commit_context)
+        if first_pass_review is not None:
+            old_revision, identity = first_pass_review
+            revision = saved_context["revision"]
+            first_pass_review = (revision, identity) if revision == old_revision + 1 else None
 
     story_start = max(0.58, float(context.job.progress))
     context.update(story_start, "Understanding the story")
@@ -4203,18 +4219,29 @@ def analyze_project(
                     story_cache=(cached_analysis.get("story_hierarchy") if reusable_story and cached_analysis else None),
                     visual_moments=visual_moments if visual_timeline else None,
                 )
-        except StoryPlanningError as error:
-            options=error.diagnostic.get("passage_options") or {}
-            if options.get("review_candidates"):
+        except (StoryPlanningError, StoryAIUnavailableError) as error:
+            options = error.diagnostic.get("passage_options") or {}
+            if isinstance(options, dict) and options.get("review_candidates"):
                 context.checkpoint()
                 try:
-                    prepared=publish_failed_review(store,project_id,brief,options,source_search_binding["generations"]["A"])
-                    error.diagnostic["review_candidate_count"]=len(prepared["analysis"]["review_candidates"]["items"])
-                    error.diagnostic["review_available"]=True
-                except (ValueError,KeyError,TypeError,OSError,RuntimeError):
-                    # Failure to prepare a proposal cannot change the edit or
-                    # turn an uncertain selection into an accepted draft.
-                    error.diagnostic["review_available"]=False
+                    review_only = error.diagnostic.get("source_review_only") is True
+                    if review_only and first_pass_review is None:
+                        raise ValueError("No unchanged first-pass project is available for source review.")
+                    prepared = publish_failed_review(
+                        store, project_id,
+                        {**brief, "fps": project_export_fps(project)} if review_only else brief,
+                        options, source_search_binding["generations"]["A"],
+                        first_pass=first_pass_review if review_only else None,
+                        cancel_check=context.check_cancelled if review_only else None,
+                    )
+                    error.diagnostic["review_candidate_count"] = len(prepared["analysis"]["review_candidates"]["items"])
+                    error.diagnostic["review_available"] = True
+                except JobCancelled:
+                    raise
+                except (ValueError, KeyError, TypeError, OSError, RuntimeError):
+                    # Preparation cannot modify the timeline, accept the
+                    # selection, or change the original Story failure.
+                    error.diagnostic["review_available"] = False
             raise
         # Also guard legacy/plugin hooks that replace the cancellable wrapper.
         validate_experimental_plan_result(context, editorial, engine)
@@ -4305,7 +4332,20 @@ def analyze_project(
     # cleanup and defensible transcript cleanup inside those passages.
     duration_chain: list[dict[str, Any]] = [{"stage": "requested", "seconds": round(float(target_duration), 3)}]
     gameplay_review: list[dict[str, Any]] = []
-    if goal == "short" and (duration > target_duration or brief.get("duration_mode") == "target" or protected_selection):
+    longform = None
+    if goal == "youtube" and str(brief.get("edit_style") or "") == "gameplay_youtube" and duration > target_duration:
+        from .longform import condense_longform  # local import: longform reuses director helpers
+
+        longform = condense_longform(
+            duration=duration, target_duration=target_duration, sound_profile=sound_profile,
+            segments=segments, visual=visual_timeline, pace=pace, audio_candidates=audio_candidates,
+        )
+    if longform is not None:
+        cuts, counts = longform["cuts"], dict(longform["counts"])
+        decision["summary"] = longform["summary"]
+        engine = "gameplay_longform"
+        duration_chain.append({"stage": "gameplay_longform", "seconds": longform["seconds"], "passages": longform["stretches"]})
+    elif goal == "short" and (duration > target_duration or brief.get("duration_mode") == "target" or protected_selection):
         selection_policy = {**((brief.get("style_profile") or {}).get("selection_policy") or {}),
                             **({"duration_bounds": copy.deepcopy(duration_bounds)} if duration_bounds else {})}
         selection_segments = _with_visual_evidence(
@@ -4547,6 +4587,7 @@ def analyze_project(
         "target_duration": target_duration,
         "duration_review": duration_review,
         **({"gameplay_moments": gameplay_review} if gameplay_review else {}),
+        **({"chapters": longform["chapters"]} if longform and longform.get("chapters") else {}),
         "source_duration": duration,
         "output_duration": output_duration,
         "removed_duration": round(max(0.0, duration - output_duration), 3),
@@ -4696,6 +4737,13 @@ def analyze_project(
             validate_text_bounds({**proposed, "draft": draft})
         validate_explicit_source_continuity(latest_brief, keep_ranges, duration)
         context.commit()
+        if has_sequence(latest) or preserve_current_edit and isinstance(latest.get("draft"), dict):
+            if not unchanged_variation:
+                candidate = copy.deepcopy(proposed)
+                candidate["draft"] = draft
+                candidate["analysis"] = analysis
+                record_isolated_ai_draft(latest, candidate)
+            return
         latest.setdefault("settings", {}).update(staged_brief or {})
         if source_mixer_patch:
             latest.setdefault("manual", {}).setdefault("source_mixer", {}).update(source_mixer_patch)
@@ -4708,6 +4756,7 @@ def analyze_project(
             # alternate request yields exactly the same source selection.
             return
         latest["draft"] = draft
+        record_ai_draft_proposal(latest)
         apply_draft_name(latest, draft.get("title"))
         # A new Draft cannot replace an active manual sequence implicitly. Its
         # current timeline and Undo history still belong to the user's edit; the
@@ -4731,7 +4780,7 @@ def analyze_project(
     # After this boundary a late cancellation must not hide a Draft that was
     # successfully saved. The UI will receive a completed authoritative job.
     saved_project = store.update(project_id, commit_analysis)
-    timeline_preserved = has_sequence(saved_project)
+    timeline_preserved = has_sequence(saved_project) or bool(preserve_current_edit and isinstance(project.get("draft"), dict))
     message = "Your first edit is ready"
     if normalized_selection_variant > 0 and not variation_changed:
         message = "No different cut found; your edit was kept"
@@ -4750,12 +4799,21 @@ def analyze_project(
     if instruction_warnings:
         message += " Custom instruction coverage remains unverified; review the request checklist."
     context.update(1.0, message)
-    result = {"project_id": project_id, "draft": saved_project["draft"], "engine": engine,
+    result_draft = ((saved_project.get("_ai_draft_proposal") or {}).get("candidate") or {}).get("draft") if timeline_preserved else None
+    result_draft = result_draft or saved_project["draft"]
+    result = {"project_id": project_id, "draft": result_draft, "proposal_only": timeline_preserved, "engine": engine,
               "editorial_authority": decision.get("editorial_authority"),
               "applied_to_timeline": not timeline_preserved, "timeline_preserved": timeline_preserved,
-              "message": message, "model_selection": saved_project["draft"].get("model_selection"),
+              "message": message, "model_selection": result_draft.get("model_selection"),
               "instruction_contract": copy.deepcopy(instruction_contract),
               "warnings": [*planner_warnings, *instruction_warnings]}
+    # Bind completion feedback only to the candidate committed by this job.
+    # An unchanged variation may retain an older proposal, but did not create it.
+    marker = saved_project.get("_ai_draft_proposal") or {}
+    if (timeline_preserved and marker.get("version") == 2
+            and not (normalized_selection_variant > 0 and not variation_changed)
+            and (marker.get("candidate") or {}).get("draft") == draft):
+        result["proposal_origin_id"] = marker["id"]
     if normalized_selection_variant > 0:
         result["variation_changed"] = variation_changed
     return result
@@ -4926,7 +4984,7 @@ def _plan_edit_with_cancel(
     return result
 
 
-def refine_project(context: JobContext, project_id: str, store: ProjectStore, settings: Settings, command: str) -> dict[str, Any]:
+def refine_project(context: JobContext, project_id: str, store: ProjectStore, settings: Settings, command: str, *, preserve_current_edit: bool = False, expected_project_revision: int | None = None) -> dict[str, Any]:
     context.checkpoint()
     project = store.load(project_id)
     require_tracks_unlocked(project)
@@ -4960,8 +5018,13 @@ def refine_project(context: JobContext, project_id: str, store: ProjectStore, se
             selection_variant = 1
     else:
         raise ValueError("Unknown refinement command")
+    options = {}
+    if preserve_current_edit:
+        options["preserve_current_edit"] = True
+    if expected_project_revision is not None:
+        options["expected_project_revision"] = expected_project_revision
     if command == "new_variation":
-        return analyze_project(context, project_id, store, settings, patch, selection_variant=selection_variant)
+        return analyze_project(context, project_id, store, settings, patch, selection_variant=selection_variant, **options)
     if staged_mixer:
-        return analyze_project(context, project_id, store, settings, patch, source_mixer_patch=staged_mixer)
-    return analyze_project(context, project_id, store, settings, patch)
+        return analyze_project(context, project_id, store, settings, patch, source_mixer_patch=staged_mixer, **options)
+    return analyze_project(context, project_id, store, settings, patch, **options)

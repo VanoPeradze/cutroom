@@ -5,13 +5,13 @@ export const KEYBOARD_PROFILES = Object.freeze([
   Object.freeze({ id: "cutroom", label: "CUTROOM", description: "Fast editing keys. D selects Cut out; click twice to remove the section." }),
   Object.freeze({ id: "resolve", label: "DaVinci Resolve", description: "Core editing keys: A selects, B blades, Ctrl/Cmd+B splits, N toggles snapping.", limitations: "An editing subset, not full Resolve emulation. No reverse or multi-speed J/K/L shuttle. Alt/Option, browser shortcuts and function keys stay native." }),
   Object.freeze({ id: "premiere", label: "Adobe Premiere Pro", description: "Core editing keys: V selects, C razors, Q/W ripple-trim, S toggles snapping, apostrophe extracts a range.", limitations: "An editing subset, not full Premiere emulation. No reverse or multi-speed J/K/L shuttle or clipboard editing. Alt/Option, browser shortcuts and function keys stay native." }),
-  Object.freeze({ id: "protools", label: "Pro Tools", description: "Commands Keyboard Focus: B separates, A/S trim, R/T zoom, L / ' navigate edits. F7/F8 select timeline tools.", limitations: "F7/F8 work only on the focused timeline canvas. Tab changes focus; no Tab to Transients, Slip/Shuffle modes, sample-accurate nudge or clipboard editing. Trims use CUTROOM's edit scope." }),
+  Object.freeze({ id: "protools", label: "Pro Tools", description: "Commands Keyboard Focus: B separates, A/S trim, R/T zoom, L / ' navigate edits. F7/F8 select timeline tools.", limitations: "F7/F8 work only on the focused timeline canvas. Tab changes focus; no Tab to Transients, source A/B Slip/Shuffle modes, sample-accurate nudge or clipboard editing. Trims use CUTROOM's edit scope. Imported-media Slip is a separate toolbar tool." }),
   Object.freeze({ id: "finalcut", label: "Final Cut Pro", description: "Core timeline keys: A selects, B blades, R selects a range, N toggles snapping. Command shortcuts also accept Ctrl on Windows.", limitations: "An editing subset, not full Final Cut emulation. No skimming or reverse/multi-speed shuttle. Alt/Option, browser shortcuts and function keys stay native." }),
 ]);
 
 const ACTION_LABELS = {
-  toggle_play: "Play / pause", stop: "Stop playback", mark_in: "Mark selection in",
-  mark_out: "Mark selection out", select_clip: "Mark clip at playhead",
+  toggle_play: "Play / pause", stop: "Stop playback", review_marker: "Open review markers at playhead", mark_in: "Mark selection in",
+  mark_out: "Mark selection out", select_clip: "Mark clip at playhead", mark_selected_layers: "Mark selected layers as one timeline range",
   clear_selection: "Clear selection", split: "Split at playhead",
   delete_selection: "Remove selection from edit", restore_selection: "Review / restore original footage",
   undo: "Undo edit", redo: "Redo edit", frame_back: "Previous frame",
@@ -20,13 +20,13 @@ const ACTION_LABELS = {
   zoom_out: "Zoom timeline out", fit: "Fit timeline",
   tool_select: "Select tool", tool_range: "Range tool", tool_blade: "Blade tool",
   tool_remove_between: "Cut out tool (two clicks)", play_forward: "Play forward at 1×",
-  trim_start: "Remove clip start up to playhead", trim_end: "Remove playhead to clip end",
+  trim_start: "Trim clip start to playhead", trim_end: "Trim clip end to playhead",
   jump_start: "Go to timeline start", jump_end: "Go to timeline end", toggle_snapping: "Toggle timeline snapping",
 };
 
 const key = (action, code, keys, options = {}) => ({ action, code, keys, mod: false, shift: false, custom: false, ...options });
 const REMOVE_SCOPE_NOTE = "Closes time in Together (A+B); source-only removal can leave a gap on that track.";
-const TRIM_SCOPE_NOTE = "CUTROOM trim: Together closes time; source-only trim leaves the other track still. No Slip/Shuffle modes.";
+const TRIM_SCOPE_NOTE = "Selected media/text: trim or extend only that occurrence, without changing edit duration. With no layer selected, Together closes time; source-only trim leaves other tracks still. No source Slip/Shuffle modes.";
 // Share only semantics that really agree. In Pro Tools Commands Keyboard Focus,
 // K snaps a clip, I/O manage timeline selection and X cuts to the clipboard.
 // Importing an NLE's common keys there would silently perform the wrong edits.
@@ -37,6 +37,7 @@ const COMMON = [
   key("redo", "KeyZ", "Ctrl/Cmd+Shift+Z", { mod: true, shift: true }),
 ];
 const NLE_NAVIGATION = [
+  key("review_marker", "KeyM", "M", { custom: true, note: "Open timeline review markers; save the note deliberately." }),
   key("stop", "KeyK", "K"), key("play_forward", "KeyL", "L", { custom: true, note: "Starts forward playback at 1×; repeated presses do not increase speed." }),
   key("mark_in", "KeyI", "I"), key("mark_out", "KeyO", "O"),
   key("select_clip", "KeyX", "X"),
@@ -51,13 +52,14 @@ const PLAIN_ZOOM = [
 const PROFILE_KEYS = {
   cutroom: [
     ...NLE_NAVIGATION, ...PLAIN_ZOOM,
+    key("mark_selected_layers", "KeyX", "Shift+X", { shift:true, custom:true, note:"Selected imported media or saved text only. Keeps the playhead; gaps are included." }),
     key("split", "KeyS", "S"), key("delete_selection", "Delete", "Delete / Backspace"),
     key("delete_selection", "Backspace", "Delete / Backspace"), key("fit", "KeyF", "F"),
     key("redo", "KeyY", "Ctrl/Cmd+Y", { mod: true }),
     key("restore_selection", "KeyR", "Shift+R", { shift: true }),
     key("tool_select", "KeyV", "V"), key("tool_range", "KeyR", "R"),
     key("tool_blade", "KeyB", "B"), key("tool_remove_between", "KeyD", "D"),
-    key("trim_start", "KeyQ", "Q"), key("trim_end", "KeyW", "W"),
+    key("trim_start", "KeyQ", "Q", { note: TRIM_SCOPE_NOTE }), key("trim_end", "KeyW", "W", { note: TRIM_SCOPE_NOTE }),
     key("toggle_snapping", "KeyN", "N"),
   ],
   resolve: [
@@ -78,7 +80,7 @@ const PROFILE_KEYS = {
     key("delete_selection", "Quote", "'", { note: `Extract the selected range. ${REMOVE_SCOPE_NOTE}` }),
     key("clear_selection", "KeyX", "Ctrl+Shift+X", { mod: true, modifier: "ctrl", shift: true }),
     key("fit", "Backslash", "\\"),
-    key("trim_start", "KeyQ", "Q"), key("trim_end", "KeyW", "W"),
+    key("trim_start", "KeyQ", "Q", { note: TRIM_SCOPE_NOTE }), key("trim_end", "KeyW", "W", { note: TRIM_SCOPE_NOTE }),
     key("toggle_snapping", "KeyS", "S"),
   ],
   protools: [

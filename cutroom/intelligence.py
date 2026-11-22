@@ -3732,9 +3732,22 @@ def _select_passage_option(settings, candidates, segments, chapters, plan, brief
             unreviewed_retrieved_option_count=retrieved_count-len(assessments)-1)
         current = {"options":[option], "receipt":copy.deepcopy(receipt)}
         payload = _passage_option_request(settings, current, candidates, segments, brief, model)
-        reply = _call_ollama_story_pass(settings, payload, 90, cancel_check)
         row = {"candidate_id":option["id"],"raw_playable_seconds":option["raw_playable_seconds"],
                "semantic_fit_verified":False}
+        try:
+            reply = _call_ollama_story_pass(settings, payload, 90, cancel_check)
+        except (StoryAIUnavailableError, StoryPlanningError) as error:
+            # The native shortlist is playable, but the model did not finish
+            # reviewing it. Preserve the original error and offer review only.
+            _check_cancelled(cancel_check)
+            if not isinstance(error, StoryBudgetError) and not error.diagnostic.get("passage_options"):
+                assessments.append({**row, "outcome": "model_reply_unavailable"})
+                error.diagnostic.update(
+                    passage_options=copy.deepcopy(receipt), source_review_only=True,
+                    search_status="incomplete", source_wide_no_fit_proven=False,
+                    semantic_result_verified=False, applied_to_timeline=False,
+                )
+            raise
         try:
             clean = _decode_passage_option_choice(reply, current, candidates, segments, chapters, plan, brief)
         except StoryPlanningError as exc:
@@ -5301,6 +5314,7 @@ def _early_extractive_rough_cut(segments, brief, failure, cancel_check=None):
                "invalid_passage_option_output", "invalid_passage_rationale",
                "unattributed_passage_refusal", "semantic_candidates_rejected"}
     if (brief.get("allow_extractive_rough_cut") is not True or brief.get("goal", "short") != "short"
+            or diagnostic.get("source_review_only") is True
             or type(brief.get("output_count", 1)) is not int or brief.get("output_count", 1) != 1
             or diagnostic.get("reason") not in allowed or diagnostic.get("source_wide_no_fit_proven") is True
             or diagnostic.get("outcome") not in {"technical_error", "invalid_model_output", "editorial_no_fit"}

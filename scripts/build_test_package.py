@@ -25,6 +25,8 @@ SUPPORT_FILES = (
     "scripts/validate_caption_bidi_browser.cjs",
     "tests/fixtures/fonts/DejaVuSans.ttf", "tests/fixtures/fonts/DejaVuSans-Bold.ttf",
     "tests/fixtures/fonts/DejaVu-LICENSE.txt", "tests/fixtures/fonts/README.md",
+    "web/fonts/Geist.ttf", "web/fonts/Geist-OFL.txt",
+    "web/fonts/NotoSansHebrew.ttf", "web/fonts/NotoSansHebrew-OFL.txt",
     ".github/CONTRIBUTING.md", ".github/SECURITY.md",
 )
 SOURCE_TREES = {

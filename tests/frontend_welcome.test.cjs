@@ -126,3 +126,43 @@ test("manual setup explains no-AI editing and hides runtime preparation", () => 
   assert.match(h.node("setupIntentCopy").textContent, /16:9/);
   assert.equal(h.node("setupRuntimeDock").hidden, false);
 });
+
+
+test("manual start focuses the visible empty-editor import control, not hidden setup", async () => {
+  const h=harness();
+  await h.node("manual").fire("click");
+  assert.equal(h.node("[data-first-choose]").focused,true);
+  assert.equal(h.node("sourceSlotA").focused,undefined);
+  h.welcome.updateProject({settings:{workflow:"manual"}});
+  assert.match(h.node("setupIntentCopy").textContent,/opens immediately/);
+});
+
+
+test("blocked Home never focuses workflow choices behind the retained editor", async () => {
+  const h=harness({goHome:async()=>false});await h.node("changeWorkflowButton").fire("click");
+  assert.notEqual(h.node("welcomeServices").focused,true);
+});
+
+test("a refused project create never focuses an importer in the current project",async()=>{
+  const h=harness({createProject:async()=>false});await h.node("manual").fire("click");
+  assert.notEqual(h.node("[data-first-choose]").focused,true);assert.notEqual(h.node("sourceSlotA").focused,true);
+  assert.equal(h.node("manual").disabled,false);
+});
+
+
+test("primary manual entry shares the recipe creation lock, and preserves disabled controls", async () => {
+  let finish, count=0;
+  const h=harness({createProject:async options=>{count++;assert.equal(options.workflow,'manual');return await new Promise(r=>{finish=r})}});
+  h.node('youtube').disabled=true;
+  const first=h.welcome.startWorkflow('manual');
+  assert.equal(h.node('newProjectButton').disabled,true);
+  await h.welcome.startWorkflow('manual');await h.node('short').fire('click');assert.equal(count,1);
+  finish({id:'p'});await first;
+  assert.equal(h.node('[data-first-choose]').focused,true);
+  assert.equal(h.node('youtube').disabled,true);assert.equal(h.node('newProjectButton').disabled,false);
+});
+test("busy or refused primary entry makes no new project and never focuses a hidden importer",async()=>{
+  const busy=harness({busy:()=>true});await busy.welcome.startWorkflow();assert.equal(busy.calls.length,0);
+  const h=harness({createProject:async()=>false});await h.welcome.startWorkflow();assert.notEqual(h.node('[data-first-choose]').focused,true);
+  const hidden=harness();hidden.node('[data-first-choose]').closest=()=>({hidden:true});await hidden.welcome.startWorkflow();assert.notEqual(hidden.node('[data-first-choose]').focused,true);
+});

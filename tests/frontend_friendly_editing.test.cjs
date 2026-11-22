@@ -26,7 +26,7 @@ function app() {
   const context = vm.createContext({document,console,dictionaries:{en:{}},setTimeout,clearTimeout,
     window:{addEventListener(){}},requestAnimationFrame:callback=>callback(),performance:{now:()=>0}});
   const run = code=>vm.runInContext(code,context);
-  for (const file of ['source-tracks.js','timeline.js','keyboard.js']) {
+  for (const file of ['source-tracks.js','timeline.js','keyboard.js','source-frame.js']) {
     run(fs.readFileSync(path.join(__dirname,'../web',file),'utf8').replace(/^export /gm,''));
   }
   run(source);

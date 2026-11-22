@@ -22,7 +22,7 @@ import webbrowser
 from pathlib import Path
 from typing import Any
 
-from flask import Flask, Response, g, jsonify, request, send_file, send_from_directory
+from flask import Flask, Response, current_app, has_app_context, g, jsonify, request, send_file, send_from_directory
 from werkzeug.exceptions import BadRequest, HTTPException, RequestEntityTooLarge
 
 from cutroom import __version__, __version_label__
@@ -32,6 +32,8 @@ from cutroom.director import analyze_project, refine_project
 from cutroom.edit_styles import UnknownEditStyle, get_edit_style, public_edit_styles
 from cutroom.editing import ManualEditError, apply_manual_edit, apply_source_review_edit, strip_private_edit_history
 from cutroom.reel_proposals import reel_proposal
+from cutroom.clip_board import ClipBoardError, build_clip_board, DEFAULT_COUNT as DEFAULT_CLIP_COUNT, DEFAULT_LENGTH as DEFAULT_CLIP_LENGTH
+from cutroom.ai_draft_proposals import ai_draft_proposal, ai_draft_review_status
 from cutroom.review_candidates import media_identity as source_review_media_identity, checked_source_candidate
 from cutroom.sequence import SEQUENCE_ACTION_FIELDS, editor_sequence_snapshot
 from cutroom.source_tracks import SourceTrackError, TimelineVersionError, validate_sequence_version
@@ -48,6 +50,7 @@ from cutroom.track_locks import TrackLockedError, require_tracks_unlocked
 from cutroom.intelligence import story_ai_status
 from cutroom.cloud_ai import ConnectionStore, CloudAIError, enabled as cloud_enabled, require_connection
 from cutroom.manual_start import start_manual_draft
+from cutroom.retained_edit import retained_edit_status, resume_retained_edit, has_retained_edit
 from cutroom.local_models import (
     OLLAMA_INSTALL_URL, catalog as local_model_catalog,
     install_transcription, supported_install,
@@ -66,9 +69,16 @@ from cutroom.media_library import (
     ASSET_ID_RE, MAX_ASSETS, MEDIA_ACTION_FIELDS, MediaLibraryError,
     asset_kind, asset_size_limit, prepare_asset, probe_asset, safe_asset_path,
 )
+from cutroom.project_copy import ProjectCopyCoordinator, ProjectCopyError
 from cutroom.projects import ProjectStateError, ProjectStore, apply_automatic_name, display_name, name_from_source
 from cutroom.text_clips import MAX_CAPTION_IMPORT_BYTES, TEXT_ACTION_FIELDS
-from cutroom.render import InsufficientStorageError, LayoutCoverageError, available_encoders, ensure_render_storage, project_caption_items, render_project, require_layout_coverage
+from cutroom.layer_tracks import LayerTrackError, validate_layer_tracks, require_layer_tracks_unlocked, require_layer_asset_unlocked
+from cutroom.layer_selection import LAYER_ACTION_FIELDS, UnchangedLayerSelection, group_duplicate_receipt
+from cutroom.group_split import group_split_receipt
+from cutroom.group_join import group_join_receipt
+from cutroom.range_export import RangeExportError
+from cutroom.review_markers import MarkerError, apply_marker
+from cutroom.render import resolve_export_range, InsufficientStorageError, LayoutCoverageError, available_encoders, ensure_render_storage, project_caption_items, caption_preview_scene, render_project, require_layout_coverage
 from cutroom.utils import sanitize_filename
 from cutroom.upload_storage import CHUNK_BYTES, UploadStorage, UploadStorageError, is_storage_full
 from cutroom.upload_transport import LEGACY_ASSET_UPLOAD_BYTES, MULTIPART_ALLOWANCE_BYTES
@@ -89,23 +99,28 @@ SOURCE_TRACK_EDIT_FIELDS = {
     "track_reset": {"slot"},
 }
 JSON_BODY_ENDPOINTS = {
+    "repair_asset_preview",
     "create_project",
     "patch_project",
     "manual_edit",
+    "write_review_marker",
     "review_reel_candidate",
     "import_caption_alternative",
     "generate_caption_alternative",
+    "generate_manual_transcript_job",
     "run_director",
     "refine",
     "render",
     "cancel_job",
     "install_model",
     "prepare_ai_runtime",
+    "save_transcription_engine",
+    "review_director_request",
     "stabilize_source",
     "preflight_upload",
 }
 UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
-FOREGROUND_JOB_KINDS = {"director", "refine", "render", "caption_alternative"}
+FOREGROUND_JOB_KINDS = {"director", "refine", "render", "caption_alternative", "manual_transcript"}
 INSTANCE_PROTOCOL_VERSION = 1
 INSTANCE_RESPONSE_LIMIT = 4 * 1024
 LEGACY_SYSTEM_RESPONSE_LIMIT = 256 * 1024
@@ -594,6 +609,18 @@ def _preserved_source_mixer(project: dict[str, Any], previous: dict[str, Any]) -
     return mixer
 
 
+def _anchor_tracked_layers_before_source_change(project: dict[str, Any], slot: str) -> None:
+    """Retain the validated legacy edit clock before B invalidates its draft."""
+    manual = project.get("manual") or {}
+    if slot != "B" or "layer_tracks" not in manual or "sequence" in manual:
+        return
+    validate_layer_tracks(project)
+    from cutroom.sequence import materialize_sequence
+    anchored, _ = materialize_sequence(project)
+    for key in ("sequence", "source_tracks"):
+        manual[key] = copy.deepcopy(anchored["manual"][key])
+
+
 def _reset_manual_after_source_change(
     project: dict[str, Any],
     slot: str,
@@ -642,7 +669,7 @@ def _reset_manual_after_source_change(
     # recording. Preserve explicit [] as an intentional empty A track.
     previous_tracks = previous.get("source_tracks")
     if keep_a_timeline:
-        for key in ("media_clips", "text_clips", "audio_mixer"):
+        for key in ("media_clips", "text_clips", "audio_mixer", "layer_tracks"):
             if key in previous:
                 project["manual"][key] = copy.deepcopy(previous[key])
     if keep_a_timeline and isinstance(previous_tracks, dict) and "A" in previous_tracks:
@@ -702,6 +729,45 @@ def create_app(settings: Settings | None = None) -> Flask:
     upload_transactions: dict[tuple[str, str, str], dict[str, Any]] = {}
     upload_storage = UploadStorage(settings.data_dir, projects_dir=settings.projects_dir)
     app.extensions["cutroom_upload_storage"] = upload_storage
+    upload_storage.lock = project_job_gate
+    copies = ProjectCopyCoordinator(store, jobs, project_job_gate,
+        lambda: not (active_uploads or upload_storage.tickets or upload_storage.legacy or
+                     any(x.get("active") or x.get("rollback_path") for x in upload_transactions.values())))
+    app.extensions["cutroom_project_copies"] = copies
+    def copy_upload_guard():
+        try: copies.require_idle()
+        except ProjectCopyError as exc: raise UploadStorageError(exc.code, str(exc), exc.status) from exc
+    upload_storage.copy_guard = copy_upload_guard
+
+    @app.errorhandler(ProjectCopyError)
+    def handle_project_copy(error):
+        return jsonify({"error": error.code, "message": str(error)}), error.status
+
+    @app.post("/api/projects/<project_id>/copies")
+    def create_project_copy(project_id):
+        payload = _json_object()
+        _reject_unknown_fields(payload, {"expected_revision", "name", "operation_token"})
+        result = copies.start(project_id, payload.get("expected_revision"), payload.get("name"), payload.get("operation_token"))
+        return jsonify({"operation": result}), 202 if result["status"] in {"queued","running","publishing"} else 200
+
+    @app.get("/api/project-copies/<token>")
+    def get_project_copy(token):
+        return jsonify({"operation": copies.public(copies.poll(token))})
+
+    @app.get("/api/project-copies")
+    def active_project_copies():
+        return jsonify({"operations": copies.active()})
+
+    @app.post("/api/project-copies/<token>/cancel")
+    def cancel_project_copy(token):
+        _reject_unknown_fields(_json_object(), set())
+        return jsonify({"operation": copies.cancel(token)})
+
+
+    def copy_safe_submit(*args, **kwargs):
+        with project_job_gate:
+            copies.require_idle()
+            return jobs.submit(*args, **kwargs)
 
     def project_import_active(project_id: str, *, exclude_token: str = "") -> bool:
         return bool(active_uploads.get(project_id, 0) or upload_storage.active_for_project(project_id, exclude_token=exclude_token))
@@ -767,6 +833,10 @@ def create_app(settings: Settings | None = None) -> Flask:
             upload_transactions.pop(key, None)
             discard_upload_rollback(state)
 
+    def require_retained_edit_resumed(project):
+        if not isinstance(project.get("draft"), dict) and has_retained_edit(project):
+            raise APIInputError("retained_edit_requires_resume", "Resume the retained edit before changing its timeline or starting AI processing.", 409)
+
     def submit_project_job(
         kind: str,
         project_id: str,
@@ -787,6 +857,9 @@ def create_app(settings: Settings | None = None) -> Flask:
                 )
             latest_project = store.load(project_id)
             validate_sequence_version(latest_project)
+            validate_layer_tracks(latest_project)
+            if kind in {"director", "refine"}:
+                require_retained_edit_resumed(latest_project)
             if validate_project is not None:
                 validate_project(latest_project)
             identity = json.dumps(
@@ -805,7 +878,7 @@ def create_app(settings: Settings | None = None) -> Flask:
                         code="job_conflict",
                         active_job_id=active_job.id,
                     )
-            return jobs.submit(kind, project_id, function, *args, dedupe_key=dedupe_key, **kwargs)
+            return copy_safe_submit(kind, project_id, function, *args, dedupe_key=dedupe_key, **kwargs)
 
     @app.before_request
     def protect_local_api():
@@ -826,11 +899,20 @@ def create_app(settings: Settings | None = None) -> Flask:
             origin = request.headers.get("Origin")
             if origin and not _origin_matches_request(origin):
                 raise APIInputError("invalid_origin", "The request origin does not match this CUTROOM instance.", 403)
+        copy_writers = {"upload_source", "upload_asset", "preflight_upload", "append_upload",
+                        "cancel_upload", "stabilize_source", "retry_asset_preparation", "retry_source_preparation",
+                        "delete_source", "cancel_source_upload", "prepare_ai_runtime",
+                        "install_model"}
+        if request.endpoint in copy_writers or (request.view_args and "slot" in request.view_args and request.method in UNSAFE_METHODS):
+            copies.begin_writer()
+            g.project_copy_writer = True
         if request.endpoint in {"upload_source", "upload_asset"}:
             args = request.view_args or {}
             project_id = args.get("project_id", "")
             # Validate the namespace before allocating or parsing multipart files.
-            validate_sequence_version(store.load(project_id))
+            upload_project = store.load(project_id)
+            validate_sequence_version(upload_project)
+            validate_layer_tracks(upload_project)
             if request.headers.get("X-Cutroom-Upload-Transport") == "chunked-v1":
                 request.max_content_length = JSON_BODY_LIMIT
                 if (request.content_length or 0) > JSON_BODY_LIMIT:
@@ -862,6 +944,9 @@ def create_app(settings: Settings | None = None) -> Flask:
 
     @app.teardown_request
     def release_upload_storage(_error):
+        if getattr(g, "project_copy_writer", False):
+            g.project_copy_writer = False
+            copies.end_writer()
         ticket = getattr(g, "upload_ticket", None)
         if ticket is not None:
             upload_storage.finish(ticket)
@@ -939,6 +1024,10 @@ def create_app(settings: Settings | None = None) -> Flask:
             "error": "not_found",
             "message": "The requested local project or file no longer exists.",
         }), 404
+
+    @app.errorhandler(LayerTrackError)
+    def handle_layer_track_compatibility(error: LayerTrackError):
+        return jsonify({"error": "layer_tracks_incompatible", "message": str(error)}), 409
 
     @app.errorhandler(ProjectStateError)
     def handle_corrupt_project(error: ProjectStateError):
@@ -1160,6 +1249,13 @@ def create_app(settings: Settings | None = None) -> Flask:
         expected_revision = payload.pop("expected_revision", None)
         if expected_revision is not None and (isinstance(expected_revision, bool) or not isinstance(expected_revision, int) or expected_revision < 1):
             raise APIInputError("invalid_field", "expected_revision must be a positive integer.")
+        if "manual" in payload:
+            with project_job_gate:
+                current = store.load(project_id)
+                require_retained_edit_resumed(current)
+                # Pin even legacy callers to this read; never race a source reset.
+                revision = expected_revision if expected_revision is not None else current["revision"]
+                return jsonify({"project": _public_project(store.patch(project_id, payload, expected_revision=revision))})
         return jsonify({"project": _public_project(store.patch(project_id, payload, expected_revision=expected_revision))})
 
     def reviewed_reel_proposal(project, candidate_id):
@@ -1180,6 +1276,66 @@ def create_app(settings: Settings | None = None) -> Flask:
             stat = path.stat()
             identity[key] = [str(path), stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns]
         return reel_proposal(project, candidate_id, identity)
+
+    def reviewed_ai_draft_proposal(project, origin_id):
+        # Bind originals/proxies used by the reviewed reset without serving or
+        # copying their private filesystem paths in the public response.
+        identity = {}
+        entries = [(f"source:{slot}", source, ("relative_path", "preview_relative_path"))
+                   for slot, source in (project.get("sources") or {}).items() if source]
+        used_assets = {row.get("asset_id") for row in (project.get("manual") or {}).get("media_clips") or [] if isinstance(row, dict)}
+        # Keyed visuals may retain a background file with no timeline occurrence.
+        # Pin that dependency too, not just the foreground source/library files.
+        for target, config in ((project.get("manual") or {}).get("chroma_key") or {}).items():
+            if (target in {"A", "B"} or target in used_assets) and isinstance(config, dict) and config.get("enabled") is True and config.get("background_mode") != "transparent":
+                if isinstance(config.get("background_asset_id"), str):
+                    used_assets.add(config["background_asset_id"])
+        entries.extend((f"asset:{asset_id}", (project.get("assets") or {}).get(asset_id) or {}, ("path", "preview_path")) for asset_id in sorted(asset_id for asset_id in used_assets if isinstance(asset_id, str)))
+        for label, source, keys in entries:
+            for index, key in enumerate(keys):
+                relative = source.get(key)
+                if not relative and index:
+                    continue
+                path = _safe_project_child(store.project_dir(project["id"]), relative)
+                if path is None or not path.is_file():
+                    raise APIInputError("source_missing", "A source used by this draft or retained layer is unavailable. Restore it before reviewing.", 409)
+                stat = path.stat()
+                identity[f"{label}:{key}"] = [str(path), stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns]
+        return ai_draft_proposal(project, origin_id, identity)
+
+    @app.post("/api/projects/<project_id>/ai-draft-proposal")
+    def review_ai_draft(project_id: str):
+        payload = _json_object()
+        _reject_unknown_fields(payload, {"origin_id", "expected_revision"})
+        origin_id, revision = payload.get("origin_id"), payload.get("expected_revision")
+        if not isinstance(origin_id, str) or not 1 <= len(origin_id) <= 128:
+            raise APIInputError("invalid_field", "Select the saved AI draft to review.")
+        if isinstance(revision, bool) or not isinstance(revision, int) or revision < 1:
+            raise APIInputError("invalid_field", "Review requires the displayed project's expected_revision.")
+        try:
+            with project_job_gate:
+                if project_import_active(project_id) or jobs.active(project_id=project_id):
+                    raise APIInputError("project_busy", "Wait for processing or import before reviewing the AI draft.", 409)
+                current = store.load(project_id)
+                if current["revision"] != revision:
+                    raise RuntimeError("revision_conflict")
+                proposal = reviewed_ai_draft_proposal(current, origin_id)
+        except (ManualEditError, SourceTrackError) as error:
+            raise APIInputError("invalid_ai_draft_proposal", str(error), 409) from error
+        return jsonify({"proposal": proposal})
+
+    @app.get("/api/projects/<project_id>/clip-board")
+    def clip_board(project_id: str):
+        # Read-only ranking from saved analysis; no model, render or project save.
+        unknown = set(request.args) - {"length", "count"}
+        if unknown:
+            raise APIInputError("unknown_field", f"Unknown query field: {sorted(unknown)[0]}.")
+        try:
+            board = build_clip_board(store.load(project_id), length=request.args.get("length", DEFAULT_CLIP_LENGTH),
+                                     count=request.args.get("count", DEFAULT_CLIP_COUNT))
+        except ClipBoardError as error:
+            raise APIInputError("invalid_field", str(error)) from error
+        return jsonify({"board": board})
 
     @app.post("/api/projects/<project_id>/reel-proposal")
     def review_reel_candidate(project_id: str):
@@ -1202,6 +1358,32 @@ def create_app(settings: Settings | None = None) -> Flask:
         except ManualEditError as error:
             raise APIInputError("invalid_reel_proposal", str(error), 409) from error
         return jsonify({"proposal": proposal})
+
+    @app.post("/api/projects/<project_id>/manual-transcript")
+    def generate_manual_transcript_job(project_id: str):
+        from cutroom.manual_transcription import LANGUAGES, generate_manual_transcript, source_for_manual_transcript
+
+        payload = _json_object()
+        _reject_unknown_fields(payload, {"language", "expected_revision"})
+        revision, language = payload.get("expected_revision"), payload.get("language")
+        if type(revision) is not int or revision < 1:
+            raise APIInputError("invalid_revision", "Refresh the project before transcribing.")
+        if not isinstance(language, str) or language not in LANGUAGES:
+            raise APIInputError("invalid_field", "Choose a supported speech language or Auto-detect.")
+
+        def validate(current):
+            if current["revision"] != revision:
+                raise RuntimeError("revision_conflict")
+            if jobs.active(project_id=project_id, kind="prepare_source"):
+                raise APIInputError("project_busy", "Wait for source preparation to finish, then transcribe.", 409)
+            try:
+                source_for_manual_transcript(current)
+            except ValueError as error:
+                raise APIInputError("manual_transcription_unavailable", str(error), 409) from error
+
+        job = submit_project_job("manual_transcript", project_id, generate_manual_transcript, project_id,
+                                 store, settings, language, revision, validate_project=validate, job_identity=payload)
+        return jsonify({"job": job.public()}), 202
 
     @app.get("/api/projects/<project_id>/caption-generation")
     def caption_generation_status(project_id: str):
@@ -1260,20 +1442,44 @@ def create_app(settings: Settings | None = None) -> Flask:
             raise APIInputError("invalid_caption_alternative", str(error), 409) from error
         return jsonify({"proposal": proposal})
 
+    @app.post("/api/projects/<project_id>/review-markers")
+    def write_review_marker(project_id: str):
+        payload = _json_object()
+        revision = payload.get("expected_revision")
+        if type(revision) is not int or revision < 1:
+            raise APIInputError("invalid_field", "Markers require the displayed project's saved revision.")
+        try:
+            with project_job_gate:
+                if project_import_active(project_id) or jobs.active(project_id=project_id):
+                    raise APIInputError("project_busy", "Wait for active processing before saving a marker.", 409)
+                updated = store.update(project_id, lambda project: apply_marker(project, payload), expected_revision=revision)
+        except MarkerError as error:
+            raise APIInputError("marker_unavailable" if error.status==409 else "invalid_marker", str(error), error.status) from error
+        return jsonify({"project_id": project_id, "previous_revision": revision, "revision": updated["revision"],
+                        "review_markers": updated["review_markers"]})
+
     @app.post("/api/projects/<project_id>/manual/edit")
     def manual_edit(project_id: str):
         payload = _json_object(caption_import=True)
         action = str(payload.get("action") or "").strip().lower()
+        reviewed_ai = action == "apply_ai_draft"
+        if reviewed_ai:
+            _reject_unknown_fields(payload, {"action", "expected_revision", "proposal_id"})
+            action = payload["action"] = "sequence_reset"
         track_fields = {"slot", "locked"} if action == "set_track_lock" else SEQUENCE_ACTION_FIELDS.get(action, SOURCE_TRACK_EDIT_FIELDS.get(action, CHROMA_KEY_ACTION_FIELDS.get(action)))
         timeline_alias = action in ID_ACTIONS and bool({"track_id", "source_ref"} & payload.keys())
+        if reviewed_ai:
+            track_fields = {*track_fields, "proposal_id"}
         if timeline_alias:
             track_fields = {*track_fields, "track_id", "source_ref"}
             for field in ("track_id", "source_ref"):
                 if not isinstance(payload.get(field), str) or not payload[field].strip() or len(payload[field]) > 256:
                     raise APIInputError("invalid_field", "Timeline identity fields must be paired nonempty strings of at most 256 characters.")
-        media_fields = MEDIA_ACTION_FIELDS.get(action)
+        media_fields = MEDIA_ACTION_FIELDS.get(action, LAYER_ACTION_FIELDS.get(action))
         text_fields = TEXT_ACTION_FIELDS.get(action)
         caption_fields = CAPTION_ACTION_FIELDS.get(action)
+        if action == "transcript_text_batch":
+            text_fields = {"items"}
         if action == "caption_alternative":
             text_fields = {"alternative_id", "review_fingerprint"}
             _require_optional_string(payload, "alternative_id", max_length=64)
@@ -1322,13 +1528,13 @@ def create_app(settings: Settings | None = None) -> Flask:
             _require_optional_string(payload, "mode", max_length=16)
         expected_revision = payload.pop("expected_revision", None)
         proposal_id = payload.pop("proposal_id", None)
-        if action == "apply_review_candidate" and proposal_id is None:
+        if (action == "apply_review_candidate" or reviewed_ai) and proposal_id is None:
             raise APIInputError("invalid_field", "Preview the source proposal before applying it.")
         if proposal_id is not None and (
-            action not in {"apply_reel_candidate", "apply_review_candidate"} or not isinstance(proposal_id, str)
+            (action not in {"apply_reel_candidate", "apply_review_candidate"} and not reviewed_ai) or not isinstance(proposal_id, str)
             or not re.fullmatch(r"[0-9a-f]{64}", proposal_id) or expected_revision is None
         ):
-            raise APIInputError("invalid_field", "A reviewed Reel requires its proposal id and displayed project revision.")
+            raise APIInputError("invalid_field", "A reviewed proposal requires its proposal id and displayed project revision.")
         if (action in SEQUENCE_ACTION_FIELDS or media_fields is not None or text_fields is not None or action in {"set_track_lock", "set_chroma_key", "reset_chroma_key"}) and expected_revision is None:
             raise APIInputError("invalid_field", "Timeline edits require the displayed project's expected_revision.")
         if expected_revision is not None and (
@@ -1353,9 +1559,19 @@ def create_app(settings: Settings | None = None) -> Flask:
                         raise APIInputError("chroma_unavailable", "The installed FFmpeg does not support Chroma Key. Your footage and edits are unchanged.", 409)
                 if (media_fields is not None or text_fields is not None) and (project_import_active(project_id) or jobs.active(project_id=project_id)):
                     raise APIInputError("project_busy", "Wait for active processing or media import to finish before editing media or text.", 409)
+                created_layers = []
                 def apply_requested_edit(current):
+                    require_retained_edit_resumed(current)
                     validate_sequence_version(current)
-                    if proposal_id is not None:
+                    validate_layer_tracks(current)
+                    if reviewed_ai:
+                        origin = ai_draft_review_status(current).get("origin_id")
+                        checked = reviewed_ai_draft_proposal(current, origin)
+                        if checked["proposal_id"] != proposal_id:
+                            raise APIInputError("stale_ai_draft_proposal", "The source or edit changed. Review the AI draft again before applying it.", 409)
+                        if not checked["apply_allowed"]:
+                            raise ManualEditError(checked["apply_issue"])
+                    elif proposal_id is not None:
                         checked = reviewed_reel_proposal(current, payload.get("candidate_id"))
                         if checked["proposal_id"] != proposal_id:
                             raise APIInputError("stale_reel_proposal", "The source or edit changed. Review the alternative again before applying it.", 409)
@@ -1405,15 +1621,80 @@ def create_app(settings: Settings | None = None) -> Flask:
                                     raise FileNotFoundError()
                             except (FileNotFoundError, ValueError, TypeError) as error:
                                 raise APIInputError("asset_unavailable", "This project video is unavailable. Retry its import before appending it.", 409) from error
-                    return apply_manual_edit(current, canonical_payload)
+                    if action == "media_replace_take":
+                        for key in ("previous_asset_id", "asset_id"):
+                            ident = payload.get(key)
+                            asset = current.get("assets", {}).get(ident) if isinstance(ident, str) else None
+                            if not isinstance(asset, dict) or asset.get("status") != "ready":
+                                continue  # The detached planner will reject this identity.
+                            try:
+                                for name in (asset.get("path"), asset.get("preview_path") or asset.get("path")):
+                                    if not native_io_path(safe_asset_path(store.project_dir(project_id), name)).is_file():
+                                        raise FileNotFoundError()
+                            except (OSError, TypeError, ValueError) as error:
+                                raise APIInputError("asset_unavailable", "An original or prepared preview is missing. Restore or repair it before replacing this take.", 409) from error
+                    if action in {"media_roll", "media_slide"}:
+                        ids = [payload.get(key) for key in (("left_id", "clip_id", "right_id") if action == "media_slide" else ("left_id", "right_id"))]
+                        for row in (current.get("manual") or {}).get("media_clips") or []:
+                            if row.get("id") not in ids:
+                                continue
+                            asset = (current.get("assets") or {}).get(row.get("asset_id")) or {}
+                            try:
+                                for name in (asset.get("path"), asset.get("preview_path") or asset.get("path")):
+                                    if not native_io_path(safe_asset_path(store.project_dir(project_id), name)).is_file():
+                                        raise FileNotFoundError()
+                            except (FileNotFoundError, TypeError, ValueError) as error:
+                                raise APIInputError("asset_unavailable", "An original or preview is missing. Restore or repair it before changing this cut.", 409) from error
+                    before_layers = copy.deepcopy(current) if action in LAYER_ACTION_FIELDS or action in {"transcript_text_batch", "media_roll", "media_slide", "media_track_overwrite", "media_track_lift", "media_set_opacity"} else None
+                    result = apply_manual_edit(current, canonical_payload, **({"apply_isolated_proposal": True} if reviewed_ai else {}))
+                    if action in {"media_track_overwrite", "media_track_lift"}:
+                        if action == "media_track_overwrite":
+                            placed = result["manual"]["media_clips"][-1]
+                            tid, start, end = placed["track_id"], placed["start"], placed["end"]
+                            needed = {placed["asset_id"]}
+                        else:
+                            from cutroom.track_lift import lift_window
+                            from cutroom.sequence import editor_sequence_snapshot
+                            start, end = lift_window(before_layers, canonical_payload, editor_sequence_snapshot(before_layers)["duration"])
+                            tid, needed = canonical_payload["track_id"], set()
+                        needed |= {r["asset_id"] for r in before_layers["manual"].get("media_clips", [])
+                            if r.get("track_id") == tid and r["end"] > start and r["start"] < end}
+                        try:
+                            for aid in needed:
+                                a = before_layers["assets"][aid]
+                                for name in (a.get("path"), a.get("preview_path") or a.get("path")):
+                                    if not native_io_path(safe_asset_path(store.project_dir(project_id), name)).is_file():
+                                        raise FileNotFoundError()
+                        except (OSError, TypeError, ValueError) as error:
+                            # Still inside ProjectStore's detached, revision-locked update.
+                            raise APIInputError("asset_unavailable", "An affected original or preview is missing. Restore it before " + ("lifting from" if action == "media_track_lift" else "overwriting") + " this track.", 409) from error
+                    if action == "layers_join":
+                        try:
+                            group_join_receipt(before_layers, result, canonical_payload)
+                        except ValueError as error:
+                            raise ManualEditError(str(error)) from error
+                    if action in {"layers_duplicate", "layers_split"}:
+                        try:
+                            receipt = group_split_receipt if action == "layers_split" else group_duplicate_receipt
+                            created_layers.extend(receipt(before_layers, result, canonical_payload))
+                        except ValueError as error:
+                            raise ManualEditError(str(error)) from error
+                    if before_layers is not None and result == before_layers:
+                        # ProjectStore.update otherwise writes a revision even
+                        # for an unchanged mutator. Keep this validated no-op
+                        # within its revision lock without changing other edits.
+                        raise UnchangedLayerSelection(result)
+                    return result
                 project = store.update(
                     project_id,
                     apply_requested_edit,
                     expected_revision=expected_revision,
                 )
+        except UnchangedLayerSelection as unchanged:
+            project = unchanged.project
         except ManualEditError as error:
             raise APIInputError("invalid_manual_edit", str(error)) from error
-        return jsonify({"project": _public_project(project)})
+        return jsonify({"project": _public_project(project), **({"created": created_layers} if action in {"layers_duplicate", "layers_split"} else {})})
 
     @app.get("/api/chroma-key/status")
     def chroma_status():
@@ -1462,7 +1743,6 @@ def create_app(settings: Settings | None = None) -> Flask:
         factor = min(1.0, 640 / max(width, height))
         preview_width, preview_height = max(2, int(width * factor) // 2 * 2), max(2, int(height * factor) // 2 * 2)
         cache = root / "cache" / "chroma-preview"
-        cache.mkdir(parents=True, exist_ok=True)
         source_stat = source_path.stat()
         identity = json.dumps([revision, slot, round(native_time, 6), source.get("generation"),
             source.get("relative_path"), source_stat.st_size, source_stat.st_mtime_ns, config, background_identity], sort_keys=True)
@@ -1470,6 +1750,9 @@ def create_app(settings: Settings | None = None) -> Flask:
         # cross Windows MAX_PATH even when FFmpeg's temporary output is short.
         frame = native_io_path(cache / (hashlib.sha256(identity.encode()).hexdigest() + ".png"))
         if not frame.is_file():
+            copies.begin_writer()
+            g.project_copy_writer = True
+            cache.mkdir(parents=True, exist_ok=True)
             temporary = cache / (uuid.uuid4().hex + ".png")
             # Key at the same source dimensions as export, then downscale the
             # opaque result. Never change edge sampling just for this preview.
@@ -1536,6 +1819,7 @@ def create_app(settings: Settings | None = None) -> Flask:
         with project_job_gate:
             current = store.load(project_id)
             validate_sequence_version(current)
+            validate_layer_tracks(current)
             if purpose == "source":
                 require_tracks_unlocked(current)
                 prune_upload_transactions(time.monotonic())
@@ -1631,7 +1915,7 @@ def create_app(settings: Settings | None = None) -> Flask:
                 current = store.update(project_id, lambda value: value.setdefault("assets", {}).update({asset_id: asset}))
                 durable = True
                 try:
-                    job = jobs.submit("prepare_asset", project_id, prepare_asset, project_id, asset_id, store, settings, dedupe_key=asset_id)
+                    job = copy_safe_submit("prepare_asset", project_id, prepare_asset, project_id, asset_id, store, settings, dedupe_key=asset_id)
                 except JobAdmissionError:
                     def discard_asset(value):
                         value["assets"].pop(asset_id, None)
@@ -1722,7 +2006,7 @@ def create_app(settings: Settings | None = None) -> Flask:
                                        expected_revision=revision)
                 durable = True
                 try:
-                    job = jobs.submit("prepare_asset", project_id, prepare_stabilized_asset,
+                    job = copy_safe_submit("prepare_asset", project_id, prepare_stabilized_asset,
                                       project_id, asset_id, store, settings, dedupe_key=asset_id)
                 except JobAdmissionError:
                     def discard_stabilized_asset(value):
@@ -1740,6 +2024,20 @@ def create_app(settings: Settings | None = None) -> Flask:
                 except OSError:
                     pass
 
+    # Read-only decoded-original review, separate from proxies and project FPS.
+    from cutroom.source_frames import SourceFrameReview, SourceFrameError
+    source_frames = SourceFrameReview(store, settings)
+    app.extensions["cutroom_source_frames"] = source_frames
+
+    @app.get("/api/projects/<project_id>/assets/<asset_id>/frame-step")
+    def source_frame_step(project_id: str, asset_id: str):
+        try:
+            if any(len(request.args.getlist(key)) != 1 for key in request.args):
+                raise SourceFrameError("Choose one source-frame request.", 400)
+            return jsonify(source_frames.step(project_id, asset_id, request.args.to_dict()))
+        except SourceFrameError as error:
+            raise APIInputError("source_frame_unavailable", str(error), error.status) from error
+
     @app.get("/api/projects/<project_id>/assets/<asset_id>/media")
     def asset_media(project_id: str, asset_id: str):
         return serve_asset(project_id, asset_id, thumbnail=False)
@@ -1756,6 +2054,75 @@ def create_app(settings: Settings | None = None) -> Flask:
             raise FileNotFoundError(asset_id)
         return send_file(path, conditional=True, as_attachment=True, download_name=sanitize_filename(asset.get("name")))
 
+    @app.post("/api/projects/<project_id>/assets/<asset_id>/repair-preview")
+    def repair_asset_preview(project_id: str, asset_id: str):
+        from cutroom.preview_repair import repair_asset
+        from cutroom.media_library import _PREPARATION_BINDING_FIELDS
+
+        payload = request.get_json()
+        if not isinstance(payload, dict):
+            raise APIInputError("invalid_request", "Expected an object", 400)
+        _reject_unknown_fields(payload, {"expected_revision", "operation_token"})
+        token = payload.get("operation_token")
+        if not isinstance(token, str) or not re.fullmatch(r"[0-9a-f]{32}", token):
+            raise APIInputError(
+                "invalid_token", "A repair operation token is required", 400
+            )
+        key = (
+            "repair:" + asset_id + ":" + str(payload.get("expected_revision")) + ":" + token
+        )
+        with project_job_gate:
+            for previous in jobs.list(kind="prepare_asset", limit=10000):
+                if previous.dedupe_key.endswith(":" + token):
+                    if previous.project_id != project_id or previous.dedupe_key != key:
+                        raise APIInputError(
+                            "repair_token_conflict",
+                            "This repair token belongs to another request",
+                            409,
+                        )
+                    return jsonify(
+                        {
+                            "project": _public_project(store.load(project_id)),
+                            "job": previous.public(),
+                        }
+                    ), 200
+            copies.require_idle()
+            current = store.load(project_id)
+            if type(payload.get("expected_revision")) is not int or payload[
+                "expected_revision"
+            ] != current.get("revision"):
+                raise APIInputError(
+                    "revision_conflict", "Reload the saved project before repairing", 409
+                )
+            validate_sequence_version(current)
+            validate_layer_tracks(current)
+            asset = (current.get("assets") or {}).get(asset_id)
+            if (
+                not ASSET_ID_RE.fullmatch(asset_id)
+                or not isinstance(asset, dict)
+                or asset.get("status") != "ready"
+            ):
+                raise APIInputError(
+                    "repair_unavailable", "Repair requires an existing ready asset", 409
+                )
+            if project_import_active(project_id) or jobs.active(project_id=project_id):
+                raise APIInputError(
+                    "project_busy", "Wait for active processing or import", 409
+                )
+            binding = {k: copy.deepcopy(asset.get(k)) for k in _PREPARATION_BINDING_FIELDS}
+            job = copy_safe_submit(
+                "prepare_asset",
+                project_id,
+                repair_asset,
+                project_id,
+                asset_id,
+                store,
+                settings,
+                binding,
+                dedupe_key=key,
+            )
+            return jsonify({"project": _public_project(current), "job": job.public()}), 202
+
     @app.post("/api/projects/<project_id>/assets/<asset_id>/prepare")
     def retry_asset_preparation(project_id: str, asset_id: str):
         with project_job_gate:
@@ -1769,6 +2136,7 @@ def create_app(settings: Settings | None = None) -> Flask:
                 return jsonify({"project": _public_project(current)})
             preparation = prepare_asset
             if asset.get("_stabilization"):
+                require_layer_asset_unlocked(current, asset_id)
                 capability = stabilization_capability(settings)
                 if not capability.get("available"):
                     raise APIInputError("stabilization_unavailable", capability["message"], 422)
@@ -1780,7 +2148,7 @@ def create_app(settings: Settings | None = None) -> Flask:
                 preparation = prepare_stabilized_asset
             current = store.update(project_id, lambda value: value["assets"][asset_id].update(status="preparing"))
             try:
-                job = jobs.submit("prepare_asset", project_id, preparation, project_id, asset_id, store, settings, dedupe_key=asset_id)
+                job = copy_safe_submit("prepare_asset", project_id, preparation, project_id, asset_id, store, settings, dedupe_key=asset_id)
             except JobAdmissionError:
                 store.update(project_id, lambda value: value["assets"][asset_id].update(status="failed"))
                 raise
@@ -1866,6 +2234,7 @@ def create_app(settings: Settings | None = None) -> Flask:
         with project_job_gate:
             current_project = store.load(project_id)
             validate_sequence_version(current_project)
+            validate_layer_tracks(current_project)
             require_tracks_unlocked(current_project)
             now = time.monotonic()
             prune_upload_transactions(now)
@@ -1955,10 +2324,21 @@ def create_app(settings: Settings | None = None) -> Flask:
             def commit_upload(project: dict[str, Any]) -> None:
                 nonlocal installed_destination, previous_source, previous_media_path, rollback_path
                 validate_sequence_version(project)
+                validate_layer_tracks(project)
                 # Source replacement clears the shared draft, so every locked
                 # lane must be checked before any physical file is moved.
                 require_tracks_unlocked(project)
+                if slot == "A":
+                    require_layer_tracks_unlocked(project)
+                _anchor_tracked_layers_before_source_change(project, slot)
                 current = project.setdefault("sources", {}).get(slot)
+                # The first manual import establishes the full-length timeline
+                # in the same transaction as the recording. No AI or second
+                # revision-sensitive request is needed. Never restart an edit
+                # automatically when replacing an existing recording.
+                start_first_manual = (slot == "A" and current is None
+                                      and project.get("settings", {}).get("workflow") == "manual"
+                                      and not project.get("draft"))
                 previous_source = json.loads(json.dumps(current)) if isinstance(current, dict) else None
                 if previous_source is not None:
                     previous_media_path = _safe_project_child(project_root, previous_source.get("relative_path"))
@@ -1977,6 +2357,8 @@ def create_app(settings: Settings | None = None) -> Flask:
                 project["analysis"] = None
                 project["draft"] = None
                 _reset_manual_after_source_change(project, slot, replacing=previous_source is not None)
+                if start_first_manual:
+                    start_manual_draft(project)
 
             with project_job_gate:
                 transaction = upload_transactions.get(transaction_key)
@@ -2018,7 +2400,7 @@ def create_app(settings: Settings | None = None) -> Flask:
                     if str(active_job.dedupe_key).split(":", 1)[0] == slot:
                         jobs.cancel(active_job.id)
                 try:
-                    job = jobs.submit(
+                    job = copy_safe_submit(
                         "prepare_source",
                         project_id,
                         _prepare_source,
@@ -2137,7 +2519,10 @@ def create_app(settings: Settings | None = None) -> Flask:
                     )
                     if rollback_available:
                         validate_sequence_version(project)
+                        validate_layer_tracks(project)
                         require_tracks_unlocked(project)
+                        if slot == "A":
+                            require_layer_tracks_unlocked(project)
                         for active_job in jobs.active(project_id=project_id, kind="prepare_source"):
                             if str(active_job.dedupe_key) == f"{slot}:{generation}":
                                 jobs.cancel(active_job.id)
@@ -2176,6 +2561,7 @@ def create_app(settings: Settings | None = None) -> Flask:
                                 replacement_source["preparation"] = "queued"
                                 replacement_source.pop("preparation_error", None)
                                 replacement_source["audio_profile_ready"] = False
+                            _anchor_tracked_layers_before_source_change(latest, slot)
                             latest["sources"][slot] = replacement_source
                             latest.setdefault("pre_analysis", {}).setdefault("audio", {}).pop(slot, None)
                             latest.setdefault("pre_analysis", {}).setdefault("vision", {}).pop(slot, None)
@@ -2215,7 +2601,7 @@ def create_app(settings: Settings | None = None) -> Flask:
                             if replacement_source is not None:
                                 restored_generation = str(replacement_source.get("generation") or "")
                                 try:
-                                    jobs.submit(
+                                    copy_safe_submit(
                                         "prepare_source",
                                         project_id,
                                         _prepare_source,
@@ -2261,6 +2647,7 @@ def create_app(settings: Settings | None = None) -> Flask:
             source = project.setdefault("sources", {}).get(slot)
             if not isinstance(source, dict):
                 raise SourceAlreadyMissing()
+            _anchor_tracked_layers_before_source_change(project, slot)
             previous_source = dict(source) if isinstance(source, dict) else None
             project["sources"][slot] = None
             project.setdefault("pre_analysis", {}).setdefault("audio", {}).pop(slot, None)
@@ -2272,7 +2659,10 @@ def create_app(settings: Settings | None = None) -> Flask:
         with project_job_gate:
             current_project = store.load(project_id)
             validate_sequence_version(current_project)
+            validate_layer_tracks(current_project)
             require_tracks_unlocked(current_project)
+            if slot == "A":
+                require_layer_tracks_unlocked(current_project)
             for active_job in jobs.active(project_id=project_id, kind="prepare_source"):
                 if str(active_job.dedupe_key).split(":", 1)[0] == slot:
                     jobs.cancel(active_job.id)
@@ -2323,7 +2713,7 @@ def create_app(settings: Settings | None = None) -> Flask:
             # replacement/deletion, otherwise a retry can enqueue stale work.
             project = store.update(project_id, mark_queued)
             try:
-                job = jobs.submit(
+                job = copy_safe_submit(
                     "prepare_source",
                     project_id,
                     _prepare_source,
@@ -2345,6 +2735,22 @@ def create_app(settings: Settings | None = None) -> Flask:
                 )
                 raise
         return jsonify({"project": _public_project(project), "job": job.public()}), 202
+
+    @app.post("/api/projects/<project_id>/retained-edit/resume")
+    def retained_edit_resume(project_id: str):
+        payload = _json_object()
+        _reject_unknown_fields(payload, {"expected_revision"})
+        revision = payload.get("expected_revision")
+        if isinstance(revision, bool) or not isinstance(revision, int) or revision < 1:
+            raise APIInputError("invalid_revision", "Refresh the project before resuming its edit.")
+        with project_job_gate:
+            if jobs.active(project_id=project_id) or project_import_active(project_id):
+                raise APIInputError("project_busy", "Wait for current processing before resuming the edit.", 409)
+            try:
+                project = store.update(project_id, lambda current: resume_retained_edit(current, store.project_dir(project_id)), expected_revision=revision)
+            except (ValueError, TypeError, KeyError) as error:
+                raise APIInputError("invalid_retained_edit", str(error)) from error
+        return jsonify({"project": _public_project(project)})
 
     @app.post("/api/projects/<project_id>/manual-draft")
     def manual_draft(project_id: str):
@@ -2382,7 +2788,13 @@ def create_app(settings: Settings | None = None) -> Flask:
     def run_director(project_id: str):
         payload = _json_object()
         _validate_settings_payload(payload)
+        preserve_header = request.headers.get("X-Cutroom-Preserve-Edit")
+        if preserve_header is not None and preserve_header != "1":
+            raise APIInputError("invalid_field", "Preserve edit must be 1 when supplied.")
+        preserve_current_edit = preserve_header == "1"
         reviewed_header = request.headers.get("X-Cutroom-Reviewed-Revision")
+        if preserve_current_edit and reviewed_header is None:
+            raise APIInputError("invalid_field", "Preserving the current edit requires its reviewed revision.")
         reviewed_revision = None
         if reviewed_header is not None:
             if not re.fullmatch(r"[1-9][0-9]{0,15}", reviewed_header) or int(reviewed_header) > 9_007_199_254_740_991:
@@ -2394,6 +2806,8 @@ def create_app(settings: Settings | None = None) -> Flask:
                 raise APIInputError("request_review_stale", "The project changed after request review. Review again; the current edit was kept.", 409)
 
         project = store.load(project_id)
+        validate_layer_tracks(project)
+        require_retained_edit_resumed(project)
         require_reviewed_revision(project)
         require_tracks_unlocked(project)
         if not project.get("sources", {}).get("A"):
@@ -2446,13 +2860,26 @@ def create_app(settings: Settings | None = None) -> Flask:
                 selected_settings,
                 payload,
                 validate_project=require_source,
-                job_identity=payload,
+                job_identity={**payload, "preserve_current_edit": True, "reviewed_revision": reviewed_revision} if preserve_current_edit else payload,
+                **({"preserve_current_edit": True} if preserve_current_edit else {}),
                 **({"expected_project_revision": reviewed_revision} if reviewed_revision is not None else {}),
             )
             return jsonify({"job": job.public()}), 202
 
     @app.post("/api/projects/<project_id>/director/refine")
     def refine(project_id: str):
+        preserve_header = request.headers.get("X-Cutroom-Preserve-Edit")
+        if preserve_header is not None and preserve_header != "1":
+            raise APIInputError("invalid_field", "Preserve edit must be 1 when supplied.")
+        preserve_current_edit = preserve_header == "1"
+        reviewed_header = request.headers.get("X-Cutroom-Reviewed-Revision")
+        if preserve_current_edit and reviewed_header is None:
+            raise APIInputError("invalid_field", "Preserving the current edit requires its reviewed revision.")
+        reviewed_revision = None
+        if reviewed_header is not None:
+            if not re.fullmatch(r"[1-9][0-9]{0,15}", reviewed_header) or int(reviewed_header) > 9_007_199_254_740_991:
+                raise APIInputError("invalid_field", "Reviewed revision must be a positive safe integer.")
+            reviewed_revision = int(reviewed_header)
         payload = _json_object()
         _reject_unknown_fields(payload, {"command"})
         _require_optional_string(payload, "command", max_length=32)
@@ -2460,6 +2887,8 @@ def create_app(settings: Settings | None = None) -> Flask:
         if command not in {"shorter", "keep_more", "more_energy", "fewer_switches", "focus_speaker", "new_variation"}:
             raise APIInputError("invalid_command", "Unknown refinement command.")
         def require_draft(latest: dict[str, Any]) -> None:
+            if reviewed_revision is not None and latest.get("revision") != reviewed_revision:
+                raise APIInputError("request_review_stale", "The project changed after review. Review again; the current edit was kept.", 409)
             require_tracks_unlocked(latest)
             if not latest.get("sources", {}).get("A") or not latest.get("draft"):
                 raise APIInputError("draft_required", "Generate a draft before refining it.")
@@ -2471,6 +2900,9 @@ def create_app(settings: Settings | None = None) -> Flask:
                     "invalid_variation", "Build a Short draft before requesting another cut.",
                 )
 
+        latest = store.load(project_id)
+        validate_layer_tracks(latest)
+        require_retained_edit_resumed(latest)
         with project_job_gate:
             job = submit_project_job(
                 "refine",
@@ -2481,14 +2913,16 @@ def create_app(settings: Settings | None = None) -> Flask:
                 connections.job_settings(settings),
                 command,
                 validate_project=require_draft,
-                job_identity={"command": command},
+                job_identity={"command": command, **({"preserve_current_edit": True} if preserve_current_edit else {}), **({"reviewed_revision": reviewed_revision} if reviewed_revision is not None else {})},
+                **({"preserve_current_edit": True} if preserve_current_edit else {}),
+                **({"expected_project_revision": reviewed_revision} if reviewed_revision is not None else {}),
             )
             return jsonify({"job": job.public()}), 202
 
     @app.post("/api/projects/<project_id>/render")
     def render(project_id: str):
         payload = _json_object()
-        _reject_unknown_fields(payload, {"quality", "fps", "resolution"})
+        _reject_unknown_fields(payload, {"quality", "fps", "resolution", "range"})
         if "resolution" in payload:
             try:
                 validate_export_resolution(payload["resolution"])
@@ -2506,6 +2940,17 @@ def create_app(settings: Settings | None = None) -> Flask:
         if not project.get("draft"):
             return jsonify({"error": "draft_required", "message": "Generate or create a draft before rendering."}), 400
         validate_sequence_version(project)
+        validate_layer_tracks(project)
+        def require_export_range(value):
+            try:
+                resolve_export_range(value, payload)
+            except RangeExportError as error:
+                raise APIInputError("range_changed" if error.stale else "invalid_export_range", str(error),
+                                    409 if error.stale else 400) from error
+            except ValueError as error:
+                raise APIInputError("invalid_export_range", str(error), 400) from error
+
+        require_export_range(project)
         try:
             layout_fallback = require_layout_coverage(project, payload)
         except LayoutCoverageError as error:
@@ -2517,6 +2962,8 @@ def create_app(settings: Settings | None = None) -> Flask:
         def require_renderable(latest: dict[str, Any]) -> None:
             nonlocal layout_fallback
             validate_sequence_version(latest)
+            validate_layer_tracks(latest)
+            require_export_range(latest)
             if not latest.get("sources", {}).get("A") or not latest.get("draft"):
                 raise APIInputError("draft_required", "Generate or create a draft before rendering.")
             try:
@@ -2571,9 +3018,14 @@ def create_app(settings: Settings | None = None) -> Flask:
         # Cancellation is deliberately idempotent. A late/repeated request still
         # returns the authoritative terminal record instead of looking like a
         # network failure to a polling client.
-        accepted = jobs.cancel(job_id)
+        if job.kind == "project_copy":
+            operation = copies.cancel(job.dedupe_key)
+            accepted = bool(operation.get("cancel_requested"))
+        else:
+            accepted = jobs.cancel(job_id)
         latest = jobs.get(job_id) or job
-        if accepted and latest.status == "cancelled" and latest.kind == "prepare_asset":
+        if (accepted and latest.status == "cancelled" and latest.kind == "prepare_asset"
+                and ASSET_ID_RE.fullmatch(latest.dedupe_key)):
             def mark_asset_cancelled(project):
                 asset = (project.get("assets") or {}).get(latest.dedupe_key)
                 if asset and asset.get("status") != "ready":
@@ -2677,7 +3129,7 @@ def create_app(settings: Settings | None = None) -> Flask:
                 }), 409
         with project_job_gate:
             check_download_admission()
-            job = jobs.submit(
+            job = copy_safe_submit(
                 "model_install", None,
                 _install_ollama_model if kind == "editor" else install_transcription,
                 model, settings, dedupe_key=dedupe_key,
@@ -3202,6 +3654,7 @@ def _public_captions(project: dict[str, Any], public: dict[str, Any]) -> None:
     Items come from the saved project (its transcript is the uncorrected one the
     corrections refer to); the editor sees the transcript with corrections applied.
     """
+    public["caption_preview"] = caption_preview_scene(project)
     try:
         validate_sequence_version(project)
         items = project_caption_items(project, aligned=False)
@@ -3256,6 +3709,12 @@ def _strip_private_caption_provenance(public: dict[str, Any]) -> None:
 
 def _public_project(project: dict[str, Any]) -> dict[str, Any]:
     public = json.loads(json.dumps(project))
+    copy_coordinator = current_app.extensions.get("cutroom_project_copies") if has_app_context() else None
+    public["project_copy"] = copy_coordinator.for_project(project["id"]) if copy_coordinator else None
+    public.pop("_ai_draft_proposal", None)
+    public["ai_draft_review"] = ai_draft_review_status(project)
+    retained_root = current_app.extensions["cutroom_store"].project_dir(project["id"]) if has_app_context() and "cutroom_store" in current_app.extensions else None
+    public["retained_edit"] = retained_edit_status(project, retained_root)
     registry = public.pop("caption_alternatives", {}) or {}
     public["caption_alternatives"] = [{"id": key, "label": value.get("label", "Saved alternative"),
                                         "source_interval": value.get("source_interval"), "unverified": True}
@@ -3281,14 +3740,21 @@ def _public_project(project: dict[str, Any]) -> dict[str, Any]:
     project_id = public["id"]
     asset_fields = {"id", "name", "kind", "duration", "width", "height", "has_audio", "status", "waveform", "stabilized"}
     for asset_id, asset in public.setdefault("assets", {}).items():
+        from cutroom.preview_repair import preview_version
+        version = preview_version(asset)
         thumbnail = bool(asset.get("thumbnail_path"))
         asset = {key: value for key, value in asset.items() if key in asset_fields}
         public["assets"][asset_id] = asset
         asset["url"] = f"/api/projects/{project_id}/assets/{asset_id}/media"
+        if version:
+            asset["preview_version"] = version
+            asset["url"] += f"?v={version}"
         if asset.get("status") == "ready":
             asset["download_url"] = f"/api/projects/{project_id}/assets/{asset_id}/download"
         if thumbnail:
             asset["thumbnail_url"] = f"/api/projects/{project_id}/assets/{asset_id}/thumbnail"
+            if version:
+                asset["thumbnail_url"] += f"?v={version}"
     for slot, source in public.get("sources", {}).items():
         if source:
             source.pop("relative_path", None)
@@ -3354,7 +3820,7 @@ def main() -> None:
             from waitress import serve
             from cutroom.upload_transport import create_upload_server
             request_body_limit = int(app.config.get("MAX_CONTENT_LENGTH") or (float(settings.raw.get("max_upload_gb", 40)) * 1024**3 + 32 * 1024**2))
-            print(f"CUTROOM AI {__version_label__} — {url}")
+            print(f"CUTROOM AI {__version_label__} â€” {url}")
             print(f"Upload transport limit: {request_body_limit / 1024**3:.1f} GiB")
             serve(
                 app,

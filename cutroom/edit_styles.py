@@ -690,6 +690,59 @@ EDIT_STYLES: tuple[dict[str, Any], ...] = (
             "extremes; do not reorder or semantically shorten the recording."
         ),
     },
+    {
+        "id": "gameplay_youtube",
+        "category": "streamer",
+        "name": {"he": "סרטון גיימינג ליוטיוב", "en": "Gameplay YouTube video"},
+        "description": {
+            "he": "מקצר הקלטה ארוכה לסרטון יוטיוב אופקי: שומר את הקטעים החזקים לפי הסדר, מוריד תפריטים, טעינות ושקט, ומציע פרקים.",
+            "en": "Condenses a long recording into a widescreen YouTube video: keeps the strongest stretches in order, drops menus, loading and dead air, and suggests chapters.",
+        },
+        "badge": {"he": "יוטיוב", "en": "YouTube"},
+        "resource_tier": "lite",
+        "features": ["long_form", "gameplay", "chronological", "chapters", "widescreen"],
+        "defaults": {
+            "goal": "youtube",
+            "aspect": "16:9",
+            "pace": "balanced",
+            "target_duration": 600,
+            "layout": "A",
+            "quality": "balanced",
+            "resolution": "1080",
+            "auto_reframe": False,
+            "captions": False,
+            "burn_captions": False,
+            "performance_mode": "auto",
+            "audio_cleanup": {
+                **_BASE_AUDIO,
+                "preset": "natural",
+                "silence_min_seconds": 1.20,
+                "silence_keep_seconds": 0.40,
+                "max_remove_ratio": 0.20,
+                "quiet_gain_db": 2.0,
+                "loud_gain_db": -2.0,
+            },
+        },
+        "selection_policy": _selection_policy(
+            moment_unit="source_stretch",
+            hook="none",
+            chronology="strict",
+            pre_roll_seconds=0.0,
+            post_roll_seconds=0.0,
+            energy=0.55,
+            speech=0.15,
+            visual_change=0.0,
+            continuity=0.30,
+            protect_action_span=True,
+            story_structure=("strongest stretches", "original order", "chapters"),
+        ),
+        "framing_policy": _framing_policy(default_layout="A", second_source_layout="A"),
+        "guidance": (
+            "Condense a long gameplay recording into a YouTube video. Keep the strongest continuous stretches "
+            "in their original order, remove silent menus, loading screens and measured dead air, and never "
+            "reorder or invent story."
+        ),
+    },
 )
 
 
