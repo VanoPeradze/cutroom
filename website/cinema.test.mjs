@@ -52,3 +52,21 @@ test('mobile backing resolution is bounded and missing canvas is harmless',()=>{
  assert.equal(harness({contextAvailable:false}).frames,0);
  assert.equal(harness({canvasAvailable:false}).frames,0);
 });
+
+
+test('the screening room preserves the owner-requested purple/cyan brand',()=>{
+ assert.match(common,/--cyan:#70d9e0;/);
+ assert.match(common,/--violet:#b7a6de;/);
+ assert.match(finish,/\.hero h1 span\+span\{color:var\(--violet\)\}/);
+ assert.match(source,/\[112,217,224\]:\[183,166,222\]/);
+ assert.doesNotMatch(common+finish+source,/#efb28d|#f9c4a4|225,162,127|244,217,195/);
+ const luminance=hex=>hex.replace('#','').match(/../g).map(c=>parseInt(c,16)/255)
+  .map(v=>v<=.04045?v/12.92:((v+.055)/1.055)**2.4)
+  .reduce((total,v,i)=>total+v*[.2126,.7152,.0722][i],0);
+ const contrast=(a,b)=>{const x=luminance(a),y=luminance(b);return(Math.max(x,y)+.05)/(Math.min(x,y)+.05);};
+ for(const [foreground,background]of [
+  ['#181c2a','#70d9e0'],['#181c2a','#9ae8ed'],['#b7a6de','#15151f'],
+  ['#b1adc3','#15151f'],['#57506b','#f0eff7'],['#624184','#f0eff7'],
+  ['#181c2a','#b7a6de'],['#49365f','#b7a6de'],
+ ])assert.ok(contrast(foreground,background)>=4.5,foreground+' on '+background);
+});

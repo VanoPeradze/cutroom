@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased - 2026-11-22 - Clips board and Gameplay YouTube videos
+
+- **Clips** in the editor top bar ranks the strongest 15/30/45/60-second moments of the main recording from saved analysis (sound levels, plus the transcript and gameplay vision when present). It runs no model and saves nothing. Each card has a real frame, an inline preview, a strength score relative to that recording (not a view prediction) and its reasons; the moment radar shows the whole recording.
+- From a card: **Open in editor** selects the moment on the timeline, **Export clip** opens Export with that marked range, and **Place in timeline** opens the existing source placement form for a moment that is not in the edit (Undo restores it). Select several cards to export them one after another, with progress, Stop and download links. Export actions appear only where marked-range export is available.
+- With the confirmed camera-on-top stack and a vertical output, card frames and previews show that framing. **Thumbnail ideas** saves full frames at the three strongest peaks as 1280x720 PNG files.
+- New **Gameplay YouTube video** style: condenses a long recording to the chosen length in minutes, keeping the strongest stretches in their original order, dropping silent menus/loading screens (gameplay vision now also runs for this style) and dead air inside kept stretches, and proposing YouTube chapters with a Copy button. The result arrives as the usual draft proposal; a manual timeline is kept until you apply it. Chapter names fall back to "Part N" without gameplay vision; rename them before publishing.
+
 ## 1.3 Beta - Hebrew-first transcription candidate (2026-11-11)
 
 - Hebrew in Balanced and Quality now uses the cached ivrit.ai model, with explicit download setup and actual-model RAM/VRAM checks. Lite stays lightweight; execution records expose fallback choices. No accuracy or speed improvement is claimed without real-audio evaluation.

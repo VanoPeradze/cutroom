@@ -1,16 +1,13 @@
 {
-  "filename": "CUTROOM-1.3-Beta-combined-ba67003.zip",
-  "bytes": 12849257,
-  "sha256": "5a406f47f7cb24e49f1967fbcd8e06c2cfb51748379e6938f504433b4e4e7b7c",
-  "build_id": "CUTROOM-1.3-beta-mac-20261111-072132",
-  "url": "https://cutroom-studio--sgntpkmsft.expo.app/downloads/CUTROOM-1.3-Beta-combined-ba67003.zip",
+  "filename": "CUTROOM-1.3-Beta-combined-324a6a3.zip",
+  "bytes": 12905683,
+  "sha256": "8fa4913fd719b65c3828f585c389133c6cde7a245a0559d63d2ba8d861e8a546",
+  "build_id": "CUTROOM-1.3-beta-mac-20261122-175612",
+  "url": "https://cutroom-studio--o2cbay1w81.expo.app/downloads/CUTROOM-1.3-Beta-combined-324a6a3.zip",
   "mirrors": [],
   "version": "1.3-beta",
   "layout": "windows-mac-folders-v1",
-  "manifest_sha256": "1d7163d4282eace4da0e412b2750e3d397ea234f3da43c59028628b13e9b5e5e",
-  "source_commit": "ba67003726e80e0d394b1927b6b710f191a60157",
-  "native_validation_url": "https://github.com/VanoPeradze/cutroom/actions/runs/42977968863",
-  "native_validation_commit": "ba67003726e80e0d394b1927b6b710f191a60157",
-  "note": "The exact combined archive passed hosted native ARM64 and Intel synthetic review. Physical UI, human listening, model inference, live Cloudflare and transcription accuracy remain unverified.",
-  "review_record_commit": "acc6ceec1cbad8ac8b5382767df64b48fd1b7ae5"
+  "manifest_sha256": "9c8836ab92eaa0c9b6656a7d9e5d3bc349e3282afa8e419385d7b22cdf7b8029",
+  "source_commit": "324a6a33f968b9d90a9e37b25b3ca5c6a83e7d5a",
+  "note": "Immutable combined Windows/Mac staging candidate for PR #130, from frozen application source 324a6a3 and its exact Windows baseline. This pin identifies the archive for separate macOS ARM64/Intel qualification and does not claim native, physical-device, transcription or human acceptance."
 }

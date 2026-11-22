@@ -630,13 +630,14 @@ test('studio tour supports horizontal navigation, RTL and keyboard boundaries', 
 
 test('studio finish stays local, preserves real imagery and has bounded responsive rules',()=>{
  const finish=readFileSync(new URL('./public/studio.css',import.meta.url),'utf8');
- assert.match(html,/href="\/studio.css\?v=20261117-night-drive1"/);
+ assert.match(html,/href="\/studio.css\?v=20261122-clips1"/);
  assert.match(finish,/grid-template-columns:repeat\(5,minmax\(0,1fr\)\)/);
  assert.match(finish,/@media\(max-width:767px\)/);
  assert.match(finish,/@media\(max-width:359px\)/);
  assert.match(finish,/@media\(prefers-reduced-motion:reduce\)/);
  assert.doesNotMatch(finish,/@import|url\(['"]?https?:/);
- assert.match(html,/<span data-he="החומר שלך\.">Your footage\.<\/span>/);
+ assert.match(html,/<span data-he="ה־AI מוצא את הרגעים\.">AI finds the moments\.<\/span>/);
+ assert.match(html,/id="clips"[\s\S]*In the next beta[\s\S]*Available now/);
  assert.match(html,/Interface captured 19 October 2026/);
 });
 
@@ -681,14 +682,12 @@ test('the cutting-room redesign uses locally licensed fonts and a real workflow'
  assert.doesNotMatch(html, /class="hero-atmosphere"/);
 });
 
-test('Night Drive surfaces and platform buttons maintain readable contrast',()=>{
+test('screening-room surfaces and platform buttons maintain readable contrast',()=>{
  const L=hex=>hex.match(/[a-f0-9]{2}/gi).map(v=>parseInt(v,16)/255).map(v=>v<=.04045?v/12.92:((v+.055)/1.055)**2.4).reduce((v,c,i)=>v+c*[.2126,.7152,.0722][i],0);
  const ratio=(a,b)=>{const x=L(a),y=L(b);return(Math.max(x,y)+.05)/(Math.min(x,y)+.05);};
- const colors=Object.fromEntries([...css.matchAll(/--([a-z-]+):(#(?:[0-9a-f]{6}))(?=[;}])/gi)].map(m=>[m[1],m[2]]));
- const finish=readFileSync(new URL('./public/studio.css',import.meta.url),'utf8');
- const link=finish.match(/\.workspace-jump\{[^}]+?;color:(#[0-9a-f]{6})/i)?.[1];
- for(const fg of [colors['paper-ink'],colors['paper-muted'],link]) assert.ok(ratio(fg,colors.paper)>=4.5);
- for(const [fg,bg] of [[colors.ink,colors.cyan],[colors.ink,colors.violet],[colors.violet,colors.bg],[colors.text,colors.panel]]) assert.ok(ratio(fg,bg)>=4.5);
+ for(const background of ['f0eee8'])for(const text of ['28282d','55565e','6d3e2b'])assert.ok(ratio(text,background)>=4.5,`${text}/${background}`);
+ assert.ok(ratio('201c19','efb28d')>=4.5);
+ assert.ok(ratio('f5f1e9','23262b')>=4.5);
 });
 
 
@@ -725,7 +724,7 @@ test('Hebrew-first and optional cloud disclosure remains bilingual and unmeasure
 });
 
 
-test('active header download keeps dark text on its cyan surface',()=>{
+test('active header download keeps dark text on its copper surface',()=>{
  const finish=readFileSync(new URL('./public/studio.css',import.meta.url),'utf8');
  assert.ok(finish.includes('.site-header nav .nav-download[aria-current=location]{color:var(--ink);text-decoration:none}'));
 });
