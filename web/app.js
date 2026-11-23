@@ -2142,7 +2142,13 @@ function toast(message, type = "error", timeout = 4400) {
   node.className = `toast ${type}`;
   node.textContent = message;
   elements.toastRegion.append(node);
-  window.setTimeout(() => node.remove(), timeout);
+  window.setTimeout(() => {
+    // Fade out first; remove on animation end (or right away without motion).
+    node.classList.add("flow-leaving");
+    const done = () => node.remove();
+    node.addEventListener("animationend", done, { once: true });
+    window.setTimeout(done, 400);
+  }, timeout);
 }
 
 function runUiAction(action, context = "") {
