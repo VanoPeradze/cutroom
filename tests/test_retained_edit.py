@@ -57,6 +57,27 @@ def test_invalid_status_and_resume_no_mutation(retained,fault):
     response=call(retained);assert response.status_code in (400,409),response.get_json()
     assert store.state_path(pid).read_bytes()==raw
 
+def test_unexpected_retained_validation_error_stays_private(retained, monkeypatch):
+    from cutroom import retained_edit
+
+    _, client, store, pid = retained
+    previous = store.state_path(pid).read_bytes()
+    diagnostic = "Internal retained validation fixture (never client-facing)"
+
+    def broken(*args):
+        raise ValueError(diagnostic)
+
+    monkeypatch.setattr(retained_edit, "_candidate", broken)
+    status = client.get(f"/api/projects/{pid}").get_json()["project"]["retained_edit"]
+    assert not status["available"] and "restore" in status["issue"].lower()
+    assert diagnostic not in status["issue"]
+    response = call(retained)
+    assert response.status_code == 400 and response.get_json()["error"] == "invalid_retained_edit"
+    assert response.get_json()["message"] == status["issue"]
+    assert diagnostic not in response.get_data(as_text=True)
+    assert store.state_path(pid).read_bytes() == previous
+
+
 @pytest.mark.parametrize("endpoint",["manual-draft","director","director/refine"])
 def test_bypass_refused_without_provider_or_job(retained,monkeypatch,endpoint):
     app,client,store,pid=retained;raw=store.state_path(pid).read_bytes()

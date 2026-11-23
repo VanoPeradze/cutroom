@@ -311,7 +311,7 @@ def test_legacy_multipart_disk_exhaustion_is_507_with_owned_cleanup(app, monkeyp
     store = app.extensions["cutroom_store"]
     pid = project(app)["id"]
     before = copy.deepcopy(store.load(pid))
-    def full(_uploaded, path, _limit):
+    def full(_uploaded, path, _limit, *, root):
         path.write_bytes(b"partial")
         raise OSError(errno.ENOSPC, "synthetic disk exhaustion")
     monkeypatch.setattr(server, "copy_upload", full)

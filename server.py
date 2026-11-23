@@ -52,7 +52,7 @@ from cutroom.track_locks import TrackLockedError, require_tracks_unlocked
 from cutroom.intelligence import story_ai_status
 from cutroom.cloud_ai import ConnectionStore, CloudAIError, enabled as cloud_enabled, require_connection
 from cutroom.manual_start import start_manual_draft
-from cutroom.retained_edit import retained_edit_status, resume_retained_edit, has_retained_edit
+from cutroom.retained_edit import retained_edit_status, resume_retained_edit, has_retained_edit, public_retained_edit_issue
 from cutroom.local_models import (
     OLLAMA_INSTALL_URL, catalog as local_model_catalog,
     install_transcription, supported_install,
@@ -68,7 +68,7 @@ from cutroom.jobs import JobAdmissionError, JobCancelled, JobContext, JobManager
 from cutroom.frame_rates import validate_export_fps, validate_export_resolution
 from cutroom.media import VIDEO_EXTENSIONS, MediaProbeUnavailableError, UploadTooLargeError, copy_upload, create_proxy, extract_thumbnails, probe_media
 from cutroom.media_library import (
-    ASSET_ID_RE, MAX_ASSETS, MEDIA_ACTION_FIELDS, MediaLibraryError,
+    ASSET_ID_RE, MAX_ASSETS, MEDIA_ACTION_FIELDS, AssetUploadReservation, MediaLibraryError,
     asset_kind, asset_size_limit, prepare_asset, probe_asset, safe_asset_path,
 )
 from cutroom.project_copy import ProjectCopyCoordinator, ProjectCopyError
@@ -1950,7 +1950,7 @@ def create_app(settings: Settings | None = None) -> Flask:
             if len(current.get("assets") or {}) >= MAX_ASSETS:
                 raise APIInputError("asset_limit", f"A project can contain at most {MAX_ASSETS} media assets.")
             active_uploads[project_id] = active_uploads.get(project_id, 0) + 1
-        folder = None
+        reservation = None
         durable = False
         try:
             uploaded = ticket if ticket is not None else request.files.get("file")
@@ -1968,19 +1968,19 @@ def create_app(settings: Settings | None = None) -> Flask:
                 raise APIInputError("file_too_large", f"This {kind} exceeds the {limit // 1024**2} MB import limit.", 413,
                                     max_upload_bytes=limit)
             asset_id = "asset_" + uuid.uuid4().hex
-            path = safe_asset_path(project_root, f"media/assets/{asset_id}/original{Path(filename).suffix.lower()}")
-            folder = path.parent
-            folder.mkdir(parents=True)
+            reservation = AssetUploadReservation(project_root, asset_id, filename)
             if ticket is None:
-                copy_upload(uploaded, path, limit)
+                copy_upload(uploaded, reservation.new_original_path(), limit, root=project_root)
+                reservation.record_original()
             # Keep a chunked original journal-owned until validation finishes.
-            metadata = probe_asset(ticket.path if ticket is not None else path, kind, settings)
-            asset = {"id": asset_id, "name": filename, **metadata, "path": path.relative_to(project_root).as_posix(), "status": "preparing", "waveform": []}
+            metadata = probe_asset(ticket.path if ticket is not None else reservation.path, kind, settings)
+            asset = {"id": asset_id, "name": filename, **metadata, "path": reservation.relative, "status": "preparing", "waveform": []}
             with project_job_gate:
                 if ticket is not None and ticket.cancelled:
                     raise UploadStorageError("upload_cancelled", "The upload was cancelled.")
                 if ticket is not None:
-                    ticket.path.replace(path)
+                    ticket.path.replace(reservation.new_original_path())
+                    reservation.record_original()
                 current = store.update(project_id, lambda value: value.setdefault("assets", {}).update({asset_id: asset}))
                 durable = True
                 try:
@@ -2000,9 +2000,8 @@ def create_app(settings: Settings | None = None) -> Flask:
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired, json.JSONDecodeError) as exc:
             raise APIInputError("invalid_media", "The media could not be read. Choose a valid video, image, or audio file.") from exc
         finally:
-            if folder is not None and not durable:
-                # This path was generated under the validated project namespace.
-                shutil.rmtree(folder, ignore_errors=True)
+            if reservation is not None and not durable:
+                reservation.discard()
             with project_job_gate:
                 remaining = active_uploads.get(project_id, 0) - 1
                 if remaining > 0:
@@ -2352,7 +2351,7 @@ def create_app(settings: Settings | None = None) -> Flask:
                 }), 409
             try:
                 if ticket is None:
-                    copy_upload(uploaded, staging, max_upload_bytes)
+                    copy_upload(uploaded, staging, max_upload_bytes, root=project_root)
             except UploadTooLargeError:
                 return jsonify({
                     "error": "file_too_large",
@@ -2818,7 +2817,7 @@ def create_app(settings: Settings | None = None) -> Flask:
             try:
                 project = store.update(project_id, lambda current: resume_retained_edit(current, store.project_dir(project_id)), expected_revision=revision)
             except (ValueError, TypeError, KeyError) as error:
-                raise APIInputError("invalid_retained_edit", str(error)) from error
+                raise APIInputError("invalid_retained_edit", public_retained_edit_issue(error)) from error
         return jsonify({"project": _public_project(project)})
 
     @app.post("/api/projects/<project_id>/manual-draft")

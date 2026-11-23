@@ -12461,7 +12461,7 @@ function reviewOutputSettings() {
   document.querySelector('#studioShelfOutput [role="radio"][aria-checked="true"]')?.focus({ preventScroll: true });
 }
 
-function openExportDialog({ progress = false } = {}) {
+function openExportDialog({ progress = false, requiredRangePlan = null } = {}) {
   showExportLayoutWarning(null);
   const previousStorageInfo=document.getElementById("exportStorageInfo");
   if(previousStorageInfo){previousStorageInfo.textContent="";previousStorageInfo.hidden=true;}
@@ -12481,6 +12481,14 @@ function openExportDialog({ progress = false } = {}) {
     return;
   }
   const settings = state.project.settings;
+  if (requiredRangePlan) {
+    if (progress || !clipRangeExportSupported()) return;
+    updateFrameRateControls(settings.fps ?? 30);
+    if (!sameExportRangePlan(requiredRangePlan, currentExportRangePlan())) {
+      toast(changedExportRangeMessage());
+      return;
+    }
+  }
   const draft = editorProject().draft;
   elements.exportSummary.innerHTML = "";
   const output = outputReviewSnapshot();
@@ -12501,10 +12509,16 @@ function openExportDialog({ progress = false } = {}) {
     : state.draftDirtyReasons.size
       ? "Export your current edit. Pending AI preferences are not applied; rebuild only if you want a new AI draft."
       : t("exportHelp");
-  updateFrameRateControls(settings.fps ?? 30);
+  if (!requiredRangePlan) updateFrameRateControls(settings.fps ?? 30);
   elements.exportFrameRateField.hidden = progress;
   elements.exportSummary.hidden = progress;
-  refreshExportScope({reset:true, progress});
+  if (requiredRangePlan) {
+    elements.exportScope.value = "selection";
+    state.markedExportIntent = requiredRangePlan;
+    refreshExportScope();
+  } else {
+    refreshExportScope({reset:true, progress});
+  }
   // The backend keeps exports newest-first so the default download must never
   // silently point to an older render after a project has multiple exports.
   const latestExport = !progress && Array.isArray(state.project.exports) ? state.project.exports[0] : null;
@@ -12589,14 +12603,17 @@ async function openClipFromBoard(clip, range, { exportAfter = false } = {}) {
     toast(`Clip ${clip.rank} is selected on the timeline. Trim, frame or caption it, then export the marked range.`, "success", 4200);
     return;
   }
-  openExportDialog();
-  if (!elements.exportDialog.open || !clipRangeExportSupported()) return;
-  if (currentExportRangePlan()) {
-    elements.exportScope.value = "selection";
-    refreshExportScope({ choose: true });
-  } else {
-    toast("This clip could not be marked for export. Check the selection in the edited timeline.");
+  // A Clip can only hand off its exact reviewed range, never a generic whole edit.
+  const fps = Number(state.project.settings?.fps ?? 30);
+  const requiredRangePlan = clipRangeExportSupported() && state.timeline.selectionIsRange
+    ? makeExportRangePlan(rangeAuditionSnapshot(), fps) : null;
+  if (!requiredRangePlan || Math.abs(requiredRangePlan.inTime - range.start) > 1e-3
+      || Math.abs(requiredRangePlan.outTime - range.end) > 1e-3) {
+    toast(uiCopy("לא ניתן לסמן את הקליפ הזה לייצוא. בדקו את הטווח בציר הזמן הערוך.",
+      "This clip could not be marked for export. Check the selection in the edited timeline."));
+    return;
   }
+  openExportDialog({ requiredRangePlan });
 }
 
 function placeClipFromBoard(clip) {

@@ -81,8 +81,21 @@ for(const kind of ['video','image'])test(`${kind} frame action preserves all con
  assert.deepEqual(plain(run('requests[0].body')),{action:'media_transform',clip_id:'media_a',...rect,expected_revision:7});
  assert.equal(run('mediaFlush'),1);assert.equal(run('textFlush'),1);
 });
-for(const value of ['null','[]','{}','{x:0,y:0,w:1}','{x:0,y:0,w:1,h:1,enabled:false}','{x:true,y:0,w:1,h:1}',"{x:'0',y:0,w:1,h:1}",'{x:NaN,y:0,w:1,h:1}','{x:0,y:0,w:Infinity,h:1}','{x:-.1,y:0,w:1,h:1}','{x:-1e-10,y:0,w:1,h:1}','{x:0,y:0,w:.00999999999,h:1}','{x:0,y:0,w:.001,h:1}','{x:.5,y:0,w:1,h:1}','{x:0,y:.7,w:1,h:.4}'])test(`canonical frame plan rejects ${value}`,()=>{
- const{run}=framed();const plan=plain(run(`layerFramePlan('media_a',${value})`));assert.ok(plan.issue);assert.equal(plan.patch,null);assert.equal(run('requests.length'),0);
+// Test values are passed as data into the sandbox, never compiled as a JavaScript expression.
+const fullPlan={x:0,y:0,w:1,h:1};
+const invalidFramePlans=[
+ ['null',null], ['array',[]], ['empty object',{}], ['missing height',{x:0,y:0,w:1}],
+ ['unknown enabled field',{...fullPlan,enabled:false}], ['boolean coordinate',{...fullPlan,x:true}],
+ ['string coordinate',{...fullPlan,x:'0'}], ['NaN coordinate',{...fullPlan,x:NaN}],
+ ['infinite width',{...fullPlan,w:Infinity}], ['negative x',{...fullPlan,x:-.1}],
+ ['negative sub-frame x',{...fullPlan,x:-1e-10}], ['just below minimum width',{...fullPlan,w:.00999999999}],
+ ['width below minimum',{...fullPlan,w:.001}], ['extends beyond right',{...fullPlan,x:.5}],
+ ['extends beyond bottom',{...fullPlan,y:.7,h:.4}],
+];
+for(const [label,value] of invalidFramePlans)test('canonical frame plan rejects '+label,()=>{
+ const{run,context}=framed();context.testFramePlan=value;
+ const plan=plain(run("layerFramePlan('media_a',testFramePlan)"));
+ assert.ok(plan.issue);assert.equal(plan.patch,null);assert.equal(run('requests.length'),0);
 });
 for(const setup of ['state.project.editor_sequence.error="Invalid saved sequence"','state.captionDirty=true','state.captionContextSave={}','state.project.draft=null','state.project.assets.v.status="failed"','state.project.assets.v.kind="audio"','delete state.project.assets.v','state.project.manual.media_clips[0].x=NaN'])test(`frame action refuses unsafe state ${setup}`,async()=>{const{run}=framed();run(setup);assert.equal(await run(`frameTimelineLayer('media_a',${JSON.stringify(rect)})`),null);assert.equal(run('requests.length'),0);});
 for(const id of ['text_b','A:sequence:0:0','missing','automatic_caption'])test(`frame action never falls through from ${id} to source`,async()=>{const{run}=framed();assert.equal(await run(`frameTimelineLayer('${id}',${JSON.stringify(rect)})`),null);assert.equal(run('requests.length'),0);});

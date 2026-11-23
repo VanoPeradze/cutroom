@@ -173,6 +173,31 @@ def test_long_retained_layer_blocks_actual_reset_but_allows_read_only_inspection
     assert store.state_path(pid).read_bytes() == before
 
 
+def test_unexpected_draft_impact_error_stays_private_and_blocks_apply(api, monkeypatch):
+    from cutroom import editing
+
+    _, _, store, pid, _ = api
+    previous = store.state_path(pid).read_bytes()
+    diagnostic = "Internal draft impact fixture (never client-facing)"
+    actual_edit = editing.apply_manual_edit
+
+    def broken(project, payload, **kwargs):
+        if kwargs.get("apply_isolated_proposal") and payload.get("action") == "sequence_reset":
+            raise ValueError(diagnostic)
+        return actual_edit(project, payload, **kwargs)
+
+    monkeypatch.setattr(editing, "apply_manual_edit", broken)
+    response = review(api)
+    assert response.status_code == 200
+    proposal = response.get_json()["proposal"]
+    assert proposal["apply_allowed"] is False and proposal["impact"] is None
+    assert "Keep the current edit" in proposal["apply_issue"]
+    assert diagnostic not in response.get_data(as_text=True)
+    denied = apply(api, proposal)
+    assert denied.status_code == 400 and diagnostic not in denied.get_data(as_text=True)
+    assert store.state_path(pid).read_bytes() == previous
+
+
 def test_source_lock_and_missing_file_preserve_everything(api):
     _, _, store, pid, media = api
     store.update(pid, lambda p: p["manual"]["track_locks"].update(A=True))

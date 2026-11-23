@@ -197,7 +197,7 @@ def test_copy_upload_removes_unique_partial_on_any_failure(tmp_path: Path):
 
     destination = tmp_path / "source-A.mp4"
     with pytest.raises(OSError, match="interrupted"):
-        copy_upload(SimpleNamespace(stream=BrokenStream()), destination, 1024)
+        copy_upload(SimpleNamespace(stream=BrokenStream()), destination, 1024, root=tmp_path)
 
     assert not destination.exists()
     assert not list(tmp_path.iterdir())
@@ -221,7 +221,7 @@ def test_copy_upload_keeps_temporary_path_short_and_replaces_only_after_complete
     path_open = Path.open
 
     def record_open(path, mode="r", *args, **kwargs):
-        if mode == "wb":
+        if mode == "xb":
             opened.append(path)
         return path_open(path, mode, *args, **kwargs)
 
@@ -231,7 +231,7 @@ def test_copy_upload_keeps_temporary_path_short_and_replaces_only_after_complete
             return super().read(size)
 
     monkeypatch.setattr(Path, "open", record_open)
-    assert copy_upload(SimpleNamespace(stream=ObservingStream(payload)), destination, len(payload)) == len(payload)
+    assert copy_upload(SimpleNamespace(stream=ObservingStream(payload)), destination, len(payload), root=tmp_path) == len(payload)
     assert destination.read_bytes() == payload
     assert len(opened) == 1
     partial = opened[0]
@@ -251,7 +251,7 @@ def test_copy_upload_size_limit_preserves_destination_and_other_upload_partial(t
     other_upload.write_bytes(b"another in-flight upload")
 
     with pytest.raises(UploadTooLargeError):
-        copy_upload(SimpleNamespace(stream=io.BytesIO(b"too much data")), destination, 3)
+        copy_upload(SimpleNamespace(stream=io.BytesIO(b"too much data")), destination, 3, root=tmp_path)
 
     assert destination.read_bytes() == b"existing source"
     assert other_upload.read_bytes() == b"another in-flight upload"

@@ -6,6 +6,7 @@ import copy
 import json
 import math
 import re
+import stat
 import sys
 import uuid
 from fractions import Fraction
@@ -100,12 +101,80 @@ def asset_size_limit(kind: str, configured_limit: int) -> int:
 def safe_asset_path(project_dir: Path, relative: Any) -> Path:
     if not isinstance(relative, str) or not relative:
         raise FileNotFoundError("Asset file is unavailable")
-    root = project_dir.resolve()
-    assets_root = (root / "media" / "assets").resolve()
-    candidate = (root / relative.replace("\\", "/")).resolve()
-    if root not in assets_root.parents or assets_root not in candidate.parents:
+    parts = relative.replace("\\", "/").split("/")
+    if (parts[:2] != ["media", "assets"] or len(parts) < 3
+            or any(part in ("", ".", "..") or ":" in part or "\0" in part for part in parts[2:])):
         raise FileNotFoundError("Invalid asset path")
-    return candidate
+    assets_root = project_dir.resolve() / "media" / "assets"
+    candidate = assets_root.joinpath(*parts[2:])
+    try:
+        # Existing or future entries must stay under their lexical asset root;
+        # neither the asset root nor an intermediate entry can redirect I/O.
+        resolved = candidate.resolve()
+        if not resolved.is_relative_to(assets_root) or resolved != candidate:
+            raise FileNotFoundError("Invalid asset path")
+    except (OSError, RuntimeError) as exc:
+        raise FileNotFoundError("Invalid asset path") from exc
+    return resolved
+
+
+def _asset_identity(path: Path, matches_mode) -> tuple[int, int]:
+    details = path.lstat()
+    if path.resolve(strict=True) != path or not matches_mode(details.st_mode):
+        raise MediaLibraryError("The local asset destination changed. Import the file again.")
+    return details.st_dev, details.st_ino
+
+
+class AssetUploadReservation:
+    """Own exactly one local upload folder and at most one original, never a subtree."""
+
+    def __init__(self, project_dir: Path, asset_id: str, filename: str):
+        if not ASSET_ID_RE.fullmatch(asset_id):
+            raise MediaLibraryError("The local asset identifier is invalid.")
+        suffix = Path(filename).suffix.lower()
+        # Match a supported fixed basename; never pass through an uploaded name.
+        original = next((f"original{ext}" for ext in VIDEO_EXTENSIONS | IMAGE_EXTENSIONS | AUDIO_EXTENSIONS
+                         if ext == suffix), None)
+        if original is None:
+            raise MediaLibraryError("Unsupported local asset format.")
+        self.relative = f"media/assets/{asset_id}/{original}"
+        self.path = safe_asset_path(project_dir, self.relative)
+        self.folder = self.path.parent
+        asset_root = self.folder.parent
+        asset_root.mkdir(parents=True, exist_ok=True)
+        expected_root = _asset_identity(asset_root, stat.S_ISDIR)
+        try:
+            self.folder.mkdir(exist_ok=False)
+        except FileExistsError as exc:
+            raise MediaLibraryError("The local asset destination is already reserved. Import the file again.") from exc
+        self._folder_identity = _asset_identity(self.folder, stat.S_ISDIR)
+        self._original_identity = None
+        if _asset_identity(asset_root, stat.S_ISDIR) != expected_root:
+            raise MediaLibraryError("The local asset destination changed. Import the file again.")
+
+    def _require_folder(self) -> None:
+        if _asset_identity(self.folder, stat.S_ISDIR) != self._folder_identity:
+            raise MediaLibraryError("The local asset destination changed. Import the file again.")
+
+    def new_original_path(self) -> Path:
+        self._require_folder()
+        if self.path.exists() or self.path.is_symlink():
+            raise MediaLibraryError("The local asset destination is no longer empty. Import the file again.")
+        return self.path
+
+    def record_original(self) -> None:
+        self._require_folder()
+        self._original_identity = _asset_identity(self.path, stat.S_ISREG)
+
+    def discard(self) -> None:
+        # No recursive cleanup: a replaced folder or unowned file remains intact.
+        try:
+            self._require_folder()
+            if self._original_identity is not None and _asset_identity(self.path, stat.S_ISREG) == self._original_identity:
+                self.path.unlink()
+            self.folder.rmdir()
+        except (OSError, RuntimeError, MediaLibraryError):
+            pass
 
 
 def _picture_end(video, container, duration):
@@ -147,7 +216,7 @@ def probe_asset(path: Path, kind: str, settings, *, cancel_check=None, include_c
     try:
         result = run_command([
             settings.ffprobe, "-v", "error", "-protocol_whitelist", "file,pipe", "-show_format", "-show_streams",
-            "-print_format", "json", str(path),
+            "-print_format", "json", str(path.absolute()),
         ], timeout=30, **({"cancel_check": cancel_check} if cancel_check is not None else {}))
     except (FileNotFoundError, PermissionError) as exc:
         raise MediaProbeUnavailableError() from exc
@@ -197,7 +266,7 @@ def _original_video_preview_compatible(source: Path, metadata: dict[str, Any]) -
 def _build_original_thumbnail(context, source: Path, settings, folder: Path) -> None:
     context.update(0.65, "Creating media thumbnail; using original video for preview")
     run_command([settings.ffmpeg, "-hide_banner", "-v", "error", "-y", "-threads", "1",
-                 "-protocol_whitelist", "file,pipe", "-i", str(source), "-map", "0:v:0",
+                 "-protocol_whitelist", "file,pipe", "-i", str(source.absolute()), "-map", "0:v:0",
                  "-frames:v", "1", "-an", "-vf", "scale=320:-2", "-threads", "1",
                  str(folder / "thumbnail.jpg")], timeout=60, cancel_check=context.check_cancelled)
 
@@ -221,18 +290,18 @@ def _build_asset_preview(context, source: Path, asset: dict[str, Any], settings,
     kind = asset["kind"]
     preview = folder / ("preview.png" if kind == "image" else "preview.m4a" if kind == "audio" else "preview.mp4")
     if kind == "video":
-        run_command([settings.ffmpeg, "-hide_banner", "-v", "error", "-y", "-threads", str(max(1, int(settings.raw.get("ffmpeg_threads", 4)))), "-protocol_whitelist", "file,pipe", "-i", str(source), "-map", "0:v:0", "-map", "0:a:0?", "-map_metadata", "-1", "-vf", "scale=-2:'min(720,ih)',format=yuv420p", "-c:v", "libx264", "-preset", "veryfast", "-crf", "27", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", str(preview)], timeout=max(180, asset["duration"] * 4), cancel_check=context.check_cancelled)
+        run_command([settings.ffmpeg, "-hide_banner", "-v", "error", "-y", "-threads", str(max(1, int(settings.raw.get("ffmpeg_threads", 4)))), "-protocol_whitelist", "file,pipe", "-i", str(source.absolute()), "-map", "0:v:0", "-map", "0:a:0?", "-map_metadata", "-1", "-vf", "scale=-2:'min(720,ih)',format=yuv420p", "-c:v", "libx264", "-preset", "veryfast", "-crf", "27", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", str(preview)], timeout=max(180, asset["duration"] * 4), cancel_check=context.check_cancelled)
     else:
-        args = [settings.ffmpeg, "-hide_banner", "-v", "error", "-y", "-protocol_whitelist", "file,pipe", "-i", str(source), "-map_metadata", "-1"]
+        args = [settings.ffmpeg, "-hide_banner", "-v", "error", "-y", "-protocol_whitelist", "file,pipe", "-i", str(source.absolute()), "-map_metadata", "-1"]
         args += ["-frames:v", "1", "-vf", "scale='min(4096,iw)':-1", str(preview)] if kind == "image" else ["-vn", "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", str(preview)]
         run_command(args, timeout=max(90, asset["duration"] * 2), cancel_check=context.check_cancelled)
     if kind in {"video", "image"}:
         context.update(0.65, "Creating media thumbnail")
-        run_command([settings.ffmpeg, "-hide_banner", "-v", "error", "-y", "-i", str(preview), "-frames:v", "1", "-vf", "scale=320:-2", str(folder / "thumbnail.jpg")], timeout=60, cancel_check=context.check_cancelled)
+        run_command([settings.ffmpeg, "-hide_banner", "-v", "error", "-y", "-protocol_whitelist", "file,pipe", "-i", str(preview.absolute()), "-frames:v", "1", "-vf", "scale=320:-2", str(folder / "thumbnail.jpg")], timeout=60, cancel_check=context.check_cancelled)
     waveform: list[float] = []
     if asset["has_audio"]:
         context.update(0.8, "Building audio waveform")
-        result = run_command([settings.ffmpeg, "-hide_banner", "-v", "error", "-i", str(preview), "-vn", "-af", "aformat=channel_layouts=mono,aeval=abs(val(0))", "-ac", "1", "-ar", "100", "-f", "s16le", "pipe:1"], text=False, timeout=max(60, asset["duration"]), cancel_check=context.check_cancelled)
+        result = run_command([settings.ffmpeg, "-hide_banner", "-v", "error", "-protocol_whitelist", "file,pipe", "-i", str(preview.absolute()), "-vn", "-af", "aformat=channel_layouts=mono,aeval=abs(val(0))", "-ac", "1", "-ar", "100", "-f", "s16le", "pipe:1"], text=False, timeout=max(60, asset["duration"]), cancel_check=context.check_cancelled)
         samples = array.array("h")
         samples.frombytes(result.stdout)
         if sys.byteorder != "little":

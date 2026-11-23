@@ -13,6 +13,23 @@ import uuid
 from typing import Any
 
 
+# Known edit-policy failures keep their actionable editor copy. An arbitrary
+# exception payload is never returned by the public review response.
+_PUBLIC_APPLY_ISSUES = (
+    "The saved candidate or its source changed. Generate a fresh proposal.",
+    "The saved AI proposal is no longer available.",
+    "The saved draft did not produce a replacement timeline.",
+    "The reset would change existing layers. Keep the current edit; this review does not support retiming or removing them.",
+    "Track A is locked. Unlock it before changing its clips.",
+    "Track B is locked. Unlock it before changing its clips.",
+    "This edit would shorten the timeline past text or captions. Trim, move, or remove those text clips first.",
+    "This edit would shorten the timeline past added media. Trim, move, or remove those media clips first.",
+    "The proposal changes transcript timing with saved caption edits. Keep the current edit; this application cannot safely remap those captions.",
+    "The proposal requires different audio routing. Keep the current edit and review source routing first.",
+    "The proposal analyzes a different audio source from the current edit. Review source routing first.",
+)
+
+
 def _digest(value: Any) -> str:
     encoded = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
@@ -163,7 +180,7 @@ def ai_draft_proposal(project: dict[str, Any], origin_id: str, media_identity: A
         proposed_project = copy.deepcopy(project)
         proposed_project.update(isolated_candidate(project) or {})
     except (ValueError, RuntimeError) as error:
-        raise ManualEditError(str(error)) from error
+        raise ManualEditError("The saved candidate or its source changed. Generate a fresh proposal.") from error
     draft = proposed_project["draft"]
     source = (project.get("sources") or {}).get("A") or {}
     duration = source.get("duration")
@@ -206,8 +223,13 @@ def ai_draft_proposal(project: dict[str, Any], origin_id: str, media_identity: A
                   "text_preserved": (staged.get("manual") or {}).get("text_clips") == manual.get("text_clips")}
         if not impact["media_preserved"] or not impact["text_preserved"]:
             raise ManualEditError("The reset would change existing layers. Keep the current edit; this review does not support retiming or removing them.")
-    except (ValueError, KeyError, TypeError) as error:
-        issue = str(error)
+    except (ValueError, KeyError, TypeError, RuntimeError, AttributeError, OverflowError) as error:
+        issue = "The saved draft could not be checked against this timeline. Keep the current edit and review it before trying again."
+        if len(error.args) == 1 and isinstance(error.args[0], str):
+            if error.args[0] == "captions_out_of_date":
+                issue = "The proposal captions do not match the current timeline. Review the transcription first."
+            else:
+                issue = next((message for message in _PUBLIC_APPLY_ISSUES if error.args[0] == message), issue)
     warnings = [
         "Source inspection plays primary A passages only, not the proposed composite, source B, effects, captions or edited sound mix.",
         "Apply resets source-track timing and layout to the saved draft. Imported media/text retain their existing edit times; they are not removed or retimed.",
