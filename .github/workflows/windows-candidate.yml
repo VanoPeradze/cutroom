@@ -19,6 +19,13 @@ jobs:
     runs-on: windows-2022
     timeout-minutes: 100
     env:
+      # Keep application bytes identical to Git on Windows; installer CRLF
+      # blobs are already pinned with -text attributes and stay unchanged.
+      GIT_CONFIG_COUNT: '2'
+      GIT_CONFIG_KEY_0: core.autocrlf
+      GIT_CONFIG_VALUE_0: 'false'
+      GIT_CONFIG_KEY_1: core.eol
+      GIT_CONFIG_VALUE_1: lf
       TESTED_HEAD_SHA: '224118921888e38472bfe6ba0f757ae662b45adf'
       CUTROOM_NO_BROWSER: '1'
       HF_HUB_OFFLINE: '1'
@@ -43,6 +50,11 @@ jobs:
         run: |
           if ((git rev-parse HEAD).Trim() -ne $env:TESTED_HEAD_SHA) { throw 'Frozen app source identity mismatch.' }
           if (@(git status --porcelain).Count -ne 0) { throw 'Frozen app checkout is not clean.' }
+          foreach ($file in @('server.py', 'web/app.js', 'web/styles.css', 'tests/frontend_transcript_batch_receipt.test.cjs', 'setup_windows.ps1', 'run_windows.bat')) {
+            $expected = (git rev-parse ('HEAD:' + $file)).Trim()
+            $actual = (git hash-object --no-filters $file).Trim()
+            if ($LASTEXITCODE -ne 0 -or $expected -ne $actual) { throw ('Working tree changed frozen bytes: ' + $file) }
+          }
       - name: Set up Python
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
