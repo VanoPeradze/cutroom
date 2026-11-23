@@ -29,11 +29,12 @@ from cutroom import __version__, __version_label__
 from cutroom.config import ROOT, Settings, load_settings
 from cutroom.ai_runtime import AIRuntime, ollama_environment, resolve_ollama_executable, open_ollama, read_ollama_json
 from cutroom.director import analyze_project, refine_project
-from cutroom.edit_styles import UnknownEditStyle, get_edit_style, public_edit_styles
+from cutroom.edit_styles import UnknownEditStyle, get_edit_style, public_edit_styles, public_style_families
 from cutroom.editing import ManualEditError, apply_manual_edit, apply_source_review_edit, strip_private_edit_history
 from cutroom.reel_proposals import reel_proposal
 from cutroom.grading import LUT_MAX_BYTES, GradingError, normalize_color, normalize_keyframes, save_lut
 from cutroom.posting_kit import PostingKitError, PostingKitUnavailable, ai_posting_kit, build_posting_kit
+from cutroom.auto_style import recommend_style
 from cutroom.clip_board import ClipBoardError, build_clip_board, DEFAULT_COUNT as DEFAULT_CLIP_COUNT, DEFAULT_LENGTH as DEFAULT_CLIP_LENGTH
 from cutroom.ai_draft_proposals import ai_draft_proposal, ai_draft_review_status
 from cutroom.review_candidates import media_identity as source_review_media_identity, checked_source_candidate
@@ -157,6 +158,7 @@ SETTINGS_FIELDS = {
     "visual_ai",
     "audio_cleanup",
     "instruction",
+    "source_context",
     "output_count",
     "source_continuity",
     "allow_extractive_rough_cut",
@@ -367,6 +369,7 @@ def _validate_settings_payload(payload: dict[str, Any]) -> None:
         "goal": 24,
         "pace": 24,
         "instruction": 8000,
+        "source_context": 600,
         "aspect": 16,
         "layout": 32,
         "resolution": 16,
@@ -1155,6 +1158,7 @@ def create_app(settings: Settings | None = None) -> Flask:
             "ai_connection": connections.public(),
             "transcription_engine": connections.transcription.public(),
             "edit_styles": public_edit_styles(),
+            "style_families": public_style_families(),
             "data_dir": str(settings.data_dir),
             "limits": {
                 "max_upload_gb": float(settings.raw.get("max_upload_gb", 40)),
@@ -1345,6 +1349,17 @@ def create_app(settings: Settings | None = None) -> Flask:
         except (ManualEditError, SourceTrackError) as error:
             raise APIInputError("invalid_ai_draft_proposal", str(error), 409) from error
         return jsonify({"proposal": proposal})
+
+    @app.get("/api/projects/<project_id>/style-recommendation")
+    def style_recommendation(project_id: str):
+        # Read-only advice from saved analysis; never changes settings.
+        unknown = set(request.args) - {"goal"}
+        if unknown:
+            raise APIInputError("unknown_field", f"Unknown query field: {sorted(unknown)[0]}.")
+        goal = request.args.get("goal")
+        if goal is not None and goal not in SETTING_CHOICES["goal"]:
+            raise APIInputError("invalid_field", "goal has an unsupported value.")
+        return jsonify({"recommendation": recommend_style(store.load(project_id), goal)})
 
     @app.get("/api/projects/<project_id>/clip-board")
     def clip_board(project_id: str):

@@ -738,6 +738,17 @@ def _source_path(store: ProjectStore, project: dict[str, Any], slot: str) -> Pat
     return path
 
 
+MID_FILLER_MIN_GAP = 0.08
+# Only pure hesitation sounds are removed mid-sentence. Words such as "like",
+# "so" or "אז" can carry meaning, so they stay unless the segment-level rules
+# above already decided otherwise.
+_HESITATION = re.compile(r"^(?:u+m+|u+h+|e+r+m+|h+m+|e+h+|e+m+|e+u+h+|א+מ+|א+ה+|א+ממ+|ה+מ+|ا+م+|آه+|э+м*)$")
+
+
+def _is_hesitation(value: Any) -> bool:
+    return bool(_HESITATION.match(str(value or "").strip().strip(",.!?…؟;:-").lower()))
+
+
 def _cut_candidates(
     segments: list[dict[str, Any]],
     decision: dict[str, Any],
@@ -794,6 +805,26 @@ def _cut_candidates(
                         "start": first["start"], "end": end, "reason": "filler", "priority": 0.78,
                         "segment_ids": [segment["id"]],
                         "evidence": {"source": "word_timing", "segment_id": segment["id"], "word": first.get("word")},
+                    })
+            # A filler inside a sentence is cut only when it stands alone: a
+            # measured pause on both sides proves it is not part of a word.
+            for index in range(1, len(words)):
+                word = words[index]
+                if not _is_hesitation(word.get("word")):
+                    continue
+                previous_end = float(words[index - 1]["end"])
+                next_start = float(words[index + 1]["start"]) if index + 1 < len(words) else float(segment["end"])
+                word_start, word_end = float(word["start"]), float(word["end"])
+                if word_start - previous_end < MID_FILLER_MIN_GAP or (index + 1 < len(words) and next_start - word_end < MID_FILLER_MIN_GAP):
+                    continue
+                start = max(previous_end + 0.03, word_start - 0.02)
+                end = min(next_start - 0.03, word_end + 0.08)
+                if end - start >= 0.12:
+                    candidates.append({
+                        "start": round(start, 3), "end": round(end, 3), "reason": "filler", "priority": 0.74,
+                        "segment_ids": [segment["id"]],
+                        "evidence": {"source": "word_timing", "segment_id": segment["id"], "word": word.get("word"),
+                                     "isolated_by_pause": True},
                     })
     # Backward-compatible helper behavior for older tests/extensions. The v5.1
     # Director itself supplies acoustic cuts from build_audio_actions().
@@ -3589,9 +3620,12 @@ def analyze_project(
             "loud_action": "keep",
             "normalize": True,
         })
+    # The explainer style is defined by transcript cleanup (fillers, false
+    # starts, repeated takes), so it always needs speech evidence.
     youtube_cleanup_only = bool(
         goal == "youtube"
         and not str(brief.get("instruction") or "").strip()
+        and str(brief.get("edit_style") or "") != "youtube_explainer"
     )
     youtube_needs_transcript = bool(brief.get("captions") or brief.get("burn_captions"))
     auto_reframe_enabled = project.get("settings", {}).get("auto_reframe", True) is not False

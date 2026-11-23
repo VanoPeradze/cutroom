@@ -12,6 +12,7 @@ class UnknownEditStyle(ValueError):
     pass
 
 
+SOURCE_CONTEXT_MAX_CHARS = 600
 STORY_INTENT_VERSION = "explicit-story-intent-2026-10-20-v2"
 _STRUCTURE_DIRECTIVE = re.compile(
     r"^(?:please\s+)?(?:(?:use|follow|require)\s+(?:this\s+|the\s+)?(?:story\s+|narrative\s+)?(?:structure|progression|roles)"
@@ -743,10 +744,205 @@ EDIT_STYLES: tuple[dict[str, Any], ...] = (
             "reorder or invent story."
         ),
     },
+    {
+        "id": "talking_clips",
+        "category": "talking",
+        "name": {"he": "קטעי דיבור", "en": "Talking Clips"},
+        "description": {
+            "he": "פודקאסט, ראיון או מדבר למצלמה: מחשבה שלמה שנפתחת במשפט החזק ביותר, עם כתוביות מילה-מילה.",
+            "en": "Podcast, interview or talking to camera: one complete thought that opens on its strongest line, with word-by-word captions.",
+        },
+        "badge": {"he": "דיבור", "en": "Talk"},
+        "resource_tier": "lite",
+        "features": ["talking_head", "podcast", "complete_ideas", "strong_opening", "captions", "vertical"],
+        "defaults": {
+            "goal": "short",
+            "aspect": "9:16",
+            "pace": "balanced",
+            "target_duration": 60,
+            "layout": "auto",
+            "quality": "balanced",
+            "resolution": "1080",
+            "auto_reframe": True,
+            "captions": True,
+            "burn_captions": True,
+            "caption_style": "highlight",
+            "performance_mode": "auto",
+            "audio_cleanup": {
+                **_BASE_AUDIO,
+                "preset": "tight",
+                "silence_min_seconds": 0.50,
+                "silence_keep_seconds": 0.15,
+                "max_remove_ratio": 0.36,
+            },
+        },
+        "selection_policy": _selection_policy(
+            moment_unit="complete_thought",
+            hook="clear_claim",
+            chronology="premise_then_conclusion",
+            pre_roll_seconds=1.5,
+            post_roll_seconds=1.5,
+            energy=0.10,
+            speech=0.60,
+            visual_change=0.0,
+            continuity=0.30,
+            story_structure=("strongest line or clear claim", "explanation or example", "conclusion or takeaway"),
+            max_moments=1,
+        ),
+        "framing_policy": _framing_policy(default_layout="auto", second_source_layout="pip"),
+        "guidance": (
+            "Edit this as a talking clip from a podcast, interview or talking-head recording. Choose one complete "
+            "thought that stands on its own for a viewer who saw nothing before it. Open on its strongest spoken "
+            "line: a clear claim, surprising number, question or result, taken from the selected passage itself. "
+            "Keep the explanation that supports it and end on a conclusion or takeaway, never mid-sentence. "
+            "Remove filler words, false starts and dead air; never invent words or change who said what."
+        ),
+    },
+    {
+        "id": "youtube_explainer",
+        "category": "talking",
+        "name": {"he": "סרטון הסבר ליוטיוב", "en": "YouTube Explainer"},
+        "description": {
+            "he": "מדבר למצלמה או מסביר: חיתוכי קפיצה על שקטים, מוריד מילות מילוי וטייקים חוזרים, ושומר על הסדר.",
+            "en": "Talking to camera or explaining: jump cuts on pauses, removes filler words and repeated takes, and keeps the order.",
+        },
+        "badge": {"he": "הסבר", "en": "Explainer"},
+        "resource_tier": "lite",
+        "features": ["long_form", "talking_head", "jump_cuts", "retakes", "chronological", "widescreen"],
+        "defaults": {
+            "goal": "youtube",
+            "aspect": "16:9",
+            "pace": "balanced",
+            "target_duration": 600,
+            "layout": "A",
+            "quality": "balanced",
+            "resolution": "1080",
+            "auto_reframe": False,
+            "captions": False,
+            "burn_captions": False,
+            "performance_mode": "auto",
+            "audio_cleanup": {
+                **_BASE_AUDIO,
+                "preset": "tight",
+                "silence_min_seconds": 0.35,
+                "silence_keep_seconds": 0.12,
+                "max_remove_ratio": 0.40,
+            },
+        },
+        "selection_policy": _selection_policy(
+            moment_unit="source_sequence",
+            hook="none",
+            chronology="strict",
+            pre_roll_seconds=0.0,
+            post_roll_seconds=0.0,
+            energy=0.0,
+            speech=0.70,
+            visual_change=0.0,
+            continuity=0.30,
+        ),
+        "framing_policy": _framing_policy(default_layout="A", second_source_layout="A"),
+        "guidance": (
+            "Clean up a talking-head or explainer recording for YouTube. Keep every point in its original order. "
+            "Remove dead air, filler words, false starts and repeated takes, keeping the last complete take of a "
+            "repeated sentence. Do not reorder, summarize or invent content."
+        ),
+    },
 )
 
 
 _STYLE_BY_ID = {style["id"]: style for style in EDIT_STYLES}
+
+
+# The picker shows five families. Every variant is an existing, fully
+# executable style, so a saved ``edit_style`` keeps meaning exactly what it
+# meant before and no project needs migrating.
+STYLE_FAMILIES: tuple[dict[str, Any], ...] = (
+    {
+        "id": "auto",
+        "name": {"he": "אוטומטי", "en": "Auto"},
+        "description": {"he": "CUTROOM בוחר את הגישה לפי התוכן. מתאים לרוב הסרטונים.",
+                        "en": "CUTROOM picks the approach from the content. Fits most videos."},
+        "badge": {"he": "מומלץ", "en": "Recommended"},
+        "goals": ("short", "podcast", "youtube", "clean"),
+        "variants": (("smart", {"he": "אוטומטי", "en": "Auto"}),),
+    },
+    {
+        "id": "highlights",
+        "name": {"he": "רגעי שיא", "en": "Highlights"},
+        "description": {"he": "Shorts, Reels ו-TikTok: הרגעים הכי חזקים, מהר, עם הוק בהתחלה.",
+                        "en": "Shorts, Reels and TikTok: the strongest moments, fast, with a hook up front."},
+        "badge": {"he": "ויראלי", "en": "Viral"},
+        "goals": ("short", "podcast"),
+        "variants": (
+            ("stream_highlights", {"he": "כל השיאים", "en": "All peaks"}),
+            ("competitive_clutch", {"he": "אקשן / קלאץ׳", "en": "Action / clutch"}),
+            ("reaction_burst", {"he": "תגובה", "en": "Reaction"}),
+            ("funny_moments", {"he": "מצחיק", "en": "Funny"}),
+        ),
+    },
+    {
+        "id": "talking",
+        "name": {"he": "קטעי דיבור", "en": "Talking Clips"},
+        "description": {"he": "פודקאסט, ראיון או מדבר למצלמה: מחשבה שלמה שנפתחת במשפט החזק.",
+                        "en": "Podcast, interview or talking head: a complete thought that opens strong."},
+        "badge": {"he": "חדש", "en": "New"},
+        "goals": ("short", "podcast"),
+        "variants": (
+            ("talking_clips", {"he": "פודקאסט / מדבר", "en": "Podcast / talking"}),
+            ("stream_commentary", {"he": "פרשנות סטרימר", "en": "Streamer commentary"}),
+        ),
+    },
+    {
+        "id": "story",
+        "name": {"he": "סיפור", "en": "Story"},
+        "description": {"he": "Short ארוך עד 3 דקות: התחלה, התפתחות ותוצאה.",
+                        "en": "A longer Short, up to 3 minutes: setup, build and payoff."},
+        "badge": {"he": "Storyline", "en": "Storyline"},
+        "goals": ("short", "podcast"),
+        "variants": (
+            ("stream_story", {"he": "הדוק", "en": "Tight"}),
+            ("chill_story", {"he": "טבעי", "en": "Natural"}),
+        ),
+    },
+    {
+        "id": "youtube_long",
+        "name": {"he": "יוטיוב ארוך", "en": "Long YouTube"},
+        "description": {"he": "סרטון אופקי מלא: מקצר גיימינג, מנקה סרטון הסבר, או רק מוריד שקט.",
+                        "en": "A full widescreen video: condense gameplay, clean an explainer, or just remove dead air."},
+        "badge": {"he": "16:9", "en": "16:9"},
+        "goals": ("youtube", "clean"),
+        "variants": (
+            ("gameplay_youtube", {"he": "גיימינג מקוצר", "en": "Condensed gameplay"}),
+            ("youtube_explainer", {"he": "הסבר / מדבר", "en": "Explainer / talking"}),
+            ("clean_vod", {"he": "רק ניקוי שקט", "en": "Dead air only"}),
+        ),
+    },
+)
+_FAMILY_BY_STYLE = {
+    style_id: (family["id"], label)
+    for family in STYLE_FAMILIES
+    for style_id, label in family["variants"]
+}
+assert set(_FAMILY_BY_STYLE) == set(_STYLE_BY_ID), "every style belongs to exactly one family"
+
+
+def style_family(style_id: Any) -> str:
+    return _FAMILY_BY_STYLE.get(get_edit_style(style_id)["id"], ("auto", {}))[0]
+
+
+def public_style_families() -> list[dict[str, Any]]:
+    return [
+        {
+            "id": family["id"],
+            "name": copy.deepcopy(family["name"]),
+            "description": copy.deepcopy(family["description"]),
+            "badge": copy.deepcopy(family["badge"]),
+            "goals": list(family["goals"]),
+            "default_style": family["variants"][0][0],
+            "variants": [{"style": style_id, "label": copy.deepcopy(label)} for style_id, label in family["variants"]],
+        }
+        for family in STYLE_FAMILIES
+    ]
 
 
 def get_edit_style(style_id: Any, *, strict: bool = False) -> dict[str, Any]:
@@ -775,6 +971,9 @@ def public_edit_styles() -> list[dict[str, Any]]:
                 "selection_policy",
                 "framing_policy",
             )
+        } | {
+            "family": _FAMILY_BY_STYLE[style["id"]][0],
+            "variant_label": copy.deepcopy(_FAMILY_BY_STYLE[style["id"]][1]),
         }
         for style in EDIT_STYLES
     ]
@@ -782,6 +981,9 @@ def public_edit_styles() -> list[dict[str, Any]]:
 
 def enrich_brief_with_style(brief: Mapping[str, Any]) -> dict[str, Any]:
     output = copy.deepcopy(dict(brief))
+    # Creator-supplied background ("what is this video, who is who"). It helps
+    # every Story stage read the transcript, but it is never source evidence.
+    source_context = " ".join(str(output.pop("source_context", "") or "").split())[:SOURCE_CONTEXT_MAX_CHARS]
     style = get_edit_style(output.get("edit_style"))
     output["edit_style"] = style["id"]
     # Missing intent belongs to an older project: preserve its preset contract.
@@ -831,6 +1033,16 @@ def enrich_brief_with_style(brief: Mapping[str, Any]) -> dict[str, Any]:
         "guidance": guidance,
         "preferred_structure": list(preferred_structure),
     }
+    if source_context:
+        output["style_profile"]["source_context"] = {
+            "authority": "advisory_only",
+            "text": source_context,
+            "use": (
+                "Background written by the creator about this recording: what it is about and who is who. Use it "
+                "to read names, roles and topics in the transcript correctly. It is not evidence that any moment "
+                "happened and never overrides the transcript, the timing or the user's instruction."
+            ),
+        }
     output["story_contract"] = {**story_intent, "preferred_structure": [
         {"purpose": purpose, "origin": "style", "style_id": style["id"], "authority": "preference"}
         for purpose in preferred_structure]}

@@ -226,6 +226,7 @@
               <span><strong>CUTROOM Smart</strong><small>Balanced automatic edit</small></span><b>Recommended</b>
             </button>
           </div>
+          <div class="style-recommendation" id="styleRecommendation" role="status" aria-live="polite" hidden></div>
           <small class="edit-style-note" id="editStyleNote" data-i18n="editStyleEvidence">Each style changes moment selection, pacing and duration. Screen + camera is never enabled without explicit confirmation.</small>
           <details class="context-help"><summary>What does an editing style change?</summary><p>Styles guide moment selection, pacing and story structure. They do not clone a particular creator or guarantee a finished edit. Your output format and length stay under your control; review the draft before exporting.</p></details>
         </fieldset>
@@ -253,6 +254,11 @@
             <span data-i18n="directionNote">Director instruction <small>Optional</small></span>
             <textarea id="directorInstruction" dir="auto" rows="3" maxlength="8000" aria-describedby="directorInstructionCounter" placeholder="Example: keep the pricing explanation and the qualification that follows it."></textarea>
             <small id="directorInstructionCounter" class="instruction-counter" dir="auto" aria-live="polite" aria-atomic="true">0 / 8,000 characters</small>
+          </label>
+
+          <label class="brief-group instruction-group source-context-group">
+            <span>What is this video about? <small>Optional · who appears, names, topic</small></span>
+            <textarea id="sourceContext" dir="auto" rows="2" maxlength="600" placeholder="Example: a podcast with Dana (host) and Avi (guest) about starting a bakery."></textarea>
           </label>
 
           <label class="brief-group burn-caption-choice">
