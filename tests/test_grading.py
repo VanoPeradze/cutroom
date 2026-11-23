@@ -1,3 +1,4 @@
+import os
 import shutil
 import subprocess
 
@@ -68,9 +69,13 @@ def test_render_prefers_keyframes_and_folds_in_punch_ins():
 
 @pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg is not installed")
 def test_ffmpeg_runs_grade_lut_and_keyframes(tmp_path):
-    project_dir = tmp_path / "project: one"  # a colon must survive filter escaping
+    # Windows disallows a colon in a folder name; its absolute drive path
+    # already makes FFmpeg escape a colon. Keep spaces and Unicode on both.
+    folder_name = "project one (צבע)" if os.name == "nt" else "project: one (צבע)"
+    project_dir = tmp_path / folder_name
     lut = lut_path(project_dir, normalize_color({"lut_id": save_lut(project_dir, identity_cube(3))}))
     grade = color_filter({"look": "vintage", "exposure": 0.3, "temperature": -0.4, "lut_id": lut.stem}, lut)
+    assert r"\:" in grade  # exercise actual ffmpeg filter escaping on both systems
     motion = keyframe_transform_filter([{"time": 0, "zoom": 1}, {"time": 2, "zoom": 2, "x": 0.8, "y": 0.2}], 320, 180)
     output = tmp_path / "out.mp4"
     subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-f", "lavfi", "-i", "testsrc2=size=320x180:rate=30:duration=2",

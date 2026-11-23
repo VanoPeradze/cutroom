@@ -593,5 +593,7 @@ def build_ass(
         lines.append(f"Dialogue: 1,{_ass_timestamp(row['start'])},{_ass_timestamp(row['end'])},{name},,0,0,0,,"
                      f"{_text_template(row, width, height, font_size)}\n")
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text("".join(lines), encoding="utf-8-sig")
+    # Keep ASS bytes and BOM identical on Windows, Mac and Linux. Text-mode
+    # writes translate LF to CRLF on Windows, changing the rendered preimage.
+    target.write_bytes("".join(lines).encode("utf-8-sig"))
     return target
