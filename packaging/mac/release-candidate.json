@@ -1,13 +1,13 @@
 {
-  "filename": "CUTROOM-1.3-Beta-combined-66c27c3.zip",
-  "bytes": 15832646,
-  "sha256": "b5a16b5006d2c475ca97644d263e5ed6f856496e78d051cd2b125d1673ca3c56",
-  "build_id": "CUTROOM-1.3-beta-mac-20261123-055623",
-  "url": "https://cutroom-studio--gvxfhydcci.expo.app/downloads/CUTROOM-1.3-Beta-combined-66c27c3.zip",
+  "bytes": 15381121,
+  "sha256": "5d9564e06fd5af383b6d30a0a94bc947a1b341675ca3eb42481add4a75a6bf2b",
+  "manifest_sha256": "b639afa946095db2c77d0792bb4b90ef7221ebdbc4398858d94aa6dbd01a8ef1",
+  "build_id": "CUTROOM-1.3-beta-mac-20261123-112823",
+  "filename": "CUTROOM-1.3-Beta-combined-71ea417.zip",
+  "url": "https://cutroom-studio--m5syzau6er.expo.app/downloads/CUTROOM-1.3-Beta-combined-71ea417.zip",
   "mirrors": [],
   "version": "1.3-beta",
-  "layout": "windows-mac-folders-v1",
-  "manifest_sha256": "a4649aae85092723f0574519ce90c66849a4064d74b8ebf4d20f1cb2fc1678c0",
-  "source_commit": "66c27c3495b47051246c5383788a2e09d21a7804",
-  "note": "Immutable Expo stage for CUTROOM PR #132 from frozen app source 66c27c3 and the exact Windows output qualified by GitHub Actions run 45118914767. Round-trip bytes and manifest verified. This pin starts separate qualification on both native Mac architectures; historical validation pins are unchanged."
+  "source_commit": "71ea417c2de0088c07687942b2df7865407b6566",
+  "note": "Verified exact CUTROOM cumulative style/motion archive staged after hosted Windows run 45162156788. Native Mac qualification remains separate; historical validation pins are unchanged.",
+  "layout": "windows-mac-folders-v1"
 }
