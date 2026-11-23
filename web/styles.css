@@ -2154,3 +2154,5 @@ button, summary { touch-action: manipulation; }
 .source-context-group textarea { min-height: 54px; }
 @keyframes style-variants-in { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .edit-style-variants { animation: none; } }
+.video-map-summary { display: block; margin-top: 10px; color: var(--paper-dim); font-size: 11px; line-height: 1.5; }
+.video-map-summary[hidden] { display: none; }

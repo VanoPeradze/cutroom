@@ -23,6 +23,8 @@ export function strengthLabel(strength) {
 
 const SCREENS = { cutscene: "Cutscene", menu: "Menu", loading: "Loading screen", webcam_only: "Camera only", map: "Map", other: "Other screen" };
 
+const SOUND_EVENTS = { laughter: "Laughter", applause: "Applause", music: "Music" };
+
 export function reasonLabel(reason) {
   switch (reason?.kind) {
     case "energy": return reason.level === "high" ? "High energy" : "Active sound";
@@ -30,6 +32,7 @@ export function reasonLabel(reason) {
     case "reactions": { const count = Math.round(Number(reason.count) || 0); return `${count} ${count === 1 ? "reaction" : "reactions"}`; }
     case "speech": return "Speech";
     case "screen": return SCREENS[reason.value] || "Other screen";
+    case "sound_event": return SOUND_EVENTS[reason.type] || "";
     default: return "";
   }
 }
@@ -38,6 +41,7 @@ export function boardSummary(board) {
   const used = ["sound"];
   if (board?.signals?.transcript) used.push("spoken reactions");
   if (board?.signals?.vision) used.push("on-screen action");
+  if (board?.signals?.sound_events) used.push("laughter and applause");
   const list = used.length > 1 ? `${used.slice(0, -1).join(", ")} and ${used.at(-1)}` : used[0];
   return `Ranked by ${list} in this recording.`;
 }

@@ -10,6 +10,7 @@ from .ai_draft_proposals import record_ai_draft_proposal, record_isolated_ai_dra
 from .cache_keys import build_analysis_cache_fingerprints, cache_fingerprints_match, stable_fingerprint
 from .composition import default_reels_stack, select_embedded_candidate
 from .config import Settings
+from .understanding import VIDEO_MAP_VERSION, build_video_map, decode_mono, story_context
 from .edit_styles import enrich_brief_with_style, required_story_roles_from_policy, required_story_role_orders_from_policy
 from .frame_rates import project_export_fps
 from .caption_items import apply_corrections, corrections as caption_corrections
@@ -4055,6 +4056,20 @@ def analyze_project(
     visual_inputs_match = (cached_fingerprints or {}).get("visual_moments") == visual_key
     reusable_story = reusable_story and visual_inputs_match
 
+    # A measured "video map" (speaker turns, sound events, topics, shot rhythm)
+    # gives Story advisory structure. It is cached with the transcript.
+    video_map = None
+    if not (goal == "youtube" and youtube_cleanup_only):
+        video_map = _resolve_video_map(
+            context, settings, cached_analysis, cache_fingerprints,
+            segments=(transcript or {}).get("segments", []) if isinstance(transcript, dict) else [],
+            duration=duration, audio_path=analysis_source, audio_slot=analysis_audio_slot,
+            audio_offset=analysis_timeline_offset, scenes=scenes_a, vision=vision,
+        )
+        map_context = story_context(video_map)
+        if map_context and isinstance(brief.get("style_profile"), dict):
+            brief["style_profile"]["video_map"] = map_context
+
     # Persist the expensive reusable context before Story AI starts. If a local
     # model fails or CUTROOM closes during a later pass, retrying can reuse the
     # transcript/audio/vision instead of processing a long recording again.
@@ -4690,6 +4705,7 @@ def analyze_project(
         "sync": sync,
         "vision": vision,
         "visual_moments": visual_moments if visual_timeline else None,
+        "video_map": video_map,
         "thumbnails": {"A": thumbnails},
         "waveform": waveform,
         "engine": engine,
@@ -4982,6 +4998,63 @@ def _with_visual_evidence(segments: list[dict[str, Any]], visual: VisualTimeline
             continue
         output.append({**item, "visual_action": evidence["action"], "visual_dead": evidence["dead"]})
     return output
+
+
+def _resolve_video_map(
+    context: JobContext,
+    settings: Settings,
+    cached_analysis: dict[str, Any] | None,
+    cache_fingerprints: dict[str, Any],
+    *,
+    segments: list[dict[str, Any]],
+    duration: float,
+    audio_path: Path | None,
+    audio_slot: str,
+    audio_offset: float,
+    scenes: list[Any] | None,
+    vision: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    """Build or reuse the measured video map; never fail the edit over it."""
+    rows = [row for row in segments or [] if isinstance(row, dict) and str(row.get("text") or "").strip()]
+    if not rows or duration <= 0:
+        return None
+    key = stable_fingerprint("video-map", {
+        "version": VIDEO_MAP_VERSION,
+        "source": cache_fingerprints.get("source"),
+        "transcript": cache_fingerprints.get("transcript"),
+        "scenes": cache_fingerprints.get("scenes"),
+        "vision": cache_fingerprints.get("vision"),
+        "segments": [(row.get("id"), round(float(row.get("start", 0)), 2), round(float(row.get("end", 0)), 2)) for row in rows],
+    })
+    cached = (cached_analysis or {}).get("video_map") if cached_analysis else None
+    if isinstance(cached, dict) and cached.get("cache_key") == key:
+        return copy.deepcopy(cached)
+    samples, audio_reason = None, None
+    if audio_path is None:
+        audio_reason = "no_audio_source"
+    elif str(audio_slot or "A").upper() != "A" or abs(float(audio_offset or 0.0)) > 1e-6:
+        # The transcript sits on the timeline clock; offset audio would put
+        # voices and laughs at the wrong moments, so audio parts are skipped.
+        audio_reason = "offset_audio_source"
+    else:
+        try:
+            context.update(max(0.56, float(context.job.progress)), "Mapping speakers and sound events")
+            samples = decode_mono(audio_path, settings, duration, cancel_check=context.check_cancelled)
+        except JobCancelled:
+            raise
+        except Exception:  # noqa: BLE001 - optional evidence
+            samples = None
+        if samples is None:
+            audio_reason = "audio_decode_unavailable"
+    try:
+        video_map = build_video_map(segments=rows, duration=duration, samples=samples, scenes=scenes,
+                                    vision=vision, audio_reason=audio_reason)
+    except JobCancelled:
+        raise
+    except Exception as exc:  # noqa: BLE001 - optional evidence
+        return {"version": VIDEO_MAP_VERSION, "available": False, "reason": f"{type(exc).__name__}", "cache_key": key}
+    video_map["cache_key"] = key
+    return video_map
 
 
 def _plan_edit_with_cancel(

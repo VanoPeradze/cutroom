@@ -102,7 +102,30 @@ def _percentile(score: int, scores: list[int]) -> int:
     return int(round(100.0 * (below + ties / 2.0) / len(scores)))
 
 
-def _reasons(signals: dict[str, Any], strength: int, reactions: int, has_speech: bool) -> list[dict[str, Any]]:
+# Laughter and applause mark moments people reacted to; music alone does not.
+SOUND_EVENT_BONUS = {"laughter": 10.0, "applause": 8.0}
+
+
+def _sound_events(project: dict[str, Any]) -> list[dict[str, Any]]:
+    """Saved video-map events on the source A clock, or nothing."""
+    analysis = project.get("analysis") or {}
+    if str(analysis.get("audio_source") or "A").upper() != "A" or abs(_finite_number(analysis.get("audio_timeline_offset"), 0.0)) > 1e-6:
+        return []
+    video_map = analysis.get("video_map")
+    if not isinstance(video_map, dict) or not video_map.get("available"):
+        return []
+    return [row for row in video_map.get("events") or []
+            if isinstance(row, dict) and row.get("type") in {"laughter", "applause", "music"}
+            and _finite_number(row.get("end")) > _finite_number(row.get("start"))]
+
+
+def _events_in(start: float, end: float, events: list[dict[str, Any]]) -> list[str]:
+    return sorted({str(row["type"]) for row in events
+                   if _finite_number(row.get("start")) < end and _finite_number(row.get("end")) > start})
+
+
+def _reasons(signals: dict[str, Any], strength: int, reactions: int, has_speech: bool,
+             sound_events: list[str] | None = None) -> list[dict[str, Any]]:
     reasons: list[dict[str, Any]] = []
     if strength >= 75:
         reasons.append({"kind": "energy", "level": "high"})
@@ -119,6 +142,8 @@ def _reasons(signals: dict[str, Any], strength: int, reactions: int, has_speech:
         reasons.append({"kind": "event", "text": event[:140]})
     if visual.get("screen") and visual.get("screen") != "gameplay":
         reasons.append({"kind": "screen", "value": str(visual["screen"])})
+    for kind in sound_events or []:
+        reasons.append({"kind": "sound_event", "type": kind})
     if has_speech and not reactions:
         reasons.append({"kind": "speech"})
     return reasons
@@ -160,14 +185,21 @@ def build_clip_board(project: dict[str, Any], *, length: Any = DEFAULT_LENGTH, c
         return {**base, "available": False, "reason": reason}
     segments = _segments(project)
     visual = _visual(project)
+    events = _sound_events(project)
     base["signals"] = {"audio": True, "transcript": bool(segments), "vision": bool(visual)}
+    if events:
+        base["signals"]["sound_events"] = True
 
     window = float(min(length, duration))
     step = max(1.0, window / 6.0)
     windows: list[tuple[float, float, dict[str, Any]]] = []
     position = 0.0
     while position + window <= duration + 1e-6:
-        windows.append((position, position + window, _moment_signals(position, position + window, waveform, segments, levels, visual)))
+        signals = _moment_signals(position, position + window, waveform, segments, levels, visual)
+        bonus = sum(SOUND_EVENT_BONUS.get(kind, 0.0) for kind in _events_in(position, position + window, events))
+        if bonus:
+            signals = {**signals, "score": min(100.0, float(signals["score"]) + bonus)}
+        windows.append((position, position + window, signals))
         position += step
     if not windows:
         return {**base, "available": False, "reason": "too_short"}
@@ -205,6 +237,6 @@ def build_clip_board(project: dict[str, Any], *, length: Any = DEFAULT_LENGTH, c
             "strength": strength,
             "hook": hook,
             "excerpt": excerpt,
-            "reasons": _reasons(signals, strength, reactions, bool(excerpt)),
+            "reasons": _reasons(signals, strength, reactions, bool(excerpt), _events_in(start, end, events)),
         })
     return {**base, "available": True, "reason": None, "clips": clips}

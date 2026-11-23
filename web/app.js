@@ -187,7 +187,7 @@ function cacheElements() {
     "welcomeView", "workspaceView", "projectHead", "projectName", "saveState", "recentProjects", "recentList", "recentCount",
     "projectsButton", "projectsDialog", "dialogProjects", "dialogNewProject", "newProjectButton", "homeButton",
     "advancedButton", "advancedPanel", "closeAdvanced", "studioPreviewDock", "studioDirectorDock", "studioRenderButton", "studioDraftStatus", "studioPanelFraming", "renderButton", "resultRenderButton", "setupPanel", "setupSourceMixerDock", "analysisPanel", "resultPanel", "resultGrid", "previewColumn", "verdictColumn",
-    "sourceSlotA", "sourceSlotB", "sourceInputA", "sourceInputB", "cancelUploadA", "cancelUploadB", "audioCalibration", "audioMeterCanvas", "recommendedThreshold", "useRecommendedThreshold", "silenceThreshold", "silenceThresholdOut", "preSilenceMin", "preSilenceMinOut", "preSilenceKeep", "preSilenceKeepOut", "audioCutEstimate", "audioProfileSummary", "editStyleChoices", "editStyleNote", "styleRecommendation", "sourceContext", "goalChoices", "goalExplainer", "goalExplainerTitle", "goalExplainerText", "durationGroup", "targetDuration", "durationMode", "durationOutput", "paceChoices", "paceNote",
+    "sourceSlotA", "sourceSlotB", "sourceInputA", "sourceInputB", "cancelUploadA", "cancelUploadB", "audioCalibration", "audioMeterCanvas", "recommendedThreshold", "useRecommendedThreshold", "silenceThreshold", "silenceThresholdOut", "preSilenceMin", "preSilenceMinOut", "preSilenceKeep", "preSilenceKeepOut", "audioCutEstimate", "audioProfileSummary", "editStyleChoices", "editStyleNote", "styleRecommendation", "videoMapSummary", "sourceContext", "goalChoices", "goalExplainer", "goalExplainerTitle", "goalExplainerText", "durationGroup", "targetDuration", "durationMode", "durationOutput", "paceChoices", "paceNote",
     "directorInstruction", "directorInstructionCounter", "uploadStorageInfo", "directorOutcomeNotice", "instructionResults", "instructionResultsTitle", "instructionResultsSummary", "instructionResultsList", "allowExtractiveRoughCut", "readiness", "generateButton", "jobMessage", "jobProgress", "cancelJobButton", "analysisError", "analysisErrorTitle", "analysisErrorMessage", "retryDirectorButton", "backFromErrorButton", "draftTitle", "draftSummary", "draftEngineBadge",
     "reelCandidates", "reelCandidatesTitle", "reelCandidateList", "draftWarning", "draftWarningText", "reviewSpeechSettings", "gameplayMoments",
     "beforeDuration", "afterDuration", "decisionCount", "decisionList", "retainedEditPreview", "previewStage", "previewA", "previewB", "previewPaneA", "previewPaneB", "previewPlay", "playButton",
@@ -3623,7 +3623,35 @@ function renderStyleVariants(family) {
 // Read-only advice from saved analysis: shown only when it differs from the
 // current choice, and applied only when the user clicks it.
 const styleRecommendationCache = new Map();
+// One readable line from the saved video map: what CUTROOM understood.
+function videoMapSummary(map) {
+  if (!map?.available) return "";
+  const parts = [];
+  const speakers = map.speakers || {};
+  if (speakers.available && speakers.count) parts.push(speakers.count === 1 ? uiCopy("דובר אחד", "1 speaker") : uiCopy(`${speakers.count} דוברים`, `${speakers.count} speakers`));
+  const topics = Array.isArray(map.topics) ? map.topics.length : 0;
+  if (topics > 1) parts.push(uiCopy(`${topics} נושאים`, `${topics} topics`));
+  const counts = map.event_counts || {};
+  const named = { laughter: ["צחוק", "laugh", "laughs"], applause: ["מחיאות כפיים", "applause", "applause"], music: ["מוזיקה", "music section", "music sections"] };
+  for (const [type, [he, one, many]] of Object.entries(named)) {
+    const count = Number(counts[type]) || 0;
+    if (count) parts.push(uiCopy(`${he} ×${count}`, `${count} ${count === 1 ? one : many}`));
+  }
+  const shots = Number(map.visual?.shots_per_minute);
+  if (Number.isFinite(shots) && map.visual?.shot_changes) parts.push(uiCopy(`${shots} חיתוכים לדקה`, `${shots} shots/min`));
+  return parts.length ? `${uiCopy("מה זיהינו בסרטון:", "What CUTROOM understood:")} ${parts.join(" · ")}` : "";
+}
+
+function renderVideoMap() {
+  const host = elements.videoMapSummary;
+  if (!host) return;
+  const text = videoMapSummary(state.project?.analysis?.video_map);
+  host.textContent = text;
+  host.hidden = !text;
+}
+
 async function renderStyleRecommendation() {
+  renderVideoMap();
   const host = elements.styleRecommendation;
   if (!host) return;
   const project = state.project;

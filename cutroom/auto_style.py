@@ -54,9 +54,11 @@ def _gameplay_share(visual: Any) -> float | None:
     return round(gameplay / total, 3) if total > 0 else None
 
 
-def _speaker_turns(segments: list[dict[str, Any]]) -> int:
-    speakers = {str(row.get("speaker")) for row in segments if isinstance(row, dict) and row.get("speaker")}
-    return len(speakers)
+def _speaker_count(segments: list[dict[str, Any]], video_map: Any) -> int:
+    speakers = (video_map or {}).get("speakers") if isinstance(video_map, dict) else None
+    if isinstance(speakers, dict) and speakers.get("available"):
+        return int(speakers.get("count") or 0)
+    return len({str(row.get("speaker")) for row in segments if isinstance(row, dict) and row.get("speaker")})
 
 
 def recommend_style(project: dict[str, Any], goal: Any = None) -> dict[str, Any]:
@@ -68,7 +70,7 @@ def recommend_style(project: dict[str, Any], goal: Any = None) -> dict[str, Any]
     coverage = _speech_coverage(segments, duration)
     gameplay = _gameplay_share(analysis.get("visual_moments"))
     signals = {"goal": goal, "duration_seconds": round(duration, 1), "speech_coverage": coverage,
-               "gameplay_share": gameplay, "speakers": _speaker_turns(segments)}
+               "gameplay_share": gameplay, "speakers": _speaker_count(segments, analysis.get("video_map"))}
 
     def result(style_id: str, confidence: str, he: str, en: str) -> dict[str, Any]:
         style = get_edit_style(style_id, strict=True)
