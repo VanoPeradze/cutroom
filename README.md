@@ -1,9 +1,11 @@
 # CUTROOM
 
+[![CUTROOM 1.3 Beta](https://img.shields.io/badge/version-1.3%20Beta-1bd9ce?style=flat-square)](https://github.com/VanoPeradze/cutroom/releases)
+
 **A free, open-source video editor for recordings, YouTube, Shorts and Reels.**
 Cut, frame, mix and caption on your computer. Start manually or generate a first draft and decide what stays.
 
-[Download for Windows or Mac](https://cutroom-studio.expo.app/#download) · [GitHub releases](https://github.com/VanoPeradze/cutroom/releases) · [User guide](docs/USER_GUIDE_EN.md) · [עברית](docs/README_HE.md)
+[Download for Windows or Mac](https://cutroom-studio.expo.app/#download) · [GitHub releases](https://github.com/VanoPeradze/cutroom/releases) · [User guide](docs/USER_GUIDE_EN.md) · [Hebrew README](docs/README_HE.md)
 
 ## The editor
 

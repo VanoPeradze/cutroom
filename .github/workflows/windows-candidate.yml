@@ -26,7 +26,7 @@ jobs:
       GIT_CONFIG_VALUE_0: 'false'
       GIT_CONFIG_KEY_1: core.eol
       GIT_CONFIG_VALUE_1: lf
-      TESTED_HEAD_SHA: '4e25851ae6d677732a6786e91bf9c3bdd5165780'
+      TESTED_HEAD_SHA: '71ea417c2de0088c07687942b2df7865407b6566'
       CUTROOM_NO_BROWSER: '1'
       HF_HUB_OFFLINE: '1'
       TRANSFORMERS_OFFLINE: '1'
@@ -43,7 +43,7 @@ jobs:
       - name: Check out the frozen reviewed app
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: '4e25851ae6d677732a6786e91bf9c3bdd5165780'
+          ref: '71ea417c2de0088c07687942b2df7865407b6566'
           persist-credentials: false
       - name: Verify exact tested source and clean checkout
         shell: pwsh
