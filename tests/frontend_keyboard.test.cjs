@@ -14,8 +14,14 @@ test("every profile exposes every supported action with readable nonempty help",
   assert.deepEqual(Array.from(KEYBOARD_PROFILES, (profile) => profile.id), ["cutroom", "resolve", "premiere", "protools", "finalcut"]);
   for (const { id } of KEYBOARD_PROFILES) {
     const rows = shortcutRows(id);
-    assert.equal(rows.length, 28);
-    assert.equal(new Set(rows.map((row) => row.action)).size, 28);
+    assert.equal(rows.length, 30);
+    assert.equal(new Set(rows.map((row) => row.action)).size, 30);
+    const selectedMarks=rows.find(row=>row.action==="mark_selected_layers");
+    assert.equal(selectedMarks.bound,id==="cutroom");
+    assert.equal(resolve(event("X",{shiftKey:true}),id),id==="cutroom"?"mark_selected_layers":null);
+    const marker=rows.find(row=>row.action==="review_marker");
+    assert.equal(marker.bound,id!=="protools");
+    assert.equal(resolve(event("m"),id),id==="protools"?null:"review_marker");
     assert.ok(rows.every((row) => row.keys && row.label && typeof row.custom === "boolean" && typeof row.bound === "boolean"));
     assert.ok(rows.every((row) => Array.isArray(row.bindings) && row.bindings.every((binding) => typeof binding.keys === "string" && typeof binding.custom === "boolean" && typeof binding.note === "string")));
     assert.ok(rows.filter((row) => !row.bound).every((row) => row.keys === "Not assigned" && !row.custom && row.bindings.length === 0));

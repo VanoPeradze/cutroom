@@ -89,17 +89,15 @@ def test_mixer_is_undoable_and_base_deletion_preserves_media_transactionally():
     assert value == before
 
 
-def test_sequence_ripple_delete_refuses_to_strand_added_media_without_losing_history():
+def test_together_ripple_delete_moves_added_media_without_losing_source_time_or_undo():
     value = project()
-    clip = add(value, start=12, end=15)
-    before = copy.deepcopy(value)
-    with pytest.raises(ManualEditError, match="Trim, move, or remove"):
-        apply_manual_edit(value, {"action": "sequence_ripple_delete", "start": 0, "end": 5})
-    assert value == before
-    apply_manual_edit(value, {"action": "media_update", "clip_id": clip["id"], "start": 7, "end": 10})
+    clip = copy.deepcopy(add(value, start=12, end=15))
     apply_manual_edit(value, {"action": "sequence_ripple_delete", "start": 0, "end": 5})
     assert value["manual"]["sequence"]["duration"] == 10
-    assert value["manual"]["media_clips"][0]["end"] == 10
+    assert value["manual"]["media_clips"] == [{**clip, "start": 7, "end": 10}]
+    apply_manual_edit(value, {"action": "undo"})
+    assert value["manual"]["media_clips"] == [clip]
+    assert "sequence" not in value["manual"]
 
 
 def test_replacing_secondary_recording_preserves_independent_assets_and_layers():
@@ -119,8 +117,13 @@ def test_public_metadata_hides_all_internal_asset_paths(tmp_path):
     value["assets"][ASSET].update(preview_path=f"media/assets/{ASSET}/preview.m4a", thumbnail_path=f"media/assets/{ASSET}/thumbnail.jpg")
     asset = _public_project(value)["assets"][ASSET]
     assert not {"path", "preview_path", "thumbnail_path"} & asset.keys()
-    assert asset["url"].endswith(f"/{ASSET}/media")
-    assert asset["thumbnail_url"].endswith(f"/{ASSET}/thumbnail")
+    # Ready previews expose only their safe API routes and opaque cache token,
+    # never the project-local original/preparation filenames in either URL.
+    version = asset["preview_version"]
+    assert len(version) == 24 and all(c in "0123456789abcdef" for c in version)
+    base = f"/api/projects/{value['id']}/assets/{ASSET}"
+    assert asset["url"] == f"{base}/media?v={version}"
+    assert asset["thumbnail_url"] == f"{base}/thumbnail?v={version}"
     for path in ("../secret", "media/source-A.mp4", str(tmp_path / "secret")):
         with pytest.raises(FileNotFoundError):
             safe_asset_path(tmp_path / "project", path)

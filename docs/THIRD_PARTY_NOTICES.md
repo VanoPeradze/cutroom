@@ -39,3 +39,9 @@ Cloudflare Whisper Large v3 Turbo is a separately selected transcription service
 ## DejaVu test fonts
 
 The caption-render regression fixtures redistribute unmodified DejaVu Sans 2.37 regular and bold. Bitstream Vera copyright/license and public-domain DejaVu changes are preserved in [the complete bundled license](../tests/fixtures/fonts/DejaVu-LICENSE.txt). [Provenance and SHA-256 checksums](../tests/fixtures/fonts/README.md). They are passed directly to the test renderer, not installed into the OS and not used to replace the product UI font.
+
+## Application interface fonts
+
+The application redistributes unmodified Geist and Noto Sans Hebrew font files under the SIL Open Font License 1.1. Geist is copyright 2024 The Geist Project Authors; Noto Sans Hebrew is copyright 2022 The Noto Project Authors. Complete licenses are bundled beside the fonts: [Geist](../web/fonts/Geist-OFL.txt) and [Noto Sans Hebrew](../web/fonts/NotoSansHebrew-OFL.txt).
+
+The interface serves these fonts locally. They are not installed into the operating system, fetched from a font CDN, or used to change a project's selected caption/export font. These are the same licensed source files used by the public CUTROOM site, copied into application-owned assets so downloaded packages do not depend on the marketing website.

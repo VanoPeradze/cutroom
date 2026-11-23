@@ -3,7 +3,7 @@ const TIMELINE_HEIGHT_KEY = "cutroom-timeline-height-v4";
 const INSPECTOR_WIDTH_KEY = "cutroom-inspector-width-v3";
 const INSPECTOR_COLLAPSED_KEY = "cutroom-inspector-collapsed-v1";
 
-export function initWorkspace({ document: doc = document, window: win = window, onResize = () => {}, openShortcuts = () => {}, translate = (key, fallback) => fallback } = {}) {
+export function initWorkspace({ document: doc = document, window: win = window, onResize = () => {}, openShortcuts = () => {}, resizeIssue = () => "", translate = (key, fallback) => fallback } = {}) {
   const panel = doc.getElementById("advancedPanel");
   const actions = panel?.querySelector(".studio-header-actions");
   const preview = doc.getElementById("previewColumn");
@@ -17,6 +17,9 @@ export function initWorkspace({ document: doc = document, window: win = window, 
   let fallbackOrigin = null;
   let preferredHeight = null;
   let resizeGesture = null;
+  let timelineExpanded = false;
+  let timelineScrollRestore = null;
+  let lastResizeIssue = "";
   let preferredWidth = null;
   let workspaceMode = "timeline";
   let editEffects = false;
@@ -62,6 +65,30 @@ export function initWorkspace({ document: doc = document, window: win = window, 
   divider.setAttribute("aria-controls", "studioPreviewDock studioTimelineDock");
   divider.title = "Drag up for more timeline or down for more video. Arrow keys resize; double-click resets.";
   panel.appendChild(divider);
+  const timelineExpand = button("workspaceTimelineExpand", "Expand timeline");
+  timelineExpand.className = "workspace-timeline-expand";
+  timelineExpand.setAttribute("aria-controls", "studioTimelineDock studioPreviewDock");
+  timelineExpand.setAttribute("aria-pressed", "false");
+  timelineExpand.setAttribute("data-editor-shortcuts", "off");
+  // A larger viewport can clamp a bottom-scrolled timeline. Restore its old
+  // position only until the user deliberately interacts elsewhere; new navigation
+  // must win over a display-only snapshot.
+  const discardScrollRestore = event => {
+    if (!timelineExpanded || timelineExpand.contains?.(event.target) || divider.contains?.(event.target)) return;
+    if (event.type === "keydown" && ["Tab", "Shift", "Control", "Alt", "Meta"].includes(event.key)) return;
+    timelineScrollRestore = null;
+  };
+  listen(doc, "pointerdown", discardScrollRestore, true);
+  listen(doc, "keydown", discardScrollRestore, true);
+  listen(doc, "wheel", discardScrollRestore, {capture:true,passive:true});
+  const desktopLayout = () => win.innerWidth >= 900 && win.innerHeight >= 540;
+  const allowExplicitResize = () => {
+    const issue = resizeIssue();
+    if (issue) { lastResizeIssue = String(issue); status.textContent = lastResizeIssue; return false; }
+    if (lastResizeIssue && status.textContent === lastResizeIssue) status.textContent = "";
+    lastResizeIssue = "";
+    return true;
+  };
   const inspector = doc.getElementById("studioInspector");
   const inspectorToggle = inspector ? button("workspaceToolsToggle", "Hide tools") : null;
   const inspectorDivider = inspector ? create("div", "inspector-divider") : null;
@@ -98,7 +125,7 @@ export function initWorkspace({ document: doc = document, window: win = window, 
     if (!inspector) return null;
     const bounds = widthBounds();
     // Context changes should not move the preview or the clip under the pointer.
-    const defaultWidth = 400;
+    const defaultWidth = 320;
     const width = Math.round(Math.min(bounds.maximum, Math.max(bounds.minimum, preferredWidth ?? defaultWidth)));
     panel.style.setProperty("--workspace-inspector-width", `${width}px`);
     panel.classList.toggle("inspector-collapsed", inspectorCollapsed);
@@ -197,24 +224,37 @@ export function initWorkspace({ document: doc = document, window: win = window, 
   const heightBounds = () => {
     const height = panel.getBoundingClientRect().height || Math.max(400, (win.innerHeight || 800) - 64);
     const headerHeight = panel.querySelector(".studio-header")?.getBoundingClientRect().height || 44;
-    // Extra tracks scroll inside the timeline instead of taking height from
-    // the monitor. Even a previously oversized timeline preserves the player.
     const minimum = 184;
     const dockHeight = panel.querySelector(".advanced-tabs")?.getBoundingClientRect().height || 0;
-    const monitorMinimum = height < 700 ? Math.max(220, Math.round(height * .42))
-      : Math.min(420, Math.max(320, Math.round(height * .5)));
-    const maximum = Math.max(minimum, Math.floor(height - headerHeight - dockHeight - 8 - monitorMinimum));
-    // 256 px fits the standard lanes (video, layout, original audio, captions) without scrolling.
-    return { minimum, maximum, defaultHeight: Math.min(300, Math.max(256, Math.round(height * .28))) };
+    const dividerHeight = divider.getBoundingClientRect().height || 8;
+    // The composed monitor keeps its transport and a usable picture while a dense
+    // edit can take the rest. Rows still scroll; these are not persistent tracks.
+    const available = height - headerHeight - dockHeight - dividerHeight;
+    const maximum = Math.max(minimum, Math.floor(available - 220));
+    return { minimum, maximum, defaultHeight: Math.min(360, Math.max(232, Math.round(available * .38))) };
   };
   const applyTimelineHeight = () => {
     const bounds = heightBounds();
-    const height = Math.round(Math.min(bounds.maximum, Math.max(bounds.minimum, preferredHeight ?? bounds.defaultHeight)));
+    if (!desktopLayout()) { timelineExpanded = false; timelineScrollRestore = null; }
+    const height = Math.round(Math.min(bounds.maximum, Math.max(bounds.minimum,
+      timelineExpanded ? bounds.maximum : preferredHeight ?? bounds.defaultHeight)));
     panel.style.setProperty("--workspace-timeline-height", `${height}px`);
+    panel.classList.toggle("timeline-expanded", timelineExpanded);
     divider.setAttribute("aria-valuemin", String(bounds.minimum));
     divider.setAttribute("aria-valuemax", String(bounds.maximum));
     divider.setAttribute("aria-valuenow", String(height));
     divider.setAttribute("aria-valuetext", `Timeline ${height} pixels tall`);
+    timelineExpand.textContent = timelineExpanded ? "Restore layout" : "Expand timeline";
+    timelineExpand.setAttribute("aria-pressed", String(timelineExpanded));
+    timelineExpand.title = timelineExpanded ? "Restore your previous video and timeline proportions."
+      : "Give the timeline more room while keeping the video and transport visible. Your normal layout is retained.";
+    timelineExpand.disabled = !timelineExpanded && height >= bounds.maximum;
+    if (timelineExpand.disabled) timelineExpand.title = "The timeline already uses the available space. Make the window taller to show more rows.";
+    timelineExpand.hidden = !desktopLayout();
+    // Workspace initializes before TimelineView. Mount on its first scheduled
+    // refresh and never recreate the navigation, canvas or media players.
+    const navigation = panel.querySelector(".timeline-navigation");
+    if (navigation && timelineExpand.parentElement !== navigation) navigation.insertBefore(timelineExpand, navigation.firstChild?.nextSibling || null);
     return height;
   };
   const scheduleResize = () => {
@@ -231,6 +271,8 @@ export function initWorkspace({ document: doc = document, window: win = window, 
     } catch { /* Private browsers may deny display preference storage. */ }
   };
   const setTimelineHeight = (height, persist = true) => {
+    timelineExpanded = false;
+    timelineScrollRestore = null;
     preferredHeight = Number.isFinite(height) ? height : null;
     const applied = applyTimelineHeight();
     if (preferredHeight !== null) preferredHeight = applied;
@@ -238,11 +280,32 @@ export function initWorkspace({ document: doc = document, window: win = window, 
     scheduleResize();
     return applied;
   };
+  const setTimelineExpanded = (expanded) => {
+    if (disposed || resizeGesture || inspectorGesture || !desktopLayout() || !allowExplicitResize()) return false;
+    expanded = Boolean(expanded);
+    if (expanded === timelineExpanded) return true;
+    if (expanded && applyTimelineHeight() >= heightBounds().maximum) return false;
+    const scroll = doc.getElementById("timelineScroll");
+    const restore = !expanded && timelineScrollRestore?.element === scroll
+      && Math.abs(scroll.scrollTop - Math.min(timelineScrollRestore.top, Math.max(0, scroll.scrollHeight - scroll.clientHeight))) < 1
+      ? timelineScrollRestore : null;
+    timelineScrollRestore = expanded && scroll ? {element:scroll,top:scroll.scrollTop} : null;
+    timelineExpanded = expanded;
+    applyTimelineHeight();
+    if (restore) scroll.scrollTop = restore.top;
+    scheduleResize();
+    return true;
+  };
+  listen(timelineExpand, "click", () => setTimelineExpanded(!timelineExpanded));
+  listen(timelineExpand, "keydown", event => {
+    if (event.key !== "Escape" || !timelineExpanded) return;
+    if (setTimelineExpanded(false)) { event.preventDefault(); event.stopPropagation(); }
+  });
   const endResize = (event, cancelled = false) => {
     if (!resizeGesture || (event?.pointerId !== undefined && event.pointerId !== resizeGesture.pointerId)) return;
     const gesture = resizeGesture;
     resizeGesture = null;
-    if (cancelled) preferredHeight = gesture.originalPreference;
+    if (cancelled) { preferredHeight = gesture.originalPreference; timelineExpanded = gesture.originalExpanded; timelineScrollRestore = gesture.originalScrollRestore; }
     if (divider.hasPointerCapture?.(gesture.pointerId)) divider.releasePointerCapture(gesture.pointerId);
     panel.classList.remove("workspace-resizing");
     applyTimelineHeight();
@@ -250,9 +313,10 @@ export function initWorkspace({ document: doc = document, window: win = window, 
     scheduleResize();
   };
   listen(divider, "pointerdown", (event) => {
-    if (event.button !== 0 || resizeGesture) return;
+    if (event.button !== 0 || resizeGesture || inspectorGesture || !allowExplicitResize()) return;
     event.preventDefault();
-    resizeGesture = { pointerId: event.pointerId, y: event.clientY, height: applyTimelineHeight(), originalPreference: preferredHeight };
+    resizeGesture = { pointerId: event.pointerId, y: event.clientY, height: applyTimelineHeight(), originalPreference: preferredHeight, originalExpanded: timelineExpanded, originalScrollRestore: timelineScrollRestore };
+    divider.focus({ preventScroll: true });
     divider.setPointerCapture?.(event.pointerId);
     panel.classList.add("workspace-resizing");
   });
@@ -264,13 +328,15 @@ export function initWorkspace({ document: doc = document, window: win = window, 
   listen(divider, "pointerup", (event) => endResize(event));
   listen(divider, "pointercancel", (event) => endResize(event, true));
   listen(divider, "lostpointercapture", (event) => endResize(event, true));
-  listen(divider, "dblclick", () => setTimelineHeight(null));
+  listen(divider, "dblclick", () => { if (allowExplicitResize()) setTimelineHeight(null); });
   listen(divider, "keydown", (event) => {
+    if (event.key === "Escape" && resizeGesture) { event.preventDefault(); event.stopPropagation(); endResize(null, true); return; }
+    if (resizeGesture || inspectorGesture) return;
     const bounds = heightBounds();
     const step = event.shiftKey ? 64 : 24;
     const next = event.key === "ArrowUp" ? applyTimelineHeight() + step : event.key === "ArrowDown" ? applyTimelineHeight() - step
       : event.key === "Home" ? bounds.minimum : event.key === "End" ? bounds.maximum : null;
-    if (next === null) return;
+    if (next === null || !allowExplicitResize()) return;
     event.preventDefault();
     event.stopPropagation();
     setTimelineHeight(next);
@@ -383,7 +449,7 @@ export function initWorkspace({ document: doc = document, window: win = window, 
     ["Protect finished work", "Edit → Track protection locks source A or B against changes. Locked footage still plays and exports. Choose the other source to keep editing; Together edits and history changes that would affect a locked source require unlocking first. Added media, layout and the audio mixer remain separate controls."],
     ["Bring footage back", "Original footage opens the complete recording with kept and removed sections: preview, drag a Range, then Restore to edit or Remove from edit. You can also extend a cut's white edges directly on the timeline. Zoom in if a clip is too small to grab its edges."],
     ["Change the look", "Select a section, open Layout and choose a composition: it saves immediately. Entire edit applies your next choice throughout. In Captions, select a line, edit its text and Save."],
-    ["Watch and export", "Drag the video/timeline divider to resize. Full screen shows just the composed video; Escape returns. Output has aspect ratio, resolution and up to 60 FPS at the top. Export creates the file."],
+    ["Watch and export", "Expand timeline in the navigation row gives more room to arrange layers; Restore layout brings back your chosen proportions. You can also drag the video/timeline divider or use its arrow keys; double-click resets. Extra rows scroll vertically and the Index finds every clip. Full screen shows just the composed video; Escape returns. Output has aspect ratio, resolution and up to 60 FPS at the top. Export creates the file."],
   ];
   for (const [stepTitle, body] of help) {
     const step = create("li");
@@ -412,10 +478,16 @@ export function initWorkspace({ document: doc = document, window: win = window, 
   listen(shortcutsButton, "click", () => { guide.close(); openShortcuts(); });
   listen(guide, "close", () => { if (!disposed && !panel.hidden) guideButton.focus(); });
   listen(win, "resize", scheduleResize);
+  // Wrapped app chrome can change the editor's actual height without a window
+  // resize. Observe the fixed workspace box, not its rearranged child panels.
+  const sizeObserver = win.ResizeObserver ? new win.ResizeObserver(scheduleResize) : null;
+  sizeObserver?.observe(panel);
   const observer = win.MutationObserver ? new win.MutationObserver(() => {
     if (panel.hidden) {
       if (guide.open) guide.close();
       endResize(null, true);
+      timelineExpanded = false;
+      timelineScrollRestore = null;
       endInspectorResize(null, true);
       if (startedInStudio && (isVideoFullscreen() || fullscreenPending)) void leaveFullscreen();
     }
@@ -438,7 +510,7 @@ export function initWorkspace({ document: doc = document, window: win = window, 
   const viewport = initPreviewViewport({ document: doc, preview });
   const chrome = initStudioChrome({ document: doc, panel, guideButton, fullscreenButton, inspectorToggle });
   const controller = {
-    toggleFullscreen, openGuide, setTimelineHeight, setInspectorWidth, setInspectorCollapsed, setWorkspace, setEditEffects,
+    toggleFullscreen, openGuide, setTimelineHeight, setTimelineExpanded, setInspectorWidth, setInspectorCollapsed, setWorkspace, setEditEffects,
     showInspector: () => setInspectorCollapsed(false),
     destroy() {
       disposed = true;
@@ -447,6 +519,7 @@ export function initWorkspace({ document: doc = document, window: win = window, 
       void leaveFullscreen();
       listeners.forEach((remove) => remove());
       observer?.disconnect();
+      sizeObserver?.disconnect();
       if (resizeFrame !== null) win.cancelAnimationFrame(resizeFrame);
       chrome.restore();
       viewport.restore();
@@ -454,6 +527,7 @@ export function initWorkspace({ document: doc = document, window: win = window, 
       fullscreenButton.remove();
       status.remove();
       divider.remove();
+      timelineExpand.remove();
       inspectorToggle?.remove();
       inspectorDivider?.remove();
       if (inspector) { inspector.inert = false; inspector.removeAttribute("aria-hidden"); }
@@ -463,6 +537,7 @@ export function initWorkspace({ document: doc = document, window: win = window, 
       panel.style.removeProperty("--workspace-timeline-height");
       panel.style.removeProperty("--workspace-inspector-width");
       panel.classList.remove("inspector-collapsed");
+      panel.classList.remove("timeline-expanded");
       delete panel.dataset.workspace;
       delete panel.workspaceController;
     },
@@ -532,8 +607,11 @@ export function initPreviewViewport({ document: doc, preview }) {
   const viewport = doc.createElement("div");
   viewport.className = "preview-viewport";
   preview.insertBefore(viewport, stage);
+  const first = doc.getElementById("firstRecordingGuide");
+  if (first?.parentNode === preview) viewport.appendChild(first);
   viewport.appendChild(stage);
   return { restore() {
+    if (first?.parentNode === viewport) preview.insertBefore(first, viewport);
     if (stage.parentNode === viewport) preview.insertBefore(stage, viewport);
     viewport.remove();
   } };

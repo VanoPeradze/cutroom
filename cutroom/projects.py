@@ -133,10 +133,20 @@ class ProjectStore:
 
     def list(self) -> list[dict[str, Any]]:
         projects: list[dict[str, Any]] = []
+        # A complete renamed copy is not offered until its durable receipt is
+        # finished. Never remove that destination during receipt recovery.
+        from .project_copy import copy_directory
+        reserved_destination = None
+        lease = copy_directory(self.settings) / "lease.json"
+        if lease.exists():
+            try: reserved_destination = json.loads(lease.read_text(encoding="utf8")).get("destination_id")
+            except (OSError, ValueError, AttributeError): pass
         root = self.settings.projects_dir.resolve()
         for state in self.settings.projects_dir.glob("*/project.json"):
             try:
                 directory = state.parent
+                if directory.name == reserved_destination:
+                    continue
                 if not PROJECT_ID_RE.fullmatch(directory.name) or directory.resolve().parent != root:
                     continue
                 project = json.loads(state.read_text(encoding="utf-8"))
@@ -158,6 +168,7 @@ class ProjectStore:
                         for slot, source in sources.items()
                     },
                     "has_draft": bool(project.get("draft")),
+                    **_summary_retained_edit(project),
                     "workflow": _summary_workflow(project),
                     "thumbnail_name": _summary_thumbnail(sources),
                 })
@@ -233,6 +244,8 @@ class ProjectStore:
     def save(self, project: dict[str, Any], expected_revision: int | None = None) -> dict[str, Any]:
         project_id = project["id"]
         with self._lock_for(project_id):
+            from .project_copy import require_source_writable
+            require_source_writable(self.settings, project_id)
             return self._save_unlocked(project, expected_revision)
 
     def _save_unlocked(self, project: dict[str, Any], expected_revision: int | None = None) -> dict[str, Any]:
@@ -248,9 +261,14 @@ class ProjectStore:
             if expected_revision is not None and current_revision != int(expected_revision):
                 raise RuntimeError("revision_conflict")
             validate_sequence_version(current)
+            from .layer_tracks import validate_layer_tracks, validate_locked_layer_changes
+            validate_layer_tracks(current)
             validate_locked_track_changes(current, project)
+            validate_locked_layer_changes(current, project)
         candidate = copy.deepcopy(project)
         validate_sequence_version(candidate)
+        from .layer_tracks import validate_layer_tracks
+        validate_layer_tracks(candidate)
         candidate["updated_at"] = now_iso()
         candidate["revision"] = current_revision + 1 if path.exists() else max(1, int(candidate.get("revision", 1)))
         atomic_write_json(path, candidate)
@@ -269,11 +287,15 @@ class ProjectStore:
         under the same per-project lock as the mutation and atomic JSON replace.
         """
         with self._lock_for(project_id):
+            from .project_copy import require_source_writable
+            require_source_writable(self.settings, project_id)
             project = self._load_unlocked(project_id)
             current_revision = int(project.get("revision", 0))
             if expected_revision is not None and current_revision != int(expected_revision):
                 raise RuntimeError("revision_conflict")
             validate_sequence_version(project)
+            from .layer_tracks import validate_layer_tracks
+            validate_layer_tracks(project)
             replacement = mutator(project)
             updated = project if replacement is None else replacement
             if not isinstance(updated, dict) or updated.get("id") != project_id:
@@ -293,7 +315,18 @@ class ProjectStore:
             if "language" in patch:
                 project["language"] = str(patch["language"])
             if isinstance(patch.get("settings"), dict):
-                project.setdefault("settings", {}).update(patch["settings"])
+                settings_patch = dict(patch["settings"])
+                audio_patch = settings_patch.get("audio_cleanup")
+                if isinstance(audio_patch, dict):
+                    # Inspector controls save individual cleanup fields. Merge
+                    # against the latest locked project so an unrelated audio
+                    # change survives retries; explicit null still means Auto.
+                    current_audio = project.get("settings", {}).get("audio_cleanup")
+                    settings_patch["audio_cleanup"] = {
+                        **(current_audio if isinstance(current_audio, dict) else {}),
+                        **audio_patch,
+                    }
+                project.setdefault("settings", {}).update(settings_patch)
             if isinstance(patch.get("manual"), dict):
                 project.setdefault("manual", {}).update(patch["manual"])
 
@@ -301,6 +334,8 @@ class ProjectStore:
 
     def delete(self, project_id: str) -> None:
         with self._lock_for(project_id):
+            from .project_copy import require_source_writable
+            require_source_writable(self.settings, project_id)
             directory = self.project_dir(project_id)
             project = self._load_unlocked(project_id)
             referenced_exports = self._referenced_export_paths(project)
@@ -421,3 +456,18 @@ def _summary_thumbnail(sources: dict[str, Any]) -> str | None:
     source = sources.get("A") if isinstance(sources.get("A"), dict) else None
     names = [name for name in (source or {}).get("thumbnail_names") or [] if isinstance(name, str) and re.fullmatch(r"[A-Za-z0-9_.-]+", name)]
     return names[len(names) // 3] if names else None
+
+
+def _summary_retained_edit(project):
+    """Cheap saved evidence only, not availability or playback readiness."""
+    import math
+    from .retained_edit import has_retained_edit
+    retained = not isinstance(project.get("draft"), dict) and has_retained_edit(project)
+    result = {"has_retained_edit": retained, "retained_duration": None}
+    manual = project.get("manual")
+    sequence = manual.get("sequence") if isinstance(manual, dict) else None
+    if retained and isinstance(sequence, dict) and type(sequence.get("version")) is int and sequence["version"] == 1:
+        duration = sequence.get("duration")
+        if not isinstance(duration, bool) and isinstance(duration, (int, float)) and math.isfinite(duration) and 0 <= duration <= 86400:
+            result["retained_duration"] = duration
+    return result

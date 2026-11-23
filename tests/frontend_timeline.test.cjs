@@ -651,6 +651,708 @@ test('media blade rejects fragments shorter than .08 seconds and releases pointe
   assert.equal(h.captures.size, 0);
 });
 
+test('media Blade previews and commits the same output frame only on release, independently of A/B locks', () => {
+  const h = mediaFixture({ fps: 30 }), before = JSON.stringify(h.project), checked = [];
+  h.project.manual.track_locks = { A: true, B: true };
+  h.timeline.mediaSplitIssue = (id, time) => { checked.push([id, time]); return ''; };
+  h.timeline.setTool('blade');
+  h.timeline.pointerMove(h.mediaPoint(4.019));
+  assert.equal(h.canvas.style.cursor, 'crosshair');
+  assert.match(h.canvas.title, /Split only this media at 00:00:04:01.*duration stays unchanged/);
+  h.timeline.pointerDown(h.mediaPoint(4.019));
+  assert.equal(h.timeline.gesture.kind, 'media_blade');
+  assert.equal(h.mediaActions.length, 0, 'pressing the mouse is not yet an edit');
+  h.timeline.pointerUp(h.mediaPoint(4.019));
+  assert.deepEqual(h.mediaActions, [{ action: 'media_split', clip_id: 'visual', time: 121 / 30 }]);
+  assert.ok(checked.length >= 3 && checked.every(([id, time]) => id === 'visual' && time === 121 / 30));
+  assert.equal(h.captures.size, 0); assert.equal(h.edits.length, 0);
+  delete h.project.manual.track_locks;
+  assert.equal(JSON.stringify(h.project), before, 'Blade delegates one action, never mutates the saved edit');
+});
+
+test('TimelineView accepts the host media Split readiness callback', () => {
+  const h = mediaFixture(), callback = () => 'Guarded by the host';
+  const timeline = new h.scope.TimelineView(h.canvas, h.scroll, null, null, null, { mediaSplitIssue: callback });
+  assert.equal(timeline.mediaSplitIssue, callback);
+});
+
+test('media Blade uses the original source clock outside sequence mode', () => {
+  const h = mediaFixture(); delete h.project.manual.sequence;
+  h.timeline.setTool('blade'); h.timeline.pointerDown(h.mediaPoint(4.019)); h.timeline.pointerUp(h.mediaPoint(4.019));
+  assert.ok(Math.abs(h.mediaActions[0].time - 4.019) < 1e-9);
+});
+
+test('media Blade minimum pieces are checked after frame rounding', () => {
+  for (const [time, accepted] of [[2.07, false], [2.084, true], [5.93, false]]) {
+    const h = mediaFixture(); h.timeline.setTool('blade');
+    h.timeline.pointerDown(h.mediaPoint(time)); h.timeline.pointerUp(h.mediaPoint(time));
+    assert.equal(h.mediaActions.length, accepted ? 1 : 0);
+  }
+});
+
+test('media Blade explains host safeguards and keeps feedback visible after vertical and horizontal scrolling', () => {
+  const h = mediaFixture(), issue = 'The split is inside an audio fade. Choose a point after the fade has finished.';
+  h.timeline.mediaSplitIssue = () => issue; h.timeline.setTool('blade');
+  h.timeline.pointerMove(h.mediaPoint(4));
+  assert.equal(h.canvas.style.cursor, 'not-allowed'); assert.equal(h.canvas.title, issue);
+  h.scroll.scrollLeft = 190; h.scroll.scrollTop = 170; h.scroll.clientWidth = 180;
+  h.draws.length = 0; h.timeline.drawHover(h.canvas.getContext('2d'), 4, h.timeline.geometry().px, 400);
+  const label = h.draws.find(draw => String(draw.text).includes('Split blocked:'));
+  const box = h.draws.find(draw => draw.fill === '#f4f7f7');
+  assert.ok(label.text.includes(issue)); assert.equal(box.y, 174);
+  assert.ok(box.x >= 192 && box.x + box.width <= 368);
+  h.timeline.pointerDown(h.mediaPoint(4)); h.timeline.pointerUp(h.mediaPoint(4));
+  assert.deepEqual(h.mediaActions, []);
+});
+
+test('media Blade identifies audio, titles and custom captions without redirecting to footage', () => {
+  for (const [kind, expected] of [['audio', 'audio'], ['title', 'title'], ['caption', 'text caption']]) {
+    const h = mediaFixture();
+    if (kind === 'audio') h.project.manual.media_clips[0].asset_id = 'sound';
+    else { h.project.manual.media_clips = []; h.project.manual.text_clips = [{ id: 'text_one', kind, start: 2, end: 6, text: 'Read me' }]; }
+    h.timeline.mediaSplitIssue = () => ''; h.timeline.setTool('blade');
+    h.timeline.pointerMove(h.mediaPoint(4));
+    assert.match(h.canvas.title, new RegExp(`Split only this ${expected}`));
+    h.timeline.pointerDown(h.mediaPoint(4)); h.timeline.pointerUp(h.mediaPoint(4));
+    assert.equal(h.mediaActions[0].clip_id, kind === 'audio' ? 'visual' : 'text_one');
+    assert.equal(h.edits.length, 0);
+  }
+});
+
+test('media Blade cancels Escape, pointer cancellation, tool changes and project refresh without altering the range', () => {
+  for (const cancel of [h => h.timeline.keyDown(h.event(0, { key: 'Escape' })),
+    h => h.timeline.pointerCancel(h.mediaPoint(4)), h => h.listeners.lostpointercapture(h.mediaPoint(4)),
+    h => h.timeline.setTool('select'), h => h.timeline.setProject({ ...h.project, revision: 2 })]) {
+    const h = mediaFixture(); h.timeline.setSelection({ start: 1, end: 2 }, false, true); h.timeline.setTool('blade');
+    h.timeline.pointerDown(h.mediaPoint(4)); cancel(h); h.timeline.pointerUp(h.mediaPoint(4));
+    assert.equal(h.mediaActions.length, 0); assert.equal(h.timeline.gesture, null); assert.equal(h.captures.size, 0);
+  }
+  const h = mediaFixture(); h.timeline.setSelection({ start: 1, end: 2 }, false, true); h.timeline.setTool('blade');
+  h.timeline.pointerDown(h.mediaPoint(4)); h.timeline.keyDown(h.event(0, { key: 'Escape' }));
+  assert.deepEqual(plain(h.timeline.selection), { start: 1, end: 2 }); assert.equal(h.timeline.selectionIsRange, true);
+});
+
+test('media Blade does not split on a drag or a release outside its original occurrence', () => {
+  for (const release of [h => h.mediaPoint(5), h => h.point(4, 40)]) {
+    const h = mediaFixture(); h.timeline.setTool('blade'); h.timeline.pointerDown(h.mediaPoint(4));
+    h.timeline.pointerMove(release(h)); assert.equal(h.canvas.style.cursor, 'not-allowed');
+    assert.match(h.canvas.title, /Split cancelled/); h.timeline.pointerUp(release(h));
+    assert.equal(h.mediaActions.length, 0); assert.equal(h.mediaEdits.length, 0); assert.equal(h.captures.size, 0);
+  }
+});
+
+test('foreign pointers cannot commit or cancel media Blade', () => {
+  const h = mediaFixture(); h.timeline.setTool('blade'); h.timeline.pointerDown(h.mediaPoint(4));
+  h.timeline.pointerMove(h.mediaPoint(5, 0, { pointerId: 2 })); h.timeline.pointerUp(h.mediaPoint(4, 0, { pointerId: 2 }));
+  h.timeline.pointerCancel(h.mediaPoint(4, 0, { pointerId: 2 })); assert.ok(h.timeline.gesture);
+  h.timeline.pointerUp(h.mediaPoint(4)); assert.equal(h.mediaActions.length, 1);
+});
+
+test('media Blade revalidates host readiness, current occurrence and busy state at release', () => {
+  for (const change of [h => { h.timeline.mediaSplitIssue = () => 'Motion must not restart.'; },
+    h => { h.timeline.canEdit = () => false; }, h => { h.timeline.editPending = true; },
+    h => { h.project.manual.media_clips = []; }]) {
+    const h = mediaFixture(); h.timeline.mediaSplitIssue = () => ''; h.timeline.setTool('blade');
+    const point = h.mediaPoint(4);
+    h.timeline.pointerDown(point); change(h); h.timeline.pointerUp(point);
+    assert.equal(h.mediaActions.length, 0); assert.equal(h.captures.size, 0);
+  }
+});
+
+test('unknown or failed host Split readiness fails closed instead of offering a false safe cut', () => {
+  for (const callback of [() => undefined, () => false, () => { throw new Error('stale'); }]) {
+    const h = mediaFixture(); h.timeline.mediaSplitIssue = callback; h.timeline.setTool('blade');
+    h.timeline.pointerMove(h.mediaPoint(4)); assert.equal(h.canvas.style.cursor, 'not-allowed');
+    assert.match(h.canvas.title, /readiness could not be confirmed/);
+    h.timeline.pointerDown(h.mediaPoint(4)); h.timeline.pointerUp(h.mediaPoint(4)); assert.equal(h.mediaActions.length, 0);
+  }
+});
+
+test('media Blade awaits save success or failure and suppresses repeated dispatch while pending', async () => {
+  for (const reject of [false, true]) {
+    const h = mediaFixture(); let settle, count = 0;
+    h.timeline.onMediaAction = () => { count++; return new Promise((resolve, failure) => { settle = reject ? failure : resolve; }); };
+    h.timeline.setTool('blade'); h.timeline.pointerDown(h.mediaPoint(4)); h.timeline.pointerUp(h.mediaPoint(4));
+    assert.equal(h.timeline.editPending, true);
+    h.timeline.pointerDown(h.mediaPoint(4)); h.timeline.pointerUp(h.mediaPoint(4));
+    h.timeline.keyDown(h.event(0, { key: 'Delete' })); assert.equal(count, 1);
+    settle(); await new Promise(setImmediate); assert.equal(h.timeline.editPending, false);
+    h.timeline.pointerDown(h.mediaPoint(4)); h.timeline.pointerUp(h.mediaPoint(4)); assert.equal(count, 2); settle();
+  }
+});
+
+test('media Blade releases the pending guard if a synchronous host fails', () => {
+  const h = mediaFixture(); h.timeline.onMediaAction = () => { throw new Error('host failure'); }; h.timeline.setTool('blade');
+  h.timeline.pointerDown(h.mediaPoint(4)); assert.throws(() => h.timeline.pointerUp(h.mediaPoint(4)), /host failure/);
+  assert.equal(h.timeline.editPending, false); assert.equal(h.timeline.gesture, null); assert.equal(h.captures.size, 0);
+});
+
+test('media Blade feedback clears on leaving, changing tools, refreshing or hovering source footage', () => {
+  for (const clear of [h => h.listeners.pointerleave(), h => h.timeline.setTool('select'),
+    h => h.timeline.setProject(h.project), h => h.timeline.pointerMove(h.point(2, 60))]) {
+    const h = mediaFixture(); h.timeline.setTool('blade'); h.timeline.pointerMove(h.mediaPoint(4));
+    assert.ok(h.timeline.bladeHover); clear(h); assert.equal(h.timeline.bladeHover, null); assert.equal(h.canvas.title, '');
+  }
+});
+
+test('automatic speech captions advertise unsplittable Blade and never send a layer action', () => {
+  const h = captionFixture(); h.timeline.setTool('blade'); h.timeline.pointerMove(h.point(2, h.captionY()));
+  assert.equal(h.canvas.style.cursor, 'not-allowed'); assert.match(h.canvas.title, /Automatic speech captions cannot be split/);
+  h.timeline.pointerDown(h.point(2, h.captionY())); h.timeline.pointerUp(h.point(2, h.captionY()));
+  assert.deepEqual(h.captionEvents, [['select', 's0:w0']]); assert.equal(h.edits.length, 0);
+});
+
+function nativeSlipFixture(options = {}) {
+  const h = mediaFixture(options); h.slipChecks = [];
+  h.timeline.mediaSlipPreview = (id, sourceStart) => {
+    h.slipChecks.push({ id, sourceStart });
+    const clip = h.project.manual.media_clips.find(c => c.id === id), delta = sourceStart - clip.source_start;
+    return { issue: '', patch: { source_start: sourceStart, ...(h.project.assets[clip.asset_id].kind === 'video'
+      ? { video_source_start: clip.video_source_start + delta * clip.speed } : {}) } };
+  };
+  h.timeline.setTool('slip'); return h;
+}
+
+test('TimelineView accepts explicit Slip with a canonical absolute Source in callback', () => {
+  const h = mediaFixture(), callback = () => ({ issue: '', patch: {} });
+  const timeline = new h.scope.TimelineView(h.canvas, h.scroll, null, null, null, { mediaSlipPreview: callback });
+  assert.equal(timeline.mediaSlipPreview, callback); assert.equal(timeline.setTool('slip'), true);
+  assert.equal(timeline.tool, 'slip'); assert.equal(timeline.setTool('shuffle'), false);
+});
+
+test('Slip rounds only the signed delta and keeps fractional Source in and both endpoints exact', () => {
+  const h = nativeSlipFixture({ fps: 30 }), clip = h.project.manual.media_clips[0];
+  Object.assign(clip, { start: 2.007, end: 6.019, source_start: 3.007, video_source_start: 5.013 });
+  const before = JSON.stringify(h.project);
+  h.timeline.pointerDown(h.mediaPoint(4)); h.timeline.pointerMove(h.mediaPoint(4.139));
+  const expected = 3.007 + 4 / 30, preview = h.mediaPreviews.at(-1).patch;
+  assert.ok(Math.abs(preview.source_start - expected) < 1e-9);
+  assert.ok(Math.abs(preview.video_source_start - (5.013 + 8 / 30)) < 1e-9);
+  assert.deepEqual(Object.keys(preview).sort(), ['source_start', 'video_source_start']);
+  assert.deepEqual(h.mediaActions, []); h.timeline.pointerUp(h.mediaPoint(4.139));
+  assert.deepEqual(h.mediaActions, [{ action: 'media_slip', clip_id: 'visual', source_start: expected }]);
+  assert.deepEqual(h.mediaEdits, []); assert.deepEqual(h.edits, []); assert.equal(JSON.stringify(h.project), before);
+  assert.deepEqual(h.mediaPreviews.at(-1), { id: 'visual', patch: null });
+});
+
+test('Slip checks actual earlier/later source proposals and never clamps them to edit or source bounds', () => {
+  for (const destination of [-12, 50]) {
+    const h = nativeSlipFixture();
+    h.timeline.mediaSlipPreview = (id, sourceStart) => { h.slipChecks.push({ id, sourceStart }); return sourceStart === 3
+      ? { issue: '', patch: {} } : { issue: 'Source window exceeds available content.', patch: null }; };
+    h.timeline.pointerDown(h.mediaPoint(4)); h.timeline.pointerUp(h.mediaPoint(destination));
+    assert.ok(h.slipChecks.some(c => destination < 0 ? c.sourceStart < 0 : c.sourceStart > 20));
+    assert.deepEqual(h.mediaActions, []); assert.deepEqual(h.mediaEdits, []);
+    assert.deepEqual(h.mediaPreviews.at(-1), { id: 'visual', patch: null });
+  }
+});
+
+test('blocked Slip restores a preceding valid source preview and explains the real reason', () => {
+  const h = nativeSlipFixture(), original = h.timeline.mediaSlipPreview;
+  h.timeline.mediaSlipPreview = (id, sourceStart) => sourceStart > 4 ? { issue: 'No later picture frames.', patch: null } : original(id, sourceStart);
+  h.timeline.pointerDown(h.mediaPoint(4)); h.timeline.pointerMove(h.mediaPoint(4.5));
+  assert.equal(h.mediaPreviews.at(-1).patch.source_start, 3.5);
+  h.timeline.pointerMove(h.mediaPoint(7)); assert.deepEqual(h.mediaPreviews.at(-1), { id: 'visual', patch: null });
+  assert.deepEqual(plain(h.timeline.gesture.patch), {}); assert.equal(h.canvas.style.cursor, 'not-allowed');
+  assert.match(h.canvas.title, /No later picture frames/); h.timeline.pointerUp(h.mediaPoint(7));
+  assert.deepEqual(h.mediaActions, []);
+});
+
+test('Slip preserves timeline-based motion, fades and framing rather than applying Trim guards', () => {
+  const h = nativeSlipFixture(), clip = h.project.manual.media_clips[0];
+  Object.assign(clip, { fade_in: 1.2, fade_out: 1.3, motion: 'pan', fit: 'contain', x: .2, w: .7 });
+  const before = JSON.stringify(h.project); h.timeline.pointerDown(h.mediaPoint(4)); h.timeline.pointerUp(h.mediaPoint(5));
+  assert.deepEqual(h.mediaActions, [{ action: 'media_slip', clip_id: 'visual', source_start: 4 }]);
+  assert.equal(JSON.stringify(h.project), before); assert.deepEqual(h.mediaEdits, []);
+});
+
+test('Slip on an edge changes content, never trims or moves that occurrence', () => {
+  const h = nativeSlipFixture(); h.timeline.mediaTrimPreview = () => { throw Error('Trim must not run'); };
+  h.timeline.pointerDown(h.mediaPoint(2.01)); h.timeline.pointerUp(h.mediaPoint(3.01));
+  assert.equal(h.mediaActions[0].action, 'media_slip'); assert.equal(h.mediaActions[0].source_start, 4);
+  assert.deepEqual(h.mediaEdits, []); assert.deepEqual(h.edits, []);
+});
+
+test('Slip does not dispatch on press, click, pointer jitter or return to the original source', () => {
+  for (const end of [4, 4.01]) {
+    const h = nativeSlipFixture(); h.timeline.pointerDown(h.mediaPoint(4)); assert.deepEqual(h.mediaActions, []);
+    h.timeline.pointerUp(h.mediaPoint(end)); assert.deepEqual(h.mediaActions, []);
+  }
+  const h = nativeSlipFixture(); h.timeline.pointerDown(h.mediaPoint(4)); h.timeline.pointerMove(h.mediaPoint(5));
+  h.timeline.pointerUp(h.mediaPoint(4)); assert.deepEqual(h.mediaActions, []);
+  assert.deepEqual(h.mediaPreviews.at(-1), { id: 'visual', patch: null });
+});
+
+test('coalesced Slip release commits exactly once on the same output-frame delta in both directions', () => {
+  for (const [fps, direction] of [[24, 1], [24, -1], [30, 1], [60, -1]]) {
+    const h = nativeSlipFixture({ fps }); h.timeline.pointerDown(h.mediaPoint(4));
+    h.timeline.pointerUp(h.mediaPoint(4 + direction * .213));
+    const delta = Math.round(direction * .213 * fps) / fps;
+    assert.ok(Math.abs(h.mediaActions[0].source_start - (3 + delta)) < 1e-8);
+    assert.equal(h.mediaActions.length, 1);
+  }
+});
+
+test('Slip ignores timeline magnets and does not steal Alt snapping behavior from other tools', () => {
+  for (const altKey of [false, true]) {
+    const h = nativeSlipFixture({ fps: 30 }); h.timeline.setSnapping(true);
+    h.timeline.pointerDown(h.mediaPoint(4)); h.timeline.pointerUp(h.mediaPoint(5.051, 0, { altKey }));
+    assert.ok(Math.abs(h.mediaActions[0].source_start - (3 + 32 / 30)) < 1e-8);
+    assert.equal(h.timeline.snapGuide, null); assert.equal(h.timeline.snapping, true);
+  }
+});
+
+test('Slip supports audio only content changes and remains independent of locked A/B', () => {
+  const h = nativeSlipFixture(); h.project.manual.media_clips[0].asset_id = 'sound'; h.project.manual.track_locks = { A: true, B: true };
+  h.timeline.pointerDown(h.mediaPoint(4)); h.timeline.pointerMove(h.mediaPoint(5));
+  assert.deepEqual(h.mediaPreviews.at(-1).patch, { source_start: 4 });
+  h.timeline.pointerUp(h.mediaPoint(5)); assert.equal(h.mediaActions[0].action, 'media_slip'); assert.deepEqual(h.edits, []);
+});
+
+test('Slip refuses image and text occurrences without falling through to move or resize', () => {
+  for (const kind of ['image', 'text']) {
+    const h = nativeSlipFixture();
+    if (kind === 'image') h.project.manual.media_clips[0].asset_id = 'image';
+    else { h.project.manual.media_clips = []; h.project.manual.text_clips = [{ id: 'text_title', kind: 'title', start: 2, end: 6, text: 'Title' }]; }
+    h.timeline.pointerDown(h.mediaPoint(2.01)); h.timeline.pointerMove(h.mediaPoint(4)); h.timeline.pointerUp(h.mediaPoint(4));
+    assert.match(h.canvas.title, /Images and text/); assert.equal(h.canvas.style.cursor, 'not-allowed');
+    assert.deepEqual(h.mediaActions, []); assert.deepEqual(h.mediaEdits, []); assert.deepEqual(h.edits, []);
+    assert.equal(h.captures.size, 0); assert.equal(h.timeline.gesture, null);
+  }
+});
+
+test('Slip refuses source A/B, empty time and automatic captions but retains ruler seeking', () => {
+  for (const point of [[2, 80], [11, 200]]) {
+    const h = nativeSlipFixture(); h.timeline.pointerDown(h.point(...point)); h.timeline.pointerUp(h.point(5, point[1]));
+    assert.deepEqual(h.edits, []); assert.deepEqual(h.mediaEdits, []); assert.deepEqual(h.mediaActions, []);
+    assert.equal(h.captures.size, 0); assert.equal(h.timeline.gesture, null);
+  }
+  const caption = captionFixture(); caption.timeline.setTool('slip');
+  caption.timeline.pointerDown(caption.point(2, caption.captionY())); caption.timeline.pointerUp(caption.point(3, caption.captionY()));
+  assert.match(caption.canvas.title, /Automatic speech captions/); assert.deepEqual(caption.captionEvents, [['select', 's0:w0']]);
+  const ruler = nativeSlipFixture(); ruler.timeline.pointerDown(ruler.point(2, 10)); ruler.timeline.pointerUp(ruler.point(3, 10));
+  assert.ok(ruler.seeks.length > 0); assert.deepEqual(ruler.mediaActions, []); assert.deepEqual(ruler.edits, []);
+});
+
+test('Escape, cancel, lost capture, tool and project changes restore Slip without writes', () => {
+  const cancels = [h => h.timeline.keyDown({ key: 'Escape', preventDefault() {}, stopPropagation() {} }),
+    h => h.timeline.pointerCancel(h.mediaPoint(5)), h => h.listeners.lostpointercapture(h.mediaPoint(5)),
+    h => h.timeline.setTool('select'), h => h.timeline.setProject({ ...h.project, id: 'next' })];
+  for (const cancel of cancels) {
+    const h = nativeSlipFixture(), before = JSON.stringify(h.project);
+    h.timeline.pointerDown(h.mediaPoint(4)); h.timeline.pointerMove(h.mediaPoint(5)); cancel(h); h.timeline.pointerUp(h.mediaPoint(5));
+    assert.deepEqual(h.mediaActions, []); assert.deepEqual(h.mediaEdits, []); assert.equal(h.captures.size, 0);
+    assert.deepEqual(h.mediaPreviews.at(-1), { id: 'visual', patch: null }); assert.equal(h.timeline.mediaSlipHover, null);
+    assert.equal(JSON.stringify(h.project), before);
+  }
+});
+
+test('foreign pointers cannot alter or finish a Slip gesture', () => {
+  const h = nativeSlipFixture(); h.timeline.pointerDown(h.mediaPoint(4)); const checked = h.slipChecks.length;
+  h.timeline.pointerMove(h.mediaPoint(5, 0, { pointerId: 9 })); h.timeline.pointerUp(h.mediaPoint(5, 0, { pointerId: 9 }));
+  h.timeline.pointerCancel(h.mediaPoint(5, 0, { pointerId: 9 })); assert.equal(h.slipChecks.length, checked); assert.ok(h.timeline.gesture);
+  h.timeline.pointerUp(h.mediaPoint(5)); assert.equal(h.mediaActions.length, 1);
+});
+
+test('Slip waits for its native save and releases duplicate-dispatch guards after success or failure', async () => {
+  for (const reject of [false, true]) {
+    const h = nativeSlipFixture(); let settle, calls = 0;
+    h.timeline.onMediaAction = () => { calls++; return new Promise((resolve, failure) => { settle = reject ? failure : resolve; }); };
+    h.timeline.pointerDown(h.mediaPoint(4)); h.timeline.pointerUp(h.mediaPoint(5)); assert.equal(h.timeline.editPending, true);
+    h.timeline.pointerDown(h.mediaPoint(4)); h.timeline.pointerUp(h.mediaPoint(5));
+    h.timeline.keyDown({ key: 'Delete', preventDefault() {}, stopPropagation() {} }); assert.equal(calls, 1);
+    settle(); await new Promise(setImmediate); assert.equal(h.timeline.editPending, false);
+  }
+});
+
+test('Slip rechecks native readiness after restoring its live preview', () => {
+  const h = nativeSlipFixture(), original = h.timeline.mediaSlipPreview; let restored = false;
+  h.timeline.mediaSlipPreview = (id, start) => restored ? { issue: 'Saved source changed.', patch: null } : original(id, start);
+  h.timeline.onMediaPreview = (id, patch) => { if (patch === null) restored = true; };
+  h.timeline.pointerDown(h.mediaPoint(4)); h.timeline.pointerUp(h.mediaPoint(5));
+  assert.equal(restored, true); assert.deepEqual(h.mediaActions, []); assert.equal(h.timeline.editPending, false);
+});
+
+test('Slip fails closed for absent, malformed, throwing or geometry-changing host previews', () => {
+  for (const callback of [undefined, () => null, () => { throw Error('stale'); }, () => ({ issue: '', patch: null }),
+    () => ({ issue: '', patch: [] }), () => ({ issue: '', patch: { source_start: NaN } }),
+    () => ({ issue: '', patch: { start: 1, end: 5 } })]) {
+    const h = nativeSlipFixture(); h.timeline.mediaSlipPreview = callback;
+    h.timeline.pointerDown(h.mediaPoint(4)); h.timeline.pointerUp(h.mediaPoint(5));
+    assert.deepEqual(h.mediaActions, []); assert.deepEqual(h.mediaEdits, []); assert.equal(h.captures.size, 0);
+    assert.match(h.canvas.title, /readiness could not be confirmed/);
+  }
+  const busy = nativeSlipFixture(); busy.timeline.canEdit = () => false;
+  assert.match(busy.timeline.mediaSlipPlan('visual', 3).issue, /Wait/);
+});
+
+test('Slip cancels when pointer scale changes and double-click does not unexpectedly fit the timeline', () => {
+  const h = nativeSlipFixture(); h.timeline.pointerDown(h.mediaPoint(4)); h.timeline.pointerMove(h.mediaPoint(5));
+  h.timeline.setZoom(2); h.timeline.pointerUp(h.mediaPoint(5)); assert.equal(h.timeline.gesture, null);
+  assert.deepEqual(h.mediaActions, []); assert.deepEqual(h.mediaPreviews.at(-1), { id: 'visual', patch: null });
+  h.listeners.dblclick(h.mediaPoint(4)); assert.equal(h.timeline.zoom, 2);
+});
+
+test('Slip feedback shows signed content offsets, not new placement, and stays visible in scrolled lanes', () => {
+  const h = nativeSlipFixture(); h.scroll.scrollTop = 180; h.scroll.clientHeight = 180;
+  h.timeline.pointerMove(h.mediaPoint(4)); assert.match(h.canvas.title, /right = later, left = earlier/);
+  h.timeline.pointerDown(h.mediaPoint(4)); h.timeline.pointerMove(h.mediaPoint(5));
+  assert.match(h.canvas.title, /Slip \+1\.000 s.*Source in 4\.000 s.*Picture in 7\.000 s.*Timing fixed/);
+  h.draws.length = 0; h.timeline.drawHover(h.canvas.getContext('2d'), 5, h.timeline.geometry().px, 600);
+  const label = h.draws.find(row => /Slip \+1\.000/.test(row.text || ''));
+  assert.equal(label.y, 198); assert.equal(label.text, h.timeline.mediaSlipHover.label);
+  h.timeline.pointerCancel(h.mediaPoint(5)); h.listeners.pointerleave(); assert.equal(h.timeline.mediaSlipHover, null);
+});
+
+test('leaving Slip restores original Select move/trim and never changes shortcut or snap preferences', () => {
+  const h = nativeSlipFixture(); h.timeline.setSnapping(true); h.timeline.setTool('select');
+  h.timeline.pointerDown(h.mediaPoint(4)); h.timeline.pointerUp(h.mediaPoint(5));
+  assert.equal(h.mediaEdits.length, 1); assert.deepEqual(h.mediaActions, []); assert.equal(h.timeline.snapping, true);
+  assert.equal(h.timeline.mediaSlipHover, null);
+});
+
+function nativeMoveFixture(options = {}) {
+  const h = mediaFixture(options); h.moveChecks = [];
+  h.timeline.mediaMovePreview = (id, start) => {
+    h.moveChecks.push({ id, start });
+    const clip = [...h.project.manual.media_clips, ...(h.project.manual.text_clips || [])].find(c => c.id === id);
+    return { issue: '', patch: Math.abs(start - clip.start) <= 1e-9 ? {} : { start, end: start + clip.end - clip.start } };
+  };
+  return h;
+}
+
+test('TimelineView accepts canonical fixed-duration Move without a new tool or shortcut', () => {
+  const h = mediaFixture(), callback = () => ({ issue: '', patch: {} });
+  const timeline = new h.scope.TimelineView(h.canvas, h.scroll, null, null, null, { mediaMovePreview: callback });
+  assert.equal(timeline.mediaMovePreview, callback); assert.equal(timeline.nativeMediaMove(), true);
+  assert.equal(timeline.tool, 'select'); assert.equal(timeline.setTool('nudge'), false);
+});
+
+test('native body Move previews placement only, preserves full content and commits once independently of source locks', () => {
+  const h = nativeMoveFixture(), clip = h.project.manual.media_clips[0];
+  Object.assign(clip, { fade_in: .3, fade_out: .4, motion: 'pan', scale: 110 });
+  h.project.manual.track_locks = { A: true, B: true }; const before = JSON.stringify(h.project);
+  h.timeline.pointerDown(h.mediaPoint(4)); h.timeline.pointerMove(h.mediaPoint(5));
+  assert.deepEqual(h.mediaPreviews.at(-1), { id: 'visual', patch: { start: 3, end: 7 } });
+  assert.deepEqual(h.mediaActions, []); assert.equal(JSON.stringify(h.project), before);
+  h.timeline.pointerUp(h.mediaPoint(5));
+  assert.deepEqual(h.mediaActions, [{ action: 'media_move', clip_id: 'visual', start: 3 }]);
+  assert.deepEqual(h.mediaEdits, []); assert.equal(JSON.stringify(h.project), before);
+  assert.deepEqual(h.mediaPreviews.at(-1), { id: 'visual', patch: null });
+  assert.equal(h.timeline.mediaSelection, 'visual'); assert.equal(h.captures.size, 0);
+});
+
+test('Move uses canonical precision and retains fractional original duration without rounding the opposite endpoint', () => {
+  const h = nativeMoveFixture({ fps: 30 }), clip = h.project.manual.media_clips[0];
+  clip.start = 2.007; clip.end = 6.019; const length = clip.end - clip.start;
+  h.timeline.mediaMovePreview = (id, start) => {
+    const canonical = Number(start.toFixed(6)); return { issue: '', patch: { start: canonical, end: canonical + length } };
+  };
+  h.timeline.pointerDown(h.mediaPoint(4)); h.timeline.pointerMove(h.mediaPoint(5.012345678));
+  const patch = h.mediaPreviews.at(-1).patch;
+  assert.equal(patch.start, 3.019346); assert.ok(Math.abs(patch.end - patch.start - length) < 1e-12);
+  h.timeline.pointerUp(h.mediaPoint(5.012345678)); assert.equal(h.mediaActions[0].start, patch.start);
+  assert.equal(Object.keys(h.mediaActions[0]).length, 3, 'only action, identity and destination are submitted');
+});
+
+test('native Move retains full-occurrence start/end clamps and does not shorten or extend the edit', () => {
+  for (const [destination, expected] of [[0, 0], [20, 8]]) {
+    const h = nativeMoveFixture(); h.timeline.pointerDown(h.mediaPoint(4)); h.timeline.pointerUp(h.mediaPoint(destination));
+    assert.equal(h.mediaActions[0].start, expected);
+    assert.equal(h.project.manual.sequence.duration, 12); assert.equal(h.project.manual.media_clips[0].end, 6);
+  }
+});
+
+test('native Move keeps exact head/tail magnets and Alt bypass without adding frame reanchoring', () => {
+  for (const altKey of [false, true]) {
+    const h = nativeMoveFixture({ fps: 30 }), clip = h.project.manual.media_clips[0]; clip.end = 6.019;
+    h.timeline.snapPoints = () => [{ time: 8, label: 'Other layer' }]; h.timeline.setSnapping(true);
+    h.timeline.pointerDown(h.mediaPoint(4)); h.timeline.pointerMove(h.mediaPoint(6.02, 0, { altKey }));
+    const expected = altKey ? 4.02 : 8 - (clip.end - clip.start);
+    assert.ok(Math.abs(h.mediaPreviews.at(-1).patch.start - expected) < 1e-9);
+    assert.equal(Boolean(h.timeline.snapGuide), !altKey);
+    h.timeline.pointerUp(h.mediaPoint(6.02, 0, { altKey })); assert.ok(Math.abs(h.mediaActions[0].start - expected) < 1e-9);
+  }
+});
+
+test('blocked native Move restores prior preview and presents the real placement issue without a generic update', () => {
+  const h = nativeMoveFixture(), callback = h.timeline.mediaMovePreview;
+  h.timeline.mediaMovePreview = (id, start) => start > 4 ? { issue: 'At most 16 custom texts can overlap.', patch: null } : callback(id, start);
+  h.timeline.pointerDown(h.mediaPoint(4)); h.timeline.pointerMove(h.mediaPoint(5));
+  assert.deepEqual(h.mediaPreviews.at(-1).patch, { start: 3, end: 7 });
+  h.timeline.pointerMove(h.mediaPoint(7));
+  assert.deepEqual(h.mediaPreviews.at(-1), { id: 'visual', patch: null }); assert.deepEqual(plain(h.timeline.gesture.patch), {});
+  assert.match(h.canvas.title, /16 custom texts/); assert.equal(h.canvas.style.cursor, 'not-allowed'); assert.equal(h.timeline.snapGuide, null);
+  h.timeline.pointerUp(h.mediaPoint(7)); assert.deepEqual(h.mediaActions, []); assert.deepEqual(h.mediaEdits, []);
+});
+
+test('a canonical no-op Move never writes even after a real pointer drag', () => {
+  const h = nativeMoveFixture(); h.timeline.mediaMovePreview = () => ({ issue: '', patch: {} });
+  h.timeline.pointerDown(h.mediaPoint(4)); h.timeline.pointerMove(h.mediaPoint(5)); h.timeline.pointerUp(h.mediaPoint(5));
+  assert.deepEqual(h.mediaActions, []); assert.deepEqual(h.mediaEdits, []); assert.equal(h.timeline.editPending, false);
+});
+
+test('native Move rechecks readiness after restoring the live preview before committing', () => {
+  const h = nativeMoveFixture(), callback = h.timeline.mediaMovePreview; let restored = false;
+  h.timeline.mediaMovePreview = (id, start) => restored ? { issue: 'Saved layer changed.', patch: null } : callback(id, start);
+  h.timeline.onMediaPreview = (id, patch) => { if (patch === null) restored = true; };
+  h.timeline.pointerDown(h.mediaPoint(4)); h.timeline.pointerMove(h.mediaPoint(5)); h.timeline.pointerUp(h.mediaPoint(5));
+  assert.equal(restored, true); assert.deepEqual(h.mediaActions, []); assert.equal(h.timeline.editPending, false);
+});
+
+test('native Move supports audio, images and custom title/caption bodies with the same fixed-duration action', () => {
+  for (const kind of ['audio', 'image', 'title', 'caption']) {
+    const h = nativeMoveFixture(); let id = 'visual';
+    if (['title', 'caption'].includes(kind)) {
+      id = 'text_' + kind; h.project.manual.media_clips = []; h.project.manual.text_clips = [{ id, kind, start: 2, end: 6, text: 'Keep this', style: 'boxed' }];
+    } else h.project.assets.video.kind = kind;
+    const before = JSON.stringify(h.project);
+    h.timeline.pointerDown(h.mediaPoint(4)); h.timeline.pointerUp(h.mediaPoint(5));
+    assert.deepEqual(h.mediaActions, [{ action: 'media_move', clip_id: id, start: 3 }]);
+    assert.equal(JSON.stringify(h.project), before); assert.deepEqual(h.mediaEdits, []);
+  }
+});
+
+test('Move press, click, jitter and return to original placement never save; coalesced release saves once', () => {
+  for (const end of [4, 4.02]) {
+    const h = nativeMoveFixture(); h.timeline.pointerDown(h.mediaPoint(4)); assert.deepEqual(h.mediaActions, []);
+    h.timeline.pointerUp(h.mediaPoint(end)); assert.deepEqual(h.mediaActions, []);
+  }
+  const h = nativeMoveFixture(); h.timeline.pointerDown(h.mediaPoint(4)); h.timeline.pointerMove(h.mediaPoint(5)); h.timeline.pointerUp(h.mediaPoint(4));
+  assert.deepEqual(h.mediaActions, []);
+  h.timeline.pointerDown(h.mediaPoint(4)); h.timeline.pointerUp(h.mediaPoint(5)); h.timeline.pointerUp(h.mediaPoint(5));
+  assert.equal(h.mediaActions.length, 1);
+});
+
+test('Escape, cancellation, lost capture, tool/project changes restore native Move preview with no write', () => {
+  for (const cancel of [h => h.timeline.keyDown(h.event(0, { key: 'Escape' })), h => h.timeline.pointerCancel(h.mediaPoint(5)),
+    h => h.listeners.lostpointercapture(h.mediaPoint(5)), h => h.timeline.setTool('blade'), h => h.timeline.setProject({ ...h.project, revision: 2 })]) {
+    const h = nativeMoveFixture(), before = JSON.stringify(h.project); h.timeline.setSelection({ start: 1, end: 2 }, false, true);
+    h.timeline.pointerDown(h.mediaPoint(4)); h.timeline.pointerMove(h.mediaPoint(5)); cancel(h); h.timeline.pointerUp(h.mediaPoint(5));
+    assert.deepEqual(h.mediaActions, []); assert.deepEqual(h.mediaEdits, []); assert.equal(h.captures.size, 0);
+    assert.equal(h.timeline.mediaMoveHover, null); assert.deepEqual(h.mediaPreviews.at(-1), { id: 'visual', patch: null });
+    assert.equal(JSON.stringify(h.project), before);
+  }
+});
+
+test('foreign pointer events cannot alter or finish native Move', () => {
+  const h = nativeMoveFixture(); h.timeline.pointerDown(h.mediaPoint(4));
+  h.timeline.pointerMove(h.mediaPoint(5, 0, { pointerId: 9 })); h.timeline.pointerUp(h.mediaPoint(5, 0, { pointerId: 9 }));
+  h.timeline.pointerCancel(h.mediaPoint(5, 0, { pointerId: 9 })); assert.equal(h.moveChecks.length, 0); assert.ok(h.timeline.gesture);
+  h.timeline.pointerUp(h.mediaPoint(5)); assert.equal(h.mediaActions.length, 1);
+});
+
+test('native Move keeps duplicate-dispatch protection until asynchronous success or failure settles', async () => {
+  for (const reject of [false, true]) {
+    const h = nativeMoveFixture(); let settle, calls = 0;
+    h.timeline.onMediaAction = () => { calls++; return new Promise((resolve, fail) => { settle = reject ? fail : resolve; }); };
+    h.timeline.pointerDown(h.mediaPoint(4)); h.timeline.pointerUp(h.mediaPoint(5)); assert.equal(h.timeline.editPending, true);
+    h.timeline.pointerDown(h.mediaPoint(4)); h.timeline.pointerUp(h.mediaPoint(5)); h.timeline.keyDown(h.event(0, { key: 'Delete' })); assert.equal(calls, 1);
+    settle(); await new Promise(setImmediate); assert.equal(h.timeline.editPending, false);
+  }
+});
+
+test('native Move releases capture and pending state when the host fails synchronously', () => {
+  const h = nativeMoveFixture(); h.timeline.onMediaAction = () => { throw Error('host failed'); };
+  h.timeline.pointerDown(h.mediaPoint(4)); assert.throws(() => h.timeline.pointerUp(h.mediaPoint(5)), /host failed/);
+  assert.equal(h.timeline.editPending, false); assert.equal(h.timeline.gesture, null); assert.equal(h.captures.size, 0);
+});
+
+test('unknown, malformed, resizing or content-changing Move plans fail closed rather than use legacy media_update', () => {
+  for (const callback of [undefined, () => undefined, () => { throw Error('stale'); }, () => ({ issue: '' }),
+    () => ({ issue: '', patch: [] }), () => ({ issue: '', patch: { start: 3 } }),
+    () => ({ issue: '', patch: { start: 3, end: 6 } }), () => ({ issue: '', patch: { start: 10, end: 14 } }),
+    () => ({ issue: '', patch: { start: -1, end: 3 } }), () => ({ issue: '', patch: { start: NaN, end: 7 } }),
+    () => ({ issue: '', patch: { start: 3, end: 7, source_start: 4 } })]) {
+    const h = nativeMoveFixture(); h.timeline.pointerDown(h.mediaPoint(4)); h.timeline.mediaMovePreview = callback;
+    h.timeline.pointerUp(h.mediaPoint(5)); assert.deepEqual(h.mediaActions, []); assert.deepEqual(h.mediaEdits, []);
+    assert.equal(h.captures.size, 0);
+  }
+});
+
+test('native Move handles a newly busy or stale layer without falling through to another occurrence', () => {
+  for (const change of [h => { h.timeline.canEdit = () => false; }, h => { h.project.manual.media_clips = []; }]) {
+    const h = nativeMoveFixture(), release = h.mediaPoint(5); h.timeline.pointerDown(h.mediaPoint(4)); change(h); h.timeline.pointerUp(release);
+    assert.deepEqual(h.mediaActions, []); assert.deepEqual(h.mediaEdits, []); assert.deepEqual(h.edits, []);
+  }
+  const h = nativeMoveFixture(); h.timeline.sourceReview = true;
+  assert.match(h.timeline.mediaMovePlan('visual', 3).issue, /no longer/);
+});
+
+test('native Move cancels a changed pointer scale including a coalesced release, with no accidental placement', () => {
+  const h = nativeMoveFixture(); h.timeline.pointerDown(h.mediaPoint(4)); h.timeline.pointerMove(h.mediaPoint(5));
+  h.timeline.zoom = 2; h.timeline.pointerUp(h.mediaPoint(5));
+  assert.equal(h.timeline.gesture, null); assert.equal(h.captures.size, 0); assert.deepEqual(h.mediaActions, []);
+  assert.deepEqual(h.mediaPreviews.at(-1), { id: 'visual', patch: null }); assert.equal(h.timeline.mediaMoveHover, null);
+});
+
+test('Move feedback is scoped to placement, stays visible in scrolled lanes, and clears on leaving', () => {
+  const h = nativeMoveFixture(); h.timeline.pointerMove(h.mediaPoint(4));
+  assert.equal(h.canvas.style.cursor, 'grab'); assert.match(h.canvas.title, /whole layer.*no ripple/);
+  h.timeline.pointerDown(h.mediaPoint(4)); h.timeline.pointerMove(h.mediaPoint(5));
+  assert.equal(h.canvas.style.cursor, 'grabbing'); assert.match(h.canvas.title, /Content, duration and other layers stay unchanged/);
+  h.scroll.scrollTop = 180; h.draws.length = 0; h.timeline.drawHover(h.canvas.getContext('2d'), 3, h.timeline.geometry().px, 500);
+  assert.ok(h.draws.some(d => /Move layer.*No ripple/.test(d.text || ''))); assert.ok(h.draws.some(d => d.fill === '#f4f7f7' && d.y === 184));
+  h.timeline.pointerCancel(h.mediaPoint(5)); h.listeners.pointerleave(); assert.equal(h.timeline.mediaMoveHover, null); assert.equal(h.canvas.title, '');
+});
+
+test('canonical Move leaves existing edge Trim, Slip and callback-absent body editing separate', () => {
+  const trim = nativeMoveFixture(); trim.timeline.mediaTrimPreview = (id, edge, time) => ({ issue: '', patch: { [edge]: time } });
+  trim.timeline.pointerDown(trim.mediaPoint(2.01)); trim.timeline.pointerUp(trim.mediaPoint(3.01));
+  assert.equal(trim.mediaActions[0].action, 'media_trim'); assert.equal(trim.moveChecks.length, 0);
+  const slip = nativeSlipFixture(); slip.timeline.mediaMovePreview = () => { throw Error('Move must not run'); };
+  slip.timeline.pointerDown(slip.mediaPoint(4)); slip.timeline.pointerUp(slip.mediaPoint(5)); assert.equal(slip.mediaActions[0].action, 'media_slip');
+  const legacy = mediaFixture(); legacy.timeline.pointerDown(legacy.mediaPoint(4)); legacy.timeline.pointerUp(legacy.mediaPoint(5));
+  assert.deepEqual(legacy.mediaEdits, [{ id: 'visual', patch: { start: 3, end: 7 } }]); assert.deepEqual(legacy.mediaActions, []);
+});
+
+function nativeTrimFixture(options = {}) {
+  const h = mediaFixture(options); h.trimChecks = [];
+  h.timeline.mediaTrimPreview = (id, edge, time) => {
+    h.trimChecks.push({ id, edge, time }); return { issue: '', patch: { [edge]: time } };
+  };
+  return h;
+}
+
+test('TimelineView accepts the canonical host media Trim preview callback', () => {
+  const h = mediaFixture(), callback = () => ({ issue: '', patch: {} });
+  const timeline = new h.scope.TimelineView(h.canvas, h.scroll, null, null, null, { mediaTrimPreview: callback });
+  assert.equal(timeline.mediaTrimPreview, callback); assert.equal(timeline.nativeMediaTrim(), true);
+});
+
+test('native media edge Trim uses the canonical patch and submits only one frame-aligned edge', () => {
+  const h = nativeTrimFixture({ fps: 30 }); h.project.manual.media_clips[0].end = 6.007;
+  const before = JSON.stringify(h.project), patch = { start: 3, source_start: 4, video_source_start: 7, fade_in: 0 };
+  h.timeline.mediaTrimPreview = (id, edge, time) => { h.trimChecks.push({ id, edge, time }); return { issue: '', patch }; };
+  h.timeline.pointerDown(h.mediaPoint(2.01)); h.timeline.pointerMove(h.mediaPoint(3.02));
+  assert.deepEqual(h.mediaPreviews.at(-1), { id: 'visual', patch }); assert.deepEqual(h.mediaActions, []);
+  h.timeline.pointerUp(h.mediaPoint(3.02));
+  assert.deepEqual(h.mediaActions, [{ action: 'media_trim', clip_id: 'visual', edge: 'start', time: 3 }]);
+  assert.ok(h.trimChecks.length >= 3 && h.trimChecks.every(c => c.edge === 'start' && c.time === 3));
+  assert.deepEqual(h.mediaPreviews.at(-1), { id: 'visual', patch: null }); assert.deepEqual(h.mediaEdits, []);
+  assert.equal(JSON.stringify(h.project), before, 'unchanged legacy opposite edge and source clocks are never mutated locally');
+});
+
+test('native media Trim keeps legacy source-clock precision outside sequence mode', () => {
+  const h = nativeTrimFixture(); delete h.project.manual.sequence;
+  h.timeline.pointerDown(h.mediaPoint(2.01)); h.timeline.pointerUp(h.mediaPoint(3.029));
+  assert.ok(Math.abs(h.mediaActions[0].time - 3.019) < 1e-9);
+});
+
+test('native edge Trim reports source and picture limits rather than silently clamping them', () => {
+  for (const edge of ['start', 'end']) {
+    const h = nativeTrimFixture(); Object.assign(h.project.manual.media_clips[0], { video_source_start: .1 });
+    h.project.assets.video.duration = 7;
+    h.timeline.mediaTrimPreview = (id, e, time) => { h.trimChecks.push({ id, edge: e, time }); return { issue: e === 'start' ? 'Picture source would be negative.' : 'Not enough original sound.', patch: null }; };
+    h.timeline.pointerDown(h.mediaPoint(edge === 'start' ? 2.01 : 5.99));
+    h.timeline.pointerUp(h.mediaPoint(edge === 'start' ? 1.01 : 7.99));
+    assert.equal(h.trimChecks[0].time, edge === 'start' ? 1 : 8);
+    assert.equal(h.mediaActions.length, 0); assert.equal(h.mediaEdits.length, 0); assert.equal(h.captures.size, 0);
+  }
+});
+
+test('blocked native Trim removes a previous valid preview and explains the real reason', () => {
+  const h = nativeTrimFixture(), before = JSON.stringify(h.project);
+  h.timeline.mediaTrimPreview = (id, edge, time) => time < 3.5 ? { issue: '', patch: { end: time, fade_out: 0 } }
+    : { issue: 'The boundary is inside an existing fade.', patch: null };
+  h.timeline.pointerDown(h.mediaPoint(5.99)); h.timeline.pointerMove(h.mediaPoint(2.99));
+  assert.deepEqual(h.mediaPreviews.at(-1), { id: 'visual', patch: { end: 3, fade_out: 0 } });
+  h.timeline.pointerMove(h.mediaPoint(3.99));
+  assert.deepEqual(h.mediaPreviews.at(-1), { id: 'visual', patch: null });
+  assert.deepEqual(plain(h.timeline.gesture.patch), {}); assert.equal(h.canvas.style.cursor, 'not-allowed');
+  assert.match(h.canvas.title, /inside an existing fade/);
+  h.scroll.scrollTop = 180; h.draws.length = 0; h.timeline.drawHover(h.canvas.getContext('2d'), 4, h.timeline.geometry().px, 500);
+  assert.ok(h.draws.some(d => String(d.text).includes('Trim blocked:'))); assert.ok(h.draws.some(d => d.fill === '#f4f7f7' && d.y === 184));
+  h.timeline.pointerUp(h.mediaPoint(3.99)); assert.equal(h.mediaActions.length, 0); assert.equal(JSON.stringify(h.project), before);
+});
+
+test('native Trim never rescales fades or invents a picture clock absent from the canonical patch', () => {
+  const h = nativeTrimFixture(); Object.assign(h.project.manual.media_clips[0], { fade_in: 1, fade_out: 1 });
+  h.timeline.mediaTrimPreview = () => ({ issue: '', patch: { end: 3, fade_out: 0 } });
+  h.timeline.pointerDown(h.mediaPoint(5.99)); h.timeline.pointerMove(h.mediaPoint(2.99));
+  assert.deepEqual(h.mediaPreviews.at(-1).patch, { end: 3, fade_out: 0 });
+  h.timeline.pointerUp(h.mediaPoint(2.99)); assert.deepEqual(h.mediaActions[0], { action: 'media_trim', clip_id: 'visual', edge: 'end', time: 3 });
+});
+
+test('native Trim rechecks canonical readiness after preview restoration before committing', () => {
+  const h = nativeTrimFixture(); let checks = 0;
+  h.timeline.mediaTrimPreview = () => ++checks <= 2 ? { issue: '', patch: { start: 3 } } : { issue: 'The source changed while saving.', patch: null };
+  h.timeline.pointerDown(h.mediaPoint(2.01)); h.timeline.pointerMove(h.mediaPoint(3.01)); h.timeline.pointerUp(h.mediaPoint(3.01));
+  assert.equal(checks, 3); assert.equal(h.mediaActions.length, 0); assert.equal(h.timeline.editPending, false);
+});
+
+test('native Trim handles coalesced pointer-up and suppresses press, jitter and return-to-original writes', () => {
+  const h = nativeTrimFixture(); h.timeline.pointerDown(h.mediaPoint(2.01)); assert.equal(h.mediaActions.length, 0);
+  h.timeline.pointerUp(h.mediaPoint(3.01)); assert.equal(h.mediaActions.length, 1);
+  const jitter = nativeTrimFixture(); jitter.timeline.pointerDown(jitter.mediaPoint(2.01)); jitter.timeline.pointerUp(jitter.mediaPoint(2.02));
+  assert.equal(jitter.mediaActions.length, 0);
+  const restored = nativeTrimFixture(); restored.timeline.pointerDown(restored.mediaPoint(2.01)); restored.timeline.pointerMove(restored.mediaPoint(3.01)); restored.timeline.pointerUp(restored.mediaPoint(2.01));
+  assert.equal(restored.mediaActions.length, 0);
+});
+
+test('cancelled native Trim clears preview and preserves the original saved edit and range', () => {
+  for (const cancel of [h => h.timeline.keyDown(h.event(0, { key: 'Escape' })), h => h.timeline.pointerCancel(h.mediaPoint(3)),
+    h => h.listeners.lostpointercapture(h.mediaPoint(3)), h => h.timeline.setTool('blade'), h => h.timeline.setProject({ ...h.project, revision: 2 })]) {
+    const h = nativeTrimFixture(), before = JSON.stringify(h.project); h.timeline.setSelection({ start: 1, end: 2 }, false, true);
+    h.timeline.pointerDown(h.mediaPoint(2.01)); h.timeline.pointerMove(h.mediaPoint(3.01)); cancel(h); h.timeline.pointerUp(h.mediaPoint(3.01));
+    assert.equal(h.mediaActions.length, 0); assert.equal(h.mediaEdits.length, 0); assert.equal(h.captures.size, 0);
+    assert.equal(h.timeline.mediaTrimHover, null); assert.deepEqual(h.mediaPreviews.at(-1), { id: 'visual', patch: null });
+    assert.equal(JSON.stringify(h.project), before);
+  }
+});
+
+test('foreign pointers cannot preview, cancel or commit native Trim', () => {
+  const h = nativeTrimFixture(); h.timeline.pointerDown(h.mediaPoint(2.01));
+  h.timeline.pointerMove(h.mediaPoint(3.01, 0, { pointerId: 9 })); h.timeline.pointerUp(h.mediaPoint(3.01, 0, { pointerId: 9 }));
+  h.timeline.pointerCancel(h.mediaPoint(3.01, 0, { pointerId: 9 })); assert.equal(h.trimChecks.length, 0); assert.ok(h.timeline.gesture);
+  h.timeline.pointerUp(h.mediaPoint(3.01)); assert.equal(h.mediaActions.length, 1);
+});
+
+test('native Trim awaits saves and rejects repeated edits until success or failure settles', async () => {
+  for (const reject of [false, true]) {
+    const h = nativeTrimFixture(); let settle, calls = 0;
+    h.timeline.onMediaAction = () => { calls++; return new Promise((resolve, failure) => { settle = reject ? failure : resolve; }); };
+    h.timeline.pointerDown(h.mediaPoint(2.01)); h.timeline.pointerUp(h.mediaPoint(3.01)); assert.equal(h.timeline.editPending, true);
+    h.timeline.pointerDown(h.mediaPoint(2.01)); h.timeline.pointerUp(h.mediaPoint(3.01)); h.timeline.keyDown(h.event(0, { key: 'Delete' })); assert.equal(calls, 1);
+    settle(); await new Promise(setImmediate); assert.equal(h.timeline.editPending, false);
+  }
+});
+
+test('unknown canonical Trim previews and busy changes fail closed without approximating the edit', () => {
+  for (const change of [h => { h.timeline.mediaTrimPreview = () => undefined; }, h => { h.timeline.mediaTrimPreview = () => ({ issue: '', patch: null }); },
+    h => { h.timeline.mediaTrimPreview = () => { throw Error('stale'); }; }, h => { h.timeline.canEdit = () => false; }]) {
+    const h = nativeTrimFixture(); h.timeline.pointerDown(h.mediaPoint(2.01)); change(h); h.timeline.pointerUp(h.mediaPoint(3.01));
+    assert.equal(h.mediaActions.length, 0); assert.equal(h.mediaEdits.length, 0); assert.equal(h.captures.size, 0);
+  }
+});
+
+test('native Trim respects magnets and Alt bypass while retaining whole output frames', () => {
+  for (const altKey of [false, true]) {
+    const h = nativeTrimFixture(); h.timeline.setSnapping(true); h.timeline.pointerDown(h.mediaPoint(5.99));
+    h.timeline.pointerUp(h.mediaPoint(4.05, 0, { altKey }));
+    assert.ok(Math.abs(h.mediaActions[0].time - (altKey ? 244 / 60 : 4)) < 1e-9);
+  }
+});
+
+test('native Trim supports custom text and static images while body moves retain their existing action', () => {
+  for (const text of [false, true]) {
+    const h = nativeTrimFixture();
+    if (text) { h.project.manual.media_clips = []; h.project.manual.text_clips = [{ id: 'text_title', kind: 'title', start: 2, end: 6, text: 'Title' }]; }
+    else h.project.manual.media_clips[0].asset_id = 'image';
+    h.timeline.pointerDown(h.mediaPoint(2.01)); h.timeline.pointerUp(h.mediaPoint(1.01));
+    assert.deepEqual(h.mediaActions[0], { action: 'media_trim', clip_id: text ? 'text_title' : 'visual', edge: 'start', time: 1 });
+    assert.equal(Object.hasOwn(h.mediaPreviews[0].patch, 'source_start'), false);
+  }
+  const move = nativeTrimFixture(); move.timeline.pointerDown(move.mediaPoint(4)); move.timeline.pointerUp(move.mediaPoint(7));
+  assert.equal(move.trimChecks.length, 0); assert.equal(move.mediaActions.length, 0); assert.equal(move.mediaEdits.length, 1);
+});
+
+test('media edge/body cursors remain truthful independently of locked A/B source tracks', () => {
+  const h = nativeTrimFixture(); h.project.manual.track_locks = { A: true, B: true };
+  h.timeline.pointerMove(h.mediaPoint(2.01)); assert.equal(h.canvas.style.cursor, 'ew-resize'); assert.match(h.canvas.title, /Other layers and timeline duration stay unchanged/);
+  h.timeline.pointerMove(h.mediaPoint(4)); assert.equal(h.canvas.style.cursor, 'grab'); assert.equal(h.canvas.title, '');
+});
+
 test('zoom in and out center the yellow playhead, including when it was scrolled offscreen',()=>{
   const h=sequenceFixture();h.timeline.setPlayhead(7);h.timeline.selectRange(1,2);
   const original=JSON.stringify(h.project);

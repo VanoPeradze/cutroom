@@ -125,9 +125,9 @@ test('an appended project video keeps transport available after primary clips ar
   run(`state.project.editor_sequence.source_tracks={A:[],B:[]};
     state.mediaStudio={videoAt:()=>null};`);
   assert.equal(run('hasTimelineFootage()'),false);
-  run(`state.mediaStudio.videoAt=()=>({id:'third-video',start:0,end:6});`);
+  run(`state.project.manual.media_clips=[{id:'third-video',asset_id:'third',start:0,end:6}];`);
   assert.equal(run('hasTimelineFootage()'),true);
-  run(`state.mediaStudio.videoAt=()=>null;`);
+  run(`state.project.manual.media_clips=[];`);
   assert.equal(run('hasTimelineFootage()'),false);
 });
 
@@ -466,7 +466,7 @@ test('Studio status reports the current extended sequence duration, not the orig
     assert.equal(run('state.project.draft.output_duration'),10);
   }
   run(`state.draftDirtyReasons.add('pace');updateStudioStatus();`);
-  assert.equal(nodes.get('studioDraftStatus').textContent,'00:22 · 9:16 · Rebuild required');
+  assert.equal(nodes.get('studioDraftStatus').textContent,'00:22 · 9:16 · AI preferences pending');
   run('delete state.project.editor_sequence;state.draftDirtyReasons.clear();updateStudioStatus();');
   assert.equal(nodes.get('studioDraftStatus').textContent,'00:10 · 9:16');
 });
@@ -566,4 +566,28 @@ for(const action of ['undo','redo']) test(`${action} clears a stale trimmed sele
   assert.deepEqual(plain(run('seeks')),[1.5]);
   assert.equal(run('state.timeline.playhead'),1.5);
   assert.equal(run('activeEditTarget()'),'A');
+});
+
+
+for(const pinned of [false,true])test(`media insertion conflict never replays stale ripple coordinates, with pinned guard=${pinned}`,async()=>{
+  const {run}=app();
+  run(`state.manualSelection={start:1,end:2};api=async(url,options)=>{
+    requests.push({url,method:options?.method||'GET'});
+    if(options?.method==='POST')throw Object.assign(new Error('conflict'),{status:409,code:'revision_conflict'});
+    return {project:{...state.project,revision:10}};};`);
+  assert.equal(await run(`applyManualEdit('media_insert',{asset_id:'asset',start:1},${pinned?'{isCurrent:()=>state.project.revision===7}':'{}'})`),null);
+  assert.deepEqual(plain(run('requests.map(item=>item.method)')),['POST','GET']);
+  assert.equal(run('state.project.revision'),10);assert.equal(run('state.manualSelection'),null);
+  assert.equal(run('renderCount'),1);assert.equal(run('state.manualEditBusy'),false);
+  assert.match(run('messages.at(-1)'),/latest version.*insertion point.*retry/);
+});
+test('project navigation during conflict refresh cannot reinstall the old insert project',async()=>{
+  const {run}=app();
+  run(`api=async(url,options)=>{
+    requests.push({url,method:options?.method||'GET'});
+    if(options?.method==='POST')throw Object.assign(new Error('conflict'),{status:409,code:'revision_conflict'});
+    const old={...state.project,revision:10};state.project={...state.project,id:'other',revision:3};return {project:old};};`);
+  assert.equal(await run(`applyManualEdit('media_insert',{asset_id:'asset',start:1})`),null);
+  assert.equal(run('state.project.id'),'other');assert.equal(run('state.project.revision'),3);
+  assert.deepEqual(plain(run('requests.map(item=>item.method)')),['POST','GET']);
 });

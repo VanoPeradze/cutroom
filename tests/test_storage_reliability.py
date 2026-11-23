@@ -5,6 +5,8 @@ import threading
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from cutroom import render
 from cutroom.ffmpeg_compat import ExportCapabilities
 from cutroom.jobs import Job, JobContext
@@ -32,7 +34,8 @@ class MemoryStore:
         return copy.deepcopy(self.project)
 
 
-def test_render_removes_export_files_that_fall_out_of_retention(monkeypatch, tmp_path: Path):
+@pytest.mark.parametrize("previous_count", [20, 30])
+def test_render_preserves_all_completed_exports_and_history(monkeypatch, tmp_path: Path, previous_count):
     project_root = tmp_path / "project"
     exports = tmp_path / "exports"
     (project_root / "media").mkdir(parents=True)
@@ -40,7 +43,7 @@ def test_render_removes_export_files_that_fall_out_of_retention(monkeypatch, tmp
     (project_root / "media" / "source-A.mp4").write_bytes(b"source")
 
     old_exports = []
-    for index in range(20):
+    for index in range(previous_count):
         name = f"old-{index}.mp4"
         captions_name = f"old-{index}.srt"
         (exports / name).write_bytes(b"video")
@@ -90,12 +93,15 @@ def test_render_removes_export_files_that_fall_out_of_retention(monkeypatch, tmp
 
     monkeypatch.setattr(render, "_run_ffmpeg_process", fake_run)
     context = JobContext(Job("job_test", "render", project["id"]), threading.Lock())
-    render.render_project(context, project["id"], store, settings)
+    result = render.render_project(context, project["id"], store, settings)
 
-    assert len(store.project["exports"]) == 20
-    assert not (exports / "old-19.mp4").exists()
-    assert not (exports / "old-19.srt").exists()
-    assert (exports / "old-0.mp4").exists()
+    assert len(store.project["exports"]) == previous_count + 1
+    assert store.project["exports"][0]["id"] == result["export"]["id"]
+    assert store.project["exports"][1:] == old_exports
+    for record in old_exports:
+        assert (exports / record["name"]).read_bytes() == b"video"
+        assert (exports / record["captions_name"]).read_text(encoding="utf-8") == "caption"
+    assert (project_root / "media" / "source-A.mp4").read_bytes() == b"source"
 
 
 def test_failed_final_probe_does_not_leave_an_orphan_export(monkeypatch, tmp_path: Path):

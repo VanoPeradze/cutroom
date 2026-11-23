@@ -82,7 +82,7 @@ def test_repeated_occurrences_keep_independent_picture_speech_clocks_and_array_o
     # Decoded clocks start at the independent input seeks; logical source
     # positions remain unchanged in the detached occurrence metadata.
     assert [entry.seek_start for entry in inventory.inputs("library")] == [2, 4]
-    assert "[2:v]trim=start=1.000000000:end=3.033333333" in graph
+    assert "[2:v]trim=end=3.133333333,settb=1/1000000000,setpts=(PTS-1.000000000/TB)/2.000000000-4,fps=30:start_time=0:round=up" in graph
     assert "[2:a]atrim=start=0.000000000:end=1.000000000" in graph
     assert "[3:a]atrim=start=0.000000000:end=1.000000000" in graph
     assert inventory.inputs("library")[0].clip["video_source_start"] == 3

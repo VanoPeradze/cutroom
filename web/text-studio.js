@@ -15,10 +15,40 @@ export function textStyle(clip, width, height, previewHeight) {
     horizontal:42 / width * 100, box:Math.max(3,Math.round(size*.12))*ratio};
 }
 
+
+// ASS writes centisecond event bounds with Python's ties-to-even rounding.
+// Keep saved edit-clock endpoints intact; this is display timing only.
+function textEventMilliseconds(value) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return NaN;
+  const scaled = value * 100, lower = Math.floor(scaled), fraction = scaled - lower;
+  const rounded = lower + (fraction > .5 || fraction === .5 && lower % 2 !== 0 ? 1 : 0);
+  return Math.max(0, rounded) * 10;
+}
+function textRenderMilliseconds(time) {
+  if (typeof time !== 'number' || !Number.isFinite(time)) return NaN;
+  // Remove only floating multiplication noise at an exact millisecond.
+  return Math.floor(time * 1000 + 1e-7);
+}
+function textPreviewActive(clip, time) {
+  const now = textRenderMilliseconds(time), start = textEventMilliseconds(clip?.start), end = textEventMilliseconds(clip?.end);
+  return Number.isFinite(now) && Number.isFinite(start) && Number.isFinite(end) && end > start && now >= start && now < end;
+}
+export function textPreviewOpacity(clip, time) {
+  if (!textPreviewActive(clip, time)) return 0;
+  if (clip.template !== 'chapter') return 1;
+  const start = textEventMilliseconds(clip.start), end = textEventMilliseconds(clip.end), now = textRenderMilliseconds(time);
+  const elapsed = now - start, duration = end - start;
+  // Match installed libass fad(250,250): fade-in wins when fades overlap.
+  // Very short chapter cues must not be replaced by a triangular min() curve.
+  if (elapsed < 250) return elapsed / 250;
+  if (elapsed < duration - 250) return 1;
+  return (duration - elapsed) / 250;
+}
+
 export class TextStudio {
   constructor(root, stage, options) {
     this.root=root; this.stage=stage; this.options=options; this.projectId=null; this.selected=null;
-    this.pending=new Map(); this.overrides=new Map(); this.dragOverrides=new Map(); this.saving=null; this.timer=null; this.importing=false; this.limit=100;
+    this.pending=new Map(); this.overrides=new Map(); this.dragOverrides=new Map(); this.groupOverrides=new Map(); this.saving=null; this.timer=null; this.importing=false; this.limit=100;
     root.innerHTML=`<div class="text-studio-head"><h4>Your text & captions</h4></div>
       <div class="text-actions"><button type="button" data-add="title">Add text</button><button type="button" data-add="caption">Add caption</button></div>
       <details class="text-import inspector-section"><summary>Import caption file</summary><button type="button" data-import>Choose SRT / VTT</button>
@@ -30,7 +60,9 @@ export class TextStudio {
       <label class="text-search">Find custom text<input type="search" data-search placeholder="Search titles and captions"></label>
       <div class="text-clip-list" aria-label="Custom titles and captions"></div><button type="button" data-more hidden>Show more</button>
       <p class="text-selection-empty">Select custom text from the list to edit its template and timing.</p>
-      <section class="text-inspector" hidden data-editor-shortcuts="off"><h4>Edit selected text</h4>
+      <section class="text-inspector" hidden data-editor-shortcuts="off"><h4>Edit selected text</h4><p class="text-help" data-layer-protection hidden></p>
+        <label class="layer-enabled-control"><input type="checkbox" data-text-enabled aria-describedby="textEnabledNote" disabled> Enabled in preview &amp; export</label>
+        <p class="text-help layer-enabled-note" id="textEnabledNote" data-text-enabled-note></p>
         <label>Text<textarea data-text="text" dir="auto" rows="3" maxlength="1000"></textarea></label>
         <section class="text-template-section" aria-label="Text template">
           <h5>Template</h5>
@@ -38,12 +70,16 @@ export class TextStudio {
           <p class="text-template-description" id="textTemplateDescription"></p>
           <select data-text="template" hidden aria-label="Text template">${TEXT_TEMPLATES.map(template=>`<option value="${template.id}">${template.name}</option>`).join('')}</select>
         </section>
-        <div class="text-fields"><label>Start (seconds)<input type="number" data-text="start" min="0" step="0.01"></label><label>End (seconds)<input type="number" data-text="end" min="0.08" step="0.01"></label>
+        <div class="text-fields"><label>Start (seconds)<input type="number" data-text="start" min="0" step="any" data-scrub-step="0.01" title="Exact seconds; Arrow Up/Down or scrub changes 0.01 s"></label><label>End (seconds)<input type="number" data-text="end" min="0.08" step="any" data-scrub-step="0.01" title="Exact seconds; Arrow Up/Down or scrub changes 0.01 s"></label>
         <label data-template-field="subtext">Second line<input type="text" data-text="subtext" dir="auto" maxlength="200" placeholder="Role, label or date"></label>
         <label data-template-field="position">Position<select data-text="position"><option value="top">Top</option><option value="center">Center</option><option value="bottom">Bottom</option></select></label>
         <label>Style<select data-text="style"><option value="clean">Clean</option><option value="bold">Bold</option><option value="boxed">Boxed</option></select></label>
         <label>Size (%)<input type="number" data-text="scale" min="75" max="150" step="5"></label></div>
-        <div class="text-actions"><button type="button" data-preview>Preview at start</button><button type="button" data-remove>Remove text</button></div>
+        <details class="inspector-section layer-move-controls"><summary>Timeline placement</summary>
+          <div class="text-actions" role="group" aria-label="Move the whole selected clip" aria-describedby="textMoveHelp"><button type="button" data-move="playhead" disabled>Move to playhead</button><button type="button" data-move="-1" disabled>Move 1f earlier</button><button type="button" data-move="1" disabled>Move 1f later</button></div>
+          <p class="text-help" id="textMoveHelp">Move preserves length, source content and effects. Other layers stay put. Start/End are separate timing edits; arrows or scrub change them by 0.01 s.</p>
+        </details>
+        <div class="text-actions"><button type="button" data-preview>Preview at start</button><button type="button" data-trim-start disabled>Trim start</button><button type="button" data-trim-end disabled>Trim end</button><button type="button" data-duplicate disabled>Duplicate at playhead</button><button type="button" data-remove>Remove text</button></div>
         <p class="text-help">Changes preview immediately and save automatically. Drag this text clip or its edges on the timeline. Simultaneous text in the same position can overlap.</p>
       </section>`;
     this.status=root.querySelector('.text-status'); this.inspector=root.querySelector('.text-inspector');
@@ -57,12 +93,17 @@ export class TextStudio {
       else if(button.hasAttribute('data-import')) this.find('input[type=file]').click();
       else if(button.dataset.textId) void this.select(button.dataset.textId,true);
       else if(button.hasAttribute('data-retry')) void this.flush();
-      else if(button.hasAttribute('data-discard')) { if(!this.saving){this.pending.clear();this.overrides.clear();this.render(true);this.options.preview();this.status.textContent='Unsaved text changes discarded.';} }
+      else if(button.hasAttribute('data-discard')) { if(!this.saving){this.saveError=null;this.pending.clear();this.overrides.clear();this.render(true);this.options.preview();this.status.textContent='Unsaved text changes discarded.';this.options.saveStateChanged?.();} }
+      else if(button.hasAttribute('data-trim-start')) void this.trim('start');
+      else if(button.hasAttribute('data-trim-end')) void this.trim('end');
+      else if(button.hasAttribute('data-duplicate')) void this.duplicate();
+      else if(button.dataset.move) void this.movePlacement(button.dataset.move);
       else if(button.hasAttribute('data-remove')) void this.action('text_remove',{clip_id:this.selected});
       else if(button.hasAttribute('data-preview')) { const clip=this.clips().find(c=>c.id===this.selected);if(clip)this.options.seek(clip.start); }
       else if(button.hasAttribute('data-more')) {this.limit+=100;this.renderList();}
     };
     root.addEventListener('click',onClick);
+    root.addEventListener('change',event=>{if(event.target.matches('[data-text-enabled]'))void this.setOccurrenceEnabled(event.target.checked);});
     root.querySelector('input[type=file]').addEventListener('change',event=>{const file=event.target.files[0];event.target.value='';if(file)void this.importFile(file);});
     root.querySelector('[data-search]').addEventListener('input',()=>{this.limit=100;this.renderList();});
     root.addEventListener('input',event=>{
@@ -81,12 +122,18 @@ export class TextStudio {
   }
   find(selector){return this.root.querySelector(selector)||this.libraryRoot?.querySelector(selector);}
   project(){return this.options.project();}
-  clips(){return (this.project()?.manual?.text_clips||[]).map(c=>({...c,...this.overrides.get(c.id),...this.dragOverrides.get(c.id)}));}
+  clips(includeGroup=true){
+    const protection=(this.overrides.size || this.dragOverrides.size || includeGroup && this.groupOverrides?.size) ? this.options.mutationPlanner?.() || this.options.mutationIssue : null;
+    return (this.project()?.manual?.text_clips||[]).map(c=>{
+      const patch={...this.overrides.get(c.id),...this.dragOverrides.get(c.id),...(includeGroup?this.groupOverrides?.get(c.id):null)};
+      return Object.keys(patch).length && protection?.("text_remove",{clip_id:c.id}) ? {...c} : {...c,...patch};
+    });
+  }
   dirty(){return Boolean(this.pending.size||this.saving||this.importing);}
   render(force=false){
     const p=this.project();
     const previousSelection=this.selected;
-    if(this.projectId!==p?.id){clearTimeout(this.timer);this.pending.clear();this.overrides.clear();this.dragOverrides.clear();this.selected=null;this.projectId=p?.id;this.limit=100;force=true;}
+    if(this.projectId!==p?.id){this.saveError=null;clearTimeout(this.timer);this.pending.clear();this.overrides.clear();this.dragOverrides.clear();this.groupOverrides?.clear();this.selected=null;this.projectId=p?.id;this.limit=100;force=true;}
     for(const host of [this.root,this.libraryRoot].filter(Boolean))for(const b of host.querySelectorAll('[data-add],[data-import]'))b.disabled=!p?.draft||this.importing||this.options.busy();
     const clip=this.clips().find(c=>c.id===this.selected);
     if(this.selected&&!clip)this.selected=null;
@@ -101,6 +148,94 @@ export class TextStudio {
     this.find('.text-recovery').hidden=!this.pending.size;
     this.find('.text-search').hidden = !this.clips().length;
     this.renderList();
+    this.updateTrimAvailability();
+    this.updateDuplicateAvailability();
+    this.updateMoveAvailability();
+    this.updateEnabledAvailability();
+    this.updateProtectionAvailability();
+    this.options.saveStateChanged?.();
+  }
+  updateProtectionAvailability() {
+    const issue=this.selected ? this.options.mutationIssue?.('text_remove',{clip_id:this.selected}) || '' : '';
+    for(const input of this.root?.querySelectorAll?.('[data-text], [data-template-choice], [data-remove]') || []) {
+      input.disabled=Boolean(!this.selected||issue||this.importing||(this.options.busy()&&!this.saving));
+      if(issue){if(input.layerProtectionTitle===undefined)input.layerProtectionTitle=input.title||'';input.title=issue;}
+      else if(input.layerProtectionTitle!==undefined){input.title=input.layerProtectionTitle;delete input.layerProtectionTitle;}
+    }
+    const note=this.root?.querySelector?.('[data-layer-protection]');if(note){note.hidden=!issue;note.textContent=issue && this.pending?.has(this.selected) ? issue+' Saved text is shown while locked; your unsaved draft is kept. Unlock to review and retry it, or discard it locally.' : issue;}
+  }
+  updateEnabledAvailability() {
+    if(typeof this.options.enabledPreview!=='function')return;
+    const input=this.root?.querySelector?.('[data-text-enabled]');if(!input)return;
+    const clip=this.clips().find(row=>row.id===this.selected),enabled=clip?.enabled!==false;
+    const plan=this.options.enabledPreview(this.selected,!enabled),saving=Boolean(this.pending?.size||this.saving||this.importing||this.changingEnabled);
+    const busy=this.options.busy()||this.options.trimBusy?.();
+    input.checked=Boolean(clip)&&enabled;
+    input.disabled=!clip||busy||saving||Boolean(plan?.issue)||!plan?.patch;
+    input.title=busy||saving?'Wait for current changes to finish saving.':plan?.issue||'Enable or disable this occurrence in preview and export. Timing and settings stay unchanged; Undo restores it.';
+    const note=this.root?.querySelector?.('[data-text-enabled-note]');
+    if(note)note.textContent=enabled?'Included in preview and export. Disable to compare without removing this occurrence.':'Disabled in preview and export. Its timeline position and all edits are retained.';
+  }
+  async setOccurrenceEnabled(enabled) {
+    const id=this.selected,projectId=this.project()?.id;
+    if(!id||!projectId||this.changingEnabled||this.importing||this.options.busy()||this.options.trimBusy?.()||typeof this.options.setEnabled!=='function'){this.updateEnabledAvailability();return null;}
+    this.changingEnabled=true;this.updateEnabledAvailability();
+    try{return await this.options.setEnabled(id,enabled);}
+    catch(error){if(this.project()?.id===projectId)this.status.textContent=error.message;return null;}
+    finally{this.changingEnabled=false;this.updateEnabledAvailability();}
+  }
+  moveDestination(mode,time) {
+    const clip=this.clips().find(row=>row.id===this.selected);if(!clip)return NaN;
+    const configured=Number(this.options.frame?.()),frame=Number.isFinite(configured)&&configured>0 ? configured : 1/30;
+    if(mode==='playhead') { if(!Number.isFinite(time))time=this.options.time?.();return Number.isFinite(time)?Math.round(time/frame)*frame:NaN; }
+    return ['-1','1'].includes(String(mode)) ? Number(clip.start)+Number(mode)*frame : NaN;
+  }
+  updateMoveAvailability(time) {
+    if(typeof this.options.movePreview!=='function')return;
+    const saving=Boolean(this.pending?.size||this.saving||this.importing),busy=this.options.busy()||this.options.trimBusy?.();
+    for(const mode of ['playhead','-1','1']) {
+      const button=this.root?.querySelector?.(`[data-move="${mode}"]`);if(!button)continue;
+      const plan=this.options.movePreview(this.selected,this.moveDestination(mode,time)),unchanged=!plan?.patch||!Object.keys(plan.patch).length;
+      button.disabled=busy||saving||Boolean(plan?.issue)||unchanged;
+      button.title=busy||saving?'Wait for the current changes to finish saving before moving.':plan?.issue||(unchanged?'The clip is already at this position.':`Move the whole clip to ${Number(plan.patch.start).toFixed(3)} s. Source content, length and other layers stay unchanged. One Undo restores it.`);
+    }
+  }
+  async movePlacement(mode) {
+    const id=this.selected,projectId=this.project()?.id,start=this.moveDestination(mode);
+    if(!id||!projectId||this.importing||this.options.busy()||this.options.trimBusy?.()||typeof this.options.move!=='function')return null;
+    try{return await this.options.move(id,start);}
+    catch(error){if(this.project()?.id===projectId)this.status.textContent=error.message;return null;}
+  }
+  updateDuplicateAvailability(time){
+    if(typeof this.options.duplicatePreview!=='function')return;
+    const button=this.root?.querySelector?.('[data-duplicate]');if(!button)return;
+    if(!Number.isFinite(time)&&this.selected)time=this.options.time?.();
+    const plan=this.options.duplicatePreview(this.selected,time),saving=Boolean(this.pending?.size||this.saving||this.importing),busy=this.options.busy()||this.options.trimBusy?.();
+    button.disabled=busy||saving||Boolean(plan?.issue)||!plan?.patch;
+    button.title=busy||saving?'Wait for the current changes to finish saving before duplicating.':plan?.issue||`Copy the whole text clip at ${Number(plan?.patch?.start).toFixed(3)} s. Other layers and edit duration stay unchanged; the new copy is selected. One Undo removes it.`;
+  }
+  async duplicate(){
+    const id=this.selected,projectId=this.project()?.id,time=this.options.time?.();
+    if(!id||!projectId||this.importing||this.options.busy()||this.options.trimBusy?.()||typeof this.options.duplicate!=='function')return null;
+    try{return await this.options.duplicate(id,time);}
+    catch(error){if(this.project()?.id===projectId)this.status.textContent=error.message;return null;}
+  }
+  updateTrimAvailability(time){
+    if(typeof this.options.trimPreview!=='function')return;
+    if(!Number.isFinite(time)&&this.selected)time=this.options.time?.();
+    const saving=Boolean(this.pending?.size||this.saving||this.importing),busy=this.options.trimBusy?.()||this.options.busy();
+    for(const edge of ['start','end']){
+      const button=this.root?.querySelector?.(`[data-trim-${edge}]`);if(!button)continue;
+      const plan=this.options.trimPreview(this.selected,edge,time),issue=plan?.issue||'',unchanged=!plan?.patch||!Object.keys(plan.patch).length;
+      button.disabled=busy||saving||Boolean(issue)||unchanged;
+      button.title=saving||busy?'Wait for the current changes to finish saving before trimming.':issue||(unchanged?'This edge is already at the playhead.':`Set this text clip's ${edge} to the playhead. Other layers and edit duration stay unchanged; one Undo restores it.`);
+    }
+  }
+  async trim(edge){
+    const id=this.selected,projectId=this.project()?.id,time=this.options.time?.();
+    if(!id||!projectId||this.importing||this.options.busy()||this.options.trimBusy?.()||typeof this.options.trim!=='function')return null;
+    try{return await this.options.trim(id,edge,time);}
+    catch(error){if(this.project()?.id===projectId)this.status.textContent=error.message;return null;}
   }
   renderTemplates(template){
     this.showTemplateFields(template);
@@ -111,14 +246,14 @@ export class TextStudio {
       button.setAttribute('aria-checked',String(checked));button.tabIndex=checked?0:-1;
       // Our automatic save can briefly mark the app busy. Keep its existing
       // controls focusable while later choices queue behind that same save.
-      button.disabled=!this.project()?.draft||!this.selected||this.importing||(this.options.busy()&&!this.saving);
+      button.disabled=!this.project()?.draft||!this.selected||this.importing||(this.options.busy()&&!this.saving)||Boolean(this.options.mutationIssue?.('text_remove',{clip_id:this.selected}));
     }
     this.templateDescription.textContent=selected.detail;
   }
   chooseTemplate(template){
     if(!TEXT_TEMPLATES.some(item=>item.id===template)||!this.project()?.draft||this.importing||(this.options.busy()&&!this.saving))return false;
     const clip=this.clips().find(item=>item.id===this.selected);if(!clip)return false;
-    if((clip.template||'plain')!==template)this.queueClip(clip.id,{template});
+    if((clip.template||'plain')!==template && this.queueClip(clip.id,{template})===false)return false;
     const select=this.root.querySelector('[data-text=template]');if(select)select.value=template;
     this.renderTemplates(template);return true;
   }
@@ -159,10 +294,13 @@ export class TextStudio {
     return true;
   }
   queueClip(id,patch){
+    const issue=this.options.mutationIssue?.("text_update",{clip_id:id,...this.pending.get(id),...patch}) || this.options.trackPatchIssue?.(id,{...this.pending.get(id),...patch});
+    if(issue){this.render(true);this.status.textContent=issue;return false;}
     this.overrides.set(id,{...this.overrides.get(id),...patch});this.pending.set(id,{...this.pending.get(id),...patch});
     this.dragOverrides.delete(id);this.options.preview();this.renderList();this.find('.text-recovery').hidden=false;
-    this.status.textContent='Unsaved changes…';clearTimeout(this.timer);this.timer=setTimeout(()=>void this.flush(),500);
+    this.saveError=null;this.status.textContent='Unsaved changes…';clearTimeout(this.timer);this.timer=setTimeout(()=>void this.flush(),500);this.options.saveStateChanged?.();
   }
+  previewGroup(patches){this.groupOverrides=new Map((patches||[]).map(({clip_id,start,end})=>[clip_id,{start,end}]));}
   previewClip(id,patch){if(patch)this.dragOverrides.set(id,patch);else this.dragOverrides.delete(id);this.options.preview();}
   async flush(){
     clearTimeout(this.timer);
@@ -174,22 +312,25 @@ export class TextStudio {
     const save=async()=>{
       while(this.pending.size && this.project()?.id===projectId){
         const [id,patch]=this.pending.entries().next().value;
+        const issue=this.options.mutationIssue?.("text_update",{clip_id:id,...patch});
+        if(issue){this.saveError=this.status.textContent=issue+" Your unsaved text is kept. Unlock to retry, or discard locally.";return false;}
         const clip=this.clips().find(c=>c.id===id);
         if(!clip||!clip.text.trim()||!Number.isFinite(clip.start)||!Number.isFinite(clip.end)||clip.start<0||clip.end-clip.start<.08-1e-9||clip.end>this.options.duration()+1e-9||!Number.isInteger(clip.scale)||clip.scale<75||clip.scale>150){
-          this.status.textContent='Enter text, valid start/end times within the edit, and a size from 75 to 150. Nothing was saved.';return false;
+          this.saveError=this.status.textContent='Enter text, valid start/end times within the edit, and a size from 75 to 150. Nothing was saved.';return false;
         }
         let result;
-        try{result=await this.options.edit('text_update',{clip_id:id,...patch});}catch(error){this.status.textContent=error.message;return false;}
-        if(!result){this.status.textContent='Text was not saved. Retry or discard these changes before leaving.';return false;}
+        try{result=await this.options.edit('text_update',{clip_id:id,...patch});}catch(error){this.saveError=this.status.textContent=error.message;return false;}
+        if(!result){this.saveError=this.status.textContent='Text was not saved. Retry or discard these changes before leaving.';return false;}
         if(this.project()?.id!==projectId)return false;
         if(this.pending.get(id)===patch){this.pending.delete(id);this.overrides.delete(id);}
       }
-      this.status.textContent='Saved';return true;
+      this.saveError=null;this.status.textContent='Saved';return true;
     };
-    this.saving=save();
-    try{return await this.saving;}finally{this.saving=null;this.render();this.options.preview();}
+    this.saving=save();this.options.saveStateChanged?.();
+    try{return await this.saving;}finally{this.saving=null;this.render();this.options.preview();this.options.saveStateChanged?.();}
   }
   async action(action,detail){
+    const issue=this.options.mutationIssue?.(action,detail);if(issue){this.status.textContent=issue;return null;}
     const projectId=this.project()?.id;if(!projectId||this.options.busy()||!(await this.flush()))return null;
     if(this.project()?.id!==projectId)return null;
     const result=await this.options.edit(action,detail);
@@ -217,16 +358,27 @@ export class TextStudio {
     finally{this.importing=false;this.render(true);this.options.preview();}
   }
   sync(time,sourceMode=false){
-    const p=this.project(),visible=!sourceMode&&p?.draft, clips=visible?this.clips().filter(c=>c.start<=time&&time<c.end):[];
+    this.updateTrimAvailability(time);
+    this.updateDuplicateAvailability(time);
+    this.updateMoveAvailability(time);
+    const p=this.project(),order=this.options.trackOrder?.(p),tracked=p?.manual && Object.hasOwn(p.manual,"layer_tracks");
+    const visible=!sourceMode&&p?.draft&&!order?.issue&&(!tracked || order);
+    const clips=visible?this.clips().filter(c=>c.enabled!==false&&textPreviewActive(c,time)):[];
+    if(tracked && order?.enabled && !order.issue)clips.sort((a,b)=>order.text.get(a.id)-order.text.get(b.id));
     this.layer.hidden=!clips.length;
     const [w,h]=this.options.dimensions();
     const signature=JSON.stringify([clips,w,h,this.stage.clientHeight]);
-    if(signature===this.signature)return;this.signature=signature;
+    if(signature===this.signature){
+      // Clock-only updates retain cue nodes, including while paused or seeking.
+      for(let i=0;i<clips.length;i++)this.layer.children[i].style.opacity=String(textPreviewOpacity(clips[i],time));
+      return;
+    }
+    this.signature=signature;
     this.layer.replaceChildren();if(!clips.length)return;
     const previewHeight=this.stage.getBoundingClientRect().height;
     for(const clip of clips){
       const item=document.createElement('div'),style=textStyle(clip,w,h,previewHeight);item.className='custom-text-cue';item.dataset.position=clip.position;item.dataset.style=clip.style;item.dir='auto';
-      item.dataset.template=clip.template||'plain';
+      item.dataset.template=clip.template||'plain';item.dataset.textClipId=clip.id;item.style.opacity=String(textPreviewOpacity(clip,time));
       const main=document.createElement('span');main.className='custom-text-main';main.textContent=clip.text;
       if(clip.subtext&&['lower_third','chapter'].includes(clip.template)){
         const sub=document.createElement('span');sub.className='custom-text-sub';sub.textContent=clip.subtext;

@@ -31,23 +31,30 @@ def caption_renderer():
     return ffmpeg, (font, bold)
 
 
-def _render(renderer, tmp_path, name, text, *, visual_reference=False, style="clean", size=(1000, 160), words=None, scale=100):
+def _render(renderer, tmp_path, name, text, *, visual_reference=False, style="clean", size=(1000, 160),
+            words=None, scale=100, authored=None, field="text"):
     ffmpeg, fonts = renderer
     width, height = size
     # Relative paths avoid filter-graph quoting differences on Windows.
     font_dir = tmp_path / "fonts"
     font_dir.mkdir(exist_ok=True)
     for font in fonts:
-        shutil.copyfile(font, font_dir / font.name)
-    path = build_ass({}, [], tmp_path / f"{name}.ass", width, height, caption_style=style, caption_scale=scale,
-                     caption_lines=[{"start": 0, "end": 1, "text": "REFERENCE" if visual_reference else text, "words": words or []}])
+        if not (font_dir / font.name).exists():
+            shutil.copyfile(font, font_dir / font.name)
+    value = "REFERENCE" if visual_reference else text
+    options = ({"caption_lines": [], "text_clips": [{**authored, field: value}]} if authored is not None else
+               {"caption_style": style, "caption_scale": scale,
+                "caption_lines": [{"start": 0, "end": 1, "text": value, "words": words or []}]})
+    path = build_ass({}, [], tmp_path / f"{name}.ass", width, height, **options)
     script = path.read_text("utf-8-sig").replace(",Arial,", ",DejaVu Sans,")
     if visual_reference:
         script = script.replace("REFERENCE", text.replace("\n", r"\N"))
     path.write_text(script, encoding="utf-8-sig")
     result = subprocess.run([
         ffmpeg, "-v", "error", "-f", "lavfi", "-i", f"color=black:s={width}x{height}",
-        "-vf", f"ass={path.name}:fontsdir=fonts", "-frames:v", "1", "-threads", "1",
+        # A Chapter is intentionally transparent at frame zero. Inspect its solid centre instead.
+        "-vf", f"ass={path.name}:fontsdir=fonts" + (r",select=eq(n\,12)" if (authored or {}).get("template") == "chapter" else ""),
+        "-frames:v", "1", "-threads", "1",
         "-pix_fmt", "gray", "-f", "rawvideo", "pipe:1",
     ], cwd=tmp_path, capture_output=True, check=True, timeout=30)
     assert len(result.stdout) == width * height
@@ -135,3 +142,38 @@ def test_hebrew_highlight_word_timings_keep_plain_bidi_safe_phrase(caption_rende
     script = (tmp_path / "highlight.ass").read_text("utf-8-sig")
     assert script.count("Dialogue: ") == 1
     assert r"{\c" not in script, "RTL words must not be split into unsafe libass colour runs"
+
+@pytest.mark.parametrize("format", ["srt", "vtt"])
+@pytest.mark.parametrize("portrait", [False, True])
+def test_imported_burned_cue_matches_independent_visual_order(caption_renderer, tmp_path, format, portrait):
+    from cutroom.text_clips import parse_caption_file
+    logical = _logical("4K 60fps")
+    visual = _visual("4K 60fps")
+    if portrait:
+        logical += "\n" + _logical("Sony A7 IV")
+        visual += "\n" + _visual("Sony A7 IV")
+    header = "1\n00:00:00,000 --> 00:00:01,000\n" if format == "srt" else "WEBVTT\n\n00:00.000 --> 00:01.000\n"
+    cue, = parse_caption_file(header + logical, format, 1)
+    assert cue["text"] == logical
+    options = {"authored": {**cue, "scale": 75 if portrait else 100}, "size": (720, 1280) if portrait else (1000, 160)}
+    actual = _render(caption_renderer, tmp_path, "import", logical, **options)
+    expected = _render(caption_renderer, tmp_path, "oracle", visual, visual_reference=True, **options)
+    assert _pixel_error(actual, expected) < .12
+    if not portrait:
+        wrong = _render(caption_renderer, tmp_path, "reversed", _visual("60fps 4K"), visual_reference=True, **options)
+        assert _pixel_error(actual, wrong) > .12
+
+
+@pytest.mark.parametrize("template,field", [
+    ("plain", "text"), ("highlight", "text"), ("callout", "text"),
+    ("lower_third", "text"), ("chapter", "text"), ("lower_third", "subtext"), ("chapter", "subtext"),
+])
+def test_authored_title_and_secondary_line_keep_reading_order(caption_renderer, tmp_path, template, field):
+    from cutroom.text_clips import validate_text_clip
+    from test_text_templates import clip
+    phrase = "4K 60fps" if field == "text" else "Sony A7 IV / H.264"
+    logical = _logical(phrase)
+    row = validate_text_clip(clip(template=template, position="center", **{field: logical}), 2)
+    actual = _render(caption_renderer, tmp_path, "authored", logical, authored=row, field=field)
+    expected = _render(caption_renderer, tmp_path, "oracle", _visual(phrase), authored=row, field=field, visual_reference=True)
+    assert _pixel_error(actual, expected) < .12

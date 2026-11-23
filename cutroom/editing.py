@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 from typing import Any
 
+from cutroom.transcript_batch import prepare_transcript_batch
 from .caption_items import (CAPTION_ACTION_FIELDS, CaptionError, anchor_caption_change, correct_segment_text,
                             prepare_caption_edit, remap_caption_overrides)
 from .caption_alternatives import prepare_selection as prepare_caption_selection, status as caption_alternative_status, geometry as caption_geometry
@@ -10,6 +11,8 @@ from .composition import CHROMA_KEY_ACTION_FIELDS, build_manual_embedded_candida
 from .source_tracks import TRACK_ACTIONS, SourceTrackError, prepare_source_track_edit, source_track_clips, validate_source_track_sync, validate_sequence_version
 from .sequence import SEQUENCE_ACTIONS, prepare_sequence_edit
 from .media_library import MEDIA_ACTION_FIELDS, MediaLibraryError, prepare_media_edit, validate_media_bounds
+from .layer_tracks import LayerTrackError, validate_layer_tracks, assign_new_layer_tracks, explicit_media_destination, validate_locked_layer_changes, restore_current_layer_locks, set_layer_track_lock
+from .layer_selection import LAYER_ACTION_FIELDS, LayerSelectionError, prepare_layer_selection_edit
 from .render import caption_context, project_caption_items
 from .text_clips import TEXT_ACTION_FIELDS, TextClipError, prepare_text_edit, public_text_clips, validate_text_bounds
 from .track_locks import locked_tracks, require_tracks_unlocked, validate_locked_track_changes
@@ -272,11 +275,13 @@ def _rebuild_camera_plan(project: dict[str, Any]) -> None:
     )
 
 
-def _timeline_snapshot(project: dict[str, Any]) -> dict[str, Any]:
+def _timeline_snapshot(project: dict[str, Any], *, include_render_state: bool = False) -> dict[str, Any]:
     draft = project.get("draft") or {}
     manual = project.setdefault("manual", {})
     settings = project.get("settings") if isinstance(project.get("settings"), dict) else {}
     return {
+        **({"isolated_render_state": {"draft": copy.deepcopy(project.get("draft")), "analysis": copy.deepcopy(project.get("analysis")), "analysis_present": "analysis" in project}}
+           if include_render_state else {}),
         "cuts": copy.deepcopy(draft.get("cuts") or []),
         "keep_ranges": copy.deepcopy(draft.get("keep_ranges") or []),
         "camera_plan": copy.deepcopy(draft.get("camera_plan") or []),
@@ -294,8 +299,12 @@ def _timeline_snapshot(project: dict[str, Any]) -> dict[str, Any]:
         "manual_source_mixer": copy.deepcopy(manual.get("source_mixer")) if isinstance(manual.get("source_mixer"), dict) else None,
         "manual_source_tracks_present": "source_tracks" in manual,
         "manual_source_tracks": copy.deepcopy(manual.get("source_tracks")),
+        "manual_layer_tracks_present": "layer_tracks" in manual,
+        "manual_layer_tracks": copy.deepcopy(manual.get("layer_tracks")),
         "manual_sequence_present": "sequence" in manual,
         "manual_sequence": copy.deepcopy(manual.get("sequence")),
+        "manual_ai_draft_applied_present": "ai_draft_applied" in manual,
+        "manual_ai_draft_applied": copy.deepcopy(manual.get("ai_draft_applied")),
         "caption_layers": _caption_snapshot(project),
         "manual_media_clips_present": "media_clips" in manual,
         "manual_media_clips": copy.deepcopy(manual.get("media_clips")),
@@ -334,7 +343,7 @@ def _restore_timeline(project: dict[str, Any], snapshot: dict[str, Any]) -> None
     manual["camera_overrides"] = copy.deepcopy(snapshot.get("manual_camera_overrides") or [])
     if "caption_layers" in snapshot:
         _restore_captions(project, snapshot["caption_layers"])
-    for key in ("media_clips", "text_clips", "audio_mixer", "chroma_key"):
+    for key in ("media_clips", "text_clips", "audio_mixer", "chroma_key", "ai_draft_applied", "layer_tracks"):
         if f"manual_{key}_present" in snapshot:
             if snapshot[f"manual_{key}_present"]:
                 manual[key] = copy.deepcopy(snapshot[f"manual_{key}"])
@@ -384,6 +393,13 @@ def _restore_timeline(project: dict[str, Any], snapshot: dict[str, Any]) -> None
     else:
         draft.pop("reel_candidates", None)
     draft["edited_at"] = now_iso()
+    if isinstance(snapshot.get("isolated_render_state"), dict):
+        saved = snapshot["isolated_render_state"]
+        project["draft"] = copy.deepcopy(saved["draft"])
+        if saved["analysis_present"]:
+            project["analysis"] = copy.deepcopy(saved["analysis"])
+        else:
+            project.pop("analysis", None)
 
 
 def _rebuild_timeline(project: dict[str, Any], cuts: list[dict[str, Any]]) -> None:
@@ -950,6 +966,9 @@ def _restore_captions(project: dict[str, Any], snapshot: dict[str, Any]) -> None
 def _prepare_caption_change(project: dict[str, Any], payload: dict[str, Any], action: str) -> dict[str, Any] | None:
     """New caption layers for one caption action, or None when nothing changes."""
     try:
+        if action == "transcript_text_batch":
+            fixes = prepare_transcript_batch(project, payload)
+            return None if fixes is None else {**_caption_snapshot(project), "caption_corrections": fixes}
         if action == "caption_alternative":
             try:
                 selection = prepare_caption_selection(project, str(payload.get("alternative_id") or ""), str(payload.get("review_fingerprint") or ""))
@@ -1033,6 +1052,7 @@ def apply_source_review_edit(project, candidate, request):
     from .review_candidates import require_supported, validate_ranges
     staged=copy.deepcopy(project)
     try:
+        validate_layer_tracks(staged)
         require_supported(staged)
         if locked_tracks(staged):raise ValueError("Unlock the source track before applying a proposal.")
         validate_ranges(staged,request,candidate["ranges"],candidate["segment_ids"])
@@ -1063,6 +1083,8 @@ def apply_source_review_edit(project, candidate, request):
         _rebuild_timeline(staged,apply_timeline_overrides(cuts,staged.get("manual")))
         staged["draft"].update(status="requires_review",review_required=True,generative_approved=False,semantic_approval=False)
         validate_ranges(staged,request,staged["draft"]["keep_ranges"],candidate["segment_ids"])
+        validate_layer_tracks(staged)
+        validate_locked_layer_changes(project, staged)
         history=_history(staged)
         history["undo"].append({"kind":"source_review","before":before,"after":_source_review_snapshot(staged)})
         history["undo"]=history["undo"][-HISTORY_LIMIT:];history["redo"]=[]
@@ -1073,11 +1095,76 @@ def apply_source_review_edit(project, candidate, request):
     return project
 
 
-def apply_manual_edit(project: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
+def apply_manual_edit(project, payload, *, apply_isolated_proposal=False):
+    """Track-aware edits stage all changes, including history, before admission."""
+    action = str(payload.get("action") or "").strip().lower() if isinstance(payload, dict) else ""
+    try:
+        model = validate_layer_tracks(project)
+        if action == "layer_track_lock":
+            candidate = copy.deepcopy(project)
+            set_layer_track_lock(candidate, payload)
+            validate_layer_tracks(candidate)
+            validate_locked_layer_changes(project, candidate)
+            project.clear();project.update(candidate)
+            return project
+        destination = explicit_media_destination(project, payload)
+        if model is None and action != "layer_tracks_enable":
+            return _apply_manual_edit_protected(project, payload, apply_isolated_proposal=apply_isolated_proposal)
+        candidate = copy.deepcopy(project)
+        _apply_manual_edit_protected(candidate, payload, apply_isolated_proposal=apply_isolated_proposal)
+        if action not in {"undo", "redo", "layer_tracks_enable"}:
+            pinned_ids = set()
+            if destination is not None:
+                old_ids = {row["id"] for row in project.get("manual", {}).get("media_clips", [])}
+                # These three creators append their placed occurrence last, after
+                # any ripple-derived pieces. Pin its exact generated identity.
+                placed = candidate["manual"]["media_clips"][-1]
+                if placed["id"] in old_ids or placed.get("asset_id") != payload.get("asset_id"):
+                    raise LayerTrackError("The destination occurrence could not be identified")
+                placed["track_id"] = destination
+                pinned_ids.add(placed["id"])
+            assign_new_layer_tracks(project, candidate, action, pinned_ids=pinned_ids)
+        if action in {"undo", "redo"}:
+            restore_current_layer_locks(project, candidate)
+        validate_layer_tracks(candidate)
+        validate_locked_layer_changes(project, candidate)
+        if action not in {"undo", "redo"} and candidate != project:
+            entries = (candidate.get("manual") or {}).get("_history", {}).get("undo", [])
+            prior_entries = (project.get("manual") or {}).get("_history", {}).get("undo", [])
+            if entries and entries != prior_entries and entries[-1].get("kind") == "timeline":
+                entries[-1]["after"] = _timeline_snapshot(candidate, include_render_state="isolated_render_state" in entries[-1]["after"])
+        project.clear(); project.update(candidate)
+        return project
+    except (LayerTrackError, ValueError, TypeError, KeyError) as error:
+        raise ManualEditError(str(error)) from error
+
+
+def _apply_manual_edit_protected(project: dict[str, Any], payload: dict[str, Any], *, apply_isolated_proposal: bool = False) -> dict[str, Any]:
     """Stage protected edits so rejection cannot consume history or alter state."""
     validate_sequence_version(project)
     action = str(payload.get("action") or "").strip().lower() if isinstance(payload, dict) else ""
+    if apply_isolated_proposal and action == "sequence_reset" and (project.get("_ai_draft_proposal") or {}).get("version") == 2:
+        from .ai_draft_proposals import ai_draft_review_status, candidate_project
+        if not ai_draft_review_status(project).get("available"):
+            raise ManualEditError("The saved AI proposal is no longer available.")
+        try:
+            from .sequence import materialize_sequence
+            current, _ = materialize_sequence(project)
+            staged = candidate_project(current)
+            before = _timeline_snapshot(project, include_render_state=True)
+            _apply_manual_edit(staged, payload, snapshot_override=before)
+            staged.setdefault("manual", {})["ai_draft_applied"] = project["_ai_draft_proposal"]["id"]
+            _history(staged)["undo"][-1]["after"] = _timeline_snapshot(staged, include_render_state=True)
+            validate_locked_track_changes(project, staged)
+            validate_media_bounds(staged)
+            validate_text_bounds(staged)
+        except (ValueError, RuntimeError, KeyError, TypeError) as error:
+            raise ManualEditError(str(error)) from error
+        project.clear(); project.update(staged)
+        return project
     guarded = SEQUENCE_ACTIONS | {"delete_range", "trim_clip", "apply_reel_candidate", "media_append", "media_insert"}
+    if action == "sequence_insert_all":
+        require_tracks_unlocked(project)
     protected = bool(locked_tracks(project))
     manual = project.get("manual") or {}
     if protected or action in guarded and (manual.get("media_clips") or manual.get("text_clips")):
@@ -1098,7 +1185,7 @@ def apply_manual_edit(project: dict[str, Any], payload: dict[str, Any]) -> dict[
     return _apply_manual_edit(project, payload)
 
 
-def _apply_manual_edit(project: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
+def _apply_manual_edit(project: dict[str, Any], payload: dict[str, Any], *, snapshot_override=None) -> dict[str, Any]:
     """Apply one bounded, undoable manual correction to an existing draft."""
     if not isinstance(payload, dict):
         raise ManualEditError("Request body must be an object")
@@ -1146,10 +1233,13 @@ def _apply_manual_edit(project: dict[str, Any], payload: dict[str, Any]) -> dict
             if action in {"media_append","media_insert"}:
                 media_edit = prepare_media_edit(preparation_project, {**payload, "action": action})
         text_edit = prepare_text_edit(project, {**payload, "action": action}) if action in TEXT_ACTION_FIELDS else None
+        layer_edit = prepare_layer_selection_edit(project, {**payload, "action": action}) if action in LAYER_ACTION_FIELDS else None
         if action == "set_source_mixer":
             validate_source_track_sync(project, payload)
-    except (SourceTrackError, MediaLibraryError, TextClipError) as exc:
+    except (SourceTrackError, MediaLibraryError, TextClipError, LayerSelectionError) as exc:
         raise ManualEditError(str(exc)) from exc
+    if action in LAYER_ACTION_FIELDS and layer_edit is None:
+        return project
     if action in TEXT_ACTION_FIELDS and text_edit is None:
         return project
     if action in MEDIA_ACTION_FIELDS and media_edit is None:
@@ -1176,7 +1266,7 @@ def _apply_manual_edit(project: dict[str, Any], payload: dict[str, Any]) -> dict
         if visual_change is None:
             return project
     caption_change = None
-    if action in CAPTION_ACTION_FIELDS or action in {"transcript_text", "caption_alternative"}:
+    if action in CAPTION_ACTION_FIELDS or action in {"transcript_text", "transcript_text_batch", "caption_alternative"}:
         caption_change = _prepare_caption_change(project, payload, action)
         if caption_change is None:
             return project
@@ -1224,20 +1314,24 @@ def _apply_manual_edit(project: dict[str, Any], payload: dict[str, Any]) -> dict
         # Corrections and per-caption changes are layers over the transcript; the
         # transcribed text itself is never rewritten, so every change can be undone.
         before = _caption_snapshot(project)
-        _restore_captions(project, {key: value for key, value in caption_change.items() if value})
+        _restore_captions(project, caption_change if action == "transcript_text_batch" else {key: value for key, value in caption_change.items() if value})
         # A later AI draft must read the corrected words, not an older story pass.
-        if action == "transcript_text" or caption_change["caption_corrections"] != before.get("caption_corrections", {}):
+        if action in {"transcript_text", "transcript_text_batch"} or caption_change["caption_corrections"] != before.get("caption_corrections", {}):
             (project.get("analysis") or {}).pop("story_hierarchy", None)
             (project.get("analysis") or {}).pop("editorial_cache", None)
         if isinstance(project.get("draft"), dict):
             project["draft"]["edited_at"] = now_iso()
         entry = {"kind": "captions", "before": before, "after": _caption_snapshot(project)}
-    elif action in SEQUENCE_ACTIONS | TRACK_ACTIONS | set(MEDIA_ACTION_FIELDS) | set(TEXT_ACTION_FIELDS) | {"delete_range", "restore_range", "trim_clip", "split", "set_camera_layout", "set_source_mixer", "set_embedded_camera", "apply_reel_candidate"}:
+    elif action in SEQUENCE_ACTIONS | TRACK_ACTIONS | set(MEDIA_ACTION_FIELDS) | set(TEXT_ACTION_FIELDS) | set(LAYER_ACTION_FIELDS) | {"delete_range", "restore_range", "trim_clip", "split", "set_camera_layout", "set_source_mixer", "set_embedded_camera", "apply_reel_candidate"}:
         if not isinstance(project.get("draft"), dict):
             raise ManualEditError("Generate a draft before editing the timeline")
-        before = _timeline_snapshot(project)
+        before = snapshot_override if snapshot_override is not None else _timeline_snapshot(project)
         before_captions = project_caption_items(project, aligned=False) if caption_edits else []
-        if action in TEXT_ACTION_FIELDS:
+        if action in LAYER_ACTION_FIELDS:
+            project.setdefault("manual", {}).update(layer_edit)
+            project["draft"]["edited_at"] = now_iso()
+            project["draft"]["status"] = "ready"
+        elif action in TEXT_ACTION_FIELDS:
             project.setdefault("manual", {}).update(text_edit)
             project["draft"]["edited_at"] = now_iso()
             project["draft"]["status"] = "ready"
@@ -1247,15 +1341,18 @@ def _apply_manual_edit(project: dict[str, Any], payload: dict[str, Any]) -> dict
             project["draft"]["status"] = "ready"
         elif action in SEQUENCE_ACTIONS:
             manual = project.setdefault("manual", {})
+            if action == "sequence_reset":
+                from .ai_draft_proposals import mark_ai_draft_applied
+                mark_ai_draft_applied(project)
             for key in ("sequence", "source_tracks"):
                 if key in sequence_edit:
                     manual[key] = sequence_edit[key]
                 else:
                     manual.pop(key, None)
-            if action == "sequence_close_gaps" and not payload.get("slot"):
-                # Commit the staged all-layer translation in the same history
-                # entry as source timing. Other sequence edits keep their
-                # existing independent-layer behavior.
+            if action in {"sequence_ripple_delete", "sequence_insert_all"} or action == "sequence_close_gaps" and not payload.get("slot"):
+                # Commit staged all-layer time changes in the same history
+                # entry as source timing. Source-only and other sequence edits
+                # keep their existing independent-layer behavior.
                 for key in ("media_clips", "text_clips"):
                     if key in sequence_edit:
                         manual[key] = sequence_edit[key]

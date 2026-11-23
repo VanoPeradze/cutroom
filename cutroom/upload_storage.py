@@ -116,6 +116,7 @@ class UploadStorage:
         self.temp_dir = Path(tempfile.gettempdir())
         self.ttl = ttl
         self.lock = threading.RLock()
+        self.copy_guard = None
         self.tickets: dict[tuple[str, str], UploadTicket] = {}
         self.retired: dict[tuple[str, str], float] = {}
         self.legacy: dict[str, dict[str, int]] = {}
@@ -292,6 +293,8 @@ class UploadStorage:
     def admit(self, project_id: str, purpose: str, slot: str | None, filename: str, size: int,
               project_root: Path, token: str | None = None) -> tuple[UploadTicket, dict[str, Any]]:
         with self.lock:
+            if self.copy_guard is not None:
+                self.copy_guard()
             self.prune()
             token = token or uuid.uuid4().hex
             if not TOKEN_RE.fullmatch(token):
@@ -383,6 +386,8 @@ class UploadStorage:
 
     def begin_transport(self, project_id: str, token: str, offset: int, length: int) -> tuple[UploadTicket, str]:
         with self.lock:
+            if self.copy_guard is not None:
+                self.copy_guard()
             ticket = self.get(project_id, token)
             if ticket.transport_busy or ticket.busy or ticket.finalizing:
                 raise UploadStorageError("upload_busy", "This upload already has a transfer in progress.")
@@ -407,6 +412,8 @@ class UploadStorage:
 
     def begin_finalize(self, project_id: str, token: str, purpose: str, slot: str | None) -> UploadTicket:
         with self.lock:
+            if self.copy_guard is not None:
+                self.copy_guard()
             ticket = self.get(project_id, token)
             if ticket.purpose != purpose or ticket.slot != slot:
                 raise UploadStorageError("upload_target_mismatch", "The upload belongs to another import target.")
@@ -442,6 +449,8 @@ class UploadStorage:
 
     def admit_legacy(self, size: int, *, before_transport: bool = False, data_path: Path | None = None) -> str:
         with self.lock:
+            if self.copy_guard is not None:
+                self.copy_guard()
             if len(self.legacy) >= 8:
                 raise UploadStorageError("too_many_uploads", "Too many transfers are active. Try again shortly.", 429)
             self.require(size, "multipart", transport_buffer_bytes=size if before_transport else 0, data_path=data_path)

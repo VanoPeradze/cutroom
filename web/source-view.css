@@ -1,0 +1,165 @@
+/* Open the source without consuming the existing thumbnail/file drag surface. */
+#advancedPanel.console-ready #studioShelfMedia[data-library-view] .media-asset[data-direct-source] {
+  --source-action-width:92px;
+}
+#advancedPanel.console-ready #studioShelfMedia[data-library-view] .media-asset[data-direct-source] > [data-pool-source] {
+  box-sizing:border-box; display:inline-flex; align-items:center; justify-content:flex-start; gap:5px;
+  align-self:start; justify-self:start; position:relative; z-index:1; grid-column:1/-1; grid-row:3;
+  width:var(--source-action-width); min-width:0; height:30px; min-height:30px; margin:0; padding:3px 5px;
+  border:1px solid var(--control-line); border-radius:3px; background:var(--surface-inset); color:var(--paper);
+  font:550 11px/1.2 var(--font); white-space:nowrap; overflow-wrap:normal; text-align:start;
+}
+#advancedPanel.console-ready #studioShelfMedia .media-asset > [data-pool-source]::before {
+  content:""; display:inline-block; width:0; height:0; flex:none; border-block:4px solid transparent; border-inline-start:6px solid currentColor; opacity:.8;
+}
+#advancedPanel.console-ready #studioShelfMedia[data-library-view] .media-asset[data-direct-source] > .console-asset-actions {
+  grid-column:1/-1; grid-row:3; min-width:0; align-self:start;
+}
+#advancedPanel.console-ready #studioShelfMedia .media-asset[data-direct-source] > .console-asset-actions > summary {
+  box-sizing:border-box; margin-inline-start:calc(var(--source-action-width) + 5px); min-height:30px; gap:3px; padding-inline-end:0;
+}
+#advancedPanel.console-ready #studioShelfMedia .media-asset[data-direct-source] > .console-asset-actions > summary small { flex:none; }
+#advancedPanel.console-ready #studioShelfMedia .media-asset[data-direct-source] > .console-asset-actions > .console-asset-action-body { margin-block-start:4px; }
+/* A two-up thumbnail card can be narrower than the two commands combined.
+   Preserve its metadata row and give both commands a separate full-width row. */
+#advancedPanel.console-ready #studioShelfMedia[data-library-view=grid] .media-asset[data-direct-source] > [data-pool-source] {
+  grid-column:1/-1; grid-row:4; width:100%; justify-content:center;
+}
+#advancedPanel.console-ready #studioShelfMedia[data-library-view=grid] .media-asset[data-direct-source] > .console-asset-actions {
+  grid-column:1/-1; grid-row:5;
+}
+#advancedPanel.console-ready #studioShelfMedia[data-library-view=grid] .media-asset[data-direct-source] > .console-asset-actions > summary {
+  margin-inline-start:0;
+}
+#advancedPanel.console-ready #studioShelfMedia .media-asset[data-source-current=true] { border-color:var(--line-strong); }
+#advancedPanel.console-ready #studioShelfMedia .media-asset > [data-pool-source][aria-current=true] { color:var(--signal-text); border-color:var(--signal); background:var(--surface-selected); }
+#advancedPanel.console-ready #studioShelfMedia .media-asset > [data-pool-source]:enabled:hover { color:var(--cyan-text); border-color:var(--focus-ring); }
+#advancedPanel.console-ready #studioShelfMedia .media-asset > [data-pool-source]:disabled { opacity:.48; }
+#advancedPanel.console-ready #studioShelfMedia .media-asset > [data-pool-source]:focus-visible,
+#studioInspector .source-view-toggle:focus-visible { outline:2px solid var(--focus-ring); outline-offset:-2px; }
+#studioInspector .source-view-controls { display:contents; }
+#studioInspector .source-view-note, #studioInspector .source-view-notice:empty { display:none; }
+#studioInspector .library-shot-review .library-source-monitor-header:has(.source-view-toggle) {
+  display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); grid-template-areas:"title title" "focus close"; gap:5px 6px;
+}
+#studioInspector .library-shot-review .library-source-monitor-header h3 { grid-area:title; }
+#studioInspector .library-shot-review .library-source-monitor-header .source-view-toggle { grid-area:focus; }
+#studioInspector .library-shot-review .library-source-monitor-header [data-shot-keep] { grid-area:close; }
+#studioInspector .library-source-monitor-header .source-view-toggle {
+  display:inline-flex; box-sizing:border-box; align-items:center; justify-content:center; flex:0 0 auto; gap:5px;
+  min-height:32px; border-color:var(--control-line); color:var(--cyan-text); white-space:nowrap;
+}
+#studioInspector .source-view-toggle::before { content:""; display:inline-block; width:11px; height:8px; border:1px solid currentColor; border-radius:1px; }
+#studioInspector .source-view-toggle[aria-pressed=true]::before { background:linear-gradient(to right,transparent 44%,currentColor 44% 54%,transparent 54%); }
+#advancedPanel[data-source-view=focus] #studioInspector .source-view-note { display:block; color:var(--muted); }
+#advancedPanel[data-source-view=focus] #studioInspector .library-source-monitor { box-sizing:border-box; width:100%; max-width:none; margin:0; border:0; border-radius:0; background:var(--surface-inset); }
+#advancedPanel[data-source-view=focus] #studioInspector .source-view-controls { display:block; min-width:0; min-height:0; background:var(--surface-panel); }
+#advancedPanel[data-source-view=focus] #studioInspector .source-view-controls :is(input,button,select,summary) { max-width:100%; }
+#advancedPanel[data-source-view=focus] #studioInspector .library-source-monitor-header:has(.source-view-toggle) { grid-template-columns:minmax(0,1fr) auto auto; grid-template-areas:"title focus close"; }
+#advancedPanel[data-source-view=focus] #studioInspector .library-source-monitor-header { align-items:center; gap:8px; margin:0; background:var(--surface-chrome); border-block-end:1px solid var(--line); }
+#advancedPanel[data-source-view=focus] #studioInspector .library-source-monitor-header h3 { font-size:13px; font-weight:650; color:var(--paper); }
+#advancedPanel[data-source-view=focus] #studioInspector .library-source-monitor-header .source-view-toggle { color:var(--paper); background:var(--surface-selected); border-color:var(--signal); }
+#advancedPanel[data-source-view=focus] #studioInspector .library-shot-name { margin:0; min-width:0; color:var(--paper); font:600 13px/1.4 var(--font); overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+#advancedPanel[data-source-view=focus] #studioInspector .library-source-monitor video { box-sizing:border-box; display:block; width:100%; height:100%; min-width:0; min-height:0; max-width:100%; max-height:100%; object-fit:contain; border:0; border-radius:0; background:#090a0d; }
+#advancedPanel[data-source-view=focus] > :is(.studio-header,#studioPreviewDock,#workspaceInspectorDivider),
+#advancedPanel[data-source-view=focus] #studioInspector > .workbench-inspector-switch,
+#advancedPanel[data-source-view=focus] #studioPanelMedia > :not(.library-shot-review.library-source-monitor) { display:none !important; }
+/* The existing source and its video never leave their DOM parents. On desktop
+   the inspector spans the normal Program/tool columns; the pool and edit lanes stay put. */
+@media(min-width:900px) and (min-height:540px) {
+  body.studio-open #advancedPanel[data-source-view=focus]:not([hidden]) > #studioInspector {
+    display:block; grid-column:2/-1; grid-row:1/3; min-width:0; min-height:0; overflow:hidden; padding:0 !important; border:0; background:var(--surface-inset);
+  }
+  #advancedPanel[data-source-view=focus] #studioInspector #studioPanelMedia { display:block; width:100%; height:100%; max-height:100%; overflow:hidden; margin:0; padding:0; }
+  #advancedPanel[data-source-view=focus] #studioInspector .library-source-monitor {
+    display:grid; height:100%; min-height:0; padding:0; grid-template-columns:minmax(0,1fr) clamp(244px,24vw,320px);
+    grid-template-rows:auto auto minmax(0,1fr) auto auto; column-gap:0; row-gap:0;
+  }
+  #advancedPanel[data-source-view=focus] #studioInspector .library-source-monitor-header { grid-column:1/-1; grid-row:1; padding:4px 10px; min-height:40px; }
+  #advancedPanel[data-source-view=focus] #studioInspector .library-shot-name { grid-column:1; grid-row:2; padding:8px 12px 6px; }
+  #advancedPanel[data-source-view=focus] #studioInspector .library-source-monitor video { grid-column:1; grid-row:3; }
+  #advancedPanel[data-source-view=focus] #studioInspector .source-view-note { grid-column:1; grid-row:4; margin:0; padding:7px 12px; }
+  #advancedPanel[data-source-view=focus] #studioInspector .library-shot-match-origin,
+  #advancedPanel[data-source-view=focus] #studioInspector .source-view-notice:not(:empty) { grid-column:1; grid-row:5; margin:0; padding:2px 12px 6px; }
+  #advancedPanel[data-source-view=focus] #studioInspector .source-view-controls { grid-column:2; grid-row:2/-1; overflow:auto; overscroll-behavior:contain; padding:10px 12px 14px; border-inline-start:1px solid var(--line); scrollbar-gutter:stable; }
+}
+/* The stacked layout has a genuine Source-first screen with a visible exit. */
+@media(max-width:899px),(max-height:539px) {
+  #advancedPanel.console-ready #studioShelfMedia[data-library-view] .media-asset[data-direct-source] > [data-pool-source],
+  #advancedPanel.console-ready #studioShelfMedia .media-asset[data-direct-source] > .console-asset-actions > summary { min-height:44px; }
+  #studioInspector .library-source-monitor-header .source-view-toggle { min-height:44px; }
+  body.studio-open #advancedPanel[data-source-view=focus]:not([hidden]) {
+    /* Replace the Program aspect-ratio grid, whose landscape selector is more
+       specific. Otherwise a mobile source is silently clipped to its 38px header. */
+    display:grid; grid-template-columns:minmax(0,1fr) !important; grid-template-rows:minmax(0,1fr) !important; align-content:stretch;
+    padding:0 0 calc(52px + env(safe-area-inset-bottom,0px)); overflow:hidden; scroll-padding:0;
+  }
+  #advancedPanel[data-source-view=focus] > :is(#studioTimelineDock,#studioShelf,#workspaceDivider) { display:none !important; }
+  body.studio-open #advancedPanel[data-source-view=focus]:not([hidden]) > #studioInspector {
+    display:block; grid-column:1; grid-row:1; box-sizing:border-box; min-width:0; min-height:0; height:100%; padding:0 !important;
+    overflow:auto; overscroll-behavior:contain; border:0; scroll-padding-block:60px 12px;
+  }
+  #advancedPanel[data-source-view=focus] #studioInspector #studioPanelMedia { display:block; min-height:0; max-height:none; margin:0; padding:0; }
+  #advancedPanel[data-source-view=focus] #studioInspector .library-source-monitor { display:flex; flex-direction:column; align-items:stretch; padding:0; }
+  #advancedPanel[data-source-view=focus] #studioInspector .library-source-monitor-header { order:0; position:sticky; inset-block-start:0; z-index:2; padding:4px 10px; }
+  #advancedPanel[data-source-view=focus] #studioInspector .library-source-monitor-header button { min-height:44px; }
+  #advancedPanel[data-source-view=focus] #studioInspector .library-shot-name { order:1; padding:8px 12px; }
+  #advancedPanel[data-source-view=focus] #studioInspector .library-source-monitor video { order:2; height:auto; aspect-ratio:16/9; max-height:32dvh; }
+  #advancedPanel[data-source-view=focus] #studioInspector .source-view-note,
+  #advancedPanel[data-source-view=focus] #studioInspector .library-shot-match-origin,
+  #advancedPanel[data-source-view=focus] #studioInspector .source-view-notice { order:3; margin:0; padding:6px 12px; }
+  #advancedPanel[data-source-view=focus] #studioInspector .source-view-controls :is(button,input,select,summary) { scroll-margin-block:4px; }
+  #advancedPanel[data-source-view=focus] #studioInspector .source-view-controls { order:4; padding:6px 12px 20px; border-block-start:1px solid var(--line); }
+}
+@media(forced-colors:active) {
+  #studioInspector .source-view-toggle[aria-pressed=true], #studioShelfMedia [data-pool-source][aria-current=true] { outline:1px solid Highlight; }
+  #studioInspector .source-view-toggle:focus-visible, #studioShelfMedia [data-pool-source]:focus-visible { outline:2px solid Highlight; }
+}
+
+/* A user-resized pool can be narrow on any display. Keep the same native source
+   and disclosure controls, but let each have a full row instead of clipping Actions. */
+@container studio-shelf (max-width:240px) {
+  #advancedPanel.console-ready #studioShelfMedia[data-library-view=list] .media-asset[data-direct-source] > [data-pool-source] { grid-row:3; width:100%; }
+  #advancedPanel.console-ready #studioShelfMedia[data-library-view=list] .media-asset[data-direct-source] > .console-asset-actions { grid-row:4; }
+  #advancedPanel.console-ready #studioShelfMedia[data-library-view=list] .media-asset[data-direct-source] > .console-asset-actions > summary { margin-inline-start:0; gap:8px; }
+  #advancedPanel.console-ready #studioShelfMedia[data-library-view=list] .media-asset[data-direct-source] > .console-asset-actions > summary > span { display:inline-flex; align-items:center; white-space:nowrap; }
+}
+
+/* Source-range drag: reuse the live range summary, never the player controls. */
+.library-source-monitor [data-source-drag] { border:1px solid var(--control-line); border-radius:6px; padding:8px 10px; min-width:0; overflow-wrap:anywhere; font-family:inherit; font-variant-numeric:tabular-nums; line-height:1.5; }
+.library-source-monitor [data-source-drag][draggable="true"] { cursor:grab; border-style:dashed; }
+.library-source-monitor [data-source-drag][draggable="true"]:hover { background:var(--surface-hover); }
+.library-source-monitor [data-source-drag][draggable="true"]:active { cursor:grabbing; }
+@media (forced-colors:active) { .library-source-monitor [data-source-drag] { border-color:CanvasText; } }
+
+/* Verified original stills replace, not pretend to seek, the ordinary proxy. */
+#studioInspector .library-source-monitor .source-frame-controls { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; min-width:0; margin-block:8px; }
+#studioInspector .source-frame-controls button { min-width:0; min-height:34px; white-space:normal; color:var(--paper); background:var(--surface-panel); border:1px solid var(--control-line); font-family:inherit; }
+#studioInspector .source-frame-controls button:focus-visible { outline:2px solid var(--focus-ring); outline-offset:2px; }
+#studioInspector .source-frame-controls :is(p,[data-source-frame-playback]) { grid-column:1/-1; }
+#studioInspector .source-frame-info { margin:0; font:11px/1.5 var(--font); font-variant-numeric:tabular-nums; color:var(--muted); overflow-wrap:anywhere; }
+#studioInspector .library-source-frame { display:block; width:100%; max-height:50dvh; object-fit:contain; background:#090a0d; grid-column:1; grid-row:3; order:2; }
+#studioInspector .library-source-monitor :is(video,img,button)[hidden] { display:none !important; }
+@media(min-width:900px) and (min-height:540px) { #advancedPanel[data-source-view=focus] #studioInspector .library-source-frame { height:100%; max-height:100%; min-height:0; } }
+@media(max-width:899px) { #studioInspector .source-frame-controls button { min-height:44px; } }
+
+/* Source selection stays above its actual timeline destination and native actions.
+   No fixed tray: the existing inspector/source-focus scroll owner stays in charge. */
+#studioInspector .library-source-monitor .library-source-placement {
+  grid-column:1/-1; min-width:0; min-inline-size:0; margin-block:6px 0; padding-block:10px 0;
+  border-block-start:1px solid var(--line); container:source-placement / inline-size;
+}
+#studioInspector .library-source-placement h4 { margin:0 0 6px; color:var(--paper); font:600 12px/1.4 var(--font); }
+#studioInspector .library-source-placement .library-source-destination { margin:0 0 8px; color:var(--muted); font-variant-numeric:tabular-nums; }
+#studioInspector .library-source-placement-options { display:grid; grid-template-columns:minmax(0,1fr); gap:10px; margin-block-start:8px; }
+#studioInspector .library-source-placement-choice { display:grid; grid-template-columns:minmax(0,1fr); align-content:start; gap:4px; min-width:0; }
+#studioInspector .library-source-placement-choice button { width:100%; min-height:36px; }
+#studioInspector .library-source-placement-choice [data-shot-placement-help] { margin:0; min-width:0; color:var(--muted); font:11px/1.5 var(--font); font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+#studioInspector .library-source-placement-choice [data-state=blocked] { color:var(--paper-dim); }
+#studioInspector .library-source-monitor .library-shot-range > .library-shot-status { margin-block:6px; padding:8px 10px; }
+#studioInspector .library-source-monitor .library-source-receipt { grid-column:1/-1; margin:6px 0 0; padding:8px 0 0; border-block-start:1px solid var(--line); color:var(--paper); font-variant-numeric:tabular-nums; }
+#studioInspector .library-source-monitor .library-source-receipt[hidden] { display:none; }
+#studioInspector .library-source-monitor .library-shot-range > .library-preview-repair-link { grid-column:1/-1; }
+@container source-placement (max-width:299px) { #studioInspector .library-source-placement .media-destination-control { grid-template-columns:minmax(0,1fr); } }
+@container source-placement (min-width:300px) { #studioInspector .library-source-placement-options { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media(max-width:899px),(max-height:539px) { #studioInspector .library-source-placement-choice button { min-height:44px; } }

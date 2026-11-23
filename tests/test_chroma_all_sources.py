@@ -95,7 +95,8 @@ def test_library_target_is_processed_before_clip_trim_and_changes_render_fingerp
     graph, _, _ = build_filter_graph(value, 320, 180)
     assert "[2:v]setpts=PTS-STARTPTS,scale=320:180" in graph
     assert "chromakey=" in graph
-    assert graph.index("chromakey=") < graph.index("trim=start=0.000000000")
+    # The key runs on the picture before the clip's own trim/timing chain.
+    assert graph.index("chromakey=") < graph.index("[libchromasource0]trim=")
 
 
 def test_library_preview_uses_selected_asset_local_path_and_saved_settings(api, monkeypatch):

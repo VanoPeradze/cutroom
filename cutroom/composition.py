@@ -125,7 +125,7 @@ def chroma_video_targets(project: Mapping[str, Any], *, used_only: bool = False)
     """Stable inventory; unused library keys do not require export capability."""
     assets = project.get("assets") or {}
     used = {row.get("asset_id") for row in ((project.get("manual") or {}).get("media_clips") or [])
-            if isinstance(row, Mapping)} if used_only else None
+            if isinstance(row, Mapping) and row.get("enabled", True) is not False} if used_only else None
     return tuple(target for target in ("A", "B", *(assets if isinstance(assets, Mapping) else ()))
                  if (target in {"A", "B"} or used is None or target in used)
                  and chroma_video_source(project, target))

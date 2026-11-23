@@ -6,16 +6,22 @@ their pre-WSGI buffering policy is outside the application's control.
 """
 from __future__ import annotations
 
+import copy
 import json
 import re
 from http import HTTPStatus
 from typing import Any
 
 from .upload_storage import TOKEN_RE, UploadStorage, UploadStorageError, is_storage_full
+from .text_clips import MAX_CAPTION_IMPORT_BYTES
 
 IMPORT_PATH = re.compile(r"/api/projects/([^/]+)/(?:sources/([^/]+)|assets)\Z")
 CHUNK_PATH = re.compile(r"/api/projects/([^/]+)/uploads/([^/]+)\Z")
 PREFLIGHT_PATH = re.compile(r"/api/projects/([^/]+)/uploads/preflight\Z")
+MANUAL_EDIT_PATH = re.compile(r"/api/projects/[^/]+/manual/edit\Z")
+JSON_BODY_LIMIT = 1024 * 1024
+CAPTION_JSON_BODY_LIMIT = MAX_CAPTION_IMPORT_BYTES * 6 + 4096
+UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 # Legacy multipart remains bounded before Waitress buffers a complete body.
 # This is a transport ceiling, not the video asset's configured file-size limit.
 LEGACY_ASSET_UPLOAD_BYTES = 2 * 1024**3
@@ -65,10 +71,28 @@ def upload_channel_class(storage: UploadStorage, max_upload_bytes: int):
             if prefix and path.startswith(prefix + "/"):
                 path = path[len(prefix):]
             method = self.command.upper()
+            # Flask runs only after Waitress has buffered the entire body. Reject
+            # browser cross-site mutations before allocating import reservations
+            # or accepting bytes, not merely after the body reaches the API.
+            if method in UNSAFE_METHODS and self.headers.get("SEC_FETCH_SITE", "").lower() == "cross-site":
+                self.reject(UploadStorageError("cross_site_request", "Cross-site API requests are not allowed.", 403))
+                return
             source = IMPORT_PATH.fullmatch(path)
             chunk = CHUNK_PATH.fullmatch(path) if method == "PUT" else None
             preflight = PREFLIGHT_PATH.fullmatch(path) if method == "POST" else None
             if not (source and method == "POST" or chunk or preflight):
+                # The global listener ceiling permits large media. It must not
+                # apply to JSON, unknown routes, static paths, or wrong methods:
+                # they otherwise spool many GiB before Flask can reject them.
+                limit = CAPTION_JSON_BODY_LIMIT if method == "POST" and MANUAL_EDIT_PATH.fullmatch(path) else JSON_BODY_LIMIT
+                if self.content_length > limit:
+                    self.reject(UploadStorageError("request_too_large", "The request body is too large.", 413))
+                    return
+                # Chunked requests have no declared length. A per-parser copy
+                # enforces the same bound while receiving without shrinking the
+                # shared listener limit for legitimate, admitted media uploads.
+                self.adj = copy.copy(self.adj)
+                self.adj.max_request_body_size = min(self.adj.max_request_body_size, limit + 1)
                 return
             self.import_request = True
             try:

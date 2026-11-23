@@ -63,8 +63,8 @@ def test_beta_entry_documents_and_their_local_links_ship_together():
 def test_beta_payload_contains_all_local_frontend_modules_and_assets():
     payload = collect_payload(ROOT)
     for name, data in payload.items():
-        if not name.startswith("web/"):
-            continue
+        if not name.startswith("web/") or not name.endswith((".html", ".css", ".js", ".mjs", ".svg")):
+            continue  # Bundled fonts and their licenses are binary or plain assets.
         content = data.decode("utf-8")
         imports = re.findall(r"(?:from\s+|import\s*)['\"](\.[^'\"]+)['\"]", content)
         assets = re.findall(r"(?:src|href)=[\"'](/assets/[^\"']+)[\"']", content)

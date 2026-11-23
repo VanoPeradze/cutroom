@@ -20,7 +20,7 @@ export function compatibleBaseURL(value) {
   return url.href.replace(/\/+$/, "");
 }
 
-export function initWelcome({ document, api, createProject, goHome, pause, changed, busy, models = null, transcription = null }) {
+export function initWelcome({ document, api, createProject, goHome, pause, changed, busy, models = null, transcription = null, recovery = () => null }) {
   const byId = id => document.getElementById(id);
   const dialog = byId("aiConnectionDialog");
   const form = byId("aiConnectionForm");
@@ -211,34 +211,43 @@ export function initWelcome({ document, api, createProject, goHome, pause, chang
     target.scrollIntoView({ block: "start", behavior: "auto" });
     target.focus({ preventScroll: true });
   }
-  byId("changeWorkflowButton").addEventListener("click", async () => { await goHome(); chooseService(); });
+  byId("changeWorkflowButton").addEventListener("click", async () => { if(await goHome() !== false)chooseService(); });
+  async function startWorkflow(workflow = "manual") {
+    if (creating || busy()) return;
+    creating = true;
+    const controls = [...document.querySelectorAll("[data-start-workflow]"), byId("newProjectButton"), byId("dialogNewProject")].filter(Boolean);
+    // Preserve prior disabled states; the primary and recipe paths share one lock.
+    const disabled = controls.map(item => item.disabled);
+    controls.forEach(item => { item.disabled = true; });
+    try {
+      const created = await createProject({ workflow });
+      if (created === false) return;
+      const target = workflow === "manual"
+        ? byId("firstRecordingGuide")?.querySelector("[data-first-choose]") : byId("sourceSlotA");
+      // The old emptyTimelineAdd lives under a hidden state once the guide is mounted.
+      if (target && !target.disabled && !target.closest?.("[hidden],[inert]")) target.focus({ preventScroll: true });
+    } finally { creating = false; controls.forEach((item, index) => { item.disabled = disabled[index]; }); }
+  }
   for (const card of document.querySelectorAll("[data-start-workflow]")) {
-    card.addEventListener("click", async () => {
-      if (creating || busy()) return;
-      creating = true;
-      const cards = [...document.querySelectorAll("[data-start-workflow]")];
-      cards.forEach(item => { item.disabled = true; });
-      try {
-        await createProject({ workflow: card.dataset.startWorkflow });
-        byId("sourceSlotA").focus({ preventScroll: true });
-      } finally { creating = false; cards.forEach(item => { item.disabled = false; }); }
-    });
+    card.addEventListener("click", () => startWorkflow(card.dataset.startWorkflow));
   }
   function updateProject(project) {
+    const retained=recovery(project);
     const manual = project?.settings?.workflow === "manual";
     const name = manual ? "Manual edit" : project?.settings?.goal === "youtube" ? "YouTube video · 16:9 starting format" : "AI-assisted edit";
-    byId("setupIntentCopy").textContent = `${name}. ${manual ? "Add your recordings, then open the editor. No AI account is needed." : "Add your recordings, check the language and choose a style."}`;
+    byId("setupIntentCopy").textContent = retained ? "Your saved timeline is retained. Resume it without rebuilding clips or settings." : `${name}. ${manual ? "Your editor opens immediately. Import a video to begin; no AI account is needed." : "Add your recordings, check the language and choose a style."}`;
     byId("setupPanel").dataset.workflow = manual ? "manual" : "ai";
     byId("setupWorkflowSteps").hidden = manual;
-    byId("setupEyebrow").textContent = manual ? "Manual editor" : "AI Director";
-    byId("setupInstructions").textContent = manual
-      ? "Add your recording and choose the output format. With two recordings, assign the screen, camera and audio before opening the editor."
+    byId("setupEyebrow").textContent = retained ? "Saved timeline" : manual ? "Manual editor" : "AI Director";
+    byId("setupInstructions").textContent = retained ? (retained.issue || "Resume the saved edit. Empty B placement remains empty; unavailable old analysis, automatic captions and history are not recreated. No AI runs.") : manual
+      ? "Import your first video directly in the editor. It becomes the full-length timeline without AI processing. Add further clips from the media pool."
       : "Add one or two sources. With two, choose the screen, camera and audio before Director starts.";
+    const editorAI=byId("advancedPanel")?.dataset.aiRequestContext === "editor";
     const title = byId("generateButton").querySelector('[data-i18n="makeEdit"]');
-    if (title) title.textContent = manual ? "Open manual editor" : "Build my first cut";
+    if (!editorAI && title) title.textContent = retained ? "Resume retained edit" : manual ? "Open manual editor" : "Build my first cut";
     const note = byId("generateButton").querySelector('[data-i18n="oneDraft"]');
-    if (manual && note) note.textContent = "Full recording · No AI processing";
+    if (!editorAI && note) note.textContent = retained ? "Saved arrangement · No AI processing" : manual ? "Full recording · No AI processing" : "One main edit plus ranked Reel options from the same analysis";
     byId("setupRuntimeDock").hidden = manual;
   }
-  return { setConnection, openConnection, chooseService, updateProject };
+  return { setConnection, openConnection, chooseService, startWorkflow, updateProject };
 }

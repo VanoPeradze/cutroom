@@ -1,5 +1,25 @@
 # Website redesign validation
 
+## Night Drive / production verification
+
+Verified at **2026-11-17 21:04 UTC** after the owner approved publication of the reviewed website. Expo promoted deployment `2fhezil3xl` on the same project to [the canonical website](https://cutroom-studio.expo.app/?lang=he).
+
+- The release export contained only the 152 expected static files: reviewed website assets and unchanged, already-public download packages and guides. No app worktree or unpublished guide was uploaded, no release/tag was changed, and no GitHub source branch was changed.
+- Actual canonical HTTP responses for the homepage, privacy page, CSS/JS, three original SVGs, real editor image and both downloadable guides matched the audited local bytes. The real editor image also remains identical to the October 22 production capture.
+- Browser verification on the canonical URL passed in English at desktop width (1440) and Hebrew at phone width (390): no page/asset errors, no horizontal overflow, correct direction, playback, alternate cut, shot selection and pinned download links.
+- Each of the three public packages was read and SHA-256 verified from **both** its GitHub Release URL and its canonical Expo mirror against the release manifest. Windows: `07b7acecad8ae88e017ddcae03ad2daf04714120a4a734f5a23b304e2b70f51d`; Mac/combined: `5a406f47f7cb24e49f1967fbcd8e06c2cfb51748379e6938f504433b4e4e7b7c`; source: `ac612470059964776266a779e55ae0efb491e23dfbf07ff910da88f44099e35a`.
+
+## Night Drive / local qualification, 17 November 2026
+
+Tested against the main on-disk website, not the public deployment:
+
+- Windows `npm test`: 65 passed, 0 failed, 2 platform-specific skips. `node verify.mjs` validated the public assets, anchors and configured archive checks. The three public JS files passed syntax checks.
+- Installed Chromium: 10 width/language combinations (320, 390, 768, 1024 and 1440 pixels; English and Hebrew). Checked play/pause, keyboard seeking, the two edit orders, shot navigation, replay, offscreen stopping, language changes while retaining time/order, system reduced motion, manual pan control, beta links, progressive fallback and real gallery-dialog dismissal. No console/page errors or third-party requests in this run. Desktop/mobile screenshots were inspected; the Hebrew poster tally was repositioned after review.
+- No native app or device installation, AI model evaluation, website publication, package preparation, release or Git write action was part of this test.
+- The existing `check:assets` reports the **two guide mirrors** out of sync with the locally modified app guides, as it already did before this redesign. The existing mirrors match the pinned public beta's guide text apart from line endings. Do not run a release prep against ahead-of-release docs just to silence that mismatch.
+
+## Previous screening-room validation (12 November 2026)
+
 ## Scope
 
 Website-only redesign on base `eec41cf578b7805b1f9c2d493be0cf233b474b91`, reviewed on 12 November 2026. No application code, package bytes, release metadata, retained-download metadata or Expo project identity is changed. The existing archived screenshots are kept with their provenance.

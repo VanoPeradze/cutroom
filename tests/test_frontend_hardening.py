@@ -51,13 +51,15 @@ def test_destructive_source_actions_are_blocked_while_project_work_is_active():
     assert "function projectHasForegroundWork(projectId)" in APP
     assert "if (projectHasForegroundWork(state.project.id))" in APP
     assert "if (projectLibraryBusy(project.id))" in APP
-    assert "return projectHasForegroundWork(projectId)" in APP
+    library = APP.split("function projectLibraryBusy(projectId)", 1)[1].split("function projectLibraryRows", 1)[0]
+    assert "|| projectHasForegroundWork(projectId)" in library
+    assert "copyOperationActive(state.projectCopies?.forSource?.(projectId))" in library
 
 
 def test_async_ui_entry_points_report_failures_instead_of_leaking_rejections():
     assert "function runUiAction(action, context = \"\")" in APP
     assert "runUiAction(() => uploadSource(slot, file)" in APP
-    assert "runUiAction(() => openProject(project.id))" in APP
+    assert "runUiAction(() => openProject(project.id,{returnPosition:true}))" in APP
     assert "runUiAction(() => deleteProject(project))" in APP
 
 

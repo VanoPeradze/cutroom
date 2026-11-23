@@ -7,7 +7,15 @@ This folder is the maintained website source inside the public [CUTROOM reposito
 It does not run the editor, receive footage, process video, or handle user API keys.
 The previous separate website checkout is not needed for future updates.
 
-## Screening-room website redesign
+## Night Drive: the interactive opening
+
+The homepage now opens with an original three-shot illustration sequence. Play it once, seek with the native slider, jump between shots, or compare two differently timed orders. The poster is labeled as a website study, not footage or UI from the downloadable editor. The real, dated editor captures and exact beta downloads are still linked separately. English and Hebrew share the same study without losing the current edit or position on language change.
+
+The study is local HTML, CSS, SVG and JavaScript: no uploads, audio, remote dependencies, external fonts, or tracking. The poster and actual downloads work without JavaScript. The site-wide motion preference stops the ambient field and illustration pans; explicit playback can still step through static shots.
+
+Local verification: run `npm test` and `node verify.mjs` from this directory. The optional `npm run test:reel-browser` launches a temporary loopback-only server and Chromium, then closes both. See `reel.browser.mjs` for existing Playwright/Chromium and optional screenshot paths. No deploy command is needed for review.
+
+## Previous screening-room website redesign
 
 A substantial visual redesign replaces the previous white/mint composition with graphite, violet and cyan with cool lavender-paper sections, an original lightweight animated film-frame field, immediate platform downloads, a real workspace tour and bilingual installation guidance. No tracking or external runtime was added. Motion can be paused from the opening, mobile menu or footer and respects the device's reduced-motion setting. See [DESIGN.md](DESIGN.md) for rationale and [WEBSITE-REDESIGN-VALIDATION.md](WEBSITE-REDESIGN-VALIDATION.md) for verified checks and remaining limits.
 

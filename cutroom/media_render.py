@@ -5,10 +5,11 @@ import math
 from pathlib import Path
 from typing import Any
 
+from .layer_tracks import validate_layer_tracks, ordered_layer_clips, layer_audio_gain
 from .composition import source_chroma_key
 from .effects import build_chroma_key_nodes
-from .frame_rates import project_export_fps
-from .render_inventory import RenderInputInventory, audible as _audible, compile_render_inputs, library_clips, library_visual_start
+from .frame_rates import first_display_frame as _first_display_frame, project_export_fps
+from .render_inventory import RenderInputInventory, audible as _audible, compile_render_inputs, library_clips, library_picture_end, library_visual_start
 
 
 def _number(value: Any, default: float = 0.0) -> float:
@@ -45,6 +46,7 @@ def append_media_graph(
     *, chroma_background_labels: dict[str, str] | None = None,
     input_inventory: RenderInputInventory | None = None,
 ) -> tuple[list[str], str, str | None]:
+    tracked = validate_layer_tracks(project) is not None
     inventory = input_inventory or compile_render_inputs(project, include_chroma=False)
     inventory.validate(project, require_chroma=False)
     inputs = inventory.inputs("library")
@@ -72,6 +74,12 @@ def append_media_graph(
             backgrounds.update(zip(indices, outputs))
         else:
             backgrounds[indices[0]] = label
+    # Decode/input/audio order stays byte-for-byte in saved occurrence order.
+    # Only the visual overlay chain is ordered by user-owned visual tracks.
+    visual_overlays = {}
+    track_mixed = ((project.get("manual") or {}).get("layer_tracks") or {}).get("version") == 3
+    audible_voice = False
+    track_muted_voice = False
     audio_roles: dict[str, list[str]] = {role: [] for role in ("source", "music", "effects", "voice")}
     if audio_label:
         filters.append(f"{audio_label}aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,"
@@ -89,7 +97,16 @@ def append_media_graph(
         fade_out = max(0.0, min(length, _number(clip.get("fade_out"))))
         if asset["kind"] in {"video", "image"}:
             speed = max(0.25, min(4.0, _number(clip.get("speed"), 1)))
-            visual_start = library_visual_start(clip, asset, fps) - inputs[index].seek_start
+            first, last = _first_display_frame(start, fps), _first_display_frame(end, fps)
+            # Start the decoded picture on the first covered timeline frame. An
+            # off-grid outside edge does not buy a whole extra source frame.
+            visual_start = library_visual_start(clip, asset, fps)
+            if asset["kind"] == "video" and abs(first / fps - start) > 5.1e-10:
+                visual_start += max(0., first / fps - start) * speed
+                limit = library_picture_end(asset) or _number(asset.get("duration"))
+                if limit > 0:
+                    visual_start = min(visual_start, max(0., limit - 1e-6))
+            visual_start -= inputs[index].seek_start
             target_w = max(2, min(width, int(round(width * max(0.01, min(1.0, _number(clip.get("w"), 1))))) // 2 * 2))
             target_h = max(2, min(height, int(round(height * max(0.01, min(1.0, _number(clip.get("h"), 1))))) // 2 * 2))
             x = int(round(max(0.0, min(1.0, _number(clip.get("x")))) * width))
@@ -99,7 +116,7 @@ def append_media_graph(
                    f"pad={target_w}:{target_h}:(ow-iw)/2:(oh-ih)/2:color=black"
                    if clip.get("fit", "cover") == "contain" else
                    f"scale={target_w}:{target_h}:force_original_aspect_ratio=increase,crop={target_w}:{target_h}")
-            frames = max(1, round(length * fps))
+            frames = max(1, last - first)
             visual_input = f"[{input_index}:v]"
             config = source_chroma_key(project, clip.get("asset_id")) if asset["kind"] == "video" else None
             if config and config["enabled"]:
@@ -116,9 +133,29 @@ def append_media_graph(
                 # Keep alpha through fit/motion until the overlay meets the edit
                 # beneath it. Opaque padding or zoompan's YUV output would hide it.
                 fit = fit.replace("color=black", "color=black@0")
-            visual = (f"{visual_input}trim=start={visual_start:.9f}:end={visual_start + length * speed + 1 / fps:.9f},"
-                      f"setpts=(PTS-STARTPTS)/{speed:.9f},fps={fps},{fit},setsar=1,"
-                      f"tpad=stop_mode=clone:stop_duration={length + 2 / fps:.9f},trim=end_frame={frames},setpts=N/{fps}/TB")
+            if asset["kind"] == "video":
+                # Sample the continuous source clock, not the first decoded
+                # frame after a cut. Restarting at that frame quantizes the
+                # phase a second time and can alter retained footage outside an
+                # overwrite. Negative input PTS carry the predecessor of In.
+                upper_source = visual_start + (length + 2 / fps) * speed
+                source_duration = library_picture_end(asset)
+                native = f"{visual_input}trim=end={upper_source:.9f},"
+                if source_duration <= 0 or upper_source + inputs[index].seek_start >= source_duration:
+                    # Pad before resampling: an actual last frame can be less
+                    # than one output-frame interval long. A post-fps clone
+                    # alone would freeze its predecessor instead. Immediately
+                    # bound the native pad to this occurrence's needed window.
+                    pad = source_duration + (length + 2 / fps) * speed if source_duration > 0 else upper_source + 1 / fps
+                    native += (f"tpad=stop_mode=clone:stop_duration={pad:.9f},"
+                               f"trim=end={upper_source:.9f},")
+                # Four nanoseconds absorb rescaling noise at mathematically aligned CFR boundaries.
+                sample = (f"{native}settb=1/1000000000,setpts=(PTS-{visual_start:.9f}/TB)/{speed:.9f}-4,"
+                          f"fps={fps}:start_time=0:round=up")
+            else:
+                sample = f"{visual_input}trim=start={visual_start:.9f}:end={visual_start + length * speed + 1 / fps:.9f},setpts=PTS-STARTPTS,fps={fps}"
+            visual = (f"{sample},{fit},setsar=1,"
+                      f"tpad=stop_mode=clone:stop_duration={length + 2 / fps:.9f},trim=end_frame={frames},settb=1/{fps},setpts=N")
             motion = clip.get("motion", "none")
             if motion == "zoom_in":
                 if config and config["enabled"] and config["background_mode"] == "transparent":
@@ -133,16 +170,35 @@ def append_media_graph(
                 pan_h = int(math.ceil(target_h * 1.12 / 2)) * 2
                 visual += f",scale={pan_w}:{pan_h},crop={target_w}:{target_h}:x='(iw-ow)*min(n/{max(1, length * fps):.9f},1)':y='(ih-oh)/2'"
             visual += ",format=rgba"
-            visual += f",setpts=PTS+{start:.9f}/TB[libvideo{index}]"
+            opacity = clip.get("opacity_percent", 100)
+            if opacity != 100:
+                # Multiply the alpha generated by the source/key/fit/motion;
+                # never replace per-pixel alpha or disable the sound input.
+                visual += f",colorchannelmixer=aa={opacity / 100:.2f}"
+            # A stored decimal frame edge may sit half a nanosecond either side
+            # of the exact CFR timestamp. Never truncate a frame-aligned delay
+            # one tick early, or let FFmpeg's seconds comparison expose a gap.
+            visual += f",settb=1/{fps},setpts=N+{first}[libvideo{index}]"
             filters.append(visual)
-            filters.append(f"{video_label}[libvideo{index}]overlay=x={x}:y={y}:eof_action=pass:repeatlast=0:"
-                           f"enable='gte(t,{start:.9f})*lt(t,{end:.9f})'[libcomposite{index}]")
-            video_label = f"[libcomposite{index}]"
+            lower, upper = (first - .5) / fps, (last - .5) / fps
+            overlay = (f"[libvideo{index}]overlay=x={x}:y={y}:eof_action=pass:repeatlast=0:"
+                       f"enable='gte(t,{lower:.9f})*lt(t,{upper:.9f})'[libcomposite{index}]")
+            if tracked:
+                visual_overlays[clip["id"]] = (overlay, f"[libcomposite{index}]")
+            else:
+                filters.append(f"{video_label}{overlay}")
+                video_label = f"[libcomposite{index}]"
         if _audible(clip, asset):
             role = clip.get("role", "music")
             if role not in {"music", "effects", "voice"}:
                 role = "music"
             gain = 0.0 if clip.get("muted") else 10 ** (max(-60, min(12, _number(clip.get("volume_db")))) / 20)
+            track_gain = layer_audio_gain(project, clip)
+            if role == "voice" and track_gain == 0:
+                track_muted_voice = True
+            gain *= track_gain
+            if role == "voice" and gain > 0:
+                audible_voice = True
             # Picture speed never retimes speech or a music/effects recording.
             audio = (f"[{input_index}:a]atrim=start={source_start:.9f}:end={source_start + length:.9f},"
                      "asetpts=PTS-STARTPTS,aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,"
@@ -157,14 +213,33 @@ def append_media_graph(
             audio += f",adelay={round(start * 48000)}S:all=1,asetpts=N/48000/TB,apad,atrim=duration={duration:.9f},asetpts=N/48000/TB[libaudio{index}]"
             filters.append(audio)
             audio_roles[role].append(f"[libaudio{index}]")
+    if tracked:
+        for clip in ordered_layer_clips(project, "visual"):
+            if clip["id"] in visual_overlays:
+                overlay, output_label = visual_overlays[clip["id"]]
+                filters.append(f"{video_label}{overlay}")
+                video_label = output_label
+    def aligned(labels: list[str], name: str) -> list[str]:
+        # FFmpeg 6.1 amix drops an input after a short frame (the uneven
+        # piece edges of a source track); fixed-size frames keep it mixed.
+        if len(labels) < 2:
+            return labels
+        out = []
+        for position, label in enumerate(labels):
+            filters.append(f"{label}asetnsamples=n=1024:p=0[lib{name}al{position}]")
+            out.append(f"[lib{name}al{position}]")
+        return out
+
     buses: dict[str, str] = {}
     for role, labels in audio_roles.items():
         if not labels:
             continue
+        labels = aligned(labels, role)
         mix = f"amix=inputs={len(labels)}:duration=longest:dropout_transition=0:normalize=0" if len(labels) > 1 else "anull"
         filters.append(f"{''.join(labels)}{mix},volume={_gain(mixer, role):.9f}[libbus{role}]")
         buses[role] = f"[libbus{role}]"
-    speech_roles = [role for role in ("source", "voice") if role in buses and _gain(mixer, role) > 0]
+    speech_roles = [role for role in ("source", "voice") if role in buses and _gain(mixer, role) > 0
+                    and not (track_mixed and role == "voice" and track_muted_voice and not audible_voice)]
     if mixer.get("ducking") and "music" in buses and speech_roles:
         speech_keys = []
         for role in speech_roles:
@@ -176,7 +251,7 @@ def append_media_graph(
         filters.append(f"{buses['music']}[libduckkey]sidechaincompress=threshold=0.025:ratio=8:attack=20:release=350[libducked]")
         buses["music"] = "[libducked]"
     if buses:
-        labels = list(buses.values())
+        labels = aligned(list(buses.values()), "bus")
         mix = f"amix=inputs={len(labels)}:duration=longest:dropout_transition=0:normalize=0" if len(labels) > 1 else "anull"
         # When loudness normalization is enabled, apply the master fader after it.
         normalize = bool(((project.get("draft") or {}).get("audio_policy") or {}).get("normalize"))

@@ -1,0 +1,25 @@
+#studioInspector [data-clip-opacity] .media-opacity-body{display:grid;gap:7px;padding:5px 2px 9px;min-width:0}
+#studioInspector [data-clip-opacity] label{display:grid;grid-template-columns:minmax(0,1fr) minmax(58px,76px);gap:8px;align-items:center;font-weight:600}
+#studioInspector [data-clip-opacity] :is(input,button){box-sizing:border-box;width:100%;min-width:0;min-height:32px}
+#studioInspector [data-clip-opacity] [data-opacity-slider]{margin:0;accent-color:var(--signal)}
+#studioInspector .media-opacity-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+#studioInspector [data-opacity-preview]{touch-action:none;user-select:none;-webkit-user-select:none}
+#studioInspector [data-opacity-preview][aria-pressed=true]{background:var(--surface-selected);border-color:var(--signal);color:var(--signal-text)}
+#studioInspector [data-opacity-apply]{font-weight:650}
+#studioInspector [data-clip-opacity] .media-help{margin:0;overflow-wrap:anywhere}
+#studioInspector [data-opacity-value][aria-invalid=true]{outline:1px solid var(--danger-text,#a44141)}
+#studioInspector [data-clip-opacity] :is(input,button,summary):focus-visible{outline:2px solid var(--focus-ring);outline-offset:-2px}
+@media(max-width:899px),(max-height:539px){#studioInspector [data-clip-opacity] :is(input,button,summary){min-height:44px}}
+
+/* Keep the native image (including its alpha) untouched. Paint only the two
+   uncovered strips in its own occurrence; their geometry follows the container
+   on responsive resize, and their motion follows the fitted source. */
+.media-overlay[data-still-contain]{container-type:size}
+.media-overlay[data-still-contain]::before{
+  content:"";display:block;position:absolute;inset:0;z-index:-1;pointer-events:none;
+  --bar-x:max(0px,calc((100cqw - 100cqh * var(--still-picture-aspect)) / 2));
+  --bar-y:max(0px,calc((100cqh - 100cqw / var(--still-picture-aspect)) / 2));
+  background:linear-gradient(to right,#000 0 var(--bar-x),transparent var(--bar-x) calc(100% - var(--bar-x)),#000 calc(100% - var(--bar-x)) 100%),
+             linear-gradient(to bottom,#000 0 var(--bar-y),transparent var(--bar-y) calc(100% - var(--bar-y)),#000 calc(100% - var(--bar-y)) 100%);
+  transform:var(--still-picture-motion,none);transform-origin:50% 50%;
+}

@@ -1,4 +1,4 @@
-import { TimelineView, formatTime } from "./timeline.js?v=1.2-beta-20261024-insertgaps1";
+import { TimelineView, formatTime } from "./timeline.js?v=20261117-editing-context1";
 
 // Project current edit clips onto the original recording, including copies.
 // The original draft's keep mask is intentionally not authoritative anymore.
@@ -53,16 +53,18 @@ export function sourceReviewAudio(project, slot) {
 }
 
 export class SourceReview {
-  constructor({getProject, applyEdit, mediaUrl, pause, exactInsert}) {
-    Object.assign(this, {getProject, applyEdit, mediaUrl, pause, exactInsert});
+  constructor({getProject, applyEdit, mediaUrl, pause, exactInsert, dock=null}) {
+    Object.assign(this, {getProject, applyEdit, mediaUrl, pause, exactInsert, dock});
+    this.generation=0;this.playRequest=0;
     this.dialog = document.getElementById("sourceReviewDialog");
     this.nodes = Object.fromEntries([...this.dialog.querySelectorAll("[data-review]")].map(node => [node.dataset.review,node]));
     const n = this.nodes;
     this.timeline = new TimelineView(n.canvas,n.scroll,time => this.seek(time),range => this.select(range),null,{sourceReview:true,canEdit:()=>!this.busy});
-    n.close.onclick = () => this.dialog.close();
+    n.close.onclick = () => this.close({restoreFocus:true});
     this.dialog.addEventListener("close", () => { n.video.pause(); this.timeline.cancelGesture(); n.video.removeAttribute("src"); n.video.load(); });
     n.retry.onclick = () => { if (this.loadPreview({ resume: true })) n.canvas.focus(); };
-    n.slot.onchange = () => { this.slot=n.slot.value; this.selection=null; this.refresh(true); };
+    n.slot.onchange = () => { if(this.dock && this.blocked())return; this.slot=n.slot.value; this.selection=null; if(this.dock)this.sourceIdentity=this.identity(); this.refresh(true); };
+    if(n.refresh)n.refresh.onclick=()=>this.adoptCurrent();
     n.scope.onchange = () => this.updateControls();
     n.restore.onclick = () => this.edit("sequence_source_restore");
     n.remove.onclick = () => this.edit("sequence_source_remove");
@@ -73,14 +75,14 @@ export class SourceReview {
     n.zoomIn.onclick = () => this.timeline.setZoom(this.timeline.zoom*1.5);
     n.zoomOut.onclick = () => this.timeline.setZoom(this.timeline.zoom/1.5);
     n.exact.onclick = () => {
-      if (this.busy || this.getProject()?.id !== this.projectId || this.protectedSlots().length) return;
+      if (this.busy || (this.dock && this.blocked()) || this.getProject()?.id !== this.projectId || this.protectedSlots().length) return;
       const selection = this.selection ? {source_start:this.selection.start, source_end:this.selection.end} : {};
       const placement = {projectId:this.projectId, slot:this.slot, scope:n.scope.value === "edit" ? "edit" : "source", ...selection};
-      this.dialog.close(); this.exactInsert(placement);
+      this.close(); this.exactInsert(placement);
     };
     n.video.addEventListener("timeupdate", () => { this.timeline.setPlayhead(n.video.currentTime); this.updateQuote(); });
     n.video.addEventListener("loadedmetadata", () => {
-      if (!this.dialog.open) return;
+      if (!this.isOpen || (this.dock && !this.valid())) return;
       this.seek(this.resumePreviewAt ?? this.selection?.start ?? 0);
       this.resumePreviewAt=null;
       if (this.previewState === "loading" || this.previewState === "error") {
@@ -89,33 +91,94 @@ export class SourceReview {
       this.previewState="ready"; n.retry.hidden=true;
     });
     n.video.addEventListener("error", () => {
-      if (!this.dialog.open || !n.video.getAttribute("src")) return;
+      if (!this.isOpen || (this.dock && !this.valid()) || !n.video.getAttribute("src")) return;
       this.previewState="error"; n.retry.hidden=false;
       n.status.textContent="Preview could not load. Check that the source file is available and CUTROOM is running, then retry. Your edit and selection have not changed.";
     });
-    this.dialog.addEventListener("keydown", event => {
-      if (event.code !== "Space" || event.target.closest("input,select,button,video")) return;
-      event.preventDefault(); event.stopPropagation();
-      if (!event.repeat) { if (n.video.paused) n.video.play().catch(()=>{}); else n.video.pause(); }
+    this.keydown=event=>{
+      if(event.defaultPrevented || event.isComposing)return;
+      if(this.dock && event.key==='Escape'){event.preventDefault();event.stopPropagation();this.close({restoreFocus:true});return;}
+      if(event.code!=="Space" || event.target.closest("input,select,button,video"))return;
+      event.preventDefault();event.stopPropagation();
+      if(!event.repeat){if(n.video.paused)this.playPreview();else this.pausePreview();}
+    };
+    this.dialog.addEventListener("keydown",this.keydown);
+    n.video.addEventListener('ratechange',()=>{
+      if(n.video.defaultPlaybackRate!==1)n.video.defaultPlaybackRate=1;
+      if(n.video.playbackRate!==1)n.video.playbackRate=1;
+    });
+    n.video.addEventListener('play',()=>{
+      if(this.dock && (!this.isOpen || this.blocked())){this.pausePreview();return;}
+      this.dock?.pauseProgram?.(n.video);
     });
   }
 
-  open(target="edit") {
+  get isOpen(){return this.dock ? Boolean(this.monitor) : Boolean(this.dialog.open);}
+  identity(){return JSON.stringify(this.getProject()?.sources?.[this.slot] || null);}
+  valid(){const p=this.getProject();return this.isOpen && p?.id===this.projectId && !!p?.editor_sequence
+    && !!p.sources?.[this.slot] && this.dock.token()===this.viewToken && this.identity()===this.sourceIdentity && this.dock.visible()!==false;}
+  blocked(){return !this.valid() || this.busy || this.dock.busy?.() || !!this.dock.issue?.() || this.getProject()?.revision!==this.revision;}
+  pausePreview(){++this.playRequest;this.nodes.video.pause();}
+  playPreview(){
+    if(this.dock && this.blocked())return;
+    const generation=this.generation,request=++this.playRequest;
+    this.dock?.pauseProgram?.(this.nodes.video);
+    Promise.resolve(this.nodes.video.play()).then(()=>{
+      if(generation!==this.generation){if(!this.isOpen)this.nodes.video.pause();return;}
+      if(request!==this.playRequest || !this.isOpen || (this.dock && this.blocked()))this.nodes.video.pause();
+    }).catch(()=>{});
+  }
+  close({force=false,restoreFocus=false}={}){
+    if(!this.isOpen || (this.busy && !force))return false;
+    if(!this.dock){this.dialog.close();return true;}
+    const owned=this.monitor.contains(document.activeElement),opener=this.opener,slot=this.slot;
+    ++this.generation;this.pausePreview();this.timeline.cancelGesture();
+    this.nodes.video.removeAttribute('src');this.nodes.video.load();
+    this.dialog.append(this.shell);this.monitor.remove();this.monitor=null;this.busy=false;
+    delete this.dock.root.dataset.primarySourceMonitorOpen;
+    this.dock.closed?.();
+    if(restoreFocus && owned){const target=opener?.isConnected?opener:this.dock.focusTarget?.(slot);if(target?.isConnected)target.focus();}
+    return true;
+  }
+  sync(){
+    if(!this.dock || !this.isOpen)return;
+    if(!this.valid()){this.close({force:true});return;}
+    if(this.blocked())this.pausePreview();
+    this.updateControls();
+  }
+  adoptCurrent(){
+    if(!this.dock || !this.valid() || this.busy || this.dock.busy?.() || this.dock.issue?.())return false;
+    this.revision=this.getProject().revision;this.refresh();return true;
+  }
+  open(target="edit", {slot,opener}={}) {
     const project=this.getProject();
-    if (!project?.editor_sequence) return false;
+    if (!project?.editor_sequence || (this.dock && (this.busy || this.dock.busy?.() || this.dock.visible()===false))) return false;
+    if(this.isOpen)this.close({force:true});
     this.pause(); this.projectId=project.id; this.selection=null;
     this.nodes.status.textContent="Click a section to preview it. Drag to select your own range. Use the ruler to seek anywhere.";
-    this.slot=target === "B" ? "B" : "A";
+    this.slot=['A','B'].includes(slot)?slot:(target==='B'?'B':'A');
+    if(!project.sources?.[this.slot])return false;
     this.nodes.scope.value=target === "edit" ? "edit" : "source";
-    this.dialog.showModal(); this.refresh(true); this.nodes.canvas.focus();
+    if(this.dock){
+      this.revision=project.revision;this.viewToken=this.dock.token();this.sourceIdentity=this.identity();++this.generation;
+      this.opener=opener||document.activeElement;
+      this.shell=this.dialog.querySelector('.source-review-shell');
+      const region=document.createElement('section');region.className='source-review-monitor';region.dataset.editorShortcuts='off';region.setAttribute('role','region');region.setAttribute('aria-label',`Original source ${this.slot}`);
+      region.addEventListener('keydown',this.keydown);region.append(this.shell);this.dock.root.prepend(region);this.monitor=region;
+      this.dock.root.dataset.primarySourceMonitorOpen='true';
+    }else this.dialog.showModal();
+    this.refresh(true);
+    if(this.dock){this.monitor.scrollIntoView({block:'start',inline:'nearest'});this.nodes.canvas.focus({preventScroll:true});}
+    else this.nodes.canvas.focus();
     return true;
   }
 
   refresh(sourceChanged=false) {
     const p=this.getProject(),n=this.nodes;
-    if (p?.id !== this.projectId || !p.editor_sequence || !p.sources[this.slot]) { this.dialog.close(); return; }
+    if (p?.id !== this.projectId || !p.editor_sequence || !p.sources[this.slot]) { this.close({force:true}); return; }
     this.ranges=sourceReviewRanges(p,this.slot);
     n.slot.value=this.slot;
+    this.monitor?.setAttribute('aria-label',`Original source ${this.slot}`);
     n.slot.querySelector('option[value="B"]').disabled=!p.sources.B;
     n.scope.hidden=!p.sources.B;
     const waveform=sourceReviewAudio(p,this.slot);
@@ -133,10 +196,11 @@ export class SourceReview {
 
   loadPreview({ resume = false } = {}) {
     const p=this.getProject(),n=this.nodes;
-    if (!this.dialog.open || this.busy || p?.id !== this.projectId || !p.sources?.[this.slot]) return false;
+    if (!this.isOpen || this.busy || p?.id !== this.projectId || !p.sources?.[this.slot]) return false;
     this.resumePreviewAt=resume ? Number(n.video.currentTime ?? this.selection?.start ?? 0) : null;
     this.previewState="loading"; n.retry.hidden=true;
     n.status.textContent="Loading original preview. Your edit stays unchanged.";
+    n.video.defaultPlaybackRate=1;n.video.playbackRate=1;
     n.video.src=this.mediaUrl(p.sources[this.slot]); n.video.load();
     return true;
   }
@@ -192,23 +256,39 @@ export class SourceReview {
     n.next.disabled=!this.ranges.removed.some(r=>r.start>time+1e-6);
     n.selection.textContent=this.selection ? `${formatTime(this.selection.start,true)} – ${formatTime(this.selection.end,true)} · ${stats.kept.toFixed(1)}s in edit · ${stats.removed.toFixed(1)}s removed` : "Click a kept or removed section, or drag to select any range.";
     n.summary.textContent=`Original ${formatTime(this.ranges.duration)} · ${this.ranges.removed.length} removed ${this.ranges.removed.length===1 ? "section" : "sections"}`;
-    n.effect.textContent=n.scope.value === "edit" ? "Restore inserts only missing footage near its source neighbors, with synchronized A/B. Remove cuts all uses of the selection from both tracks and closes the gap." : `Source ${this.slot} only. Remove leaves a gap; restore fills it when possible, otherwise inserts on this track. Other-source clips stay still.`;
+    n.effect.textContent=n.scope.value === "edit" ? (this.getProject()?.sources?.B ? "Restore inserts only missing footage near its source neighbors, with synchronized A/B. Remove cuts all uses of the selection from both tracks and closes the gap." : "Restore inserts only missing footage near its source neighbors. Remove cuts all uses of the selection from this source track and closes the gap.") : `Source ${this.slot} only. Remove leaves a gap; restore fills it when possible, otherwise inserts on this track. Other-source clips stay still.`;
     if (locked.length) n.effect.textContent=`Track ${locked.join(' + ')} is locked. You can preview; unlock in Edit → Track protection before changing this scope.`;
+    if(this.dock){
+      const stale=this.getProject()?.revision!==this.revision,blocked=this.blocked();
+      for(const key of ['restore','remove','undo','exact','slot','scope'])n[key].disabled ||= Boolean(blocked);
+      n.close.disabled=Boolean(this.busy);n.video.controls=!blocked;
+      if(n.refresh){n.refresh.hidden=!stale;n.refresh.disabled=Boolean(this.busy||this.dock.busy?.()||this.dock.issue?.());}
+      if(n.context)n.context.textContent=stale?'The saved edit changed. Use current edit to review updated coverage before changing footage.':this.dock.issue?.()||'Original source picture and sound, without edited effects or mix. Coverage uses normal source clocks, not retimed-picture coverage.';
+    }
     this.updateQuote();
   }
 
   async edit(action) {
-    if (this.busy || this.getProject()?.id!==this.projectId || (!this.selection && action!=="undo")) return;
+    if (this.busy || (this.dock && this.blocked()) || this.getProject()?.id!==this.projectId || (!this.selection && action!=="undo")) return;
     if (action!=="undo" && this.protectedSlots().length) { this.updateControls(); return; }
-    this.busy=true; this.nodes.video.pause(); this.updateControls();
+    const generation=this.generation,revision=this.revision;
+    const admission=()=>this.generation===generation && this.valid() && this.getProject()?.revision===revision && !this.dock.issue?.();
+    this.busy=true; this.pausePreview(); this.updateControls();
     this.nodes.status.textContent="Updating edit…";
     try {
       const detail=action === "undo" ? {} : {slot:this.slot,scope:this.nodes.scope.value === "edit" ? "edit" : this.slot,source_start:this.selection.start,source_end:this.selection.end};
-      const result=await this.applyEdit(action,detail);
+      const result=await this.applyEdit(action,detail,this.dock?{strictRevision:true,isCurrent:()=>this.generation===generation&&this.valid(),admissionCurrent:admission}:undefined);
+      if(this.dock){
+        if(this.generation!==generation || !this.valid())return;
+        const current=this.getProject();
+        if(!result || result.id!==current.id || result.revision!==current.revision || !Number.isInteger(result.revision)){this.nodes.status.textContent='The edit was not confirmed. Use current edit before trying again.';return;}
+        this.revision=current.revision;
+      }
       this.refresh();
       this.nodes.status.textContent=result ? (action === "undo" ? "Undone." : action === "sequence_source_restore" ? "Footage restored. Already-kept footage was not duplicated." : "Selection removed from the edit. The original is still here.") : "The edit was not confirmed. Check the current project before trying again.";
     } catch (error) {
+      if(this.dock && (this.generation!==generation || !this.valid()))return;
       this.nodes.status.textContent="Could not confirm whether the edit changed. Close and reopen the project to check it before trying again.";
-    } finally { this.busy=false; this.updateControls(); }
+    } finally { if(!this.dock || this.generation===generation){this.busy=false;this.updateControls();} }
   }
 }

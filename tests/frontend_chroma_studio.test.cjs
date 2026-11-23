@@ -91,13 +91,14 @@ test('reset uses the existing undoable source action and saved state is restored
   assert.equal(studio.node.querySelector('[data-chroma="enabled"]').checked,true);
 });
 
-test('saving one source preserves the other unsaved candidate through the actual app render while external history invalidates it',async()=>{
+test('saving one source preserves the other unsaved candidate through the actual app render across unrelated saved revisions',async()=>{
   const f=await chromaFixture(),edit=f.studio.options.edit;
   f.input('enabled',true);f.input('tolerance',.35);f.studio.source.value='B';f.studio.source.onchange();f.input('tolerance',.45);
   f.studio.source.value='A';f.studio.source.onchange();f.studio.options.edit=async(...args)=>{const result=await edit(...args);f.studio.render();return result;};
   await f.studio.apply.onclick();f.studio.source.value='B';f.studio.source.onchange();
   assert.equal(f.studio.settings().tolerance,.45);assert.equal(f.studio.dirty(),true);assert.equal(f.project().manual.chroma_key.B.tolerance,.2);assert.equal(f.calls.length,1);
-  f.switchProject({...f.project(),revision:f.project().revision+1});assert.equal(f.studio.settings().tolerance,.2);assert.equal(f.studio.dirty(),false);
+  f.switchProject({...f.project(),revision:f.project().revision+1});assert.equal(f.studio.settings().tolerance,.45);assert.equal(f.studio.dirty(),true);
+  assert.equal(f.studio.discardDraft(),true);assert.equal(f.studio.settings().tolerance,.2);assert.equal(f.calls.length,1);
 });
 
 test('busy, protected and missing sources cannot submit chroma mutations',async()=>{
@@ -178,14 +179,16 @@ test('a saved missing image stays explicit rather than silently changing to a so
 
 function directorFixture() {
   const nodes=new Map(), get=id=>{if(!nodes.has(id)){const node=new Element();node.id=id;nodes.set(id,node);}return nodes.get(id);};
-  get('aiDraftNotice').append(new Element('p'));get('aiDraftApplyDialog').open=false;
+  get('aiDraftNotice').append(new Element('p'));
   const header=new Element();header.className='studio-header';get('advancedPanel').append(header);
   const inspector=new Element();inspector.className='advanced-content';get('advancedPanel').append(inspector);
   const calls=[],toasts=[],context=vm.createContext({console,document:{getElementById:get},window:{addEventListener(){}},dictionaries:{en:{aiDraftKept:'New draft ready; manual timeline kept',aiDraftApply:'Apply new AI draft',aiDraftApplied:'New draft applied; Undo available'}},setTimeout,clearTimeout});
+  context.AiDraftReview=class {constructor(options){this.options=options;context.review=this;}async open(){this.opened=true;return true;}close(){this.opened=false;this.options.onClose?.();return true;}};
   const app=fs.readFileSync('web/app.js','utf8').replace(/^import .*;\r?\n/gm,'').replace(/\nboot\(\)\.catch\(\(error\) => \{[\s\S]*?\n\}\);/,'');
-  vm.runInContext(app+`\nforegroundBusy=()=>false;flushCurrentProjectSaves=async()=>true;toast=(...args)=>globalThis.toasts.push(args);
+  vm.runInContext(app+`\nforegroundBusy=()=>false;flushCurrentProjectSaves=async()=>{throw Error("Review must not flush");};pauseAllMedia=()=>{};sourceMediaUrl=()=>"/test-original.mp4";liveEmbeddedCameraRequest=()=>null;toast=(...args)=>globalThis.toasts.push(args);
+    globalThis.realApplyManualEdit=applyManualEdit;
     applyManualEdit=async(action,detail,options)=>{globalThis.calls.push([action,detail,options.isCurrent()]);state.project={...state.project,revision:state.project.revision+1,manual:{}};return state.project;};
-    this.ui={state,elements,rememberDirectorResult,currentAiDraftNotice,directorCompletionNotice,renderAiDraftNotice,openAiDraftConfirmation,confirmAiDraftApply,renderEditStyleNote,renderModelStatus,prepareLocalAI,renderDraftWarning,openSpeechReviewSettings,renderDurationReview};`,Object.assign(context,{calls,toasts}));
+    this.ui={state,elements,rememberDirectorResult,currentAiDraftNotice,directorCompletionNotice,renderAiDraftNotice,openAiDraftConfirmation,aiDraftReviewIssue,renderEditStyleNote,renderModelStatus,prepareLocalAI,renderDraftWarning,openSpeechReviewSettings,renderDurationReview};`,Object.assign(context,{calls,toasts}));
   const {ui}=context;ui.state.dictionary=context.dictionaries.en;
   ui.state.project={id:'current',revision:8,draft:{engine:'style',segments:[{start:0,end:10}]},manual:{sequence:{tracks:{A:[{id:'manual-kept'}]}}}};
   ui.elements.resultPanel=get('resultPanel');ui.elements.advancedPanel=get('advancedPanel');
@@ -301,19 +304,73 @@ test('saved transcript fallback is actionable and reviewing it expands the actua
   assert.deepEqual(plain(f.ui.state.project.settings),{spoken_language:'auto',performance_mode:'auto'});assert.equal(f.calls.length,0);
 });
 
-test('Apply new AI draft requires explicit modal confirmation and delegates the existing undoable sequence reset',async()=>{
-  const f=directorFixture();f.ui.rememberDirectorResult(f.job());await f.ui.openAiDraftConfirmation();
-  assert.equal(f.get('aiDraftApplyDialog').open,true);assert.equal(f.calls.length,0);
-  await f.ui.confirmAiDraftApply();assert.deepEqual(plain(f.calls),[['sequence_reset',{},true]]);assert.equal(f.get('aiDraftApplyDialog').open,false);assert.equal(f.get('aiDraftNotice').hidden,true);
-  await f.ui.confirmAiDraftApply();assert.equal(f.calls.length,1);
+function savedReview(f){
+  f.ui.state.project.ai_draft_review={version:1,available:true,origin_id:'saved-origin',pending:true,legacy:false};
+  f.ui.state.project.sources={A:{relative_path:'media/source.mp4'}};
+  return {project_id:'current',revision:8,origin_id:'saved-origin',proposal_id:'a'.repeat(64),apply_allowed:true};
+}
+
+test('saved AI review opens without saving and applies only the pinned reviewed proposal',async()=>{
+  const f=directorFixture(),proposal=savedReview(f);await f.ui.openAiDraftConfirmation();
+  assert.equal(f.run('review.opened'),true);assert.equal(f.calls.length,0);
+  assert.equal(f.run('review.options.originId'),'saved-origin');
+  await f.run('review.options.apply')(proposal);
+  assert.deepEqual(plain(f.calls),[['apply_ai_draft',{proposal_id:'a'.repeat(64)},true]]);
+  assert.equal(f.get('aiDraftNotice').hidden,true);
+  await f.run('review.options.apply')(proposal);assert.equal(f.calls.length,1);
 });
 
-test('cancelling or a revision/project change during confirmation preserves the manual timeline without any reset',async()=>{
-  for(const change of ['cancel','revision','project']){
-    const f=directorFixture();f.ui.rememberDirectorResult(f.job());await f.ui.openAiDraftConfirmation();
-    if(change==='cancel')f.get('aiDraftApplyDialog').close();else if(change==='revision')f.ui.state.project.revision++;else f.ui.state.project={id:'other',revision:1,draft:{},manual:{}};
-    await f.ui.confirmAiDraftApply();assert.equal(f.calls.length,0);
+test('revision project origin and view changes never apply a stale saved AI review',async()=>{
+  for(const change of ['revision','project','origin','view','dirty']){
+    const f=directorFixture(),proposal=savedReview(f);await f.ui.openAiDraftConfirmation();
+    if(change==='revision')f.ui.state.project.revision++;
+    else if(change==='project')f.ui.state.project={id:'other',revision:8};
+    else if(change==='origin')f.ui.state.project.ai_draft_review.origin_id='changed';
+    else if(change==='view')f.ui.state.projectViewToken++;
+    else f.ui.state.draftDirtyReasons.add('language');
+    await f.run('review.options.apply')(proposal);assert.equal(f.calls.length,0,change);
   }
+});
+
+test('closing the review retains the proposal without applying or saving',async()=>{
+  const f=directorFixture(),proposal=savedReview(f);const before=JSON.stringify(f.ui.state.project);await f.ui.openAiDraftConfirmation();
+  f.run('review.close()');assert.equal(f.ui.state.aiDraftReview,null);assert.equal(f.calls.length,0);
+  await f.run('review.options.apply')(proposal);assert.equal(f.calls.length,0);
+  assert.equal(JSON.stringify(f.ui.state.project),before);assert.ok(f.ui.currentAiDraftNotice());
+});
+
+test('authoritative unavailable status cannot be resurrected by a recent Director job',()=>{
+  const f=directorFixture();f.ui.state.project.ai_draft_review={version:1,available:false};
+  f.ui.rememberDirectorResult(f.job());assert.equal(f.ui.currentAiDraftNotice(),null);assert.equal(f.get('aiDraftNotice').hidden,true);
+});
+
+test('legacy saved proposal is discoverable without a recent job and never called new',()=>{
+  const f=directorFixture();savedReview(f);f.ui.state.project.ai_draft_review.pending=false;f.ui.state.project.ai_draft_review.legacy=true;
+  f.ui.renderAiDraftNotice();assert.equal(f.get('applyAiDraftButton').textContent,'Review saved draft');
+  assert.doesNotMatch(f.get('aiDraftNotice').querySelector('p').textContent,/new/i);
+});
+
+test('pending caption media text settings and transcript drafts block review instead of silently flushing',async()=>{
+  for(const change of ['caption','transcript','media','text','saving','queue','preferences','chroma','camera']){
+    const f=directorFixture();savedReview(f);
+    if(change==='caption')f.ui.state.captionDirty=true;
+    if(change==='chroma')f.ui.state.chromaStudio={projectId:'current',drafts:new Map([['A',{}]]),dirty:()=>true};
+    if(change==='camera')Object.assign(f.ui.state.embeddedEditor,{projectId:'current',dirty:true});
+    if(change==='transcript')f.ui.state.transcriptBuffers.set('s',{projectId:'current'});
+    if(change==='media')f.ui.state.mediaStudio={pending:new Map([['a',{}]])};
+    if(change==='text')f.ui.state.textStudio={dirty:()=>true};
+    if(change==='saving')f.ui.state.transcriptSaving=true;
+    if(change==='queue')f.ui.state.saveQueues.set('current',{pending:{name:'changed'}});
+    if(change==='preferences')f.ui.state.draftDirtyReasons.add('language');
+    assert.ok(f.ui.aiDraftReviewIssue(),change);assert.equal(await f.ui.openAiDraftConfirmation(),false);assert.equal(f.calls.length,0);
+  }
+});
+
+test('review rejects mismatched proposal metadata and blocks duplicate open',async()=>{
+  const f=directorFixture(),proposal=savedReview(f);await f.ui.openAiDraftConfirmation();
+  const controller=f.ui.state.aiDraftReview;assert.equal(await f.ui.openAiDraftConfirmation(),false);assert.equal(f.ui.state.aiDraftReview,controller);
+  for(const patch of [{project_id:'other'},{revision:7},{origin_id:'other'},{apply_allowed:false}])await f.run('review.options.apply')({...proposal,...patch});
+  assert.equal(f.calls.length,0);
 });
 
 test('Clean VOD explains an intentionally selected Short and full-length alternative without changing the user goal',()=>{
@@ -396,7 +453,9 @@ test('selected asset saved settings survive reopening and Undo; drafts are never
   assert.equal(f.studio.source.value,a.id);assert.equal(f.studio.settings().tolerance,.33);
   f.switchProject({...saved,revision:10,manual:{...saved.manual,chroma_key:{}}});assert.equal(f.studio.settings().enabled,false);
   f.input('enabled',true);f.switchProject({...f.project(),assets:{[a.id]:{...a,name:'replacement.mp4',relative_path:'another.mp4'}}});
-  assert.equal(f.studio.dirty(),false);assert.equal(f.studio.settings().enabled,false);
+  assert.equal(f.studio.dirty(),true);assert.equal(f.studio.settings().enabled,true);assert.equal(f.studio.apply.disabled,true);
+  assert.match(f.studio.draftIssue(),/foreground video changed/);await f.studio.save(false);assert.equal(f.calls.length,1);
+  f.studio.discardDraft();assert.equal(f.studio.settings().enabled,false);
 });
 test('saving imported video preserves another target draft and stale target preview aborts on removal',async()=>{
   const f=await chromaFixture(),a=importedVideo('a'),b=importedVideo('b');f.switchProject({...f.project(),revision:8,assets:{[a.id]:a,[b.id]:b}});
@@ -456,4 +515,183 @@ test('new imported video enables a layer while A/B rejects the unavailable layer
   const f=await chromaFixture(),asset=importedVideo('d');f.input('background_mode','transparent');assert.equal(f.studio.settings().background_mode,'replace');
   f.switchProject({...f.project(),revision:8,assets:{[asset.id]:asset}});f.studio.source.value=asset.id;f.studio.source.onchange();f.input('enabled',true);
   assert.equal(f.studio.settings().background_mode,'transparent');assert.equal(f.project().manual.chroma_key[asset.id],undefined);
+});
+
+
+test('current manual timeline header never adopts an unapplied proposal title summary or engine',()=>{
+  const f=directorFixture();savedReview(f);
+  f.ui.state.project.draft={title:'Candidate title',summary:'Unapplied candidate summary',engine:'story_model',source_duration:20,output_duration:12};
+  f.ui.state.project.settings={aspect:'16:9'};
+  for(const key of ['draftTitle','draftSummary','draftEngineBadge','beforeDuration','afterDuration','previewStage'])f.ui.elements[key]=f.get(key);
+  f.run(`globalThis.formatTime=String;editorProject=()=>state.project;editStyleById=()=>null;localizedStyleValue=()=>'';
+    renderDirectorOutcomeNotice=renderInstructionResults=updateStudioStatus=setupPreviewSources=renderDecisions=renderDraftWarning=renderReelCandidates=renderTranscript=renderCaptionInspector=renderCameraDetection=renderSourceMixer=seekPreview=()=>{};
+    firstKeptTime=()=>0;state.timeline={setProject(){}};renderDraft();`);
+  assert.equal(f.get('draftTitle').textContent,'Current edited timeline');
+  assert.match(f.get('draftSummary').textContent,/Preview and export use your current timeline/);
+  assert.equal(f.get('draftEngineBadge').textContent,'Manual timeline');
+  assert.equal(f.ui.state.project.draft.title,'Candidate title','presentation never rewrites saved proposal metadata');
+  f.ui.state.project.ai_draft_review.available=false;f.run('renderDraft()');
+  assert.equal(f.get('draftTitle').textContent,'Candidate title');assert.equal(f.get('draftSummary').textContent,'Unapplied candidate summary');
+});
+
+
+test('AI review readiness tolerates Home before optional studios are initialized',async()=>{
+  const f=directorFixture();f.ui.state.project=null;f.ui.state.chromaStudio=null;
+  assert.equal(f.ui.aiDraftReviewIssue(),'');assert.equal(await f.ui.openAiDraftConfirmation(),false);
+});
+
+
+function conflictFixture(code='revision_conflict'){
+  const f=directorFixture();savedReview(f);
+  f.run(`globalThis.requests=[];globalThis.hydrated=0;globalThis.seeks=[];
+    state.timeline={cancelPendingCut(){},clearSelection(){state.manualSelection=null;}};
+    state.manualSelection={start:0,end:1};state.markIn=2;
+    previewTimelineTime=()=>4;pausePreview=()=>{};
+    renderReadiness=renderManualControls=renderSourceMixer=renderCaptionInspector=renderReelCandidates=()=>{};
+    flushProjectSaves=async()=>{};
+    hydrateProject=()=>{hydrated++;rememberProjectRevision(state.project);};seekSourcePreview=t=>seeks.push(t);
+    globalThis.latest={...state.project,revision:9,manual:{...state.project.manual,history:{undo_count:1,redo_count:0},text_clips:[{id:'changed',text:'External title'}]}};
+    api=async(url,options)=>{requests.push({url,method:options?.method||'GET'});if(options?.method==='POST')throw Object.assign(new Error('conflict'),{status:409,code:'${code}'});return {project:latest};};`);
+  return f;
+}
+
+for(const code of ['revision_conflict','source_binding_conflict','stale_ai_draft_proposal','invalid_ai_draft_proposal'])test(`AI Apply ${code} refreshes current history once but never replays the decision`,async()=>{
+  const f=conflictFixture(code);assert.equal(await f.run(`realApplyManualEdit('apply_ai_draft',{proposal_id:'a'.repeat(64)})`),null);
+  assert.deepEqual(plain(f.run('requests')).map(r=>r.method),['POST','GET']);
+  assert.equal(f.ui.state.project.revision,9);assert.equal(f.ui.state.project.manual.history.undo_count,1);
+  assert.equal(f.run('hydrated'),1);assert.deepEqual(plain(f.run('seeks')),[4]);
+  assert.equal(f.ui.state.manualSelection,null);assert.equal(f.ui.state.markIn,null);assert.equal(f.ui.state.manualEditBusy,false);
+  assert.match(f.toasts.at(-1)[0],/latest saved version.*fresh AI draft review.*not reapplied/);
+});
+
+for(const changed of ['project','view'])test(`late AI conflict refresh never overwrites another ${changed}`,async()=>{
+  const f=conflictFixture();f.run(`api=async(url,options)=>{requests.push({url,method:options?.method||'GET'});if(options?.method==='POST')throw Object.assign(new Error('conflict'),{status:409,code:'revision_conflict'});return new Promise(resolve=>globalThis.releaseLatest=resolve);};`);
+  const pending=f.run(`realApplyManualEdit('apply_ai_draft',{proposal_id:'a'.repeat(64)})`);
+  for(let i=0;i<20 && !f.run('typeof releaseLatest === "function"');i++)await Promise.resolve();
+  assert.equal(f.run('typeof releaseLatest'),'function');
+  if(changed==='project')f.ui.state.project={id:'other',revision:12};else f.ui.state.projectViewToken++;
+  const kept=f.ui.state.project;
+  f.run('releaseLatest({project:latest})');assert.equal(await pending,null);
+  assert.equal(f.ui.state.project,kept);assert.equal(f.run('hydrated'),0);assert.deepEqual(plain(f.run('seeks')),[]);
+});
+
+test('failed AI conflict refresh does not discard the known edit or replay Apply',async()=>{
+  const f=conflictFixture(),before=f.ui.state.project;
+  f.run(`api=async(url,options)=>{requests.push({url,method:options?.method||'GET'});throw Object.assign(new Error(options?.method==='POST'?'conflict':'Offline'),{status:options?.method==='POST'?409:503,code:'revision_conflict'});};`);
+  assert.equal(await f.run(`realApplyManualEdit('apply_ai_draft',{proposal_id:'a'.repeat(64)})`),null);
+  assert.equal(f.ui.state.project,before);assert.equal(f.run('hydrated'),0);assert.equal(f.run('requests.length'),2);
+});
+
+test('ordinary AI validation failures never fetch a replacement or retry Apply',async()=>{
+  const f=conflictFixture();f.run(`api=async(url,options)=>{requests.push({url});throw Object.assign(new Error('Track is locked'),{status:400,code:'invalid_manual_edit'});};`);
+  assert.equal(await f.run(`realApplyManualEdit('apply_ai_draft',{proposal_id:'a'.repeat(64)})`),null);
+  assert.equal(f.run('requests.length'),1);assert.equal(f.ui.state.project.revision,8);assert.equal(f.run('hydrated'),0);
+});
+
+
+test('an older conflict refresh cannot roll back a newer same-view project snapshot',async()=>{
+  const f=conflictFixture();f.run(`api=async(url,options)=>{requests.push({url,method:options?.method||'GET'});if(options?.method==='POST')throw Object.assign(new Error('conflict'),{status:409,code:'revision_conflict'});state.project={...state.project,revision:10};return {project:latest};};`);
+  assert.equal(await f.run(`realApplyManualEdit('apply_ai_draft',{proposal_id:'a'.repeat(64)})`),null);
+  assert.equal(f.ui.state.project.revision,10);assert.equal(f.run('hydrated'),0);assert.equal(f.run('requests.length'),2);
+});
+
+
+test('readiness transitions sync timeline navigation after recovery locks release without requiring a redraw',()=>{
+  const f=directorFixture();f.run(`globalThis.navSync=0;globalThis.navDisabled=false;globalThis.navSearch='retained search';
+    state.timeline={playhead:4,navigation:{sync(){navSync++;navDisabled=state.jobStartLocks.size>0;}},draw(){throw Error('No redraw needed');}};
+    renderAiDraftNotice=()=>{};state.jobStartLocks.add('recover:current');renderReadiness();`);
+  assert.equal(f.run('navDisabled'),true);
+  f.run(`state.jobStartLocks.delete('recover:current');renderReadiness();`);
+  assert.equal(f.run('navDisabled'),false);assert.equal(f.run('navSync'),2);
+  assert.equal(f.run('navSearch'),'retained search');assert.equal(f.ui.state.timeline.playhead,4);
+});
+
+test('lightweight navigation readiness tolerates an absent or not-yet-initialized timeline',()=>{
+  const f=directorFixture();f.run(`renderAiDraftNotice=()=>{};state.timeline=null;renderReadiness();state.timeline={};renderReadiness();`);
+  assert.equal(f.calls.length,0);
+});
+
+
+test('unrelated title settings timeline and history revisions preserve exact unapplied Chroma values without writes',async()=>{
+  const f=await chromaFixture();f.input('enabled',true);f.input('tolerance',.37);f.input('color','#123456');
+  const candidate=plain(f.studio.settings());
+  for(const patch of [{name:'Renamed'},{settings:{fps:25}},{manual:{...f.project().manual,media_clips:[{id:'other'}]}},{manual:{...f.project().manual,undo_count:2}}]){
+    f.switchProject({...f.project(),...patch,revision:f.project().revision+1});
+    assert.deepEqual(plain(f.studio.settings()),candidate);assert.equal(f.studio.apply.disabled,false);
+    assert.equal(f.studio.pendingDrafts().length,1);
+  }
+  assert.equal(f.calls.length,0);
+});
+
+test('same-target saved changes retain a visible conflict until local Discard and never overwrite the new key',async()=>{
+  const f=await chromaFixture();f.input('enabled',true);f.input('tolerance',.37);
+  f.switchProject({...f.project(),revision:8,manual:{...f.project().manual,chroma_key:{A:{enabled:true,tolerance:.6}}}});
+  assert.equal(f.studio.settings().tolerance,.37);assert.match(f.studio.status.textContent,/changed elsewhere/);
+  assert.equal(f.studio.apply.disabled,true);assert.equal(f.studio.reset.disabled,true);assert.equal(f.studio.discard.hidden,false);
+  f.input('tolerance',.8);assert.equal(f.studio.settings().tolerance,.37);
+  await f.studio.save(false);await f.studio.save(true);assert.equal(f.calls.length,0);
+  f.studio.discard.onclick();assert.equal(f.studio.settings().tolerance,.6);assert.equal(f.studio.dirty(),false);
+  assert.equal(f.project().manual.chroma_key.A.tolerance,.6);assert.equal(f.calls.length,0);
+});
+
+test('removed asset retains an actionable local draft even after selecting another target',async()=>{
+  const f=await chromaFixture(),a=importedVideo('a');f.switchProject({...f.project(),assets:{[a.id]:a}});
+  f.studio.source.value=a.id;f.studio.source.onchange();f.input('enabled',true);
+  f.switchProject({...f.project(),assets:{},revision:8});f.studio.source.value='A';f.studio.source.onchange();
+  const row=f.studio.node.querySelectorAll('[data-chroma-target]').find(node=>node.value===a.id);
+  assert.equal(row.disabled,false);row.onchange();assert.equal(f.studio.source.value,a.id);
+  assert.equal(f.studio.apply.disabled,true);assert.equal(f.studio.discard.disabled,false);
+  f.studio.discard.onclick();assert.equal(f.studio.pendingDrafts().length,0);assert.equal(f.calls.length,0);
+});
+
+test('replacement image identity is pinned and changing its file blocks an unapplied key',async()=>{
+  const f=await chromaFixture(),id='asset_'+'c'.repeat(32),image={id,kind:'image',status:'ready',width:64,height:64,relative_path:'old.png'};
+  f.switchProject({...f.project(),assets:{[id]:image}});f.input('enabled',true);f.input('background_asset_id',id);f.input('tolerance',.22);
+  f.switchProject({...f.project(),assets:{[id]:{...image,relative_path:'replacement.png'}},revision:8});
+  assert.match(f.studio.draftIssue(),/replacement image changed/);assert.equal(f.studio.settings().tolerance,.22);
+  await f.studio.save(false);assert.equal(f.calls.length,0);
+});
+
+test('Chroma save pins target saved settings through an asynchronous preflush instead of applying to newer settings',async()=>{
+  const f=await chromaFixture();f.input('enabled',true);let pinned;
+  f.studio.options.edit=async(_action,_detail,options)=>{pinned=options;f.switchProject({...f.project(),revision:8,manual:{chroma_key:{A:{enabled:true,tolerance:.6}}}});assert.equal(options.isCurrent(),false);return null;};
+  await f.studio.save(false);assert.equal(pinned.isCurrent(),false);assert.equal(f.studio.dirty(),true);
+  assert.match(f.studio.status.textContent,/changed elsewhere/);assert.equal(f.project().manual.chroma_key.A.tolerance,.6);
+});
+
+test('Chroma change notifications cover draft discard pending save and recovery without saving on navigation',async()=>{
+  const f=await chromaFixture(),states=[];f.studio.options.saveStateChanged=()=>states.push({pending:f.studio.pendingDrafts().length,saving:f.studio.saving});
+  f.input('enabled',true);assert.equal(states.at(-1).pending,1);f.studio.discard.onclick();assert.equal(states.at(-1).pending,0);
+  f.input('enabled',true);await f.studio.save(false);assert.ok(states.some(row=>row.saving));assert.deepEqual(states.at(-1),{pending:0,saving:false});
+});
+
+
+for(const action of ['set_chroma_key','reset_chroma_key'])test(`${action} conflicts refresh once and never overwrite a newer saved effect`,async()=>{
+  const f=conflictFixture();assert.equal(await f.run(`realApplyManualEdit('${action}',{slot:'A',enabled:true})`),null);
+  assert.deepEqual(plain(f.run('requests')).map(row=>row.method),['POST','GET']);
+  assert.equal(f.ui.state.project.revision,9);assert.equal(f.run('hydrated'),1);
+  assert.match(f.toasts.at(-1)[0],/unapplied Chroma Key settings are kept/);
+});
+
+
+test('same-project stale Chroma success cannot discard a conflicted candidate or claim Saved',async()=>{
+  const f=await chromaFixture();f.input('enabled',true);f.input('tolerance',.33);const draft=plain(f.studio.settings());
+  f.studio.options.edit=async()=>{f.switchProject({...f.project(),revision:9,sources:{...f.project().sources,A:{...f.project().sources.A,name:'replacement.mp4'}}});return {id:f.project().id,revision:8};};
+  await f.studio.save(false);assert.deepEqual(plain(f.studio.settings()),draft);assert.equal(f.studio.dirty(),true);
+  assert.match(f.studio.status.textContent,/foreground video changed/);assert.match(f.studio.saveError,/unapplied changes are kept/);
+  assert.equal(f.studio.apply.disabled,true);assert.equal(f.project().manual.chroma_key.A,undefined);
+});
+
+test('a stale successful receipt with a changed same-source effect retains the submitted draft',async()=>{
+  const f=await chromaFixture();f.input('enabled',true);f.input('tolerance',.33);
+  f.studio.options.edit=async()=>{f.switchProject({...f.project(),revision:9,manual:{chroma_key:{A:{enabled:true,tolerance:.6}}}});return {id:f.project().id,revision:8};};
+  await f.studio.save(false);assert.equal(f.studio.settings().tolerance,.33);assert.equal(f.project().manual.chroma_key.A.tolerance,.6);
+  assert.equal(f.studio.dirty(),true);assert.match(f.studio.status.textContent,/changed elsewhere/);
+});
+
+
+test('late Chroma success cannot overwrite a newer current project snapshot',async()=>{
+  const f=conflictFixture();f.run(`api=async()=>{state.project={...state.project,revision:10,name:'Newer name'};return {project:{...state.project,revision:9,name:'Older name'}};};`);
+  const receipt=await f.run(`realApplyManualEdit('set_chroma_key',{slot:'A',enabled:true})`);
+  assert.equal(receipt.revision,9);assert.equal(f.ui.state.project.revision,10);assert.equal(f.ui.state.project.name,'Newer name');
 });

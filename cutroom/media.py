@@ -66,12 +66,30 @@ def run_command(
     cancelled job terminates FFmpeg instead of waiting for an entire transcode.
     """
 
+    if cancel_check is not None:
+        cancel_check()
+    # Executables are selected by the application or its process configuration,
+    # not by uploaded files. Pin the executable path for this launch and do not
+    # allow Windows to reinterpret a batch file through the command interpreter.
+    if not args or not isinstance(args[0], str) or not args[0]:
+        raise ValueError("A media executable is required")
+    program = Path(args[0])
+    if not program.is_absolute():
+        if program.name != args[0]:
+            raise ValueError("Use an absolute path for a custom media executable")
+        found = shutil.which(args[0])
+        if not found:
+            raise FileNotFoundError("Media executable not found")
+        program = Path(found).absolute()
+    if os.name == "nt" and program.suffix.lower() != ".exe":
+        raise PermissionError("A native media executable is required")
+    args = [str(program), *args[1:]]
+
     # FFmpeg/ffprobe emit UTF-8 paths and metadata regardless of Windows' locale.
     # Binary PCM/image callers must keep the exact byte stream.
     decoding = {"encoding": "utf-8", "errors": "replace"} if text else {}
     if cancel_check is None:
-        return subprocess.run(args, capture_output=True, text=text, timeout=timeout, check=check, **decoding)
-    cancel_check()
+        return subprocess.run(args, capture_output=True, text=text, timeout=timeout, check=check, shell=False, **decoding)
     creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0
     process = subprocess.Popen(
         args,
@@ -79,6 +97,7 @@ def run_command(
         stderr=subprocess.PIPE,
         text=text,
         creationflags=creationflags,
+        shell=False,
         **decoding,
     )
     started = time.monotonic()
@@ -125,7 +144,8 @@ def probe_media(path: Path, settings: Settings, *, original_filename: str | None
     logical_name = original_filename if original_filename is not None else path.name
     suffix = Path(logical_name).suffix.lower()
     command = [
-        settings.ffprobe, "-v", "error", "-show_streams", "-show_format", "-of", "json", str(path)
+        settings.ffprobe, "-v", "error", "-protocol_whitelist", "file,pipe",
+        "-show_streams", "-show_format", "-of", "json", str(path.absolute())
     ]
     try:
         result = run_command(command, timeout=45)
@@ -218,7 +238,7 @@ def create_proxy(
     crf = int(settings.raw.get("proxy_crf", 27))
     threads = max(1, int(settings.raw.get("ffmpeg_threads", 4)))
     command = [
-        settings.ffmpeg, "-hide_banner", "-y", "-threads", str(threads), "-i", str(source),
+        settings.ffmpeg, "-hide_banner", "-y", "-threads", str(threads), "-protocol_whitelist", "file,pipe", "-i", str(source.absolute()),
         "-map_metadata", "-1", "-map_chapters", "-1",
         "-vf", f"scale=-2:'min({height},ih)':flags=lanczos,format=yuv420p",
         "-c:v", "libx264", "-preset", "veryfast", "-crf", str(crf),
@@ -257,7 +277,7 @@ def extract_thumbnails(
     staging.mkdir(parents=True, exist_ok=False)
     pattern = staging / "thumb-%03d.jpg"
     command = [
-        settings.ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-i", str(source),
+        settings.ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-protocol_whitelist", "file,pipe", "-i", str(source.absolute()),
         "-vf", f"fps={fps:.8f},scale=240:-2:flags=fast_bilinear",
         "-frames:v", str(count), "-q:v", "5", str(pattern),
     ]
@@ -292,7 +312,7 @@ def extract_thumbnails(
 
 def detect_silences(source: Path, settings: Settings, noise_db: float = -38, min_duration: float = 0.45) -> list[dict[str, float]]:
     command = [
-        settings.ffmpeg, "-hide_banner", "-i", str(source),
+        settings.ffmpeg, "-hide_banner", "-protocol_whitelist", "file,pipe", "-i", str(source.absolute()),
         "-af", f"silencedetect=noise={noise_db}dB:d={min_duration}", "-f", "null", "-",
     ]
     result = run_command(command, check=False, timeout=None)
@@ -314,7 +334,7 @@ def detect_scenes(
     cancel_check: Callable[[], None] | None = None,
 ) -> list[float]:
     command = [
-        settings.ffmpeg, "-hide_banner", "-threads", str(max(1, int(settings.raw.get("ffmpeg_threads", 4)))), "-i", str(source),
+        settings.ffmpeg, "-hide_banner", "-threads", str(max(1, int(settings.raw.get("ffmpeg_threads", 4)))), "-protocol_whitelist", "file,pipe", "-i", str(source.absolute()),
         "-an", "-filter:v", f"fps={float(settings.raw.get('scene_analysis_fps', 1.5)):.2f},scale=320:-2:flags=fast_bilinear,select='gt(scene,{clamp(threshold, 0.05, 0.9)})',showinfo",
         "-f", "null", "-",
     ]
@@ -341,7 +361,7 @@ def detect_scenes(
 def extract_waveform(source: Path, target: Path, settings: Settings, width: int = 1800, height: int = 160) -> Path:
     target.parent.mkdir(parents=True, exist_ok=True)
     command = [
-        settings.ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-i", str(source),
+        settings.ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-protocol_whitelist", "file,pipe", "-i", str(source.absolute()),
         "-filter_complex", f"showwavespic=s={width}x{height}:colors=white:scale=sqrt",
         "-frames:v", "1", str(target),
     ]
@@ -353,14 +373,32 @@ class UploadTooLargeError(ValueError):
     """Raised when an imported source exceeds CUTROOM's configured per-file limit."""
 
 
-def copy_upload(file_storage: Any, destination: Path, max_bytes: int) -> int:
-    destination.parent.mkdir(parents=True, exist_ok=True)
+def copy_upload(file_storage: Any, destination: Path, max_bytes: int, *, root: Path) -> int:
+    """Write an upload only beneath the caller's trusted storage directory."""
+    try:
+        parts = destination.absolute().relative_to(root.absolute()).parts
+    except ValueError as exc:
+        raise ValueError("Invalid upload destination") from exc
+    if not parts or any(part == ".." or ":" in part or "\0" in part for part in parts):
+        raise ValueError("Invalid upload destination")
+    root = root.resolve(strict=True)
+    if not root.is_dir():
+        raise ValueError("Invalid upload destination")
+    destination = root.joinpath(*parts)
+    parent = destination.parent.resolve()
+    if not parent.is_relative_to(root) or parent != destination.parent or destination.is_symlink():
+        raise ValueError("Invalid upload destination")
+    parent.mkdir(parents=True, exist_ok=True)
+    if parent.resolve(strict=True) != parent:
+        raise ValueError("Invalid upload destination")
     # Keep the atomic staging file beside its destination without repeating a
     # potentially long basename and exceeding Windows path limits.
-    temp = destination.with_name(f".{uuid.uuid4().hex}")
+    temp = parent / f".{uuid.uuid4().hex}"
     total = 0
+    owns_temp = False
     try:
-        with temp.open("wb") as handle:
+        with temp.open("xb") as handle:
+            owns_temp = True
             while True:
                 chunk = file_storage.stream.read(1024 * 1024)
                 if not chunk:
@@ -371,8 +409,15 @@ def copy_upload(file_storage: Any, destination: Path, max_bytes: int) -> int:
                 handle.write(chunk)
             handle.flush()
             os.fsync(handle.fileno())
+        if parent.resolve(strict=True) != parent or temp.is_symlink() or destination.is_symlink():
+            raise ValueError("Invalid upload destination")
         temp.replace(destination)
         return total
     except BaseException:
-        temp.unlink(missing_ok=True)
+        if owns_temp:
+            try:
+                if parent.resolve() == parent:
+                    temp.unlink(missing_ok=True)
+            except (OSError, RuntimeError):
+                pass
         raise

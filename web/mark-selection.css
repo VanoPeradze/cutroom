@@ -1,0 +1,8 @@
+/* When layers are selected their one-step mark command occupies the otherwise
+   disabled Loop slot. The native Loop button returns as soon as a range exists. */
+.timeline-navigation #markSelectedRange[hidden]{display:none!important}
+.timeline-navigation:has(> #markSelectedRange:not([hidden])) > #timelineLoopRange:disabled{display:none!important}
+.timeline-navigation #markSelectedRange{flex:0 0 auto;white-space:nowrap}
+.timeline-navigation #markSelectedRange:focus-visible{outline:2px solid var(--focus-ring);outline-offset:-2px}
+@media(max-width:899px),(max-height:539px){.timeline-navigation #markSelectedRange{min-height:44px}}
+

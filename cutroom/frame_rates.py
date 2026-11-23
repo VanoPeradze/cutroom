@@ -2,11 +2,32 @@
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 
 DEFAULT_EXPORT_FPS = 30
 EXPORT_FPS_CHOICES = frozenset({24, 25, 30, 50, 60})
+
+
+def stored_frame(edge: float, fps: int) -> int | None:
+    """Match only nanosecond-rounded representations of an actual frame."""
+    n = round(edge * fps)
+    return n if abs(edge - n / fps) <= 5.1e-10 else None
+
+
+def first_display_frame(edge: float, fps: int) -> int:
+    """First frame in the half-open interval starting at this edit edge."""
+    n = stored_frame(edge, fps)
+    return n if n is not None else math.ceil(edge * fps)
+
+
+def shift_edit_edge(edge: float, frames: int, fps: int) -> float:
+    """A frame move keeps real subframe phase and canonicalizes only true frame edges."""
+    if not frames:
+        return edge
+    n = stored_frame(edge, fps)
+    return round((n + frames) / fps, 9) if n is not None else edge + frames / fps
 
 
 def validate_export_fps(value: Any) -> int:

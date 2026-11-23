@@ -1,0 +1,13 @@
+/* Keep the current action ahead of a previous delivery, especially in the phone sheet. */
+#exportDialog .export-actions:not([hidden]) + #downloadExport:not([hidden]) {
+  margin-block-start: 10px;
+  background: transparent;
+  color: var(--paper);
+  border: 1px solid var(--line-strong);
+}
+#exportDialog #downloadExportCaptions:not([hidden]) { margin-block-start: 6px; }
+@media (max-width: 600px) {
+  #exportDialog .export-fps-field { margin-block: 10px; padding: 10px 12px; gap: 5px; }
+  #exportDialog .export-summary { margin-block: 12px; }
+  #exportDialog .export-actions { grid-template-columns: minmax(0,1fr) minmax(0,1.4fr); }
+}

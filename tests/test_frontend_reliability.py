@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from html.parser import HTMLParser
 from pathlib import Path
+import re
 
 from cutroom.composition import FACE_LAYOUT_VERSION
 
@@ -12,22 +13,46 @@ HTML = (ROOT / "web" / "index.html").read_text(encoding="utf-8")
 TIMELINE = (ROOT / "web" / "timeline.js").read_text(encoding="utf-8")
 CSS = (ROOT / "web" / "styles.css").read_text(encoding="utf-8")
 AUDIO_METER = (ROOT / "web" / "audio-meter.js").read_text(encoding="utf-8")
+WORKBENCH_CSS = (ROOT / "web" / "studio-finish.css").read_text(encoding="utf-8")
 
 
 def function_block(source: str, name: str, next_name: str) -> str:
     return source.split(f"function {name}", 1)[1].split(f"function {next_name}", 1)[0]
 
 
-def test_huemint_palette_is_semantic_accessible_and_canvas_consistent():
-    palette = ("#7459a3", "#501a91", "#1bb92a", "#c9b62c", "#44b9c6", "#081013")
-    css = CSS.lower()
-    canvas_code = f"{TIMELINE}\n{AUDIO_METER}".lower()
-    for color in palette:
-        assert color in css
-    assert 'content="#081013"' in HTML.lower()
-    assert "var(--signal-text)" in css
-    assert "#44b9c6" in canvas_code
-    assert "#c9b62c" in canvas_code
+def test_workbench_palette_is_semantic_accessible_and_canvas_consistent():
+    # The final workbench layer owns appearance, not the retired base palette.
+    css = WORKBENCH_CSS.lower()
+    dark = re.search(r":root\s*\{([^}]+)\}", css).group(1)
+    light = re.search(r"html\[data-theme=light\]\s*\{([^}]+)\}", css).group(1)
+    required = ("bg", "ruler", "lane", "lane-alt", "grid", "text", "clip", "clip-b",
+                "clip-edge", "selected", "label", "wave", "wave-bg", "layout",
+                "caption", "caption-edited", "caption-edge", "media-wave", "keep",
+                "keep-alt", "keep-selected", "selection-fill", "move-fill", "danger",
+                "danger-soft", "danger-fill", "danger-label", "gap-fill", "gap-edge",
+                "layout-label", "on-selected")
+
+    def luminance(value):
+        channels = [int(value[i:i + 2], 16) / 255 for i in (1, 3, 5)]
+        linear = [c / 12.92 if c <= .04045 else ((c + .055) / 1.055) ** 2.4 for c in channels]
+        return sum(c * weight for c, weight in zip(linear, (.2126, .7152, .0722)))
+
+    for theme in (dark, light):
+        for token in required:
+            assert f"--timeline-{token}:" in theme
+        colors = dict(re.findall(r"--([\w-]+):(#[\da-f]{6})", theme))
+        for fg, bg in (("paper", "surface-panel"), ("muted", "surface-inset"),
+                       ("timeline-text", "timeline-ruler"), ("timeline-label", "timeline-clip")):
+            low, high = sorted((luminance(colors[fg]), luminance(colors[bg])))
+            assert (high + .05) / (low + .05) >= 4.5
+    assert 'content="#22252a"' in HTML.lower()
+    assert "--surface-chrome:#c2c6cb" in light
+    assert 'getpropertyvalue(`--timeline-${name}`)' in TIMELINE.lower()
+    assert 'color("--timeline-bg"' in AUDIO_METER.lower()
+    assert 'color("--timeline-selected"' in AUDIO_METER.lower()
+    assert "monospace" not in f"{TIMELINE}\n{AUDIO_METER}".lower()
+    for retired in ("#1bb92a", "#44b9c6", "#c9b62c"):
+        assert retired not in css
 
     retired_accents = (
         "#7c8cff",
@@ -81,7 +106,7 @@ def test_active_jobs_are_recovered_and_job_starts_are_locked():
     recovery = function_block(APP, "recoverActiveJobs", "pollJob")
     assert 'item.kind === "prepare_source"' in recovery
     assert "retrySourcePreparation(projectId, slot, latestPreparation.id)" in recovery
-    assert '["director", "refine", "render"]' in recovery
+    assert '["director", "refine", "render", "manual_transcript"]' in recovery
     assert "resumeExportJob" in recovery
     assert "pollJob(foreground.id" in recovery
     assert "async function retrySourcePreparation" in APP
@@ -191,12 +216,15 @@ def test_upload_slots_and_studio_tabs_have_keyboard_contracts():
     assert "tabs[next].focus()" in keyboard
 
 
-def test_rebuild_required_settings_cannot_silently_export_old_draft():
+def test_pending_ai_preferences_are_disclosed_and_output_sensitive_rebuild_guards_remain():
     assert 'id="draftRebuildNotice"' in HTML
     assert HTML.count("data-rebuild-chip") >= 6
     assert "function markDraftRebuild" in APP
     assert "cutroom-draft-dirty:" in APP
-    assert "state.draftDirtyReasons.size" in function_block(APP, "openExportDialog", "startExport")
+    export_dialog = function_block(APP, "openExportDialog", "startExport")
+    assert "state.draftDirtyReasons.size" in export_dialog
+    assert "exportRequiresDraftRebuild()" in export_dialog
+    assert "Pending AI preferences are not applied" in export_dialog
     assert "requiresRebuild" in function_block(APP, "scheduleSettingsPatch", "isPlainObject")
     assert "state.project.settings?.aspect || draft.aspect" in APP
 
@@ -296,7 +324,8 @@ def test_edit_styles_apply_real_settings_and_are_not_cosmetic_labels():
     assert "applyGoalMode" not in apply_style
     assert "updateDurationControl" not in apply_style
     assert "setChoiceValue(elements.paceChoices" in apply_style
-    assert "hydrateAudioSettings(defaults.audio_cleanup)" in apply_style
+    assert "audioPresetSettings(defaults.audio_cleanup)" in apply_style
+    assert "hydrateAudioSettings(audio_cleanup)" in apply_style
     for setting in (
         "layoutSelect",
         "performanceModeSelect",

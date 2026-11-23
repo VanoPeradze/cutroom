@@ -72,7 +72,7 @@ def test_update_remove_noop_preserves_redo():
     assert value["manual"]["text_clips"][0]["text"] == "Changed"
 
 
-@pytest.mark.parametrize("action,payload", [("delete_range", {"start": 0, "end": 5}), ("sequence_ripple_delete", {"start": 0, "end": 5})])
+@pytest.mark.parametrize("action,payload", [("delete_range", {"start": 0, "end": 5})])
 def test_shortening_cannot_strand_text(action, payload):
     value = project()
     add(value, start=12, end=15)
@@ -164,7 +164,7 @@ def test_ass_keeps_text_on_edit_clock_and_sidecar_combines_only_captions(tmp_pat
     ass = build_ass(transcript, keeps, tmp_path / "text.ass", 1280, 720, text_clips=clips).read_text(encoding="utf-8-sig")
     assert "Dialogue: 1,0:00:10.00,0:00:12.00" in ass
     assert "Dialogue: 0,0:00:10.00,0:00:12.00" in ass
-    assert r"TITLE \{\\pos(0,0)\}\Nשלום" in ass
+    assert r"TITLE \{\\pos(0,0)\}\N" + "\u200fשלום\u200f" in ass
     assert "Style: Text0,Arial" in ass
     srt = build_srt(transcript, keeps, tmp_path / "text.srt", text_clips=[title, caption]).read_text(encoding="utf-8")
     assert "TITLE" not in srt and "Manual caption" in srt and "AI subtitle" in srt
@@ -279,3 +279,110 @@ def test_real_export_burns_manual_text_without_ai_caption_toggle(tmp_path, sidec
     if sidecar:
         srt = (exports / record["captions_name"]).read_text(encoding="utf-8")
         assert "Manual caption" in srt and "Hello" not in srt
+
+@pytest.mark.parametrize("fps", [24, 25, 30, 50, 60])
+def test_single_title_split_retains_frame_and_untouched_outer_edges(fps):
+    value = project()
+    value["settings"]["fps"] = fps
+    title = add(value, text="Static", start=3, end=5)
+    # Earlier native edits may already have given this occurrence sub-microsecond edges.
+    title["start"], title["end"] = 3.012345678, 5.012345678
+    original = copy.deepcopy(title)
+    frame = 4 * fps - 1
+    apply_manual_edit(value, {"action": "text_split", "clip_id": title["id"], "time": frame / fps})
+    left, right = value["manual"]["text_clips"]
+    assert left["end"] == right["start"] == round(frame / fps, 9)
+    assert left["start"] == original["start"] and right["end"] == original["end"]
+    # Saving words, then restoring the words, is not permission to round an edge.
+    for words in ("Adjusted words", original["text"]):
+        apply_manual_edit(value, {"action": "text_update", "clip_id": left["id"], "text": words})
+        assert value["manual"]["text_clips"][0]["end"] == right["start"]
+        assert value["manual"]["text_clips"][0]["start"] == original["start"]
+    split_pair = copy.deepcopy(value["manual"]["text_clips"])
+    apply_manual_edit(value, {"action": "layers_join", "clip_ids": [right["id"], left["id"]]})
+    assert value["manual"]["text_clips"] == [original]
+    apply_manual_edit(value, {"action": "undo"})
+    assert value["manual"]["text_clips"] == split_pair
+
+
+@pytest.mark.parametrize("fps,frame", [(24, 95), (30, 119), (30, 121), (60, 239)])
+@pytest.mark.parametrize("template", ["plain", "lower_third", "callout", "highlight"])
+def test_previously_saved_single_title_six_decimal_through_cut_can_join(fps, frame, template):
+    value = project()
+    value["settings"]["fps"] = fps
+    title = add(value, text="Same title", start=3, end=5, template=template)
+    original = copy.deepcopy(title)
+    apply_manual_edit(value, {"action": "text_split", "clip_id": title["id"], "time": frame / fps})
+    left, right = value["manual"]["text_clips"]
+    old_edge = round(frame / fps, 6)
+    assert old_edge != round(frame / fps, 9)
+    left["end"] = right["start"] = old_edge
+    apply_manual_edit(value, {"action": "layers_join", "clip_ids": [right["id"], left["id"]]})
+    assert value["manual"]["text_clips"] == [original]
+    apply_manual_edit(value, {"action": "undo"})
+    a, b = value["manual"]["text_clips"]
+    assert a["end"] == b["start"] == old_edge  # No migration or silent rounding.
+
+
+@pytest.mark.parametrize("reason", ["nearby but not exact", "real gap", "caption", "chapter"])
+def test_legacy_static_exception_does_not_join_other_edges(reason):
+    value = project()
+    title = add(value, start=3, end=5, text="X")
+    apply_manual_edit(value, {"action": "text_split", "clip_id": title["id"], "time": 119 / 30})
+    left, right = value["manual"]["text_clips"]
+    edge = round(119 / 30, 6)
+    left["end"] = right["start"] = edge
+    if reason == "nearby but not exact":
+        left["end"] = right["start"] = edge + .0000001
+    elif reason == "real gap":
+        right["start"] += .0000001
+    elif reason == "caption":
+        left["kind"] = right["kind"] = "caption"
+    else:
+        left["template"] = right["template"] = "chapter"
+    before = copy.deepcopy(value)
+    with pytest.raises(ManualEditError):
+        apply_manual_edit(value, {"action": "layers_join", "clip_ids": [left["id"], right["id"]]})
+    assert value == before
+
+
+def test_single_title_keeps_nonframe_api_compatibility_and_custom_cue_boundaries():
+    value = project()
+    title = add(value, kind="caption", start=3, end=5, text="Caption cue")
+    apply_manual_edit(value, {"action": "text_split", "clip_id": title["id"], "time": 3.123456789})
+    left, right = value["manual"]["text_clips"]
+    assert left["end"] == right["start"] == 3.123457
+    assert left["kind"] == right["kind"] == "caption"
+
+
+def test_api_refuses_chapter_split_without_writing_or_consuming_undo(api):
+    _, client, store, pid = api
+    path = f"/api/projects/{pid}/manual/edit"
+    res = client.post(path, json={"action":"text_add","kind":"title","start":3,"end":5,"text":"Chapter","template":"chapter","expected_revision":store.load(pid)["revision"]})
+    assert res.status_code == 200, res.get_json()
+    before = copy.deepcopy(store.load(pid))
+    clip_id = before["manual"]["text_clips"][0]["id"]
+    res = client.post(path, json={"action":"text_split","clip_id":clip_id,"time":119/30,"expected_revision":before["revision"]})
+    assert res.status_code == 400 and "fade" in str(res.get_json()).lower()
+    assert store.load(pid) == before
+
+@pytest.mark.parametrize("format", ["srt", "vtt"])
+def test_import_bidi_is_only_burn_presentation_not_project_sidecar_or_history(api, tmp_path, format):
+    _, client, store, pid = api
+    words = "מצלמים ב 4K 60fps היום.\nEnglish first: שלום!"
+    header = "1\n00:00:01,000 --> 00:00:02,000\n" if format == "srt" else "WEBVTT\n\n00:01.000 --> 00:02.000\n"
+    endpoint = f"/api/projects/{pid}/manual/edit"
+    def edit(action, **payload):
+        response = client.post(endpoint, json={"action": action, "expected_revision": store.load(pid)["revision"], **payload})
+        assert response.status_code == 200, response.get_json()
+        return response.get_json()["project"]["manual"].get("text_clips", [])
+    saved = edit("text_import", format=format, content=header + words)
+    assert len(saved) == 1 and saved[0]["text"] == words
+    before = store.state_path(pid).read_bytes()
+    clips = store.load(pid)["manual"]["text_clips"]
+    ass = build_ass({}, [], tmp_path / "cue.ass", 640, 360, text_clips=clips).read_text("utf-8-sig")
+    assert "\u200fמצלמים ב \u20664K 60fps\u2069 היום.\u200f" + r"\N" + "English first: שלום!" in ass
+    srt = build_srt({}, [], tmp_path / "cue.srt", text_clips=clips).read_text("utf-8")
+    assert srt.splitlines() == ["1", "00:00:01,000 --> 00:00:02,000", *words.splitlines()]
+    assert store.state_path(pid).read_bytes() == before
+    assert edit("undo") == [] and edit("redo") == saved

@@ -9,6 +9,7 @@ import uuid
 from typing import Any
 
 from .sequence import editor_sequence_snapshot
+from .frame_rates import project_export_fps, stored_frame
 
 MAX_TEXT_CLIPS = 2000
 MAX_SIMULTANEOUS_TEXT_CLIPS = 16
@@ -25,6 +26,10 @@ TEXT_ACTION_FIELDS = {
     "text_update": {"clip_id", *TEXT_FIELDS},
     "text_remove": {"clip_id"},
     "text_split": {"clip_id", "time"},
+    "text_trim": {"clip_id", "edge", "time"},
+    "text_duplicate": {"clip_id", "start"},
+    "text_move": {"clip_id", "start"},
+    "text_set_enabled": {"clip_id", "enabled"},
     "text_import": {"format", "content", "replace"},
 }
 
@@ -53,11 +58,21 @@ def _duration(project: dict[str, Any]) -> float:
 
 
 def validate_text_clip(row: Any, duration: float) -> dict[str, Any]:
-    if not isinstance(row, dict) or set(row) - {"id", *TEXT_FIELDS}:
+    if not isinstance(row, dict) or set(row) - {"id", "enabled", "track_id", *TEXT_FIELDS}:
         raise TextClipError("Invalid text clip fields")
     if not isinstance(row.get("id"), str) or not TEXT_ID_RE.fullmatch(row["id"]):
         raise TextClipError("Invalid text clip id")
     result = {"id": row["id"]}
+    if "track_id" in row:
+        from .layer_tracks import TRACK_RE
+        if not isinstance(row["track_id"], str) or not TRACK_RE.fullmatch(row["track_id"]):
+            raise TextClipError("Invalid text track identity")
+        result["track_id"] = row["track_id"]
+    if "enabled" in row:
+        if not isinstance(row["enabled"], bool):
+            raise TextClipError("enabled must be true or false")
+        if not row["enabled"]:
+            result["enabled"] = False
     for key, options in {"kind": {"title", "caption"}, "position": {"top", "center", "bottom"}, "style": {"clean", "bold", "boxed"}}.items():
         if not isinstance(row.get(key), str) or row[key] not in options:
             raise TextClipError(f"Invalid text {key}")
@@ -193,11 +208,61 @@ def prepare_text_edit(project: dict[str, Any], payload: dict[str, Any]) -> dict[
         index = clips.index(selected)
         if action == "text_remove":
             clips.pop(index)
+        elif action == "text_set_enabled":
+            enabled = payload.get("enabled")
+            if not isinstance(enabled, bool):
+                raise TextClipError("enabled must be true or false")
+            validate_text_clip(selected, duration)
+            if enabled == selected.get("enabled", True):
+                return None
+            if enabled:
+                selected.pop("enabled", None)
+            else:
+                selected["enabled"] = False
+        elif action == "text_move":
+            start = _number(payload.get("start"), "start", 0, duration)
+            candidate = {**selected, "start": start,
+                         "end": round(start + selected["end"] - selected["start"], 6)}
+            checked = validate_text_clip(candidate, duration)
+            if abs(start - selected["start"]) <= 1e-9:
+                return None
+            clips[index] = checked
         elif action == "text_update":
-            clips[index] = validate_text_clip({**selected, **{key: payload[key] for key in TEXT_FIELDS if key in payload}}, duration)
+            updated = validate_text_clip({**selected, **{key: payload[key] for key in TEXT_FIELDS if key in payload}}, duration)
+            # Editing the words or appearance must not round a previously saved frame edge.
+            for edge in ("start", "end"):
+                if edge not in payload or payload[edge] == selected[edge]:
+                    updated[edge] = selected[edge]
+            clips[index] = updated
+        elif action == "text_duplicate":
+            start = _number(payload.get("start", selected["start"]), "start", 0, duration)
+            duplicate = {**selected, "id": "text_" + uuid.uuid4().hex,
+                         "start": start, "end": round(start + selected["end"] - selected["start"], 6)}
+            clips.append(validate_text_clip(duplicate, duration))
+        elif action == "text_trim":
+            edge = payload.get("edge")
+            if edge not in ("start", "end"):
+                raise TextClipError("Choose the start or end edge")
+            time = _number(payload.get("time"), "time", 0, duration)
+            if abs(time - selected[edge]) <= 1e-9:
+                return None
+            clips[index] = validate_text_clip({**selected, edge: time}, duration)
         elif action == "text_split":
-            time = _number(payload.get("time"), "time", selected["start"] + .08, selected["end"] - .08)
-            clips[index:index + 1] = [validate_text_clip({**selected, "end": time}, duration), validate_text_clip({**selected, "id": "text_" + uuid.uuid4().hex, "start": time}, duration)]
+            if selected.get("template") == "chapter":
+                raise TextClipError("A Chapter title has a built-in fade. Splitting it would restart the fade; choose a static template to split.")
+            raw = payload.get("time")
+            time = _number(raw, "time", selected["start"] + .08, selected["end"] - .08)
+            # UI/Blade sends frame/fps; six-decimal field display is NOT the
+            # persisted edit clock. Preserve genuine subframe API behavior.
+            fps = project_export_fps(project)
+            frame = stored_frame(raw, fps)
+            if frame is not None:
+                time = round(frame / fps, 9)
+            left = {**selected, "end": time}
+            right = {**selected, "id": "text_" + uuid.uuid4().hex, "start": time}
+            for piece in (left, right):
+                validate_text_clip(piece, duration)
+            clips[index:index + 1] = [left, right]
     if len(clips) > MAX_TEXT_CLIPS:
         raise TextClipError(f"A project can contain at most {MAX_TEXT_CLIPS} text clips")
     _validate_overlaps(clips)
@@ -209,10 +274,10 @@ def _validate_overlaps(clips: list[dict[str, Any]]) -> None:
     for _, delta in sorted((row[key], delta) for row in clips for key, delta in (("start", 1), ("end", -1))):
         active += delta
         if active > MAX_SIMULTANEOUS_TEXT_CLIPS:
-            raise TextClipError(f"At most {MAX_SIMULTANEOUS_TEXT_CLIPS} text clips can appear at the same time")
+            raise TextClipError(f"At most {MAX_SIMULTANEOUS_TEXT_CLIPS} text clips may overlap at the same time, including disabled clips")
 
 
-def validated_text_clips(project: dict[str, Any]) -> list[dict[str, Any]]:
+def validated_text_clips(project: dict[str, Any], *, enabled_only: bool = False) -> list[dict[str, Any]]:
     clips = (project.get("manual") or {}).get("text_clips") or []
     if not isinstance(clips, list) or len(clips) > MAX_TEXT_CLIPS:
         raise TextClipError("Invalid saved text clips")
@@ -223,7 +288,7 @@ def validated_text_clips(project: dict[str, Any]) -> list[dict[str, Any]]:
     if len({row["id"] for row in result}) != len(result):
         raise TextClipError("Saved text clips contain duplicate identifiers")
     _validate_overlaps(result)
-    return result
+    return [row for row in result if row.get("enabled", True)] if enabled_only else result
 
 
 def validate_text_bounds(project: dict[str, Any]) -> None:
@@ -239,5 +304,5 @@ def public_text_clips(value: Any) -> list[dict[str, Any]]:
     """Expose only the finite editor contract, never extra saved metadata."""
     if not isinstance(value, list):
         return []
-    return [{key: row[key] for key in ("id", *sorted(TEXT_FIELDS)) if key in row}
+    return [{key: row[key] for key in ("id", "enabled", "track_id", *sorted(TEXT_FIELDS)) if key in row}
             for row in value[:MAX_TEXT_CLIPS] if isinstance(row, dict)]

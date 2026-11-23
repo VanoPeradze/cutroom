@@ -59,15 +59,18 @@ function app({count = 1, flagged = [{segment_id:'weak', reasons:['low_word_confi
   ];
   const state = {project:{id:'project',analysis:{transcript:{segments},
     transcript_quality:{review_segments:flagged,review_segment_count:count}}},
-    transcriptBuffers:new Map(),transcriptSaving:false,manualEditBusy:false};
+    transcriptBuffers:new Map(),transcriptSaving:false,manualEditBusy:false,activeUploads:new Map(),jobStartLocks:new Set()};
   // This isolated transcript-confidence fixture has no alternative-review panel.
   const scope = vm.createContext({state,elements, document:{createElement:tag => new Element(tag),getElementById:()=>null},
+    // The confidence-only fixture has no batch/recovery owner; those paths have dedicated tests.
+    selectedTranscriptRecoveryDraft:() => null, transcriptBatchOwner:() => null, transcriptBatchStatus:() => "",
+    transcriptDraftReview:() => null, renderTranscriptRecoveryRows:() => 0, previewRepairBusy:() => false, projectCopySourceBusy:() => false,
     selectedTranscriptSegment:() => state.project.analysis.transcript.segments[0],
     transcriptBufferKey:id => id, foregroundBusy:() => false,
     transcriptMappingLabel:segment => `Source ${segment.start}–${segment.end}`,
     transcriptTimelineMapping:(start,end) => ({ranges:[{start,end}],independent:false}),
     pendingTranscriptBuffers:() => [...state.transcriptBuffers.values()],
-    renderLanguageDetectionStatus() {}, highlightTranscriptSelection() {}, rangeMostlyRemoved:() => false,
+    renderProjectSaveState() {}, renderLanguageDetectionStatus() {}, highlightTranscriptSelection() {}, rangeMostlyRemoved:() => false,
     formatTime:time => String(time), languageName:() => 'Hebrew', uiCopy:(_he,en) => en,
     $:(selector,root) => root.querySelector(selector),
     selectTranscriptLine:segment => {scope.selectedLine = segment.id;}, beginTranscriptEdit() {},

@@ -1,0 +1,14 @@
+/* The destructive-in-scope edit lives in its own disclosure, never in the
+   primary Delete/Extract slot, so a reviewed single track is always explicit. */
+#trackLift{box-sizing:border-box;margin-block:8px 4px;min-width:0;border-block:1px solid var(--line);color:var(--paper)}
+#trackLift>summary{min-height:34px;padding:7px 2px;cursor:pointer;font-weight:650}
+#trackLift>.track-lift-body{display:grid;gap:7px;padding:3px 3px 12px;min-width:0}
+#trackLift .track-lift-body p{margin:0;color:var(--muted);line-height:1.4;overflow-wrap:anywhere}
+#trackLift .track-lift-body label{font-weight:650;margin-block-end:-4px}
+#trackLift :is(select,button){width:100%;box-sizing:border-box;min-width:0;min-height:34px}
+#trackLift #trackLiftApply{font-weight:650;background:var(--surface-selected);border:1px solid var(--line-strong);color:var(--paper)}
+#trackLift #trackLiftApply:disabled{opacity:.55}
+#trackLift #trackLiftReceipt:not([hidden]){border-inline-start:2px solid var(--signal);padding-inline-start:8px;color:var(--paper)}
+#trackLift :is(select,button,summary):focus-visible{outline:2px solid var(--focus-ring);outline-offset:-2px}
+@media(max-width:899px),(max-height:539px){#trackLift>summary,#trackLift :is(select,button){min-height:44px}}
+

@@ -10,13 +10,16 @@ import hashlib
 import json
 import math
 import re
+import subprocess
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
+from .layer_tracks import validate_layer_tracks, layer_tracks_render_identity
 from .composition import chroma_background_asset, chroma_source, chroma_video_targets, source_chroma_key
 from .frame_rates import project_export_fps
-from .media_library import safe_asset_path
+from .media import MediaProbeUnavailableError
+from .media_library import probe_asset, safe_asset_path, validate_clip_opacity
 
 
 def _number(value: Any, default: float = 0.0) -> float:
@@ -28,6 +31,7 @@ def _number(value: Any, default: float = 0.0) -> float:
 
 
 def library_clips(project: dict[str, Any]) -> list[tuple[dict[str, Any], dict[str, Any]]]:
+    validate_layer_tracks(project)
     rows = (project.get("manual") or {}).get("media_clips") or []
     if not isinstance(rows, list) or len(rows) > 200:
         raise ValueError("The media timeline must contain at most 200 clips")
@@ -36,17 +40,31 @@ def library_clips(project: dict[str, Any]) -> list[tuple[dict[str, Any], dict[st
     for clip in rows:
         if not isinstance(clip, dict):
             raise ValueError("Invalid library clip")
+        if not isinstance(clip.get("enabled", True), bool):
+            raise ValueError("A library clip enabled flag must be true or false")
+        if clip.get("enabled", True) is False:
+            continue
         asset = assets.get(clip.get("asset_id")) if isinstance(assets, dict) else None
         if not isinstance(asset, dict) or asset.get("kind") not in {"video", "image", "audio"}:
             raise ValueError("A timeline asset is missing; remove its clip or import it again")
         if asset.get("status", "ready") != "ready":
             raise ValueError("Wait until timeline media finishes importing before exporting")
+        validate_clip_opacity(clip, asset)
         result.append((clip, asset))
     return result
 
 
 def audible(clip: dict[str, Any], asset: dict[str, Any]) -> bool:
-    return asset["kind"] == "audio" or asset["kind"] == "video" and bool(asset.get("has_audio")) and bool(clip.get("audio_enabled", False))
+    return clip.get("enabled", True) is not False and (asset["kind"] == "audio" or asset["kind"] == "video" and bool(asset.get("has_audio")) and bool(clip.get("audio_enabled", False)))
+
+
+def library_picture_end(asset: dict[str, Any]) -> float:
+    # A metadata-only plan can still predate stream qualification. Actual exports
+    # resolve legacy files before using it. Explicit None means genuinely unknown.
+    if "picture_end" not in asset:
+        return max(0., _number(asset.get("duration")))
+    value = asset["picture_end"]
+    return min(_number(asset.get("duration")), value) if type(value) in (int, float) and math.isfinite(value) and value > 0 else 0.
 
 
 def library_visual_start(clip: dict[str, Any], asset: dict[str, Any], fps: float) -> float:
@@ -54,15 +72,18 @@ def library_visual_start(clip: dict[str, Any], asset: dict[str, Any], fps: float
         return 0.0
     source_start = max(0.0, _number(clip.get("source_start")))
     start = max(0.0, _number(clip.get("video_source_start"), source_start))
-    duration = _number(asset.get("duration"))
-    return min(start, max(0.0, duration - 1 / fps)) if duration > 0 else start
+    duration = library_picture_end(asset) or _number(asset.get("duration"))
+    # Seek just inside the picture, not one *output* frame before EOF. The
+    # library sampler holds the actual final native frame when media runs out.
+    return min(start, max(0.0, duration - 1e-6)) if duration > 0 else start
 
 
 def _library_seek_start(project: dict[str, Any], clip: dict[str, Any], asset: dict[str, Any], fps: float) -> float:
     # A single occurrence may have different picture and speech clocks. Seek
     # only before both consumed ranges, retaining the fractional trim below.
     # Keyed video resets timestamps before its trim; preserve that path here.
-    if asset["kind"] != "video" or source_chroma_key(project, clip.get("asset_id"))["enabled"]:
+    if (asset["kind"] != "video" or library_picture_end(asset) <= 0
+            or source_chroma_key(project, clip.get("asset_id"))["enabled"]):
         return 0.0
     start = library_visual_start(clip, asset, fps)
     if audible(clip, asset):
@@ -81,10 +102,13 @@ def _digest(value: Any) -> str:
 
 
 def _project_identity(project: dict[str, Any]) -> str:
+    validate_layer_tracks(project)
     manual = project.get("manual") or {}
     return _digest({"sources": project.get("sources"), "assets": project.get("assets"),
                     "media_clips": manual.get("media_clips"), "chroma_key": manual.get("chroma_key"),
-                    "fps": project_export_fps(project)})
+                    "fps": project_export_fps(project),
+                    **({"layer_tracks": layer_tracks_render_identity(project)}
+                       if (project.get("manual") or {}).get("layer_tracks") is not None else {})})
 
 
 @dataclass(frozen=True)
@@ -180,6 +204,11 @@ class RenderInputInventory:
                 result += ["-loop", "1", "-framerate", str(self.fps), "-t", f"{entry.loop_duration:.9f}"]
             if entry.seek_start > 0:
                 result += ["-ss", f"{entry.seek_start:.9f}"]
+                if entry.category == "library" and entry.media.get("kind") == "video":
+                    # Keep the decoded keyframe predecessor (negative PTS
+                    # relative to -ss); the video and audio graphs choose their
+                    # own exact residual source times.
+                    result.append("-noaccurate_seek")
             if entry.category != "source":
                 result += ["-protocol_whitelist", "file,pipe"]
             result += ["-i", str(path)]
@@ -247,3 +276,28 @@ def compile_render_inputs(project: dict[str, Any], *, include_library: bool = Tr
     return RenderInputInventory(tuple(entries), fps, _project_identity(project),
                                 _inventory_digest(entries, fps, include_library, include_chroma),
                                 include_library, include_chroma)
+
+def qualify_library_pictures(project, project_dir, settings, cancel_check=None):
+    """Read each active legacy original once. Return a render-only project view."""
+    root = project_dir.resolve()
+    measured = {}
+    for clip, asset in library_clips(project):
+        key = clip["asset_id"]
+        if asset["kind"] != "video" or "picture_end" in asset or key in measured:
+            continue
+        name = asset.get("path") or asset.get("relative_path")
+        if not isinstance(name, str) or not name:
+            raise ValueError("The timeline asset has no local media path")
+        path = (root / name).resolve()
+        if not path.is_relative_to(root):
+            raise ValueError("Timeline media must belong to this project")
+        if not path.is_file():
+            raise FileNotFoundError(f"Timeline media is missing: {path.name}")
+        try:
+            end = (probe_asset(path, "video", settings, cancel_check=cancel_check).get("picture_end")
+                   if getattr(settings, "ffprobe", None) else None)
+        except (OSError, ValueError, subprocess.SubprocessError, MediaProbeUnavailableError):
+            # Unknown endpoint: no speculative seek; pad only to the occurrence's finite target.
+            end = None
+        measured[key] = {**asset, "picture_end": end}
+    return {**project, "assets": {**project["assets"], **measured}} if measured else project

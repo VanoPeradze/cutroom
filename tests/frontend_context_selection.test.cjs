@@ -161,3 +161,27 @@ test('actual layout selection keeps Layout open while a footage click reveals cl
     assert.deepEqual(plain(run('actions')),[]);
   }
 });
+
+
+test('new media selection reveals the inspector heading but repeated selection and saves retain scroll',async()=>{
+  const {run}=fixture();
+  run(`globalThis.scrolls=[];state.mediaStudio.root.querySelector('.media-inspector').scrollIntoView=options=>scrolls.push(options);`);
+  assert.equal(await run('selectTimelineMedia("media_audio")'),true);
+  assert.deepEqual(plain(run('scrolls')),[{block:'start',inline:'nearest'}]);
+  run(`state.mediaStudio.change({dataset:{media:'volume_db'},type:'range',value:'-12',hasAttribute:()=>false,checkValidity:()=>true});`);
+  await run('state.mediaStudio.flush()');assert.equal(run('scrolls.length'),1);
+  assert.equal(await run('selectTimelineMedia("media_audio")'),true);assert.equal(run('scrolls.at(-1).block'),'nearest');
+  run(`state.project.manual.media_clips.push({...state.project.manual.media_clips[0],id:'media_next'});`);
+  assert.equal(await run('selectTimelineMedia("media_next")'),true);assert.equal(run('scrolls.at(-1).block'),'start');
+  run(`state.project={...state.project,id:'another-project'};`);
+  assert.equal(await run('selectTimelineMedia("media_next")'),true);assert.equal(run('scrolls.at(-1).block'),'start');
+  assert.equal(run('scrolls.length'),4);
+});
+test('failed new inspector selection cannot replace the reveal identity or reset scroll',async()=>{
+  const {run}=fixture();
+  run(`globalThis.scrolls=[];const inspector=state.mediaStudio.root.querySelector('.media-inspector');
+    inspector.dataset.revealedClip='keep';inspector.scrollIntoView=options=>scrolls.push(options);
+    state.captionSelection='c1';state.captionDirty=true;elements.captionItemText.value='';`);
+  assert.equal(await run('selectTimelineMedia("media_audio")'),false);
+  assert.deepEqual(plain(run('scrolls')),[]);assert.equal(run("state.mediaStudio.root.querySelector('.media-inspector').dataset.revealedClip"),'keep');
+});

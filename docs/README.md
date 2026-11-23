@@ -24,7 +24,7 @@
 
 - [Developer setup, repository structure and checks](CONTRIBUTING.md).
 - [Packaging and publishing](PUBLISHING.md).
-- [Transcript evaluation](TRANSCRIPT_EVALUATION.md) and [layout checks](UI_LAYOUT_QA.md).
+- [Transcript evaluation](TRANSCRIPT_EVALUATION.md), [edit quality evaluation](EDIT_EVALUATION.md) and [layout checks](UI_LAYOUT_QA.md).
 - [Security policy](../.github/SECURITY.md), [MIT license](../LICENSE) and [third-party notices](THIRD_PARTY_NOTICES.md).
 
 Launchers remain in the repository root. The `docs/archive` directory preserves historical release notes; it is not required to run the app and is not included in the Windows beta download. Nothing in this reorganization moves existing projects, recordings or installed models.

@@ -1187,7 +1187,7 @@ def test_project_delete_is_blocked_while_upload_is_writing_staging_data(app, mon
     entered_copy = threading.Event()
     release_copy = threading.Event()
 
-    def blocked_copy(uploaded, destination, _max_bytes):
+    def blocked_copy(uploaded, destination, _max_bytes, *, root):
         destination.write_bytes(uploaded.stream.read())
         entered_copy.set()
         assert release_copy.wait(2)

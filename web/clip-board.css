@@ -63,7 +63,7 @@ html[data-theme=light] .clip-board::backdrop { background: rgba(40, 44, 50, .45)
 .clip-board-status { display: flex; align-items: center; gap: 12px; padding: 18px; border: 1px dashed var(--line-strong); border-radius: 8px; color: var(--paper-dim); }
 .clip-board-status p { margin: 0; flex: 1; }
 
-.clip-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+.clip-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; align-items: start; }
 .clip-board.vertical .clip-grid { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
 
 .clip-card {
@@ -134,6 +134,28 @@ html[data-theme=light] .clip-board::backdrop { background: rgba(40, 44, 50, .45)
 .clip-actions .button { flex: 1; justify-content: center; }
 .clip-note { margin: 0; color: var(--warning-text); font-size: 12px; line-height: 1.4; }
 
+/* Posting kit: titles, description and hashtags, each copyable. */
+.clip-kit { border-top: 1px solid var(--line); padding-top: 8px; }
+.clip-kit > summary { cursor: pointer; color: var(--paper-dim); font-size: 12px; font-weight: 600; list-style: none; }
+.clip-kit > summary::before { content: "✦ "; color: var(--signal-text); }
+.clip-kit > summary::-webkit-details-marker { display: none; }
+.clip-kit[open] > summary { color: var(--paper); margin-bottom: 8px; }
+.clip-kit-panel { display: grid; gap: 6px; }
+.clip-kit-label { color: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; margin-top: 4px; }
+.clip-kit-titles { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.clip-kit-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 8px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-inset); }
+.clip-kit-row p { margin: 0; color: var(--paper); font-size: 13px; line-height: 1.4; overflow-wrap: anywhere; }
+.clip-kit-row.hook { grid-template-columns: minmax(0, 1fr) auto; }
+.clip-kit-row.hook small { grid-column: 1 / -1; color: var(--signal-text); font-size: 11px; font-weight: 600; }
+.clip-kit-description { color: var(--paper-dim) !important; }
+.clip-kit-tags { color: var(--signal-text) !important; }
+.clip-kit-copy { border: 0; background: none; color: var(--paper-dim); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; padding: 0 2px; }
+.clip-kit-copy:hover, .clip-kit-copy:focus-visible { color: var(--paper); text-decoration: underline; }
+.clip-kit-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 4px; }
+.clip-kit-status { margin: 0; color: var(--muted); font-size: 12px; }
+.clip-kit-status.warn { color: var(--warning-text); }
+.clip-kit-note { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.4; }
+
 .clip-card.skeleton .clip-media { background: var(--surface-inset); }
 .clip-skeleton-line { height: 12px; margin: 12px 12px 0; border-radius: 4px; background: var(--surface-inset); }
 .clip-skeleton-line.short { width: 55%; margin-bottom: 14px; }
@@ -193,3 +215,4 @@ body.welcome-mode #clipBoardButton { display: none; }
 .clip-thumb { margin: 0; }
 .clip-thumb canvas { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; border-radius: 6px; background: var(--ink); }
 .clip-thumb figcaption { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 6px; color: var(--paper-dim); font-size: 12px; font-variant-numeric: tabular-nums; }
+.draft-longform-extras { margin: 8px 0 0; color: var(--paper-dim); font-size: 12px; line-height: 1.45; }

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import json
 import os
 import shutil
@@ -66,7 +67,7 @@ DEFAULTS: dict[str, Any] = {
 
 
 def _deep_merge(base: dict[str, Any], extra: dict[str, Any]) -> dict[str, Any]:
-    out = dict(base)
+    out = copy.deepcopy(base)  # never alias DEFAULTS; callers mutate settings in place
     for key, value in extra.items():
         if isinstance(value, dict) and isinstance(out.get(key), dict):
             out[key] = _deep_merge(out[key], value)

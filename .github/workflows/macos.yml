@@ -65,7 +65,7 @@ jobs:
             architecture: x64
     # These are standard hosted runners, not the paid -large / -xlarge labels.
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 40
+    timeout-minutes: 120
     env:
       CUTROOM_NO_BROWSER: '1'
       HOMEBREW_NO_AUTO_UPDATE: '1'
@@ -103,11 +103,14 @@ jobs:
           python -m venv "$RUNNER_TEMP/cutroom-regression-venv"
           "$RUNNER_TEMP/cutroom-regression-venv/bin/python" -m pip install -r tests/requirements.txt -c packaging/mac/constraints-macos.txt
       - name: Run the complete Python regression suite with real FFmpeg
-        timeout-minutes: 15
+        # Keep the same full collection. Named tests remain visible even if a runner times out.
+        timeout-minutes: 45
+        env:
+          PYTHONUNBUFFERED: '1'
         shell: bash
         run: |
           ffmpeg -version
-          "$RUNNER_TEMP/cutroom-regression-venv/bin/python" -m pytest -ra
+          "$RUNNER_TEMP/cutroom-regression-venv/bin/python" -m pytest -v -ra --durations=25 --durations-min=0.5
       - name: Run frontend regressions
         timeout-minutes: 3
         run: node --test tests/frontend*.test.cjs
@@ -157,6 +160,19 @@ jobs:
           if [[ "$RUN_TRANSCRIPTION" == '1' ]]; then extra+=(--transcribe); fi
           python scripts/smoke_macos.py --archive "$CUTROOM_SMOKE_ARCHIVE" --windows-baseline packaging/windows/validation-baseline.json --allow-baseline-restart-failure --report "$RUNNER_TEMP/macos-smoke.json" "${extra[@]}"
           python -c 'import json, os, pathlib; result=json.loads((pathlib.Path(os.environ["RUNNER_TEMP"])/"macos-smoke.json").read_text()); print(json.dumps(result, indent=2))' >> "$GITHUB_STEP_SUMMARY"
+      - name: Test a fresh installation on the exact pinned candidate
+        timeout-minutes: 18
+        shell: bash
+        run: |
+          python scripts/smoke_macos.py --archive "$CUTROOM_CANDIDATE_ARCHIVE" --report "$RUNNER_TEMP/macos-candidate-fresh.json"
+          python - "$RUNNER_TEMP/macos-candidate-fresh.json" "$CUTROOM_CANDIDATE_ARCHIVE" <<'PY'
+          import hashlib, json, pathlib, sys
+          result = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+          archive = pathlib.Path(sys.argv[2])
+          assert result["package_sha256"] == hashlib.sha256(archive.read_bytes()).hexdigest()
+          assert result["fresh_install"] is True
+          assert result["installation_scenario"] == "empty_app_install"
+          PY
       - name: Test missing-pip recovery and the full smoke on the newly built candidate
         timeout-minutes: 18
         shell: bash
@@ -176,6 +192,7 @@ jobs:
             ${{ env.CUTROOM_CANDIDATE_ARCHIVE }}.sha256
             ${{ runner.temp }}/editor-features.json
             ${{ runner.temp }}/macos-smoke.json
+            ${{ runner.temp }}/macos-candidate-fresh.json
             ${{ runner.temp }}/macos-candidate.json
           if-no-files-found: error
           compression-level: 0

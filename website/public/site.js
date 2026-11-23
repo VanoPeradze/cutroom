@@ -239,7 +239,7 @@
     sections.forEach(section => observer.observe(section));
   }
   if ('IntersectionObserver' in window && !motionPreference.matches) {
-    // The single authored motion is the film field, not a fade on every section.
+    // The ambient field is independent of user-started playback in the sample.
   }
   renderLanguage();
   revealLinkedHelp();

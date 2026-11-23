@@ -25,6 +25,9 @@ SUPPORT_FILES = (
     "scripts/validate_caption_bidi_browser.cjs",
     "tests/fixtures/fonts/DejaVuSans.ttf", "tests/fixtures/fonts/DejaVuSans-Bold.ttf",
     "tests/fixtures/fonts/DejaVu-LICENSE.txt", "tests/fixtures/fonts/README.md",
+    "tests/fixtures/transcript-batch-api.json",
+    "web/fonts/Geist.ttf", "web/fonts/Geist-OFL.txt",
+    "web/fonts/NotoSansHebrew.ttf", "web/fonts/NotoSansHebrew-OFL.txt",
     ".github/CONTRIBUTING.md", ".github/SECURITY.md",
 )
 SOURCE_TREES = {
@@ -36,13 +39,13 @@ DOC_FILES = (
     "docs/THIRD_PARTY_NOTICES.md", "docs/UPGRADE_HE.md",
     "docs/KEYBOARD_SHORTCUTS.md", "docs/KEYBOARD_PROFILES.md", "docs/UI_LAYOUT_QA.md",
     "docs/CREATOR_EDITING_RESEARCH.md", "docs/TEST_ON_ANOTHER_PC.md",
-    "docs/TRANSCRIPT_EVALUATION.md", "docs/QUALITY_AND_LIMITS.md", "docs/UIUX_SKILL_CSS.md",
+    "docs/TRANSCRIPT_EVALUATION.md", "docs/EDIT_EVALUATION.md", "docs/QUALITY_AND_LIMITS.md", "docs/UIUX_SKILL_CSS.md",
     "docs/INDEPENDENT_TRACKS.md", "docs/BETA_FEEDBACK.md", "docs/BETA_STATUS.md", "docs/MODELS.md",
     "docs/CLOUDFLARE_TRANSCRIPTION.md", "docs/caption-bidi-validation.md",
     "docs/CONTRIBUTING.md", "docs/AI_CONNECTIONS.md", "docs/PUBLISHING.md", "docs/PLATFORMS.md",
     "docs/EDITOR_ROADMAP.md", "docs/STABILIZATION.md", "docs/CHROMA_KEY.md", "docs/SOURCE_MARKS.md",
     "docs/USER_GUIDE_EN.md", "docs/USER_GUIDE_HE.md", "docs/SHOWCASE_EN.md", "docs/SHOWCASE_HE.md",
-    "docs/images/showcase/README.md", "docs/DESKTOP_APP.md",
+    "docs/images/showcase/README.md", "docs/DESKTOP_APP.md", "docs/PROJECT_COPIES.md", "docs/PREVIEW_REPAIR.md",
 )
 # Only reviewed, purpose-made app screenshots belong in the tester package.
 # Missing captures fail the build rather than silently shipping broken guide links.

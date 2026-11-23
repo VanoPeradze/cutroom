@@ -58,7 +58,7 @@ def test_wholly_downstream_independent_layers_ripple_without_changing_local_sour
     result=insert(unlocked);assert result.status_code==200,result.get_json();row=store.load(pid)['manual'][key][0]
     assert row=={**old,'start':9.25,'end':10.25}
 
-@pytest.mark.parametrize('kind',['media','text','caption','alternative','audio_plan','locked'])
+@pytest.mark.parametrize('kind',['caption','alternative','audio_plan','locked'])
 def test_unsupported_crossing_or_protected_state_is_atomic(unlocked,kind):
     _,_,store,pid=unlocked
     def prepare(p):

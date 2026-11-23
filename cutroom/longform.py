@@ -13,6 +13,7 @@ import math
 from typing import Any
 
 from .director import (
+    _REACTION_CUE,
     _energy_levels,
     _finite_number,
     _moment_signals,
@@ -28,6 +29,9 @@ _CHAPTER_GAP_SECONDS = 75.0
 _MIN_CHAPTER_SECONDS = 10.0
 _MAX_CHAPTERS = 12
 _MIN_DEAD_AIR_SECONDS = 1.2
+_MAX_PUNCH_INS = 12
+_PUNCH_SECONDS = 1.4
+_PUNCH_SPACING_SECONDS = 30.0
 
 
 def uses_longform_gameplay(goal: Any, brief: dict[str, Any]) -> bool:
@@ -57,15 +61,72 @@ def _output_time(source_time: float, keep: list[dict[str, float]]) -> float:
     return round(elapsed, 3)
 
 
-def _chapter_title(index: int, start: float, end: float, visual: VisualTimeline | None) -> str:
+def _short_title(text: str, limit: int = 48) -> str:
+    text = " ".join(str(text or "").split()).strip(" .,;:-")
+    if len(text) <= limit:
+        return text
+    cut = text[: limit - 1]
+    space = cut.rfind(" ")
+    return (cut[:space] if space >= limit * 0.5 else cut).rstrip(" ,.;:-") + "…"
+
+
+def _spoken_title(start: float, end: float, segments: list[dict[str, Any]]) -> str:
+    """A chapter name from what is said in it: a reaction or question first."""
+    lines = [str(row.get("text") or "").strip() for row in segments
+             if _finite_number(row.get("end")) > start and _finite_number(row.get("start")) < end]
+    lines = [line for line in lines if len(line.split()) >= 2]
+    if not lines:
+        return ""
+    for line in lines:
+        if "!" in line or _REACTION_CUE.search(line):
+            return _short_title(line)
+    for line in lines:
+        if line.endswith("?"):
+            return _short_title(line)
+    return _short_title(max(lines[:4], key=len))
+
+
+def _chapter_title(index: int, start: float, end: float, visual: VisualTimeline | None,
+                   segments: list[dict[str, Any]] | None = None) -> str:
     seen = visual.evidence(start, end) if visual else None
     event = str((seen or {}).get("event") or "").strip().rstrip(".")
     if event:
-        return event if len(event) <= 48 else event[:47].rstrip() + "…"
-    return f"Part {index}"
+        return _short_title(event)
+    spoken = _spoken_title(start, end, segments or [])
+    return spoken or f"Part {index}"
 
 
-def _chapters(keep: list[dict[str, float]], visual: VisualTimeline | None) -> list[dict[str, Any]]:
+def _peak_moments(keep: list[dict[str, float]], waveform: list[dict[str, Any]], levels: dict[str, float],
+                  *, count: int, spacing: float) -> list[dict[str, float]]:
+    """The loudest instants inside kept stretches, spaced apart on the output clock."""
+    rows = []
+    for row in waveform:
+        start, end = _finite_number(row.get("start")), _finite_number(row.get("end"))
+        middle = (start + end) / 2.0
+        if not any(item["start"] + 0.5 <= middle <= item["end"] - 1.5 for item in keep):
+            continue
+        rms = (_finite_number(row.get("rms_dbfs"), -120.0) - levels["rms_floor"]) / max(1e-6, levels["rms_span"])
+        peak = (_finite_number(row.get("peak_dbfs"), -120.0) - levels["peak_floor"]) / max(1e-6, levels["peak_span"])
+        rows.append((rms * 0.72 + peak * 0.28, middle))
+    if not rows:
+        return []
+    ranked = sorted(rows, key=lambda item: (-item[0], item[1]))
+    threshold = ranked[max(0, len(ranked) // 4 - 1)][0]  # top quarter only
+    chosen: list[dict[str, float]] = []
+    for energy, source_time in ranked:
+        if energy < threshold or energy < 0.6:
+            break
+        output = _output_time(source_time, keep)
+        if any(abs(output - item["output_time"]) < spacing for item in chosen):
+            continue
+        chosen.append({"source_time": round(source_time, 3), "output_time": output, "energy": round(energy, 3)})
+        if len(chosen) >= count:
+            break
+    return sorted(chosen, key=lambda item: item["output_time"])
+
+
+def _chapters(keep: list[dict[str, float]], visual: VisualTimeline | None,
+              segments: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
     """Group kept stretches by source gaps; YouTube needs 0:00 and 3+ chapters."""
     if not keep:
         return []
@@ -93,7 +154,7 @@ def _chapters(keep: list[dict[str, float]], visual: VisualTimeline | None) -> li
     if chapters:
         chapters[0]["start"] = 0.0
     for index, chapter in enumerate(chapters, start=1):
-        chapter["title"] = _chapter_title(index, chapter["source_start"], chapter["source_end"], visual)
+        chapter["title"] = _chapter_title(index, chapter["source_start"], chapter["source_end"], visual, segments)
     return chapters if len(chapters) >= 3 else []
 
 
@@ -208,7 +269,20 @@ def condense_longform(
         "dead_screen": dead_blocks,
         "silence": dead_air,
     }.items() if value}
-    chapters = _chapters(final_keep, visual)
+    chapters = _chapters(final_keep, visual, segments)
+    # Punch-in zooms on the loudest instants (about one per 45s of video) and a
+    # cold-open idea: the single strongest instant, to tease before 0:00.
+    peaks = _peak_moments(final_keep, waveform, levels, count=max(1, min(_MAX_PUNCH_INS, round(output / 45.0))),
+                          spacing=_PUNCH_SPACING_SECONDS)
+    punch_ins = [{"start": round(max(0.0, item["output_time"] - 0.25), 3),
+                  "end": round(min(output, item["output_time"] + _PUNCH_SECONDS - 0.25), 3),
+                  "source_time": item["source_time"]} for item in peaks]
+    strongest = max(peaks, key=lambda item: item["energy"], default=None)
+    cold_open = None
+    if strongest and output >= 120:
+        cold_open = {"source_start": round(max(0.0, strongest["source_time"] - 3.0), 3),
+                     "source_end": round(min(duration, strongest["source_time"] + 3.0), 3),
+                     "output_time": strongest["output_time"]}
     summary = (
         f"Condensed {round(duration / 60)} minutes of gameplay to {max(1, round(output / 60))} minutes, "
         f"keeping the strongest stretches in their original order"
@@ -217,4 +291,5 @@ def condense_longform(
         + "; review the cuts before export."
     )
     return {"cuts": cuts, "counts": counts, "chapters": chapters, "summary": summary,
-            "seconds": round(output, 3), "stretches": len(final_keep)}
+            "seconds": round(output, 3), "stretches": len(final_keep),
+            "punch_ins": punch_ins, **({"cold_open": cold_open} if cold_open else {})}

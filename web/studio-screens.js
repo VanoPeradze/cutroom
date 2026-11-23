@@ -144,10 +144,11 @@
     segmented($("#qualitySelect"), { quality: "High" });
 
     // Summary and the main Export action at the end of the tools.
-    const summary = make("div", "export-summary");
+    const summary = make("div", "output-review-summary");
+    summary.setAttribute("aria-label", "Current output");
     const size = make("div"), length = make("div");
-    size.append(make("small", "", "Summary"), make("b"));
-    length.append(make("small", "", "Duration"), make("b"));
+    size.append(make("small", "", "Output pixels / frame rate"), make("b"));
+    length.append(make("small", "", "Timeline duration"), make("b"));
     summary.append(size, length);
     const exportButton = make("button", "button render export-video", "Export video");
     exportButton.type = "button";
@@ -155,22 +156,17 @@
     exportButton.addEventListener("click", () => render?.click());
     const note = make("p", "export-local-note", "Rendered locally on this computer");
     const anchor = $(".output-format-section", panel);
-    anchor?.after(summary);
+    anchor?.before(summary);
     const tail = make("div", "export-tail");
     tail.append(exportButton, note);
     panel.append(tail);
-    const resolutionHeights = { 720: [1280, 720], 1080: [1920, 1080], 1440: [2560, 1440], 2160: [3840, 2160] };
     const updateSummary = () => {
-      const height = Number($("#resolutionSelect")?.value || 1080);
-      const [wide, tall] = resolutionHeights[height] || [Math.round(height * 16 / 9), height];
-      const ratio = aspect.value;
-      const dims = ratio === "9:16" ? [tall, wide] : ratio === "1:1" ? [tall, tall] : ratio === "4:5" ? [Math.round(tall * .8), tall] : [wide, tall];
-      $("b", size).textContent = `${dims[0]} × ${dims[1]} · ${$("#fpsSelect")?.value || 30} FPS`;
-      $("b", length).textContent = ($("#previewTime")?.textContent || "").split("/")[1]?.trim() || "--:--";
+      const output = $("#advancedPanel")?.outputReviewSnapshot?.();
+      $("b", size).textContent = output ? `${output.size} · ${output.fps} FPS` : "Output unavailable";
+      $("b", length).textContent = output?.length || "No editable timeline";
       exportButton.disabled = Boolean(render?.disabled);
     };
     ["#resolutionSelect", "#fpsSelect", "#aspectSelect"].forEach((id) => $(id)?.addEventListener("change", updateSummary));
-    observe($("#previewTime"), updateSummary, { childList: true, characterData: true, subtree: true });
     observe(render, updateSummary, { attributes: true });
     syncers.add(updateSummary);
     updateSummary();
@@ -183,7 +179,7 @@
     shelf.dataset.studioScreens = "true";
     const heading = $(".shelf-heading", shelf);
     if (heading) {
-      $("h3", heading).textContent = "Media";
+      $("h3", heading).textContent = "Media pool";
       const add = make("button", "shelf-add", "Import");
       add.type = "button";
       add.setAttribute("aria-label", "Import media");
@@ -199,7 +195,7 @@
     tabs.setAttribute("role", "group");
     tabs.setAttribute("aria-label", "Filter media by type");
     let kind = "all";
-    const filters = [["all", "All media"], ["video", "Video"], ["audio", "Audio"], ["image", "Images"]].map(([value, text]) => {
+    const filters = [["all", "All"], ["video", "Video"], ["audio", "Audio"], ["image", "Images"]].map(([value, text]) => {
       const tab = make("button", "", text);
       tab.type = "button";
       tab.addEventListener("click", () => { kind = value; apply(); });
@@ -207,6 +203,13 @@
       tabs.append(tab);
       return tab;
     });
+    const usageLabel = make("label", "library-usage-label", "Imported usage");
+    const usage = make("select", "library-usage-filter");
+    usage.dataset.libraryUsage = ""; usage.setAttribute("aria-label", "Filter imported media by timeline usage");
+    for (const [value, text] of [["all", "All imported"], ["used", "With timeline clips"], ["unused", "No timeline clips"]]) {
+      const option = make("option", "", text); option.value = value; usage.append(option);
+    }
+    usage.value = "all"; usageLabel.append(usage);
     const views = make("div", "library-view");
     views.setAttribute("role", "group");
     views.setAttribute("aria-label", "Media library view");
@@ -239,13 +242,27 @@
     reset.type = "button";
     reset.addEventListener("click", () => {
       search.value = "";
-      kind = "all";
+      kind = "all"; usage.value = "all";
       apply();
       search.focus();
     });
     empty.append(emptyCopy, reset);
-    tools.append(search, tabs, views, count, empty);
+    tools.append(search, tabs, usageLabel, views, count, empty);
     heading?.after(tools);
+    // Keep source recordings distinct from optional overlays, music and images.
+    // Group labels are display-only; the original lists and handlers remain.
+    const groups = [[".source-library", "Source footage", ".source-library-card"],
+      [".media-library", "Imported assets", ".media-asset"]].map(([selector, label, itemSelector]) => {
+      const list = $(selector, shelf);
+      if (!list) return null;
+      const title = make("h4", "library-group-heading");
+      title.append(make("span", "", label));
+      const total = make("b");
+      total.setAttribute("aria-label", "Visible files");
+      title.append(total);
+      list.before(title);
+      return {list, title, total, itemSelector};
+    }).filter(Boolean);
     const apply = () => {
       const query = search.value.trim().toLowerCase();
       filters.forEach((tab) => tab.setAttribute("aria-pressed", String(tab.dataset.value === kind)));
@@ -253,22 +270,58 @@
       let shown = 0;
       for (const item of items) {
         const matchesKind = kind === "all" || item.dataset.kind === kind;
-        const matchesText = !query || item.textContent.toLowerCase().includes(query);
-        item.hidden = !(matchesKind && matchesText);
+        const imported = item.classList.contains("media-asset");
+        const searchable = imported ? item.dataset.librarySearch || "" : item.textContent;
+        const matchesText = !query || searchable.toLowerCase().includes(query);
+        const rawCount = item.dataset.mediaUsageCount;
+        const validUsage = item.dataset.mediaUsageValid === "true" && /^(0|[1-9][0-9]*)$/.test(rawCount || "") && Number.isSafeInteger(Number(rawCount));
+        const matchesUsage = !imported || usage.value === "all" || validUsage && (usage.value === "used" ? Number(rawCount) > 0 : Number(rawCount) === 0);
+        item.hidden = !(matchesKind && matchesText && matchesUsage);
         if (!item.hidden) shown += 1;
       }
-      const message = items.length === 0 ? "No media imported" : query || kind !== "all"
-        ? `${shown} of ${items.length} items` : `${items.length} ${items.length === 1 ? "item" : "items"}`;
+      const imported = items.filter(item => item.classList.contains("media-asset"));
+      const sources = items.length - imported.length;
+      const unknown = imported.filter(item => item.dataset.mediaUsageValid !== "true" || !/^(0|[1-9][0-9]*)$/.test(item.dataset.mediaUsageCount || "") || !Number.isSafeInteger(Number(item.dataset.mediaUsageCount))).length;
+      let message = !imported.length ? `No imported assets${sources ? ` · ${sources} source recording${sources === 1 ? "" : "s"}` : ""}`
+        : query || kind !== "all" || usage.value !== "all" ? `${shown} of ${items.length} items` : `${items.length} ${items.length === 1 ? "item" : "items"}`;
+      if (usage.value !== "all") message += ". Usage filters imported assets only; source footage is unchanged.";
+      if (unknown) message += ` ${unknown} imported asset${unknown === 1 ? " has" : "s have"} unavailable usage; shown only in All imported.`;
+      const emptyMessage = items.length ? "No matching media. Try another search or show all files." : "No media imported. Import files to start your media pool.";
+      if (emptyCopy.textContent !== emptyMessage) emptyCopy.textContent = emptyMessage;
       // The shelf observer sees child-list mutations. Do not rewrite identical
       // text, or the status itself would schedule another endless refresh.
       if (count.textContent !== message) count.textContent = message;
       empty.hidden = shown > 0 || items.length === 0;
+      for (const group of groups) {
+        const visible = $$(group.itemSelector, group.list).filter(item => !item.hidden).length;
+        const value = String(visible);
+        if (group.total.textContent !== value) group.total.textContent = value;
+        group.title.hidden = visible === 0;
+      }
     };
     search.addEventListener("input", apply);
+    usage.addEventListener("change", apply);
+    shelf.mediaPoolNavigation = {
+      revealAsset(assetId) {
+        if (typeof assetId !== "string" || !assetId) return false;
+        const cards = $$(".media-asset", shelf).filter(card => card.dataset.libraryAsset === assetId);
+        if (cards.length !== 1) return false;
+        const card = cards[0];
+        const query = search.value.trim().toLowerCase();
+        if (query && !(card.dataset.librarySearch || "").toLowerCase().includes(query)) search.value = "";
+        if (kind !== "all" && kind !== card.dataset.kind) kind = "all";
+        const rawCount = card.dataset.mediaUsageCount;
+        const validUsage = card.dataset.mediaUsageValid === "true" && /^(0|[1-9][0-9]*)$/.test(rawCount || "") && Number.isSafeInteger(Number(rawCount));
+        if (usage.value !== "all" && (!validUsage || (usage.value === "used" ? Number(rawCount) === 0 : Number(rawCount) !== 0))) usage.value = "all";
+        apply();
+        card.tabIndex = -1; card.scrollIntoView({block:"nearest", inline:"nearest"}); card.focus({preventScroll:true});
+        return true;
+      }
+    };
     // One list for everything: keep the imported-files section open.
     const keepOpen = () => { const files = $(".media-library-section", shelf); if (files && !files.open) files.open = true; };
     syncers.add(keepOpen); keepOpen();
-    observe(shelf, () => apply(), { childList: true, subtree: true });
+    observe(shelf, () => apply(), { childList: true, subtree: true, attributes:true, attributeFilter:["data-library-asset","data-library-search","data-media-usage-count","data-media-usage-valid","data-kind"] });
     apply();
   }
 
@@ -330,10 +383,7 @@
     if (!mixer) return;
     panel.dataset.studioScreens = "true";
     const title = make("h3", "panel-title", "Audio");
-    const sub = make("p", "panel-subtitle", "Track mixer");
-    panel.prepend(title, sub);
-    const foot = make("p", "mixer-footnote", "Mute: preview + export  |  Solo: preview only");
-    mixer.append(foot);
+    panel.prepend(title);
   }
 
   // ---------- Captions inspector ----------

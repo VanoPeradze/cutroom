@@ -129,7 +129,7 @@ function fixture({mediaReady = true} = {}) {
     requestAnimationFrame: callback => callback(),
   });
   const run = code => vm.runInContext(code, context);
-  run(mediaSource); run(appSource);
+  run(web('source-frame.js').replace(/^export /gm, '')); run(mediaSource); run(appSource);
   run(`cacheElements();
     state.project = {id:'discovery',revision:7,sources:{A:{duration:20},B:{duration:20}},
       settings:{audio_source:'A'},manual:{audio_mixer:{music_db:-12,music_muted:true}},draft:{output_duration:20}};
@@ -327,11 +327,12 @@ test('Master is a separate real output row while all relocated channel controls 
   assert.deepEqual(channels.children.map(row=>row.dataset.channel),roles.slice(0,4),'the four input channels keep their order without Master occupying their grid');
   assert.ok(master,'Master has its own output section');
   assert.equal(master.parentElement,channels.parentElement);
-  assert.equal(channels.parentElement.children[channels.parentElement.children.indexOf(channels)+1],master,'Master follows the input channels in reading and keyboard order');
+  assert.equal(master.parentElement.children[0],master,'Master output leads the panel in visual, reading and keyboard order');
+  assert.ok(channels.parentElement.children.indexOf(channels)>0,'the input bank follows the real Master strip');
   assert.deepEqual(master.children.map(row=>row.dataset.channel),['master']);
   assert.deepEqual(channels.children.map(row=>row.querySelector('[data-channel-name]').textContent),['Original','Music','Voiceover','Effects']);
   assert.equal(master.children[0].querySelector('[data-channel-name]').textContent,'Master');
-  assert.deepEqual(audio.querySelectorAll('[data-mix]').map(range=>range.dataset.mix),roles.map(role=>`${role}_db`));
+  assert.deepEqual(audio.querySelectorAll('[data-mix]').map(range=>range.dataset.mix),['master',...roles.slice(0,4)].map(role=>`${role}_db`));
   assert.equal(audio.querySelectorAll('.mixer-channel-meter').length,5);
   assert.equal(nodes.get('studioPanelMedia').querySelector('[data-mix]'),null,'the single mixer stays in the primary Audio panel');
   for(const [index,role] of roles.entries()) {

@@ -27,6 +27,7 @@ SEQUENCE_ACTION_FIELDS = {
     "sequence_move_range": {"start", "end", "to", "mode", "slot"},
     "sequence_duplicate_range": {"start", "end", "to"},
     "sequence_insert_linked": {"slot", "start", "source_start", "source_end"},
+    "sequence_insert_all": {"slot", "start", "source_start", "source_end"},
     "sequence_layout": {"start", "end", "layout"},
     "sequence_crop": {"slot", "start", "end", "x", "y", "zoom"},
     "sequence_podcast_frame": {"slot", "start", "end", "focus", "panel_split", "source_generation", "confirmed_stacked_clean"},
@@ -438,6 +439,40 @@ def _validate_gap_caption_state(project: dict[str, Any], staged_manual: dict[str
                 raise SourceTrackError("Closing these gaps would merge or change an edited transcript caption. Keep those gaps or resolve the caption edits first; no layers were changed.")
 
 
+def _validate_mixed_delete_captions(project: dict[str, Any], staged_manual: dict[str, Any],
+                                    start: float, end: float) -> None:
+    """Refuse ambiguous reviewed-caption ownership during a new all-layer cut.
+
+    Keep source-only legacy deletion behavior unchanged. Custom text is handled
+    explicitly as edit-time layers; automatic captions follow source words.
+    """
+    from .caption_alternatives import status as caption_status
+    from .render import project_caption_items
+
+    if caption_status(project)["active_id"] != "original":
+        raise SourceTrackError("An alternative caption version is active. Switch back to original captions before mixed-layer range removal; no layers were changed.")
+    manual = project.get("manual") or {}
+    if manual.get("caption_dormant_overrides"):
+        raise SourceTrackError("Some caption edits have uncertain ownership. Resolve them before mixed-layer range removal; no layers were changed.")
+    overrides = manual.get("caption_overrides") or {}
+    if not overrides:
+        return
+    items = {row["id"]: row for row in project_caption_items(project, aligned=False)}
+    if not isinstance(overrides, dict) or any(key not in items for key in overrides):
+        raise SourceTrackError("Some caption edits have uncertain ownership. Resolve them before mixed-layer range removal; no layers were changed.")
+    for key, edit in overrides.items():
+        if not isinstance(edit, dict) or any(_number(edit.get(field, 0), field) != 0 for field in ("start_delta", "end_delta")):
+            raise SourceTrackError("An edited automatic caption has custom timing. Reset its timing before mixed-layer range removal; no layers were changed.")
+        item = items[key]
+        if item["start"] < end - EPSILON and item["end"] > start + EPSILON:
+            raise SourceTrackError("The range overlaps a manually edited automatic caption. Resolve that caption edit or choose a different range; no layers were changed.")
+    after_items = project_caption_items({**project, "manual": staged_manual}, aligned=False)
+    for key in overrides:
+        anchor = _gap_caption_anchor(items[key])
+        if sum(_gap_caption_anchor(row) == anchor for row in after_items) != 1:
+            raise SourceTrackError("Range removal would merge or change an edited automatic caption. Resolve that caption edit first; no layers were changed.")
+
+
 def _ripple_move(value: dict[str, Any], start: float, end: float, at: float, slot: str | None = None) -> dict[str, Any] | None:
     """Lift and insert, closing the origin and pushing destination footage.
 
@@ -579,7 +614,7 @@ def _prepare_linked_edit(value: dict[str, Any], payload: dict[str, Any], action:
                 changed = True
         if not changed:
             return None
-    elif action == "sequence_insert_linked":
+    elif action in {"sequence_insert_linked", "sequence_insert_all"}:
         slot = str(payload.get("slot") or "").upper()
         if slot not in {"A", "B"} or _duration(value, slot) <= 0:
             raise SourceTrackError("Choose an existing source track A or B")
@@ -592,10 +627,26 @@ def _prepare_linked_edit(value: dict[str, Any], payload: dict[str, Any], action:
         block = {"duration": length, "source_tracks": {"A": [], "B": []},
                  "camera_plan": [{"start": 0, "end": length, "camera": slot}]}
         block["source_tracks"][slot] = [{"id": _new_id(slot), "start": 0, "end": length, "source_start": start}]
-        _insert_time(manual, block, _placement_time(payload, "start"))
+        at = _placement_time(payload, "start")
+        if action == "sequence_insert_all":
+            from .media_library import _insert_layer_time, validate_middle_insert_policy
+            if at > duration:
+                raise SourceTrackError("Choose an insertion point inside the current edit")
+            if at < duration - 1e-9:
+                validate_middle_insert_policy(value, manual, at)
+                layers = _insert_layer_time(value, at, length, duration, reserved_media=0)
+                for key in ("media_clips", "text_clips"):
+                    if key in manual:
+                        manual[key] = layers[key]
+        _insert_time(manual, block, at)
     else:
         start, end = _validate_range(value, payload)
         if action == "sequence_ripple_delete":
+            if manual.get("media_clips") or manual.get("text_clips"):
+                from .media_library import remove_layer_time
+                if (value.get("draft") or {}).get("audio_plan"):
+                    raise SourceTrackError("This draft has a timed audio plan. Mixed-layer range removal is not supported for this plan; no layers were changed.")
+                manual.update(remove_layer_time(value, start, end, duration))
             _remove_time(manual, start, end)
         else:
             at = _placement_time(payload)
@@ -653,7 +704,9 @@ def prepare_sequence_edit(project: dict[str, Any], payload: dict[str, Any]) -> d
             manual.pop("source_tracks", None)
         return manual
     preparation_project = project
-    if (action == "sequence_close_gaps" and not payload.get("slot")
+    mixed_delete = action == "sequence_ripple_delete" and bool(
+        (project.get("manual") or {}).get("media_clips") or (project.get("manual") or {}).get("text_clips"))
+    if ((action == "sequence_close_gaps" and not payload.get("slot") or mixed_delete)
             and not has_sequence(project)
             and (project.get("manual") or {}).get("caption_overrides")):
         # The first validation pass precedes editing.py's provenance annotation.
@@ -696,8 +749,12 @@ def prepare_sequence_edit(project: dict[str, Any], payload: dict[str, Any]) -> d
     if action in {"sequence_source_restore", "sequence_source_remove"}:
         from .source_review import prepare_source_review
         return prepare_source_review(value, payload)
-    if action in {"sequence_ripple_delete", "sequence_split_all", "sequence_move_range", "sequence_duplicate_range", "sequence_insert_linked"}:
-        return _prepare_linked_edit(value, payload, action)
+    if action in {"sequence_ripple_delete", "sequence_split_all", "sequence_move_range", "sequence_duplicate_range", "sequence_insert_linked", "sequence_insert_all"}:
+        result = _prepare_linked_edit(value, payload, action)
+        if result is not None and mixed_delete:
+            start, end = _number(payload.get("start"), "start"), _number(payload.get("end"), "end")
+            _validate_mixed_delete_captions(project, result, start, end)
+        return result
     if action == "sequence_layout":
         start, end = _validate_range(value, payload)
         camera = str(payload.get("layout") or "").strip()

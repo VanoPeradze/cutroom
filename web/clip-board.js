@@ -433,6 +433,7 @@ export class ClipBoard {
     actions.append(openButton, exportButton);
     if (this.options.canExport && !this.options.canExport()) exportButton.hidden = true;
     body.append(actions);
+    if (this.options.postingKit) body.append(this.kitSection(clip));
     if (!range) {
       const canPlace = Boolean(this.options.canPlace?.());
       exportButton.hidden = true;
@@ -451,6 +452,107 @@ export class ClipBoard {
     node.append(media, body);
     this.cards.set(clip.id, { node, canvas, play, progress, media, clip });
     return node;
+  }
+
+  // Titles, description and hashtags for posting. The basic kit is built from
+  // what the recording says; "Write with AI" asks the configured Story AI.
+  kitSection(clip) {
+    const details = this.el("details", "clip-kit");
+    const summary = this.el("summary", null, "Titles, description & hashtags");
+    const panel = this.el("div", "clip-kit-panel");
+    panel.setAttribute("aria-live", "polite");
+    details.append(summary, panel);
+    let loaded = false;
+    details.addEventListener("toggle", () => {
+      if (details.open && !loaded) { loaded = true; this.loadKit(clip, panel, false); }
+    });
+    return details;
+  }
+
+  async loadKit(clip, panel, useAi) {
+    panel.replaceChildren(this.el("p", "clip-kit-status", useAi ? "Writing with AI…" : "Reading this moment…"));
+    try {
+      const kit = await this.options.postingKit(clip, useAi);
+      this.renderKit(clip, panel, kit);
+    } catch (error) {
+      const message = error?.message || "The kit could not be built.";
+      if (useAi && panel.dataset.kit) {
+        this.renderKit(clip, panel, JSON.parse(panel.dataset.kit));
+        panel.prepend(this.el("p", "clip-kit-status warn", message));
+      } else {
+        panel.replaceChildren(this.el("p", "clip-kit-status warn", message));
+      }
+    }
+  }
+
+  copyButton(label, text, name) {
+    const button = this.el("button", "clip-kit-copy", label);
+    button.type = "button";
+    button.setAttribute("aria-label", `Copy ${name}`);
+    button.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(text);
+        button.textContent = "Copied";
+        setTimeout(() => { button.textContent = label; }, 1400);
+      } catch {
+        this.options.notify?.("Copy was blocked by the browser. Select the text and copy it.");
+      }
+    });
+    return button;
+  }
+
+  renderKit(clip, panel, kit) {
+    if (!kit.ai) panel.dataset.kit = JSON.stringify(kit);
+    const nodes = [];
+    const dir = kit.language === "he" ? "rtl" : "auto";
+    if (kit.hook) {
+      const hook = this.el("div", "clip-kit-row hook");
+      const text = this.el("p", null, kit.hook);
+      text.dir = dir;
+      hook.append(this.el("small", null, "On-screen hook"), text, this.copyButton("Copy", kit.hook, "hook"));
+      nodes.push(hook);
+    }
+    if (kit.titles?.length) {
+      const list = this.el("ol", "clip-kit-titles");
+      list.setAttribute("aria-label", "Suggested titles");
+      for (const title of kit.titles) {
+        const item = this.el("li", "clip-kit-row");
+        const text = this.el("p", null, title);
+        text.dir = dir;
+        item.append(text, this.copyButton("Copy", title, "title"));
+        list.append(item);
+      }
+      nodes.push(this.el("small", "clip-kit-label", "Titles"), list);
+    }
+    if (kit.description) {
+      const row = this.el("div", "clip-kit-row");
+      const text = this.el("p", "clip-kit-description", kit.description);
+      text.dir = dir;
+      row.append(text, this.copyButton("Copy", kit.description, "description"));
+      nodes.push(this.el("small", "clip-kit-label", "Description"), row);
+    }
+    if (kit.hashtags?.length) {
+      const row = this.el("div", "clip-kit-row");
+      const tags = kit.hashtags.join(" ");
+      const text = this.el("p", "clip-kit-tags", tags);
+      text.dir = dir;
+      row.append(text, this.copyButton("Copy", tags, "hashtags"));
+      nodes.push(this.el("small", "clip-kit-label", "Hashtags"), row);
+    }
+    const foot = this.el("div", "clip-kit-foot");
+    if (kit.titles?.length || kit.description) {
+      const all = [kit.hook, kit.titles?.[0], kit.description, kit.hashtags?.join(" ")].filter(Boolean).join("\n\n");
+      foot.append(this.copyButton("Copy all", all, "everything"));
+    }
+    if (kit.source !== "none") {
+      const ai = this.el("button", "button ghost compact clip-kit-ai", kit.ai ? "Write again" : "Write with AI");
+      ai.type = "button";
+      ai.addEventListener("click", () => this.loadKit(clip, panel, true));
+      foot.append(ai);
+    }
+    nodes.push(foot);
+    if (kit.note) nodes.push(this.el("p", "clip-kit-note", kit.note));
+    panel.replaceChildren(...nodes);
   }
 
   queueStills(clips) {
