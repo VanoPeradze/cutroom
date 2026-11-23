@@ -1,7 +1,7 @@
 """A saved "video map": who speaks when, sound events, topics and shot rhythm.
 
 Everything here is measured locally with FFmpeg and NumPy. No model is
-downloaded and nothing leaves the computer. The results are estimates, so
+downloaded and this map is not sent to cloud Story providers. These are estimates, so
 every part carries its method and confidence. Story receives them only as
 advisory background, never as proof that something happened.
 
@@ -26,7 +26,7 @@ import numpy as np
 
 from .utils import normalize_text
 
-VIDEO_MAP_VERSION = "video-map-2026-11-23.v1"
+VIDEO_MAP_VERSION = "video-map-2026-11-23.v2"
 SAMPLE_RATE = 8000
 FRAME = 256  # 32 ms at 8 kHz
 MAX_DECODE_SECONDS = 4 * 3600
@@ -62,21 +62,30 @@ def _number(value: Any, default: float = 0.0) -> float:
 
 
 def decode_mono(path: Path, settings: Any, duration: float, *, cancel_check: Callable[[], None] | None = None) -> np.ndarray | None:
-    """Decode up to four hours of 8 kHz mono PCM, or None when unavailable."""
+    """Decode a bounded, local 8 kHz mono PCM stream, or return no evidence."""
+    from .jobs import JobCancelled
     from .media import run_command
 
-    if duration <= 0 or duration > MAX_DECODE_SECONDS:
+    if not math.isfinite(duration) or duration < 1 or duration > MAX_DECODE_SECONDS:
         return None
     try:
         result = run_command(
-            [settings.ffmpeg, "-hide_banner", "-loglevel", "error", "-i", str(path), "-vn", "-ac", "1",
-             "-ar", str(SAMPLE_RATE), "-f", "s16le", "pipe:1"],
+            [settings.ffmpeg, "-hide_banner", "-nostdin", "-loglevel", "error",
+             "-protocol_whitelist", "file,pipe", "-i", str(path.absolute()),
+             "-t", f"{duration:.6f}", "-vn", "-ac", "1", "-ar", str(SAMPLE_RATE),
+             "-f", "s16le", "pipe:1"],
             text=False, timeout=max(120, duration * 0.5), cancel_check=cancel_check,
         )
+    except JobCancelled:
+        raise
     except Exception:  # noqa: BLE001 - a missing map must never stop the edit
         return None
-    data = np.frombuffer(result.stdout or b"", dtype=np.int16)
-    return data.astype(np.float32) / 32768.0 if data.size >= SAMPLE_RATE else None
+    pcm = result.stdout or b""
+    if len(pcm) % 2 or not 2 * SAMPLE_RATE <= len(pcm) <= 2 * math.ceil(duration * SAMPLE_RATE):
+        return None
+    samples = np.frombuffer(pcm, dtype="<i2").astype(np.float32)
+    samples *= 1.0 / 32768.0
+    return samples
 
 
 def _frames(samples: np.ndarray) -> np.ndarray:

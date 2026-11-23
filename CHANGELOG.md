@@ -1,5 +1,12 @@
 # Changelog
 
+## CUTROOM 1.3 Beta source changes: style families and interface motion
+
+- Edit styles are grouped into five families. Older style IDs and their defaults are unchanged; new Talking Clips and YouTube Explainer styles use speech evidence.
+- The local video map adds estimated speakers, sound events and topics when evidence is available. The map and creator-entered background notes stay on the computer rather than extending cloud Story data sharing.
+- In-sentence filler cleanup requires a verified pause on both sides. Transcript corrections and audio-routing changes refresh the map.
+- The style picker separates keyboard navigation between family cards and flavor chips. Interface motion respects reduced-motion preferences, including theme changes.
+
 ## Unreleased - 2026-11-22 - Clips board and Gameplay YouTube videos
 
 - **Clips** in the editor top bar ranks the strongest 15/30/45/60-second moments of the main recording from saved analysis (sound levels, plus the transcript and gameplay vision when present). It runs no model and saves nothing. Each card has a real frame, an inline preview, a strength score relative to that recording (not a view prediction) and its reasons; the moment radar shows the whole recording.

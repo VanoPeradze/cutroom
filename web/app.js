@@ -46,7 +46,7 @@ import { initTrackProtection } from "./track-protection.js?v=1.2-beta";
 import { TextStudio } from "./text-studio.js?v=20261116-caption-preview3";
 import { initNumericScrub } from "./numeric-scrub.js?v=20261116-move2";
 import { ReelProposalReview, supportsReelReview } from "./reel-proposals.js?v=20261022";
-import { ClipBoard } from "./clip-board.js?v=20261122-clips11-kit2";
+import { ClipBoard } from "./clip-board.js?v=20261123-soundevents1";
 import { AiDraftReview } from "./ai-draft-review.js?v=20261116-ai-review2";
 import { CaptionAlternatives } from "./caption-alternatives.js?v=20261023";
 import { initCaptionPreview, captionPreviewIssue } from "./caption-preview.js?v=20261116-caption-preview3";
@@ -2143,7 +2143,11 @@ function toast(message, type = "error", timeout = 4400) {
   node.textContent = message;
   elements.toastRegion.append(node);
   window.setTimeout(() => {
-    // Fade out first; remove on animation end (or right away without motion).
+    // Reduced-motion users should not wait for an animation that cannot run.
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches) {
+      node.remove();
+      return;
+    }
     node.classList.add("flow-leaving");
     const done = () => node.remove();
     node.addEventListener("animationend", done, { once: true });
@@ -2496,7 +2500,7 @@ function bindEvents() {
   elements.editStyleChoices.addEventListener("click", (event) => {
     const button = event.target.closest("button[data-value]");
     if (!button || button.dataset.value === state.selectedEditStyle) return;
-    chooseEditStyle(button.dataset.value);
+    chooseEditStyle(button.dataset.value, button.dataset.variant === "true");
   });
   elements.editStyleChoices.addEventListener("keydown", handleEditStyleKeydown);
   elements.paceChoices.addEventListener("click", (event) => {
@@ -3645,7 +3649,7 @@ function videoMapSummary(map) {
   }
   const shots = Number(map.visual?.shots_per_minute);
   if (Number.isFinite(shots) && map.visual?.shot_changes) parts.push(uiCopy(`${shots} חיתוכים לדקה`, `${shots} shots/min`));
-  return parts.length ? `${uiCopy("מה זיהינו בסרטון:", "What CUTROOM understood:")} ${parts.join(" · ")}` : "";
+  return parts.length ? `${uiCopy("הערכות מפת הווידאו:", "Video map estimates:")} ${parts.join(" · ")}` : "";
 }
 
 function renderVideoMap() {
@@ -3676,8 +3680,10 @@ async function renderStyleRecommendation() {
     }
     styleRecommendationCache.set(key, recommendation);
   }
+  // Ignore a reply for a project/revision/goal that is no longer on screen.
+  if (state.project?.id !== project.id || state.project?.revision !== project.revision || currentGoalValue() !== goal) return;
   const selected = state.selectedEditStyle || project.settings?.edit_style || "smart";
-  if (!recommendation || recommendation.confidence === "low" || recommendation.style === selected || currentGoalValue() !== goal) {
+  if (!recommendation || recommendation.confidence === "low" || recommendation.style === selected) {
     host.hidden = true;
     return;
   }
@@ -3749,24 +3755,33 @@ function renderEditStyleNote(goal = elements.goalChoices?.querySelector("button.
   }
 }
 
-function chooseEditStyle(styleId) {
-  const settings = applyEditStyle(styleId, true);
+function chooseEditStyle(styleId, focusVariant = false, announce = true) {
+  const settings = applyEditStyle(styleId, announce);
   scheduleSettingsPatch({ requiresRebuild: true, reason: "edit_style", settings });
-  // Rendering replaces cards. Keep focus on the chosen radio, not on the page.
-  $$('button[data-value]', elements.editStyleChoices).find((button) => button.dataset.value === styleId)?.focus();
+  // Rendering replaces cards; the same saved style can be on both a card and a chip.
+  const choices = $$('button[data-value]', elements.editStyleChoices);
+  const nextFocus = choices.find((button) =>
+    button.dataset.value === styleId && (button.dataset.variant === "true") === focusVariant);
+  nextFocus?.focus();
 }
 
 function handleEditStyleKeydown(event) {
   if (event.altKey || event.ctrlKey || event.metaKey) return;
-  const directions = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 };
-  if (!(event.key in directions) && !["Home", "End"].includes(event.key)) return;
-  const buttons = $$('button[data-value]', elements.editStyleChoices).filter((button) => !button.disabled);
-  const index = buttons.indexOf(event.target.closest('button[data-value]'));
-  if (index < 0 || !buttons.length) return;
+  const rtl = document.documentElement?.dir === "rtl";
+  const directions = { ArrowRight: rtl ? -1 : 1, ArrowDown: 1, ArrowLeft: rtl ? 1 : -1, ArrowUp: -1 };
+  if (!Object.hasOwn(directions, event.key) && !["Home", "End"].includes(event.key)) return;
+  const origin = event.target.closest('button[data-value]');
+  if (!origin) return;
+  const variant = origin.dataset.variant === "true";
+  const buttons = $$('button[data-value]', elements.editStyleChoices)
+    .filter((button) => !button.disabled && (button.dataset.variant === "true") === variant);
+  const index = buttons.indexOf(origin);
+  if (index < 0) return;
   event.preventDefault();
-  const next = event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1
-    : (index + directions[event.key] + buttons.length) % buttons.length;
-  if (buttons[next].dataset.value !== state.selectedEditStyle) chooseEditStyle(buttons[next].dataset.value);
+  const next = event.key === "Home" ? buttons[0] : event.key === "End" ? buttons.at(-1)
+    : buttons[(index + directions[event.key] + buttons.length) % buttons.length];
+  if (next.dataset.value === state.selectedEditStyle) next.focus();
+  else chooseEditStyle(next.dataset.value, variant, false);
 }
 
 function applyEditStyle(styleId, announce = false) {

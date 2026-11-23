@@ -159,3 +159,118 @@ def test_director_reuses_a_cached_map_and_skips_offset_audio():
     assert offset["speakers"]["reason"] == "offset_audio_source"
     assert _resolve_video_map(_Context(), None, None, fingerprints, segments=[], duration=30.0, audio_path=None,
                               audio_slot="A", audio_offset=0.0, scenes=[], vision={}) is None
+
+def test_decoder_uses_local_path_and_finite_output_bound(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    from cutroom import media
+    from cutroom.understanding import decode_mono
+
+    path = tmp_path / "synthetic audio.wav"
+    callback = lambda: None
+    seen = []
+
+    def run(args, **options):
+        seen.append((args, options))
+        return SimpleNamespace(stdout=b"\x00\x40" * SAMPLE_RATE)
+
+    monkeypatch.setattr(media, "run_command", run)
+    samples = decode_mono(path, SimpleNamespace(ffmpeg="ffmpeg"), 1.0, cancel_check=callback)
+    assert samples.dtype == np.float32 and samples.shape == (SAMPLE_RATE,)
+    assert float(samples[0]) == 0.5
+    args, options = seen[0]
+    assert args[args.index("-protocol_whitelist") + 1] == "file,pipe"
+    assert args.index("-protocol_whitelist") < args.index("-i")
+    assert args[args.index("-i") + 1] == str(path.absolute())
+    assert float(args[args.index("-t") + 1]) == 1
+    assert args[-1] == "pipe:1" and options["cancel_check"] is callback and options["text"] is False
+    for duration in (0, 0.99999, float("nan"), float("inf"), 4 * 3600 + 1):
+        assert decode_mono(path, SimpleNamespace(ffmpeg="ffmpeg"), duration) is None
+    assert len(seen) == 1
+
+
+def test_decoder_rejects_invalid_pcm_and_keeps_cancellation(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    import pytest
+    from cutroom import media
+    from cutroom.jobs import JobCancelled
+    from cutroom.understanding import decode_mono
+
+    path = tmp_path / "only a synthetic file name.wav"
+    settings = SimpleNamespace(ffmpeg="ffmpeg")
+    for output in (b"\x00" * (2 * SAMPLE_RATE + 1), b"\x00\x00" * (SAMPLE_RATE + 1)):
+        monkeypatch.setattr(media, "run_command", lambda *args, **kwargs: SimpleNamespace(stdout=output))
+        assert decode_mono(path, settings, 1) is None
+
+    def cancel(*args, **kwargs):
+        raise JobCancelled("synthetic cancellation")
+
+    monkeypatch.setattr(media, "run_command", cancel)
+    with pytest.raises(JobCancelled):
+        decode_mono(path, settings, 1)
+
+
+def test_map_cache_matches_saved_words_markers_and_audio_routing(tmp_path, monkeypatch):
+    from cutroom import director
+
+    samples = np.zeros(SAMPLE_RATE * 3, dtype=np.float32)
+    monkeypatch.setattr(director, "decode_mono", lambda *args, **kwargs: samples)
+    fingerprints = {"source": "src", "transcript": "tr", "scenes": "sc", "vision": "vi"}
+    args = {"duration": 5.0, "audio_path": tmp_path / "synthetic.wav",
+            "scenes": [], "vision": {}}
+    rows = [{"id": "one", "start": 0.0, "end": 2.0, "text": "volcano [laughter]"}]
+
+    def resolve(cache, text, slot="A", shift=0.0):
+        return director._resolve_video_map(
+            _Context(), None, {"video_map": cache} if cache else None, fingerprints,
+            segments=[{**rows[0], "text": text}], audio_slot=slot, audio_offset=shift, **args)
+
+    first = resolve(None, rows[0]["text"])
+    assert "volcano" in first["topics"][0]["keywords"] and first["event_counts"]["laughter"] == 1
+    corrected = resolve(first, "butterfly laughter")
+    assert corrected["cache_key"] != first["cache_key"]
+    assert "butterfly" in corrected["topics"][0]["keywords"] and not corrected["event_counts"]
+    marker_removed = resolve(first, "volcano laughter")
+    assert marker_removed["cache_key"] != first["cache_key"] and not marker_removed["event_counts"]
+    offset = resolve(first, rows[0]["text"], slot="B", shift=1.5)
+    assert offset["cache_key"] != first["cache_key"] and offset["speakers"]["reason"] == "offset_audio_source"
+
+
+def test_source_note_and_video_map_are_only_advised_to_local_story():
+    from cutroom.director import _attach_video_map_to_local_story, _effective_brief
+
+    project = {"settings": {"edit_style": "talking_clips", "source_context": "Local creator note",
+                            "instruction": "Existing reviewed instruction"}}
+    video_map = build_video_map(
+        segments=[{"id": "line", "text": "Demo local keyword", "start": 0.0, "end": 2.0}],
+        duration=3.0, samples=None)
+    local = _effective_brief(project, local_story=True)
+    assert _attach_video_map_to_local_story(local, video_map, local_story=True)
+    assert local["style_profile"]["source_context"]["text"] == "Local creator note"
+    assert local["style_profile"]["video_map"]["authority"] == "advisory_only"
+    cloud = _effective_brief(project, local_story=False)
+    assert not _attach_video_map_to_local_story(cloud, video_map, local_story=False)
+    assert "source_context" not in cloud and "source_context" not in cloud["style_profile"]
+    assert "video_map" not in cloud["style_profile"]
+    assert cloud["instruction"] == project["settings"]["instruction"]
+    assert project["settings"]["source_context"] == "Local creator note"
+
+def test_real_local_pcm_stops_at_verified_media_duration(tmp_path):
+    import shutil
+    import wave
+    from types import SimpleNamespace
+
+    import pytest
+    from cutroom.understanding import decode_mono
+
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        pytest.skip("Real FFmpeg is not installed")
+    path = tmp_path / "synthetic sound.wav"
+    with wave.open(str(path), "wb") as sound:
+        sound.setparams((1, 2, SAMPLE_RATE, 0, "NONE", "not compressed"))
+        sound.writeframes(b"\x00\x20" * (2 * SAMPLE_RATE))
+    samples = decode_mono(path, SimpleNamespace(ffmpeg=ffmpeg), 1.0)
+    assert samples.shape == (SAMPLE_RATE,)
+    assert np.all(samples == 0.25)

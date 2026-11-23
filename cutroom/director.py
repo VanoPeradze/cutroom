@@ -809,14 +809,14 @@ def _cut_candidates(
                     })
             # A filler inside a sentence is cut only when it stands alone: a
             # measured pause on both sides proves it is not part of a word.
-            for index in range(1, len(words)):
+            for index in range(1, len(words) - 1):
                 word = words[index]
                 if not _is_hesitation(word.get("word")):
                     continue
                 previous_end = float(words[index - 1]["end"])
-                next_start = float(words[index + 1]["start"]) if index + 1 < len(words) else float(segment["end"])
+                next_start = float(words[index + 1]["start"])
                 word_start, word_end = float(word["start"]), float(word["end"])
-                if word_start - previous_end < MID_FILLER_MIN_GAP or (index + 1 < len(words) and next_start - word_end < MID_FILLER_MIN_GAP):
+                if word_start - previous_end < MID_FILLER_MIN_GAP or next_start - word_end < MID_FILLER_MIN_GAP:
                     continue
                 start = max(previous_end + 0.03, word_start - 0.02)
                 end = min(next_start - 0.03, word_end + 0.08)
@@ -3424,8 +3424,12 @@ def _target_completion_message(review: dict[str, Any] | None) -> str | None:
     return "Draft needs review: required story material is not resolved."
 
 
-def _effective_brief(project: dict[str, Any]) -> dict[str, Any]:
-    brief = enrich_brief_with_style(copy.deepcopy(project.get("settings", {})))
+def _effective_brief(project: dict[str, Any], *, local_story: bool = True) -> dict[str, Any]:
+    settings = copy.deepcopy(project.get("settings", {}))
+    if not local_story:
+        # The new source note is local-only. Do not widen cloud Story consent.
+        settings.pop("source_context", None)
+    brief = enrich_brief_with_style(settings)
     # Frame rate is an encoder preference, not a story instruction. Changing it
     # must not invalidate expensive speech/story caches or an in-flight draft.
     brief.pop("fps", None)
@@ -3581,7 +3585,8 @@ def analyze_project(
     analysis_source_info = project.get("sources", {}).get(analysis_audio_slot) or project["sources"]["A"]
     analysis_source_duration = max(0.0, _finite_number(analysis_source_info.get("duration"), duration))
     transcription_duration = _transcription_duration(analysis_source_info, analysis_source_duration)
-    brief = _effective_brief(project)
+    local_story = not cloud_enabled(settings)
+    brief = _effective_brief(project, local_story=local_story)
     # Pin the original and the starting revision before analysis. An interrupted
     # review must not rebind to later footage, settings, or a retained edit.
     first_pass_review = None
@@ -4066,9 +4071,12 @@ def analyze_project(
             duration=duration, audio_path=analysis_source, audio_slot=analysis_audio_slot,
             audio_offset=analysis_timeline_offset, scenes=scenes_a, vision=vision,
         )
-        map_context = story_context(video_map)
-        if map_context and isinstance(brief.get("style_profile"), dict):
-            brief["style_profile"]["video_map"] = map_context
+        if _attach_video_map_to_local_story(brief, video_map, local_story=local_story):
+            # A new map changes local Story advice, including same-time text
+            # corrections. Do not borrow a hierarchy built without that map.
+            previous_map = (cached_analysis or {}).get("video_map")
+            reusable_story = bool(reusable_story and isinstance(previous_map, dict)
+                                  and previous_map.get("cache_key") == video_map.get("cache_key"))
 
     # Persist the expensive reusable context before Story AI starts. If a local
     # model fails or CUTROOM closes during a later pass, retrying can reuse the
@@ -4116,7 +4124,7 @@ def analyze_project(
             proposed = proposed_inputs(latest)
             if stable_fingerprint("director-manual-input", latest.get("manual") or {}) != manual_input_fingerprint:
                 raise RuntimeError("project_changed_during_analysis")
-            latest_brief = _effective_brief(proposed)
+            latest_brief = _effective_brief(proposed, local_story=local_story)
             latest_paths: dict[str, Path | None] = {}
             for slot in ("A", "B"):
                 latest_source = proposed.get("sources", {}).get(slot)
@@ -4746,7 +4754,7 @@ def analyze_project(
         } != initial_source_generations:
             raise RuntimeError("project_changed_during_analysis")
         proposed = proposed_inputs(latest)
-        latest_brief = _effective_brief(proposed)
+        latest_brief = _effective_brief(proposed, local_story=local_story)
         latest_paths: dict[str, Path | None] = {}
         for slot in ("A", "B"):
             latest_source = latest.get("sources", {}).get(slot)
@@ -5000,6 +5008,18 @@ def _with_visual_evidence(segments: list[dict[str, Any]], visual: VisualTimeline
     return output
 
 
+def _attach_video_map_to_local_story(
+    brief: dict[str, Any], video_map: dict[str, Any] | None, *, local_story: bool
+) -> bool:
+    if not local_story or not isinstance(brief.get("style_profile"), dict):
+        return False
+    advice = story_context(video_map)
+    if advice is None:
+        return False
+    brief["style_profile"]["video_map"] = advice
+    return True
+
+
 def _resolve_video_map(
     context: JobContext,
     settings: Settings,
@@ -5016,15 +5036,21 @@ def _resolve_video_map(
 ) -> dict[str, Any] | None:
     """Build or reuse the measured video map; never fail the edit over it."""
     rows = [row for row in segments or [] if isinstance(row, dict) and str(row.get("text") or "").strip()]
-    if not rows or duration <= 0:
+    if not rows or not math.isfinite(duration) or duration <= 0:
         return None
+    context.check_cancelled()
+    slot = str(audio_slot or "A").upper()
+    offset = _finite_number(audio_offset)
     key = stable_fingerprint("video-map", {
         "version": VIDEO_MAP_VERSION,
         "source": cache_fingerprints.get("source"),
         "transcript": cache_fingerprints.get("transcript"),
         "scenes": cache_fingerprints.get("scenes"),
         "vision": cache_fingerprints.get("vision"),
-        "segments": [(row.get("id"), round(float(row.get("start", 0)), 2), round(float(row.get("end", 0)), 2)) for row in rows],
+        "duration": duration,
+        "audio_route": (slot, offset, audio_path is not None),
+        "segments": [(row.get("id"), _finite_number(row.get("start")),
+                      _finite_number(row.get("end")), str(row.get("text") or "")) for row in rows],
     })
     cached = (cached_analysis or {}).get("video_map") if cached_analysis else None
     if isinstance(cached, dict) and cached.get("cache_key") == key:
@@ -5032,7 +5058,7 @@ def _resolve_video_map(
     samples, audio_reason = None, None
     if audio_path is None:
         audio_reason = "no_audio_source"
-    elif str(audio_slot or "A").upper() != "A" or abs(float(audio_offset or 0.0)) > 1e-6:
+    elif slot != "A" or abs(offset) > 1e-6:
         # The transcript sits on the timeline clock; offset audio would put
         # voices and laughs at the wrong moments, so audio parts are skipped.
         audio_reason = "offset_audio_source"
@@ -5053,6 +5079,7 @@ def _resolve_video_map(
         raise
     except Exception as exc:  # noqa: BLE001 - optional evidence
         return {"version": VIDEO_MAP_VERSION, "available": False, "reason": f"{type(exc).__name__}", "cache_key": key}
+    context.check_cancelled()
     video_map["cache_key"] = key
     return video_map
 

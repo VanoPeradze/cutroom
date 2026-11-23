@@ -26,6 +26,13 @@ html.flow-theme-switching *::before,
 html.flow-theme-switching *::after {
   transition: background-color 280ms ease, border-color 280ms ease, color 200ms ease, fill 280ms ease, stroke 280ms ease !important;
 }
+/* Match the theme-switch selector's specificity so the guard still wins. */
+@media (prefers-reduced-motion: reduce) {
+  html.flow-theme-switching,
+  html.flow-theme-switching *,
+  html.flow-theme-switching *::before,
+  html.flow-theme-switching *::after { transition-duration: .01ms !important; }
+}
 
 ::selection { background: color-mix(in srgb, var(--flow-accent) 38%, transparent); }
 

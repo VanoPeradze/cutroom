@@ -5,14 +5,17 @@ const test = require("node:test");
 const vm = require("node:vm");
 const source = fs.readFileSync(path.join(__dirname, "../web/ui-shell.js"), "utf8");
 
-function harness({ stored = null, systemDark = false, storageBlocked = false, observer = true, matchMedia = true } = {}) {
+function harness({ stored = null, systemDark = false, reducedMotion = false, storageBlocked = false, observer = true, matchMedia = true } = {}) {
   const events = {}, windowEvents = {}, nodes = new Map(), writes = [], mediaCalls = [];
   const store = new Map([["cutroom-theme", stored]]);
+  const classes = new Set(), timers = new Map();
+  let timerId = 0;
   const node = (id) => ({ id, attrs: {}, textContent: "", events: {},
     setAttribute(key, value) { this.attrs[key] = value; },
     addEventListener(type, callback) { this.events[type] = callback; },
   });
-  const root = { dataset: {}, style: { setProperty: (key, value) => writes.push([key, value]) } };
+  const root = { dataset: {}, style: { setProperty: (key, value) => writes.push([key, value]) },
+    classList: { add: (name) => classes.add(name), remove: (name) => classes.delete(name) } };
   const meta = node("theme-color");
   const chrome = node("appChrome");
   chrome.height = 64;
@@ -43,6 +46,7 @@ function harness({ stored = null, systemDark = false, storageBlocked = false, ob
     addEventListener: (type, callback) => { windowEvents[type] = callback; },
     ...(observer ? { ResizeObserver } : {}),
     ...(matchMedia ? { matchMedia: (query) => {
+      if (query === "(prefers-reduced-motion: reduce)") return { matches: reducedMotion };
       assert.equal(query, "(prefers-color-scheme: dark)");
       return { matches: systemDark };
     } } : {}),
@@ -52,10 +56,12 @@ function harness({ stored = null, systemDark = false, storageBlocked = false, ob
     setItem(key, value) { if (storageBlocked) throw Error("Storage denied"); store.set(key, value); },
   };
   vm.runInNewContext(source, { document, window, localStorage, ResizeObserver, MutationObserver,
+    setTimeout: (work, delay) => { timers.set(++timerId, [work, delay]); return timerId; },
+    clearTimeout: (id) => timers.delete(id),
     pauseAllMedia: () => mediaCalls.push(["all", "pause"]),
     fetch: () => assert.fail("Appearance changes must not request network resources"),
   });
-  return { root, meta, store, writes, chrome, media, mediaCalls, nodes,
+  return { root, meta, store, writes, chrome, media, mediaCalls, nodes, classes, timers,
     ready() {
       ["themeToggle", "themeIcon", "themeLabel"].forEach((id) => nodes.set(id, node(id)));
       nodes.set("appChrome", chrome);
@@ -154,4 +160,25 @@ test("theme changes and chrome measurements leave media playback, sources and po
   h.fontsReady();
   assert.deepEqual(h.mediaCalls, []);
   assert.deepEqual(h.media.map(({ src, currentTime }) => ({ src, currentTime })), snapshot);
+});
+
+test("theme fade restarts once for motion users but is skipped with reduced motion", () => {
+  const normal = harness({ stored: "light" });
+  normal.ready();
+  normal.toggle();
+  normal.toggle();
+  assert.equal(normal.root.dataset.theme, "light");
+  assert.equal(normal.classes.has("flow-theme-switching"), true);
+  assert.equal(normal.timers.size, 1);
+  const [finish, delay] = [...normal.timers.values()][0];
+  assert.equal(delay, 340);
+  finish();
+  assert.equal(normal.classes.has("flow-theme-switching"), false);
+
+  const reduced = harness({ stored: "light", reducedMotion: true });
+  reduced.ready();
+  reduced.toggle();
+  assert.equal(reduced.root.dataset.theme, "dark");
+  assert.equal(reduced.classes.has("flow-theme-switching"), false);
+  assert.equal(reduced.timers.size, 0);
 });

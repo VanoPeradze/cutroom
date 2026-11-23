@@ -103,6 +103,10 @@ def test_hesitation_glued_to_neighbours_or_meaningful_words_stay():
     meaningful = _segment([("so", 0.0, 0.3), ("like", 0.6, 0.9), ("this", 1.2, 1.5)])
     assert _cut_candidates([glued], {"remove_ids": []}, "balanced") == []
     assert _cut_candidates([meaningful], {"remove_ids": []}, "balanced") == []
+    no_right_pause = _segment([("so", 0.0, 0.3), ("um", 0.5, 0.9), ("this", 0.92, 1.1)])
+    last_word = _segment([("so", 0.0, 0.3), ("um", 2.5, 2.99)])
+    assert _cut_candidates([no_right_pause], {"remove_ids": []}, "balanced") == []
+    assert _cut_candidates([last_word], {"remove_ids": []}, "balanced") == []
     assert _cut_candidates([_segment([("so", 0.0, 0.3), ("um", 0.5, 0.9), ("ok", 1.1, 1.4)])], {"remove_ids": []}, "gentle") == []
 
 
