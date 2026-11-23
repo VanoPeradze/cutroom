@@ -13,6 +13,7 @@
 - **Color & motion** in Output: looks, exposure, contrast, saturation, warmth, an uploaded 3D `.cube` LUT, and zoom keyframes. The grade applies to the whole picture before captions. The preview is a close approximation; the LUT appears only in export.
 - **Edit evaluation:** `scripts/evaluate_edit.py` scores an edit against a human reference for your own recordings. See [Edit evaluation](docs/EDIT_EVALUATION.md).
 - UI precision fixes: the Home "16:9" card, toast placement, readable timeline clip labels, a shorter storage note after import and a Media pool header that no longer wraps at 1280px.
+- **Smoother interface:** one motion and feedback layer across the app. Buttons press in, primary actions glow, focus rings are softer, screens and workspace tools ease in, dialogs rise and their backdrop fades, and switching day/night cross-fades. Toasts float at the top center with a colored status dot and fade out, so they no longer cover the Inspector tabs. The save status has a live dot, Home has a quiet accent glow, workflow cards lift on hover, empty projects show a placeholder instead of a dark box, and project row dividers span the full row. Colors, layout and wording are unchanged; reduced-motion settings turn the animation off.
 
 ## 1.3 Beta - Hebrew-first transcription candidate (2026-11-11)
 
