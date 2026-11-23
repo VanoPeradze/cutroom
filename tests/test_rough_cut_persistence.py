@@ -43,10 +43,14 @@ def test_recovered_draft_reopens_editable_without_losing_manual_work(
     reopened = reopened_store.load(pid)
     assert calls['transcribe'] == 1
     assert source_identity_rows(reopened['analysis']['transcript']['segments']) == source_before
-    assert reopened['draft']['editorial_authority'] == story.EXTRACTIVE_ROUGH_CUT_AUTHORITY
-    assert reopened['draft']['review_required'] is True
-    assert reopened['draft']['generative_approved'] is False
-    assert reopened['draft']['keep_ranges'] == [{'start': 0., 'end': 58.}]
+    # An active manual timeline keeps its render inputs; the new rough cut is
+    # saved as an isolated proposal the user applies with Reset to AI draft.
+    draft = (reopened['_ai_draft_proposal']['candidate']['draft'] if existing_manual_timeline
+             else reopened['draft'])
+    assert draft['editorial_authority'] == story.EXTRACTIVE_ROUGH_CUT_AUTHORITY
+    assert draft['review_required'] is True
+    assert draft['generative_approved'] is False
+    assert draft['keep_ranges'] == [{'start': 0., 'end': 58.}]
     assert reopened['manual']['caption_corrections'] == manual_before['caption_corrections']
     assert result['timeline_preserved'] is existing_manual_timeline
     assert result['applied_to_timeline'] is not existing_manual_timeline

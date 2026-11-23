@@ -211,6 +211,9 @@ def test_trim_api_whitelist_revision_checks_and_atomic_rejection(monkeypatch, tm
 def test_transcript_correction_api_is_available_after_story_failure_without_draft(monkeypatch, tmp_path):
     app, store, value = api_project(monkeypatch, tmp_path)
     value["draft"] = None
+    # A failed first Story run leaves no timeline. Retained cuts would instead
+    # require Resume first (covered by the retained-edit tests).
+    value["manual"] = {}
     value = store.save(value)
     endpoint = f"/api/projects/{value['id']}/manual/edit"
     client = app.test_client()

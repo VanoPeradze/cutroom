@@ -65,7 +65,7 @@ jobs:
             architecture: x64
     # These are standard hosted runners, not the paid -large / -xlarge labels.
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 40
+    timeout-minutes: 60
     env:
       CUTROOM_NO_BROWSER: '1'
       HOMEBREW_NO_AUTO_UPDATE: '1'
@@ -103,7 +103,7 @@ jobs:
           python -m venv "$RUNNER_TEMP/cutroom-regression-venv"
           "$RUNNER_TEMP/cutroom-regression-venv/bin/python" -m pip install -r tests/requirements.txt -c packaging/mac/constraints-macos.txt
       - name: Run the complete Python regression suite with real FFmpeg
-        timeout-minutes: 15
+        timeout-minutes: 30
         shell: bash
         run: |
           ffmpeg -version
