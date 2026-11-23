@@ -46,7 +46,7 @@ import { initTrackProtection } from "./track-protection.js?v=1.2-beta";
 import { TextStudio } from "./text-studio.js?v=20261116-caption-preview3";
 import { initNumericScrub } from "./numeric-scrub.js?v=20261116-move2";
 import { ReelProposalReview, supportsReelReview } from "./reel-proposals.js?v=20261022";
-import { ClipBoard } from "./clip-board.js?v=20261122-clips11-kit2";
+import { ClipBoard } from "./clip-board.js?v=20261123-soundevents1";
 import { AiDraftReview } from "./ai-draft-review.js?v=20261116-ai-review2";
 import { CaptionAlternatives } from "./caption-alternatives.js?v=20261023";
 import { initCaptionPreview, captionPreviewIssue } from "./caption-preview.js?v=20261116-caption-preview3";
@@ -187,7 +187,7 @@ function cacheElements() {
     "welcomeView", "workspaceView", "projectHead", "projectName", "saveState", "recentProjects", "recentList", "recentCount",
     "projectsButton", "projectsDialog", "dialogProjects", "dialogNewProject", "newProjectButton", "homeButton",
     "advancedButton", "advancedPanel", "closeAdvanced", "studioPreviewDock", "studioDirectorDock", "studioRenderButton", "studioDraftStatus", "studioPanelFraming", "renderButton", "resultRenderButton", "setupPanel", "setupSourceMixerDock", "analysisPanel", "resultPanel", "resultGrid", "previewColumn", "verdictColumn",
-    "sourceSlotA", "sourceSlotB", "sourceInputA", "sourceInputB", "cancelUploadA", "cancelUploadB", "audioCalibration", "audioMeterCanvas", "recommendedThreshold", "useRecommendedThreshold", "silenceThreshold", "silenceThresholdOut", "preSilenceMin", "preSilenceMinOut", "preSilenceKeep", "preSilenceKeepOut", "audioCutEstimate", "audioProfileSummary", "editStyleChoices", "editStyleNote", "goalChoices", "goalExplainer", "goalExplainerTitle", "goalExplainerText", "durationGroup", "targetDuration", "durationMode", "durationOutput", "paceChoices", "paceNote",
+    "sourceSlotA", "sourceSlotB", "sourceInputA", "sourceInputB", "cancelUploadA", "cancelUploadB", "audioCalibration", "audioMeterCanvas", "recommendedThreshold", "useRecommendedThreshold", "silenceThreshold", "silenceThresholdOut", "preSilenceMin", "preSilenceMinOut", "preSilenceKeep", "preSilenceKeepOut", "audioCutEstimate", "audioProfileSummary", "editStyleChoices", "editStyleNote", "styleRecommendation", "videoMapSummary", "sourceContext", "goalChoices", "goalExplainer", "goalExplainerTitle", "goalExplainerText", "durationGroup", "targetDuration", "durationMode", "durationOutput", "paceChoices", "paceNote",
     "directorInstruction", "directorInstructionCounter", "uploadStorageInfo", "directorOutcomeNotice", "instructionResults", "instructionResultsTitle", "instructionResultsSummary", "instructionResultsList", "allowExtractiveRoughCut", "readiness", "generateButton", "jobMessage", "jobProgress", "cancelJobButton", "analysisError", "analysisErrorTitle", "analysisErrorMessage", "retryDirectorButton", "backFromErrorButton", "draftTitle", "draftSummary", "draftEngineBadge",
     "reelCandidates", "reelCandidatesTitle", "reelCandidateList", "draftWarning", "draftWarningText", "reviewSpeechSettings", "gameplayMoments",
     "beforeDuration", "afterDuration", "decisionCount", "decisionList", "retainedEditPreview", "previewStage", "previewA", "previewB", "previewPaneA", "previewPaneB", "previewPlay", "playButton",
@@ -2142,7 +2142,17 @@ function toast(message, type = "error", timeout = 4400) {
   node.className = `toast ${type}`;
   node.textContent = message;
   elements.toastRegion.append(node);
-  window.setTimeout(() => node.remove(), timeout);
+  window.setTimeout(() => {
+    // Reduced-motion users should not wait for an animation that cannot run.
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches) {
+      node.remove();
+      return;
+    }
+    node.classList.add("flow-leaving");
+    const done = () => node.remove();
+    node.addEventListener("animationend", done, { once: true });
+    window.setTimeout(done, 400);
+  }, timeout);
 }
 
 function runUiAction(action, context = "") {
@@ -2439,6 +2449,9 @@ function bindEvents() {
     renderReadiness();
     scheduleSettingsPatch({ requiresRebuild: true, reason: "brief" });
   });
+  elements.sourceContext?.addEventListener("input", () => {
+    scheduleSettingsPatch({ requiresRebuild: true, reason: "source context" });
+  });
   elements.allowExtractiveRoughCut?.addEventListener("change", () => {
     scheduleSettingsPatch({ requiresRebuild: true, reason: "rough-cut fallback" });
   });
@@ -2481,12 +2494,13 @@ function bindEvents() {
     if (!button) return;
     setActiveChoice(elements.goalChoices, button);
     const settings = applyGoalMode(button.dataset.value, true);
+    renderEditStyleChoices();
     scheduleSettingsPatch({ requiresRebuild: true, reason: "goal", settings });
   });
   elements.editStyleChoices.addEventListener("click", (event) => {
     const button = event.target.closest("button[data-value]");
     if (!button || button.dataset.value === state.selectedEditStyle) return;
-    chooseEditStyle(button.dataset.value);
+    chooseEditStyle(button.dataset.value, button.dataset.variant === "true");
   });
   elements.editStyleChoices.addEventListener("keydown", handleEditStyleKeydown);
   elements.paceChoices.addEventListener("click", (event) => {
@@ -3311,6 +3325,7 @@ function hydrateSettings() {
   if (elements.durationGroup) elements.durationGroup.dataset.longform = "false";
   syncLongformDuration(settings.goal || "short");
   elements.directorInstruction.value = settings.instruction || "";
+  if (elements.sourceContext) elements.sourceContext.value = settings.source_context || "";
   renderDirectorInstruction();
   if (elements.allowExtractiveRoughCut) elements.allowExtractiveRoughCut.checked = settings.allow_extractive_rough_cut === true;
   const embeddedOption = elements.layoutSelect.querySelector('option[value="embedded_stack"]');
@@ -3514,46 +3529,177 @@ function renderEditStyleChoices() {
   if (!elements.editStyleChoices) return;
   const styles = Array.isArray(state.system?.edit_styles) ? state.system.edit_styles : [];
   const selected = state.selectedEditStyle || state.project?.settings?.edit_style || "smart";
+  const families = styleFamilies();
   if (styles.length) {
     const fragment = document.createDocumentFragment();
-    for (const style of styles) {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "edit-style-card";
-      button.dataset.value = style.id;
-      button.dataset.category = style.category || "general";
-      button.setAttribute("role", "radio");
-
-      const copy = document.createElement("span");
-      const title = document.createElement("strong");
-      const description = document.createElement("small");
-      const metadata = document.createElement("em");
-      const badge = document.createElement("b");
-      title.textContent = localizedStyleValue(style.name);
-      description.textContent = localizedStyleValue(style.description);
-      const pace = String(style.defaults?.pace || "balanced");
-      metadata.textContent = `${pace[0].toUpperCase()}${pace.slice(1)} pacing`;
-      badge.textContent = localizedStyleValue(style.badge);
-      copy.append(title, description, metadata);
-      const structure = style.selection_policy?.story_structure;
-      if (Array.isArray(structure) && structure.length) {
-        const flow = document.createElement("small");
-        flow.className = "style-story-flow";
-        flow.textContent = structure.join(" → ");
-        copy.append(flow);
+    if (families.length) {
+      // Five families; each card stands for its variants. Families that do not
+      // fit the chosen goal are hidden unless the saved style lives there.
+      const goal = currentGoalValue();
+      const activeFamily = familyForStyle(selected);
+      for (const family of families) {
+        const isActive = family.id === activeFamily?.id;
+        if (!isActive && Array.isArray(family.goals) && !family.goals.includes(goal)) continue;
+        const value = isActive ? selected : family.default_style;
+        fragment.append(renderStyleCard(editStyleById(value), { value, family, active: isActive }));
       }
-      button.append(copy, badge);
-      fragment.append(button);
+      if (activeFamily && (activeFamily.variants || []).length > 1) fragment.append(renderStyleVariants(activeFamily));
+    } else {
+      for (const style of styles) fragment.append(renderStyleCard(style, { value: style.id }));
     }
     elements.editStyleChoices.replaceChildren(fragment);
   }
+  const activeFamilyId = familyForStyle(selected)?.id;
   $$(`button[data-value]`, elements.editStyleChoices).forEach((button) => {
-    const active = button.dataset.value === selected;
+    const active = button.dataset.variant === "true" || !button.dataset.family
+      ? button.dataset.value === selected
+      : button.dataset.family === activeFamilyId;
     button.classList.toggle("active", active);
     button.setAttribute("aria-checked", String(active));
     button.tabIndex = active ? 0 : -1;
   });
   renderEditStyleNote();
+  renderStyleRecommendation();
+}
+
+function styleFamilies() {
+  return Array.isArray(state.system?.style_families) ? state.system.style_families : [];
+}
+
+function familyForStyle(styleId) {
+  return styleFamilies().find((family) => (family.variants || []).some((variant) => variant.style === styleId)) || null;
+}
+
+function currentGoalValue() {
+  return elements.goalChoices?.querySelector("button.active")?.dataset.value || state.project?.settings?.goal || "short";
+}
+
+function renderStyleCard(style, { value, family = null, active = false } = {}) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "edit-style-card";
+  button.dataset.value = value;
+  button.dataset.category = style?.category || "general";
+  if (family) button.dataset.family = family.id;
+  button.setAttribute("role", "radio");
+  const copy = document.createElement("span");
+  const title = document.createElement("strong");
+  const description = document.createElement("small");
+  const badge = document.createElement("b");
+  title.textContent = localizedStyleValue(family?.name || style?.name);
+  description.textContent = localizedStyleValue(family?.description || style?.description);
+  badge.textContent = localizedStyleValue(family?.badge || style?.badge);
+  copy.append(title, description);
+  if (!family) {
+    const metadata = document.createElement("em");
+    const pace = String(style.defaults?.pace || "balanced");
+    metadata.textContent = `${pace[0].toUpperCase()}${pace.slice(1)} pacing`;
+    copy.append(metadata);
+  }
+  const structure = (active || !family) ? style?.selection_policy?.story_structure : null;
+  if (Array.isArray(structure) && structure.length) {
+    const flow = document.createElement("small");
+    flow.className = "style-story-flow";
+    flow.textContent = structure.join(" → ");
+    copy.append(flow);
+  }
+  button.append(copy, badge);
+  return button;
+}
+
+function renderStyleVariants(family) {
+  const row = document.createElement("div");
+  row.className = "edit-style-variants";
+  row.setAttribute("role", "radiogroup");
+  row.setAttribute("aria-label", uiCopy("טעם", "Flavor"));
+  const label = document.createElement("span");
+  label.className = "edit-style-variants-label";
+  label.textContent = uiCopy("טעם:", "Flavor:");
+  row.append(label);
+  for (const variant of family.variants) {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "edit-style-variant";
+    chip.dataset.value = variant.style;
+    chip.dataset.variant = "true";
+    chip.setAttribute("role", "radio");
+    chip.textContent = localizedStyleValue(variant.label);
+    chip.title = localizedStyleValue(editStyleById(variant.style)?.description);
+    row.append(chip);
+  }
+  return row;
+}
+
+// Read-only advice from saved analysis: shown only when it differs from the
+// current choice, and applied only when the user clicks it.
+const styleRecommendationCache = new Map();
+// One readable line from the saved video map: what CUTROOM understood.
+function videoMapSummary(map) {
+  if (!map?.available) return "";
+  const parts = [];
+  const speakers = map.speakers || {};
+  if (speakers.available && speakers.count) parts.push(speakers.count === 1 ? uiCopy("דובר אחד", "1 speaker") : uiCopy(`${speakers.count} דוברים`, `${speakers.count} speakers`));
+  const topics = Array.isArray(map.topics) ? map.topics.length : 0;
+  if (topics > 1) parts.push(uiCopy(`${topics} נושאים`, `${topics} topics`));
+  const counts = map.event_counts || {};
+  const named = { laughter: ["צחוק", "laugh", "laughs"], applause: ["מחיאות כפיים", "applause", "applause"], music: ["מוזיקה", "music section", "music sections"] };
+  for (const [type, [he, one, many]] of Object.entries(named)) {
+    const count = Number(counts[type]) || 0;
+    if (count) parts.push(uiCopy(`${he} ×${count}`, `${count} ${count === 1 ? one : many}`));
+  }
+  const shots = Number(map.visual?.shots_per_minute);
+  if (Number.isFinite(shots) && map.visual?.shot_changes) parts.push(uiCopy(`${shots} חיתוכים לדקה`, `${shots} shots/min`));
+  return parts.length ? `${uiCopy("הערכות מפת הווידאו:", "Video map estimates:")} ${parts.join(" · ")}` : "";
+}
+
+function renderVideoMap() {
+  const host = elements.videoMapSummary;
+  if (!host) return;
+  const text = videoMapSummary(state.project?.analysis?.video_map);
+  host.textContent = text;
+  host.hidden = !text;
+}
+
+async function renderStyleRecommendation() {
+  renderVideoMap();
+  const host = elements.styleRecommendation;
+  if (!host) return;
+  const project = state.project;
+  const hasEvidence = Boolean(project?.analysis?.segments?.length || project?.analysis?.visual_moments?.available);
+  if (!project?.id || !hasEvidence) { host.hidden = true; return; }
+  const goal = currentGoalValue();
+  const key = `${project.id}:${project.revision}:${goal}`;
+  let recommendation = styleRecommendationCache.get(key);
+  if (recommendation === undefined) {
+    styleRecommendationCache.set(key, null);
+    try {
+      const payload = await api(`/api/projects/${encodeURIComponent(project.id)}/style-recommendation?goal=${encodeURIComponent(goal)}`);
+      recommendation = payload?.recommendation || null;
+    } catch (_error) {
+      recommendation = null;
+    }
+    styleRecommendationCache.set(key, recommendation);
+  }
+  // Ignore a reply for a project/revision/goal that is no longer on screen.
+  if (state.project?.id !== project.id || state.project?.revision !== project.revision || currentGoalValue() !== goal) return;
+  const selected = state.selectedEditStyle || project.settings?.edit_style || "smart";
+  if (!recommendation || recommendation.confidence === "low" || recommendation.style === selected) {
+    host.hidden = true;
+    return;
+  }
+  const family = familyForStyle(recommendation.style);
+  const variant = family && family.variants.length > 1 ? family.variants.find((item) => item.style === recommendation.style) : null;
+  const label = [localizedStyleValue(family?.name), localizedStyleValue(variant?.label)].filter(Boolean).join(" · ")
+    || localizedStyleValue(recommendation.name);
+  const text = document.createElement("span");
+  text.textContent = `${uiCopy("מומלץ לתוכן הזה:", "Suggested for this content:")} ${label}. ${localizedStyleValue(recommendation.reason)}`;
+  const apply = document.createElement("button");
+  apply.type = "button";
+  apply.className = "style-recommendation-apply";
+  apply.textContent = uiCopy("להחיל", "Use it");
+  apply.addEventListener("click", () => chooseEditStyle(recommendation.style));
+  host.replaceChildren(text, apply);
+  host.hidden = false;
 }
 
 // Gameplay YouTube condenses a long recording: its length is minutes, not Short seconds.
@@ -3609,24 +3755,33 @@ function renderEditStyleNote(goal = elements.goalChoices?.querySelector("button.
   }
 }
 
-function chooseEditStyle(styleId) {
-  const settings = applyEditStyle(styleId, true);
+function chooseEditStyle(styleId, focusVariant = false, announce = true) {
+  const settings = applyEditStyle(styleId, announce);
   scheduleSettingsPatch({ requiresRebuild: true, reason: "edit_style", settings });
-  // Rendering replaces cards. Keep focus on the chosen radio, not on the page.
-  $$('button[data-value]', elements.editStyleChoices).find((button) => button.dataset.value === styleId)?.focus();
+  // Rendering replaces cards; the same saved style can be on both a card and a chip.
+  const choices = $$('button[data-value]', elements.editStyleChoices);
+  const nextFocus = choices.find((button) =>
+    button.dataset.value === styleId && (button.dataset.variant === "true") === focusVariant);
+  nextFocus?.focus();
 }
 
 function handleEditStyleKeydown(event) {
   if (event.altKey || event.ctrlKey || event.metaKey) return;
-  const directions = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 };
-  if (!(event.key in directions) && !["Home", "End"].includes(event.key)) return;
-  const buttons = $$('button[data-value]', elements.editStyleChoices).filter((button) => !button.disabled);
-  const index = buttons.indexOf(event.target.closest('button[data-value]'));
-  if (index < 0 || !buttons.length) return;
+  const rtl = document.documentElement?.dir === "rtl";
+  const directions = { ArrowRight: rtl ? -1 : 1, ArrowDown: 1, ArrowLeft: rtl ? 1 : -1, ArrowUp: -1 };
+  if (!Object.hasOwn(directions, event.key) && !["Home", "End"].includes(event.key)) return;
+  const origin = event.target.closest('button[data-value]');
+  if (!origin) return;
+  const variant = origin.dataset.variant === "true";
+  const buttons = $$('button[data-value]', elements.editStyleChoices)
+    .filter((button) => !button.disabled && (button.dataset.variant === "true") === variant);
+  const index = buttons.indexOf(origin);
+  if (index < 0) return;
   event.preventDefault();
-  const next = event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1
-    : (index + directions[event.key] + buttons.length) % buttons.length;
-  if (buttons[next].dataset.value !== state.selectedEditStyle) chooseEditStyle(buttons[next].dataset.value);
+  const next = event.key === "Home" ? buttons[0] : event.key === "End" ? buttons.at(-1)
+    : buttons[(index + directions[event.key] + buttons.length) % buttons.length];
+  if (next.dataset.value === state.selectedEditStyle) next.focus();
+  else chooseEditStyle(next.dataset.value, variant, false);
 }
 
 function applyEditStyle(styleId, announce = false) {
@@ -3647,6 +3802,7 @@ function applyEditStyle(styleId, announce = false) {
   elements.autoReframe.checked = defaults.auto_reframe !== false;
   elements.effectsToggle.checked = defaults.editorial_effects !== false && !["youtube", "clean"].includes(goal);
   elements.captionsToggle.checked = Boolean(defaults.captions);
+  if (defaults.caption_style && optionExists(elements.captionStyleSelect, defaults.caption_style)) elements.captionStyleSelect.value = defaults.caption_style;
   if (elements.burnCaptionsToggle) setCaptionBurnEnabled(defaults.burn_captions !== false);
   if (optionExists(elements.performanceModeSelect, defaults.performance_mode)) elements.performanceModeSelect.value = defaults.performance_mode;
   const audio_cleanup = defaults.audio_cleanup ? audioPresetSettings(defaults.audio_cleanup) : null;
@@ -3663,6 +3819,7 @@ function applyEditStyle(styleId, announce = false) {
     captions: elements.captionsToggle.checked, burn_captions: captionBurnEnabled(),
     ...(optionExists(elements.layoutSelect, defaults.layout) ? { layout: defaults.layout } : {}),
     ...(optionExists(elements.performanceModeSelect, defaults.performance_mode) ? { performance_mode: defaults.performance_mode } : {}),
+    ...(defaults.caption_style && optionExists(elements.captionStyleSelect, defaults.caption_style) ? { caption_style: defaults.caption_style } : {}),
     ...(audio_cleanup ? { audio_cleanup } : {}) };
 }
 
@@ -4361,6 +4518,7 @@ function currentSettings() {
     target_duration: Number(elements.targetDuration.value),
     duration_mode: elements.durationMode?.value || "style",
     instruction: elements.directorInstruction.value.trim(),
+    ...(elements.sourceContext ? { source_context: elements.sourceContext.value.trim() } : {}),
     output_count: state.project?.settings?.output_count ?? 1,
     source_continuity: state.project?.settings?.source_continuity || "unspecified",
     allow_extractive_rough_cut: elements.allowExtractiveRoughCut?.checked === true,
@@ -4390,6 +4548,7 @@ function scheduleSettingsPatch({ requiresRebuild = false, reason = "settings", s
   // their explicit patch. Never reconstruct a save from every hidden control.
   const requestFields = {
     "brief": () => ({ instruction: String(elements.directorInstruction.value || "").trim() }),
+    "source context": () => ({ source_context: String(elements.sourceContext?.value || "").trim() }),
     "duration": () => ({ target_duration: Number(elements.targetDuration.value) }),
     "duration intent": () => ({ duration_mode: elements.durationMode.value }),
     "rough-cut fallback": () => ({ allow_extractive_rough_cut: elements.allowExtractiveRoughCut?.checked === true }),

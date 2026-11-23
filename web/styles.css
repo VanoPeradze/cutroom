@@ -2140,3 +2140,19 @@ button, summary { touch-action: manipulation; }
 
 .export-storage-info,#exportDescription { min-width:0; overflow-wrap:anywhere; }
 .export-storage-info { white-space:pre-line; font-size:.82rem; line-height:1.5; }
+
+/* Style families: flavor chips under the chosen family and content advice. */
+.edit-style-variants { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 2px 2px 0; animation: style-variants-in .18s ease-out; }
+.edit-style-variants-label { color: var(--paper-dim); font-size: 11px; margin-inline-end: 2px; }
+.edit-style-variant { padding: 6px 12px; border: 1px solid rgba(255,255,255,.12); border-radius: 999px; color: var(--paper); background: rgba(255,255,255,.03); font-size: 12px; cursor: pointer; transition: border-color .16s ease, background .16s ease, color .16s ease; }
+.edit-style-variant:hover { border-color: rgba(255,255,255,.26); }
+.edit-style-variant.active { border-color: var(--signal-text); background: var(--surface-selected, var(--signal-soft)); color: var(--paper); font-weight: 700; }
+.edit-style-variant:focus-visible, .style-recommendation-apply:focus-visible { outline: 2px solid var(--signal-text); outline-offset: 2px; }
+.style-recommendation { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; padding: 10px 12px; border: 1px dashed rgba(255,255,255,.18); border-radius: 12px; color: var(--paper-dim); font-size: 12px; line-height: 1.45; }
+.style-recommendation[hidden] { display: none; }
+.style-recommendation-apply { flex: 0 0 auto; padding: 6px 12px; border: 1px solid var(--signal-text); border-radius: 999px; color: var(--paper); background: var(--signal-soft); font-size: 12px; font-weight: 700; cursor: pointer; }
+.source-context-group textarea { min-height: 54px; }
+@keyframes style-variants-in { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .edit-style-variants { animation: none; } }
+.video-map-summary { display: block; margin-top: 10px; color: var(--paper-dim); font-size: 11px; line-height: 1.5; }
+.video-map-summary[hidden] { display: none; }

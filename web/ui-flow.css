@@ -1,0 +1,314 @@
+/* Flow pass, 23 November 2026. Loaded last.
+   Motion, feedback and depth only: no layout, wording or workflow changes.
+   The gray light theme and the dark palette keep their colors; this file
+   adds one shared motion vocabulary on top of them. The global reduced-motion
+   rule in studio-finish.css still switches every animation here off. */
+
+:root {
+  --flow-ease: cubic-bezier(.22, 1, .36, 1);        /* fast out, soft landing */
+  --flow-spring: cubic-bezier(.34, 1.4, .64, 1);    /* small overshoot */
+  --flow-fast: 120ms;
+  --flow-base: 200ms;
+  --flow-slow: 340ms;
+  --flow-accent: var(--room-accent, #b5a1eb);
+  --flow-ring: color-mix(in srgb, var(--flow-accent) 42%, transparent);
+  --flow-glow: color-mix(in srgb, var(--flow-accent) 16%, transparent);
+  --flow-lift: 0 10px 28px -12px #0a0b0e99, 0 2px 6px -2px #0a0b0e66;
+}
+html[data-theme=light] {
+  --flow-lift: 0 10px 26px -14px #2a303a59, 0 2px 6px -3px #2a303a33;
+}
+
+/* ---------- 1. Theme switch fades instead of snapping ---------- */
+html.flow-theme-switching,
+html.flow-theme-switching *,
+html.flow-theme-switching *::before,
+html.flow-theme-switching *::after {
+  transition: background-color 280ms ease, border-color 280ms ease, color 200ms ease, fill 280ms ease, stroke 280ms ease !important;
+}
+/* Match the theme-switch selector's specificity so the guard still wins. */
+@media (prefers-reduced-motion: reduce) {
+  html.flow-theme-switching,
+  html.flow-theme-switching *,
+  html.flow-theme-switching *::before,
+  html.flow-theme-switching *::after { transition-duration: .01ms !important; }
+}
+
+::selection { background: color-mix(in srgb, var(--flow-accent) 38%, transparent); }
+
+/* ---------- 2. One feedback language for every control ---------- */
+.button,
+[role=tab],
+.service-card,
+.recent-project,
+.dialog-project,
+.studio-tool-grid button,
+.advanced-content button,
+.studio-shelf button,
+dialog button,
+summary {
+  transition:
+    background-color var(--flow-fast) ease,
+    border-color var(--flow-fast) ease,
+    color var(--flow-fast) ease,
+    box-shadow var(--flow-base) var(--flow-ease),
+    transform var(--flow-base) var(--flow-ease),
+    opacity var(--flow-fast) ease;
+}
+/* A short press-in on click makes every button feel physical. */
+:is(.button, .advanced-content button, .studio-shelf button, dialog button, .advanced-tabs [role=tab]):active:not(:disabled) {
+  transform: scale(.97);
+  transition-duration: 60ms;
+}
+.button:disabled { transition-duration: var(--flow-base); }
+
+/* Primary actions get a soft accent glow instead of a flat fill. */
+:is(.button.primary, .button.render):not(:disabled) {
+  box-shadow: 0 0 0 0 transparent, 0 6px 18px -10px var(--flow-accent);
+}
+:is(.button.primary, .button.render):hover:not(:disabled) {
+  box-shadow: 0 0 0 3px var(--flow-glow), 0 8px 22px -10px var(--flow-accent);
+  filter: brightness(1.06);
+}
+
+/* Keyboard focus: a soft ring that follows the control's own corners. */
+:is(button, a, summary, [role=tab], input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--flow-accent);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 5px var(--flow-glow);
+}
+input:not([type=range]):not([type=checkbox]):not([type=radio]),
+select,
+textarea {
+  transition: border-color var(--flow-fast) ease, box-shadow var(--flow-base) var(--flow-ease), background-color var(--flow-fast) ease;
+}
+:is(input:not([type=range]):not([type=checkbox]):not([type=radio]), select, textarea):hover:not(:disabled):not(:focus) {
+  border-color: color-mix(in srgb, var(--line-strong) 70%, var(--paper));
+}
+:is(input:not([type=range]):not([type=checkbox]):not([type=radio]), select, textarea):focus {
+  border-color: var(--flow-accent);
+  box-shadow: 0 0 0 3px var(--flow-glow);
+  outline: none;
+}
+
+/* Range sliders: a thumb that grows under the pointer. */
+input[type=range] { transition: filter var(--flow-fast) ease; }
+input[type=range]:hover { filter: brightness(1.12); }
+
+/* ---------- 3. Screens arrive instead of appearing ---------- */
+@keyframes flow-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@keyframes flow-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes flow-pop { from { opacity: 0; transform: translateY(12px) scale(.975); } to { opacity: 1; transform: none; } }
+@keyframes flow-panel { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+#welcomeView:not([hidden]) .welcome-copy { animation: flow-rise var(--flow-slow) var(--flow-ease) both; }
+#welcomeView:not([hidden]) .home-services { animation: flow-rise var(--flow-slow) var(--flow-ease) 60ms both; }
+#welcomeView:not([hidden]) .recent-strip:not([hidden]) { animation: flow-rise var(--flow-slow) var(--flow-ease) 140ms both; }
+#welcomeView:not([hidden]) :is(.home-setup, .home-guide, .home-footer) { animation: flow-fade 420ms ease 200ms both; }
+#workspaceView:not([hidden]) { animation: flow-fade 260ms ease both; }
+
+/* Switching Edit / Layout / Audio / Captions / Output eases the new tools in. */
+.advanced-content > .tab-panel.active { animation: flow-panel 240ms var(--flow-ease) both; }
+.studio-shelf > section:not([hidden]) { animation: flow-fade 220ms ease both; }
+
+/* ---------- 4. Home ---------- */
+/* A quiet accent glow behind the headline gives the page depth. */
+.home-hub { position: relative; isolation: isolate; }
+#welcomeView.home-hub::before {
+  display: block;
+  content: "";
+  position: absolute; z-index: -1; pointer-events: none;
+  inset-block-start: -40px; inset-inline-start: -8%;
+  width: min(760px, 70vw); height: 520px;
+  background:
+    radial-gradient(closest-side at 38% 46%, color-mix(in srgb, var(--flow-accent) 22%, transparent), transparent 72%),
+    radial-gradient(closest-side at 64% 62%, color-mix(in srgb, var(--cyan) 14%, transparent), transparent 70%);
+  filter: blur(8px);
+}
+html[data-theme=light] #welcomeView.home-hub::before {
+  background:
+    radial-gradient(closest-side at 38% 46%, color-mix(in srgb, #fff 34%, transparent), transparent 75%),
+    radial-gradient(closest-side at 62% 60%, color-mix(in srgb, var(--flow-accent) 10%, transparent), transparent 72%);
+  filter: blur(18px);
+}
+.home-hub .welcome-copy h1 em {
+  background: linear-gradient(100deg, var(--flow-accent), color-mix(in srgb, var(--flow-accent) 55%, var(--cyan)));
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Workflow cards lift toward the pointer; the arrow nudges forward. */
+.home-hub .service-card { will-change: transform; }
+.home-hub .service-card:hover:not(:disabled) {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--flow-accent) 55%, var(--line-strong));
+  box-shadow: var(--flow-lift), 0 0 0 1px color-mix(in srgb, var(--flow-accent) 18%, transparent);
+}
+.home-hub .service-card:active:not(:disabled) { transform: translateY(0) scale(.99); transition-duration: 70ms; }
+.home-hub .service-card .service-art { transition: transform var(--flow-slow) var(--flow-spring), border-color var(--flow-base) ease; }
+.home-hub .service-card:hover .service-art { transform: scale(1.04); border-color: color-mix(in srgb, var(--flow-accent) 40%, var(--line)); }
+.home-hub .service-card::after,
+.home-hub .service-card .service-start::after { transition: transform var(--flow-base) var(--flow-ease), color var(--flow-fast) ease; }
+.home-hub .service-card:hover::after,
+.home-hub .service-card:hover .service-start::after { transform: translateX(4px); color: var(--flow-accent); }
+[dir=rtl] .home-hub .service-card:hover::after,
+[dir=rtl] .home-hub .service-card:hover .service-start::after { transform: translateX(-4px); }
+.home-hub .service-card:nth-child(1) { animation-delay: 80ms; }
+.home-hub .service-card:nth-child(2) { animation-delay: 140ms; }
+.home-hub .service-card:nth-child(3) { animation-delay: 200ms; }
+#welcomeView:not([hidden]) .home-hub .service-card,
+#welcomeView:not([hidden]) .service-grid > .service-card { animation: flow-rise 380ms var(--flow-ease) both; }
+
+/* Recent projects: hover lifts the row, the thumbnail brightens. */
+.home-hub .recent-project-card,
+.dialog-project-row { transition: border-color var(--flow-fast) ease, box-shadow var(--flow-base) var(--flow-ease), transform var(--flow-base) var(--flow-ease); }
+.dialog-project-row:hover { border-color: color-mix(in srgb, var(--flow-accent) 40%, var(--line-strong)); box-shadow: var(--flow-lift); }
+/* Row dividers stopped 72px short of the right edge (they belonged to the
+   open button, not the row). The divider now spans the whole row. */
+body .home-hub .recent-list .recent-project-card .recent-project { border-bottom: 0; }
+body .home-hub .recent-list .recent-project-card + .recent-project-card { border-top: 1px solid var(--line); border-radius: 0; }
+body .home-hub .recent-list .recent-project-card:hover { background: var(--surface-hover); }
+.recent-list > * { animation: flow-rise 320ms var(--flow-ease) both; }
+.recent-list > :nth-child(2) { animation-delay: 40ms; }
+.recent-list > :nth-child(3) { animation-delay: 80ms; }
+.recent-list > :nth-child(4) { animation-delay: 120ms; }
+.recent-list > :nth-child(n+5) { animation-delay: 160ms; }
+
+/* Projects with no footage yet: a calm placeholder with a small play mark
+   instead of a dark slab, in both themes. */
+body .home-hub .recent-list .recent-project .project-thumb:empty {
+  position: relative;
+  background:
+    linear-gradient(160deg, color-mix(in srgb, var(--surface-raised) 85%, var(--flow-accent)), var(--surface-inset));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--paper) 8%, transparent);
+}
+body .home-hub .recent-list .recent-project .project-thumb:empty::before {
+  content: ""; position: absolute; left: 50%; top: 50%;
+  width: 0; height: 0; margin: -6px 0 0 -4px;
+  border-style: solid; border-width: 6px 0 6px 10px;
+  border-color: transparent transparent transparent color-mix(in srgb, var(--paper) 45%, transparent);
+  transition: transform var(--flow-base) var(--flow-spring), border-color var(--flow-fast) ease;
+}
+.recent-project:hover .project-thumb:empty::before { transform: scale(1.2); border-left-color: var(--flow-accent); }
+.recent-project .project-thumb img { transition: transform var(--flow-slow) var(--flow-ease), filter var(--flow-base) ease; }
+.recent-project:hover .project-thumb img { transform: scale(1.06); filter: brightness(1.08); }
+
+/* The collapsible "AI is optional" and "New to CUTROOM?" rows react to hover. */
+.home-hub :is(.home-setup, .home-guide) > summary { cursor: pointer; }
+.home-hub :is(.home-setup, .home-guide) > summary:hover { background: color-mix(in srgb, var(--surface-hover) 45%, transparent); }
+.home-hub .home-guide > summary i { display: inline-block; transition: transform var(--flow-base) var(--flow-ease); }
+.home-hub .home-guide[open] > summary i { transform: rotate(45deg); }
+.home-hub details[open] > :not(summary) { animation: flow-rise 260ms var(--flow-ease) both; }
+
+/* ---------- 5. Editor chrome ---------- */
+/* Bottom workspace tabs: the active line grows from the middle, the icon lifts. */
+.advanced-tabs [role=tab] { position: relative; }
+.advanced-tabs [role=tab]::after {
+  content: ""; position: absolute; inset-inline: 22%; inset-block-start: -1px; height: 2px;
+  border-radius: 0 0 2px 2px; background: var(--flow-accent);
+  transform: scaleX(0); opacity: 0;
+  transition: transform 260ms var(--flow-ease), opacity var(--flow-fast) ease;
+}
+.advanced-tabs [role=tab][aria-selected=true]::after { transform: scaleX(1); opacity: 1; }
+.advanced-tabs [role=tab] .ui-icon { transition: transform var(--flow-base) var(--flow-spring), color var(--flow-fast) ease; }
+.advanced-tabs [role=tab]:hover .ui-icon { transform: translateY(-1px); }
+.advanced-tabs [role=tab][aria-selected=true] .ui-icon { color: var(--flow-accent); transform: translateY(-1px); }
+.advanced-tabs [role=tab]:not([aria-selected=true]):hover { background: color-mix(in srgb, var(--surface-hover) 50%, transparent); }
+
+/* Save state: a small dot that breathes while saving and settles when saved. */
+.save-state { position: relative; padding-inline-start: 16px !important; transition: color var(--flow-base) ease; }
+.save-state::before {
+  content: ""; position: absolute; inset-inline-start: 4px; top: 50%;
+  width: 6px; height: 6px; margin-top: -3px; border-radius: 50%;
+  background: var(--muted); opacity: .7;
+  transition: background-color var(--flow-base) ease, transform var(--flow-base) var(--flow-spring);
+}
+@keyframes flow-breathe { 50% { transform: scale(.6); opacity: .45; } }
+.save-state[data-save-state=saved]::before { background: #6fcf97; opacity: .9; }
+.save-state:is([data-save-state=saving], [data-save-state=pending], [data-save-state=dirty])::before { background: var(--flow-accent); animation: flow-breathe 1s ease-in-out infinite; }
+.save-state:is([data-save-state=error], [data-save-state=failed], [data-save-state=conflict])::before { background: #ef7d7d; }
+
+/* Preview play button: grows a little on hover, presses on click. */
+.preview-stage :is(.play-overlay, .preview-play, .big-play),
+#playButton, .transport-play {
+  transition: transform var(--flow-base) var(--flow-spring), filter var(--flow-fast) ease, background-color var(--flow-fast) ease;
+}
+.preview-stage :is(.play-overlay, .preview-play, .big-play):hover,
+#playButton:hover:not(:disabled), .transport-play:hover:not(:disabled) { transform: scale(1.06); filter: brightness(1.1); }
+
+/* Empty timeline: the "Start your timeline" card breathes once, gently. */
+@keyframes flow-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+:is(.timeline-empty, .preview-empty, .studio-empty) :is(svg, .empty-art, img):first-child { animation: flow-float 3.2s ease-in-out infinite; }
+
+/* Progress bars move: a light sheen sweeps across while work runs. */
+.progress-track span { position: relative; overflow: hidden; transition: width 420ms var(--flow-ease); }
+.progress-track span::after {
+  content: ""; position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, #fff 30%, transparent), transparent);
+  transform: translateX(-100%);
+  animation: flow-sheen 1.5s ease-in-out infinite;
+}
+@keyframes flow-sheen { to { transform: translateX(100%); } }
+progress { accent-color: var(--flow-accent); }
+
+/* Active job bar slides down instead of popping. */
+.active-job-bar:not([hidden]) { animation: flow-rise 260ms var(--flow-ease) both; }
+
+/* ---------- 6. Dialogs open with a small rise, the backdrop fades ---------- */
+dialog[open] { animation: flow-pop 280ms var(--flow-ease) both; }
+dialog[open]::backdrop { animation: flow-fade 240ms ease both; backdrop-filter: blur(6px); }
+dialog[open] { box-shadow: 0 30px 80px -24px #000a, 0 0 0 1px color-mix(in srgb, var(--paper) 6%, transparent); }
+html[data-theme=light] dialog[open] { box-shadow: 0 30px 70px -26px #232a3466, 0 0 0 1px #2a303a1a; }
+
+/* ---------- 7. Toasts ---------- */
+/* Under the header they covered the Inspector / AI Director tabs. They now
+   float centered at the top of the window, clear of both side panels. */
+.toast-region {
+  inset-inline: 0 !important;
+  margin-inline: auto;
+  width: min(440px, calc(100% - 24px)) !important;
+  inset-block-start: calc(var(--app-chrome-height, 52px) + 10px) !important;
+  justify-items: center;
+}
+.toast-region .toast {
+  position: relative;
+  width: auto; max-width: 100%; min-width: 220px;
+  padding: 11px 16px 11px 34px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--paper) 10%, transparent);
+  border-inline-start-width: 1px;
+  background: color-mix(in srgb, var(--surface-raised) 88%, transparent);
+  -webkit-backdrop-filter: blur(14px) saturate(1.3); backdrop-filter: blur(14px) saturate(1.3);
+  box-shadow: 0 16px 40px -16px #000c, 0 2px 8px -4px #0008;
+  color: var(--paper);
+  font-size: 13px; line-height: 1.45;
+  animation: flow-toast-in 360ms var(--flow-spring) both;
+  pointer-events: auto;
+}
+[dir=rtl] .toast-region .toast { padding: 11px 34px 11px 16px; }
+html[data-theme=light] .toast-region .toast { box-shadow: 0 16px 36px -18px #232a3466, 0 2px 8px -4px #232a3433; }
+.toast-region .toast::before {
+  content: ""; position: absolute; inset-inline-start: 14px; top: 50%;
+  width: 8px; height: 8px; margin-top: -4px; border-radius: 50%;
+  background: #ef7d7d; box-shadow: 0 0 0 4px color-mix(in srgb, #ef7d7d 22%, transparent);
+}
+.toast-region .toast.success::before { background: #6fcf97; box-shadow: 0 0 0 4px color-mix(in srgb, #6fcf97 22%, transparent); }
+.toast-region .toast.info::before { background: var(--flow-accent); box-shadow: 0 0 0 4px var(--flow-glow); }
+.toast-region .toast.flow-leaving { animation: flow-toast-out 220ms ease both; }
+@keyframes flow-toast-in { from { opacity: 0; transform: translateY(-14px) scale(.96); } to { opacity: 1; transform: none; } }
+@keyframes flow-toast-out { to { opacity: 0; transform: translateY(-8px) scale(.97); } }
+
+/* ---------- 8. Menus and popovers ---------- */
+:is(.workspace-menu, .popover, [role=menu]):not([hidden]) { animation: flow-pop 180ms var(--flow-ease) both; transform-origin: top; }
+details[open] > :is(.workspace-menu, .menu, [role=menu]) { animation: flow-pop 180ms var(--flow-ease) both; }
+
+/* The old inset top line is replaced by the growing indicator above. */
+#advancedPanel > .advanced-tabs button.active,
+#advancedPanel.console-ready > .advanced-tabs button.active { box-shadow: none; }
+@media (forced-colors: active) {
+  .advanced-tabs [role=tab]::after { background: Highlight; }
+  .toast-region .toast { border: 1px solid CanvasText; }
+}
+
+/* Projects dialog: Delete reads as destructive on hover, not as one more link. */
+.dialog-project-row .project-delete:hover:not(:disabled) { color: #ef7d7d; background: color-mix(in srgb, #ef7d7d 10%, transparent); }

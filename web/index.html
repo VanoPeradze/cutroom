@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#22252a">
   <meta name="color-scheme" content="dark light">
-  <script src="/assets/ui-shell.js?v=20261112-workbench1"></script>
+  <script src="/assets/ui-shell.js?v=20261123-flow2"></script>
   <title>CUTROOM 1.3 Beta — Your editing workspace</title>
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/assets/styles.css?v=1.3-beta-20261111-bidi1">
+  <link rel="stylesheet" href="/assets/styles.css?v=1.3-beta-20261123-stylefamilies1">
   <link rel="stylesheet" href="/assets/workspace.css?v=1.2-beta-20261019">
   <link rel="stylesheet" href="/assets/media-studio.css?v=1.3-beta-20261107-source-marks1-roll1-slide1-take1-ow1-groupsplit1-join1">
   <link rel="stylesheet" href="/assets/stabilization-studio.css?v=1.2-beta-20261019">
@@ -34,6 +34,7 @@
   <link rel="stylesheet" href="/assets/mark-selection.css?v=20261118-markrange1">
   <link rel="stylesheet" href="/assets/color-motion.css?v=20261122-color1">
   <link rel="stylesheet" href="/assets/ui-precision.css?v=20261122-precision1">
+  <link rel="stylesheet" href="/assets/ui-flow.css?v=20261123-flow2">
 </head>
 <body class="welcome-mode">
   <a class="skip-link" href="#main" data-i18n="skip">Skip to content</a>
@@ -226,6 +227,8 @@
               <span><strong>CUTROOM Smart</strong><small>Balanced automatic edit</small></span><b>Recommended</b>
             </button>
           </div>
+          <div class="style-recommendation" id="styleRecommendation" role="status" aria-live="polite" hidden></div>
+          <small class="video-map-summary" id="videoMapSummary" hidden></small>
           <small class="edit-style-note" id="editStyleNote" data-i18n="editStyleEvidence">Each style changes moment selection, pacing and duration. Screen + camera is never enabled without explicit confirmation.</small>
           <details class="context-help"><summary>What does an editing style change?</summary><p>Styles guide moment selection, pacing and story structure. They do not clone a particular creator or guarantee a finished edit. Your output format and length stay under your control; review the draft before exporting.</p></details>
         </fieldset>
@@ -253,6 +256,12 @@
             <span data-i18n="directionNote">Director instruction <small>Optional</small></span>
             <textarea id="directorInstruction" dir="auto" rows="3" maxlength="8000" aria-describedby="directorInstructionCounter" placeholder="Example: keep the pricing explanation and the qualification that follows it."></textarea>
             <small id="directorInstructionCounter" class="instruction-counter" dir="auto" aria-live="polite" aria-atomic="true">0 / 8,000 characters</small>
+          </label>
+
+          <label class="brief-group instruction-group source-context-group">
+            <span>What is this video about? <small>Optional · who appears, names, topic</small></span>
+            <textarea id="sourceContext" dir="auto" rows="2" maxlength="600" aria-describedby="sourceContextNote" placeholder="Example: an interview about starting a bakery."></textarea>
+            <small id="sourceContextNote">Advisory notes for local Story AI only. This field is not sent to a cloud provider.</small>
           </label>
 
           <label class="brief-group burn-caption-choice">
@@ -1070,7 +1079,7 @@
       <footer class="connection-actions"><button class="button ghost" id="forgetCloudKey" type="button">Forget session key</button><button class="button primary" id="saveAIConnection" type="submit">Use this connection</button></footer>
     </form>
   </dialog>
-  <script type="module" src="/assets/app.js?v=20261117-transcript-sections1-console1-firstrecording1-mixer1-range2-export1-markers1-roll1-slide1-take1-ow1-sourceview1-lift1-opacity1-markrange1-groupsplit1-join1-titleclock1-ripplechapter1-matchseam1-editorflow1-sourcedrag1-frame1-handoff1-manualtranscript1-clips10-precision2"></script>
+  <script type="module" src="/assets/app.js?v=20261117-transcript-sections1-console1-firstrecording1-mixer1-range2-export1-markers1-roll1-slide1-take1-ow1-sourceview1-lift1-opacity1-markrange1-groupsplit1-join1-titleclock1-ripplechapter1-matchseam1-editorflow1-sourcedrag1-frame1-handoff1-manualtranscript1-clips10-precision2-flow1-stylefamilies1"></script>
   <script src="/assets/studio-screens.js?v=20261119-output1" defer></script>
   <script type="module" src="/assets/studio-workbench.js?v=20261116-ai-pane2"></script>
   <script type="module" src="/assets/studio-console.js?v=20261117-console1"></script>

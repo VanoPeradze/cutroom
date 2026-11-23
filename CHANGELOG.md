@@ -1,5 +1,12 @@
 # Changelog
 
+## CUTROOM 1.3 Beta source changes: style families and interface motion
+
+- Edit styles are grouped into five families. Older style IDs and their defaults are unchanged; new Talking Clips and YouTube Explainer styles use speech evidence.
+- The local video map adds estimated speakers, sound events and topics when evidence is available. The map and creator-entered background notes stay on the computer rather than extending cloud Story data sharing.
+- In-sentence filler cleanup requires a verified pause on both sides. Transcript corrections and audio-routing changes refresh the map.
+- The style picker separates keyboard navigation between family cards and flavor chips. Interface motion respects reduced-motion preferences, including theme changes.
+
 ## Unreleased - 2026-11-22 - Clips board and Gameplay YouTube videos
 
 - **Clips** in the editor top bar ranks the strongest 15/30/45/60-second moments of the main recording from saved analysis (sound levels, plus the transcript and gameplay vision when present). It runs no model and saves nothing. Each card has a real frame, an inline preview, a strength score relative to that recording (not a view prediction) and its reasons; the moment radar shows the whole recording.
@@ -13,6 +20,7 @@
 - **Color & motion** in Output: looks, exposure, contrast, saturation, warmth, an uploaded 3D `.cube` LUT, and zoom keyframes. The grade applies to the whole picture before captions. The preview is a close approximation; the LUT appears only in export.
 - **Edit evaluation:** `scripts/evaluate_edit.py` scores an edit against a human reference for your own recordings. See [Edit evaluation](docs/EDIT_EVALUATION.md).
 - UI precision fixes: the Home "16:9" card, toast placement, readable timeline clip labels, a shorter storage note after import and a Media pool header that no longer wraps at 1280px.
+- **Smoother interface:** one motion and feedback layer across the app. Buttons press in, primary actions glow, focus rings are softer, screens and workspace tools ease in, dialogs rise and their backdrop fades, and switching day/night cross-fades. Toasts float at the top center with a colored status dot and fade out, so they no longer cover the Inspector tabs. The save status has a live dot, Home has a quiet accent glow, workflow cards lift on hover, empty projects show a placeholder instead of a dark box, and project row dividers span the full row. Colors, layout and wording are unchanged; reduced-motion settings turn the animation off.
 
 ## 1.3 Beta - Hebrew-first transcription candidate (2026-11-11)
 

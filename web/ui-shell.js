@@ -26,6 +26,13 @@
   document.addEventListener("DOMContentLoaded", () => {
     applyTheme(theme);
     document.getElementById("themeToggle")?.addEventListener("click", () => {
+      // Cross-fade colors for a moment instead of snapping to the new theme.
+      const reducedMotion = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+      if (!reducedMotion && root.classList && typeof setTimeout === "function") {
+        root.classList.add("flow-theme-switching");
+        if (typeof clearTimeout === "function") clearTimeout(applyTheme.fadeTimer);
+        applyTheme.fadeTimer = setTimeout(() => root.classList.remove("flow-theme-switching"), 340);
+      }
       applyTheme(theme === "dark" ? "light" : "dark");
       try { localStorage.setItem(storageKey, theme); } catch {}
     });
