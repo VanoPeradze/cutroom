@@ -3515,74 +3515,6 @@ function editStyleById(styleId) {
   return styles.find((style) => style.id === styleId) || styles.find((style) => style.id === "smart") || null;
 }
 
-function styleFamilies() {
-  return Array.isArray(state.system?.style_families) ? state.system.style_families : [];
-}
-
-function familyForStyle(styleId) {
-  return styleFamilies().find((family) => (family.variants || []).some((variant) => variant.style === styleId)) || null;
-}
-
-function currentGoalValue() {
-  return elements.goalChoices?.querySelector("button.active")?.dataset.value || state.project?.settings?.goal || "short";
-}
-
-function renderStyleCard(style, { value, family = null, active = false } = {}) {
-  const button = document.createElement("button");
-  button.type = "button";
-  button.className = "edit-style-card";
-  button.dataset.value = value;
-  button.dataset.category = style?.category || "general";
-  if (family) button.dataset.family = family.id;
-  button.setAttribute("role", "radio");
-  const copy = document.createElement("span");
-  const title = document.createElement("strong");
-  const description = document.createElement("small");
-  const badge = document.createElement("b");
-  title.textContent = localizedStyleValue(family?.name || style?.name);
-  description.textContent = localizedStyleValue(family?.description || style?.description);
-  badge.textContent = localizedStyleValue(family?.badge || style?.badge);
-  copy.append(title, description);
-  if (!family) {
-    const metadata = document.createElement("em");
-    const pace = String(style?.defaults?.pace || "balanced");
-    metadata.textContent = `${pace[0].toUpperCase()}${pace.slice(1)} pacing`;
-    copy.append(metadata);
-  }
-  const structure = (active || !family) ? style?.selection_policy?.story_structure : null;
-  if (Array.isArray(structure) && structure.length) {
-    const flow = document.createElement("small");
-    flow.className = "style-story-flow";
-    flow.textContent = structure.join(" → ");
-    copy.append(flow);
-  }
-  button.append(copy, badge);
-  return button;
-}
-
-function renderStyleVariants(family) {
-  const row = document.createElement("div");
-  row.className = "edit-style-variants";
-  row.setAttribute("role", "radiogroup");
-  row.setAttribute("aria-label", uiCopy("טעם", "Flavor"));
-  const label = document.createElement("span");
-  label.className = "edit-style-variants-label";
-  label.textContent = uiCopy("טעם:", "Flavor:");
-  row.append(label);
-  for (const variant of family.variants) {
-    const chip = document.createElement("button");
-    chip.type = "button";
-    chip.className = "edit-style-variant";
-    chip.dataset.value = variant.style;
-    chip.dataset.variant = "true";
-    chip.setAttribute("role", "radio");
-    chip.textContent = localizedStyleValue(variant.label);
-    chip.title = localizedStyleValue(editStyleById(variant.style)?.description);
-    row.append(chip);
-  }
-  return row;
-}
-
 function renderEditStyleChoices() {
   if (!elements.editStyleChoices) return;
   const styles = Array.isArray(state.system?.edit_styles) ? state.system.edit_styles : [];
@@ -3618,6 +3550,74 @@ function renderEditStyleChoices() {
   });
   renderEditStyleNote();
   renderStyleRecommendation();
+}
+
+function styleFamilies() {
+  return Array.isArray(state.system?.style_families) ? state.system.style_families : [];
+}
+
+function familyForStyle(styleId) {
+  return styleFamilies().find((family) => (family.variants || []).some((variant) => variant.style === styleId)) || null;
+}
+
+function currentGoalValue() {
+  return elements.goalChoices?.querySelector("button.active")?.dataset.value || state.project?.settings?.goal || "short";
+}
+
+function renderStyleCard(style, { value, family = null, active = false } = {}) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "edit-style-card";
+  button.dataset.value = value;
+  button.dataset.category = style?.category || "general";
+  if (family) button.dataset.family = family.id;
+  button.setAttribute("role", "radio");
+  const copy = document.createElement("span");
+  const title = document.createElement("strong");
+  const description = document.createElement("small");
+  const badge = document.createElement("b");
+  title.textContent = localizedStyleValue(family?.name || style?.name);
+  description.textContent = localizedStyleValue(family?.description || style?.description);
+  badge.textContent = localizedStyleValue(family?.badge || style?.badge);
+  copy.append(title, description);
+  if (!family) {
+    const metadata = document.createElement("em");
+    const pace = String(style.defaults?.pace || "balanced");
+    metadata.textContent = `${pace[0].toUpperCase()}${pace.slice(1)} pacing`;
+    copy.append(metadata);
+  }
+  const structure = (active || !family) ? style?.selection_policy?.story_structure : null;
+  if (Array.isArray(structure) && structure.length) {
+    const flow = document.createElement("small");
+    flow.className = "style-story-flow";
+    flow.textContent = structure.join(" → ");
+    copy.append(flow);
+  }
+  button.append(copy, badge);
+  return button;
+}
+
+function renderStyleVariants(family) {
+  const row = document.createElement("div");
+  row.className = "edit-style-variants";
+  row.setAttribute("role", "radiogroup");
+  row.setAttribute("aria-label", uiCopy("טעם", "Flavor"));
+  const label = document.createElement("span");
+  label.className = "edit-style-variants-label";
+  label.textContent = uiCopy("טעם:", "Flavor:");
+  row.append(label);
+  for (const variant of family.variants) {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "edit-style-variant";
+    chip.dataset.value = variant.style;
+    chip.dataset.variant = "true";
+    chip.setAttribute("role", "radio");
+    chip.textContent = localizedStyleValue(variant.label);
+    chip.title = localizedStyleValue(editStyleById(variant.style)?.description);
+    row.append(chip);
+  }
+  return row;
 }
 
 // Read-only advice from saved analysis: shown only when it differs from the
