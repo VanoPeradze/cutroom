@@ -754,7 +754,12 @@ def _set_source_mixer(project: dict[str, Any], payload: dict[str, Any]) -> None:
         raise ManualEditError("Primary role must be screen or camera")
     sources = project.get("sources", {})
     has_any_audio = any((sources.get(slot) or {}).get("has_audio") for slot in ("A", "B"))
-    if audio_slot not in {"A", "B"} or (has_any_audio and not (sources.get(audio_slot) or {}).get("has_audio")):
+    # Attaching a parallel recording must not open its mic when the original
+    # project was silent. Role and sync adjustments can keep that silent A.
+    from .source_tracks import attached_b_generation
+    preserve_silent_a = audio_slot == "A" and bool(attached_b_generation(project))
+    if audio_slot not in {"A", "B"} or (has_any_audio and not preserve_silent_a
+                                        and not (sources.get(audio_slot) or {}).get("has_audio")):
         raise ManualEditError("Choose a source that contains audio")
     manual = project.setdefault("manual", {})
     previous_mixer = manual.get("source_mixer") if isinstance(manual.get("source_mixer"), dict) else {}
@@ -1220,7 +1225,10 @@ def _apply_manual_edit(project: dict[str, Any], payload: dict[str, Any], *, snap
             if not isinstance(prepared_tracks, dict):
                 prepared_tracks = prepared_manual["source_tracks"] = {}
             annotation_slots = (str(payload.get("slot") or "").upper(),) if action in TRACK_ACTIONS else ("A", "B")
+            from .source_tracks import uses_default_b_alignment
             for slot in annotation_slots:
+                if slot == "B" and action not in TRACK_ACTIONS and uses_default_b_alignment(project):
+                    continue
                 if slot not in prepared_tracks:
                     prepared_tracks[slot] = source_track_clips(project, slot)
                 for clip in prepared_tracks[slot] if isinstance(prepared_tracks[slot], list) else []:

@@ -8,8 +8,8 @@ from .composition import default_reels_stack
 from .frame_rates import EXPORT_FPS_CHOICES
 from .source_tracks import (
     EPSILON, MAX_SEQUENCE_SECONDS, SourceTrackError, _duration, _finite, _new_id,
-    _number, _validated, _shift_video_start, has_sequence, minimum_clip_seconds,
-    source_track_clips, timeline_duration,
+    _number, _validated, _shift_video_start, aligned_source_b_clips, attached_b_generation,
+    has_sequence, minimum_clip_seconds, source_track_clips, timeline_duration, uses_default_b_alignment,
     validate_sequence_version,
 )
 
@@ -76,6 +76,8 @@ def materialize_sequence(project: dict[str, Any]) -> tuple[dict[str, Any], float
     if not isinstance(project.get("draft"), dict):
         raise SourceTrackError("Generate a draft before editing clips")
     value = copy.deepcopy(project)
+    align_b = uses_default_b_alignment(value)
+    attachment = attached_b_generation(value)
     if has_sequence(value):
         sequence = value["manual"]["sequence"]
         duration = _number(sequence.get("duration"), "sequence duration")
@@ -85,13 +87,16 @@ def materialize_sequence(project: dict[str, Any]) -> tuple[dict[str, Any], float
         if not isinstance(tracks, dict) or not isinstance(sequence.get("camera_plan"), list):
             raise SourceTrackError("Sequence data is invalid; reset the sequence to recover the draft")
         for slot in ("A", "B"):
-            tracks[slot] = _validated(value, slot, tracks.get(slot, []))
+            tracks[slot] = (aligned_source_b_clips(value, tracks["A"]) if slot == "B" and align_b
+                            else _validated(value, slot, tracks.get(slot, [])))
+        if attachment:
+            sequence["attached_b_generation"] = attachment
         return value, duration
     keeps = _legacy_keeps(value)
     duration = round(sum(end - start for start, end in keeps), 9)
     if duration <= 0 or duration > MAX_SEQUENCE_SECONDS:
         raise SourceTrackError("The draft must contain a valid edit shorter than 24 hours")
-    slots = {slot: source_track_clips(value, slot) for slot in ("A", "B")}
+    slots = {slot: [] if slot == "B" and align_b else source_track_clips(value, slot) for slot in ("A", "B")}
     draft = value["draft"]
     camera_rows = sorted((row for row in draft.get("camera_plan") or [] if isinstance(row, dict)),
                          key=lambda row: (_finite(row.get("start")), _finite(row.get("end"))))
@@ -163,7 +168,11 @@ def materialize_sequence(project: dict[str, Any]) -> tuple[dict[str, Any], float
     }
     manual["source_tracks"] = tracks
     for slot in ("A", "B"):
-        tracks[slot] = _validated(value, slot, tracks[slot])
+        # Do not insert B's availability seams into the old A clips or plan.
+        tracks[slot] = (aligned_source_b_clips(value, tracks["A"]) if slot == "B" and align_b
+                        else _validated(value, slot, tracks[slot]))
+    if attachment:
+        manual["sequence"]["attached_b_generation"] = attachment
     return value, duration
 
 
@@ -718,7 +727,7 @@ def prepare_sequence_edit(project: dict[str, Any], payload: dict[str, Any]) -> d
         if not isinstance(prepared_tracks, dict):
             prepared_tracks = prepared_manual["source_tracks"] = {}
         for slot in ("A", "B"):
-            if slot not in prepared_tracks:
+            if slot not in prepared_tracks and not (slot == "B" and uses_default_b_alignment(project)):
                 prepared_tracks[slot] = source_track_clips(project, slot)
             for clip in prepared_tracks[slot] if isinstance(prepared_tracks[slot], list) else []:
                 if isinstance(clip, dict) and "id" in clip:

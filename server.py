@@ -39,6 +39,7 @@ from cutroom.clip_board import ClipBoardError, build_clip_board, DEFAULT_COUNT a
 from cutroom.ai_draft_proposals import ai_draft_proposal, ai_draft_review_status
 from cutroom.review_candidates import media_identity as source_review_media_identity, checked_source_candidate
 from cutroom.sequence import SEQUENCE_ACTION_FIELDS, editor_sequence_snapshot
+from cutroom.source_b_attachment import reviewed_a_generation
 from cutroom.source_tracks import SourceTrackError, TimelineVersionError, validate_sequence_version
 from cutroom.timeline_bindings import (
     ID_ACTIONS, PUBLIC_BINDING_ERROR, TimelineBindingError, build_timeline_bindings, primary_track_binding,
@@ -791,6 +792,19 @@ def create_app(settings: Settings | None = None) -> Flask:
 
     def project_import_active(project_id: str, *, exclude_token: str = "") -> bool:
         return bool(active_uploads.get(project_id, 0) or upload_storage.active_for_project(project_id, exclude_token=exclude_token))
+
+    def require_b_attachment(current, revision):
+        if current.get("revision") != revision:
+            raise APIInputError("revision_conflict", "The project changed. Review the saved edit and choose Source B again.", 409)
+        require_tracks_unlocked(current, ("B",))
+        try:
+            generation = reviewed_a_generation(current)
+        except SourceTrackError as error:
+            raise APIInputError("source_b_attachment_unavailable", str(error), 409) from error
+        path = _safe_project_child(store.project_dir(current["id"]), current["sources"]["A"].get("relative_path"))
+        if path is None or not path.is_file():
+            raise APIInputError("source_b_attachment_unavailable", "The original Source A file is missing.", 409)
+        return generation
 
     def discard_upload_rollback(state: dict[str, Any]) -> None:
         expiration = state.pop("expiration", None)
@@ -1900,12 +1914,23 @@ def create_app(settings: Settings | None = None) -> Flask:
         token = payload.get("upload_token")
         if token is not None and not isinstance(token, str):
             raise APIInputError("invalid_upload_token", "The upload token must be a string.")
+        attach_revision = None
+        if "attach_b_revision" in payload:
+            attach_revision = payload["attach_b_revision"]
+            if (purpose != "source" or slot != "B" or type(attach_revision) is not int
+                    or not 0 < attach_revision <= 9_007_199_254_740_991):
+                raise APIInputError("invalid_upload_target", "Add Source B requires the reviewed revision of a manual edit.")
         with project_job_gate:
             current = store.load(project_id)
             validate_sequence_version(current)
             validate_layer_tracks(current)
             if purpose == "source":
-                require_tracks_unlocked(current)
+                if attach_revision is None:
+                    require_tracks_unlocked(current)
+                else:
+                    require_b_attachment(current, attach_revision)
+                    if jobs.active(project_id=project_id) or project_import_active(project_id):
+                        raise APIInputError("project_busy", "Wait for active processing or import to finish before adding Source B.", 409)
                 prune_upload_transactions(time.monotonic())
                 old = upload_transactions.get((project_id, slot, token))
                 if old is not None:
@@ -1916,7 +1941,8 @@ def create_app(settings: Settings | None = None) -> Flask:
                 raise APIInputError("project_busy", "Wait for the current media import to finish.", 409)
             if purpose == "asset" and len(current.get("assets") or {}) >= MAX_ASSETS:
                 raise APIInputError("asset_limit", f"A project can contain at most {MAX_ASSETS} media assets.")
-            ticket, facts = upload_storage.admit(project_id, purpose, slot, filename, size, store.project_dir(project_id), token)
+            ticket, facts = upload_storage.admit(project_id, purpose, slot, filename, size, store.project_dir(project_id),
+                                                 token, attach_b_revision=attach_revision)
         prefix = f"/api/projects/{project_id}/uploads/{ticket.token}"
         return jsonify({"upload_token": ticket.token, "chunk_size_bytes": CHUNK_BYTES,
                         "received_bytes": 0, "size_bytes": size, "expires_in_seconds": upload_storage.ttl,
@@ -2314,11 +2340,19 @@ def create_app(settings: Settings | None = None) -> Flask:
         installed_destination = False
         previous_source: dict[str, Any] | None = None
         ticket = getattr(g, "upload_ticket", None)
+        attach_revision = ticket.attach_b_revision if ticket is not None else None
+        if request.headers.get("X-Cutroom-Source-Intent") == "attach-empty-b" and attach_revision is None:
+            raise APIInputError("upload_target_mismatch", "Source B must be reserved without replacing the edit.", 409)
         with project_job_gate:
             current_project = store.load(project_id)
             validate_sequence_version(current_project)
             validate_layer_tracks(current_project)
-            require_tracks_unlocked(current_project)
+            if attach_revision is None:
+                require_tracks_unlocked(current_project)
+            else:
+                require_b_attachment(current_project, attach_revision)
+                if jobs.active(project_id=project_id) or project_import_active(project_id, exclude_token=upload_token):
+                    raise APIInputError("project_busy", "Wait for active processing or import to finish before adding Source B.", 409)
             now = time.monotonic()
             prune_upload_transactions(now)
             existing_transaction = upload_transactions.get(transaction_key)
@@ -2345,6 +2379,7 @@ def create_app(settings: Settings | None = None) -> Flask:
                 "cancelled": False,
                 "active": True,
                 "updated_at": now,
+                "attach_b": attach_revision is not None,
             }
             active_uploads[project_id] = active_uploads.get(project_id, 0) + 1
         try:
@@ -2355,7 +2390,8 @@ def create_app(settings: Settings | None = None) -> Flask:
             extension = Path(filename).suffix.lower()
             if extension not in VIDEO_EXTENSIONS:
                 return jsonify({"error": "unsupported_format", "message": f"Unsupported video format: {extension or 'unknown'}"}), 415
-            destination = media_dir / f"source-{slot}{extension}"
+            destination = media_dir / (f"source-B-{transaction_id}{extension}" if attach_revision is not None
+                                       else f"source-{slot}{extension}")
             staging = ticket.path if ticket is not None else media_dir / f".upload-{slot}-{transaction_id}{extension}"
             backup = media_dir / f".{destination.name}.{transaction_id}.backup"
             if upload_cancel_requested(transaction_key, transaction_id):
@@ -2408,6 +2444,20 @@ def create_app(settings: Settings | None = None) -> Flask:
                 nonlocal installed_destination, previous_source, previous_media_path, rollback_path
                 validate_sequence_version(project)
                 validate_layer_tracks(project)
+                if attach_revision is not None:
+                    generation = require_b_attachment(project, attach_revision)
+                    if destination.exists() or destination.is_symlink():
+                        raise APIInputError("upload_conflict", "The Source B destination changed. Choose the file again.", 409)
+                    source_record["parallel_a_generation"] = generation
+                    staging.replace(destination)
+                    installed_destination = True
+                    project["sources"]["B"] = source_record
+                    # Profiles for the new original will be prepared independently.
+                    # Never reset the draft, analysis, manual state or edit history.
+                    for profiles in (project.get("pre_analysis") or {}).values():
+                        if isinstance(profiles, dict):
+                            profiles.pop("B", None)
+                    return
                 # Source replacement clears the shared draft, so every locked
                 # lane must be checked before any physical file is moved.
                 require_tracks_unlocked(project)
@@ -2451,8 +2501,12 @@ def create_app(settings: Settings | None = None) -> Flask:
                         "message": "The upload was cancelled.",
                         "upload_token": upload_token,
                     }), 409
+                if attach_revision is not None and (jobs.active(project_id=project_id)
+                        or active_uploads.get(project_id, 0) > 1
+                        or upload_storage.active_for_project(project_id, exclude_token=upload_token)):
+                    raise APIInputError("project_busy", "Wait for active processing or import to finish before adding Source B.", 409)
                 try:
-                    project = store.update(project_id, commit_upload)
+                    project = store.update(project_id, commit_upload, expected_revision=attach_revision)
                 except Exception:
                     if installed_destination:
                         destination.unlink(missing_ok=True)
@@ -2475,10 +2529,11 @@ def create_app(settings: Settings | None = None) -> Flask:
                     backup.unlink(missing_ok=True)
                 except OSError as exc:
                     app.logger.warning("Could not remove the upload rollback backup: %s", exc)
-                try:
-                    _cleanup_old_source(project_root, slot, previous_source, keep=destination)
-                except OSError as exc:
-                    app.logger.warning("Could not remove superseded source assets: %s", exc)
+                if attach_revision is None:
+                    try:
+                        _cleanup_old_source(project_root, slot, previous_source, keep=destination)
+                    except OSError as exc:
+                        app.logger.warning("Could not remove superseded source assets: %s", exc)
                 for active_job in jobs.active(project_id=project_id, kind="prepare_source"):
                     if str(active_job.dedupe_key).split(":", 1)[0] == slot:
                         jobs.cancel(active_job.id)
@@ -2567,6 +2622,12 @@ def create_app(settings: Settings | None = None) -> Flask:
             prune_upload_transactions(now)
             transaction = upload_transactions.get(transaction_key)
             known_upload = transaction is not None
+            if transaction and transaction.get("attach_b") and transaction.get("committed"):
+                # An attached recording becomes project media at the atomic
+                # commit boundary. A late Stop must not erase the edit by
+                # entering the old source-replacement rollback path.
+                return jsonify({"cancelled": False, "too_late": True, "known_upload": True,
+                                "generation": transaction["generation"]}), 202
             if transaction is None:
                 if len(upload_transactions) >= MAX_UPLOAD_TRANSACTIONS:
                     raise APIInputError(

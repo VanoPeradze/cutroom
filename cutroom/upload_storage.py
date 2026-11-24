@@ -107,6 +107,9 @@ class UploadTicket:
     transport_busy: bool = False
     transport_lease: str = ""
     journal_path: Path | None = None
+    # Only the server may associate a preserve-edit source attachment with a
+    # reservation. Finalization cannot accidentally fall back to replacement.
+    attach_b_revision: int | None = None
 
 
 class UploadStorage:
@@ -291,7 +294,8 @@ class UploadStorage:
                     self._remove(ticket)
 
     def admit(self, project_id: str, purpose: str, slot: str | None, filename: str, size: int,
-              project_root: Path, token: str | None = None) -> tuple[UploadTicket, dict[str, Any]]:
+              project_root: Path, token: str | None = None, *,
+              attach_b_revision: int | None = None) -> tuple[UploadTicket, dict[str, Any]]:
         with self.lock:
             if self.copy_guard is not None:
                 self.copy_guard()
@@ -310,7 +314,8 @@ class UploadStorage:
             path = project_root / "media" / f".incoming-{identity}"
             if path.exists() or path.is_symlink():
                 raise UploadStorageError("upload_conflict", "The staging reservation changed. Try importing again.")
-            ticket = UploadTicket(project_id, token, purpose, slot, filename, size, path)
+            ticket = UploadTicket(project_id, token, purpose, slot, filename, size, path,
+                                  attach_b_revision=attach_b_revision)
             try:
                 self._journal(ticket, identity)
             except OSError as error:
