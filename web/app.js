@@ -2564,6 +2564,7 @@ function bindEvents() {
   elements.retryDirectorButton.addEventListener("click", generateDraft);
   elements.backFromErrorButton.addEventListener("click", () => state.project?.draft ? showResult() : showSetup());
   elements.backToBriefButton.addEventListener("click", showSetup);
+  bindEditorSourceB();
   $$("[data-open-studio-tab]").forEach((button) => {
     button.addEventListener("click", () => openStudioTab(button.dataset.openStudioTab));
   });
@@ -4121,6 +4122,7 @@ function keepEditorAfterDirector(project) {
 }
 
 function renderReadiness() {
+  renderEditorSourceB();
   state.manualTranscriptionControls?.();
   renderLayerTrackControls();
   renderPreviewAvailability();
@@ -4183,7 +4185,75 @@ function uploadStartBlocked(projectId, slot) {
   return [...state.jobStartLocks].some((key) => !String(key).startsWith("upload:"));
 }
 
-async function uploadSource(slot, file, {prepareInForeground = false, shouldContinue = () => true} = {}) {
+function editorSourceBContext() {
+  const project = state.project;
+  return Boolean(state.studio.open && project?.settings?.workflow === "manual"
+    && project.draft && project.sources?.A && !project.editor_sequence?.error);
+}
+
+function renderEditorSourceB() {
+  const panel = document.getElementById("editorSourceB");
+  if (!panel) return;
+  const button = document.getElementById("editorAddSourceB");
+  const upload = activeUploadForSlot("B");
+  const attached = state.project?.sources?.B;
+  const add = !attached && editorSourceBContext();
+  const showGuide = attached?.parallel_a_generation && attached.parallel_a_generation === state.project?.sources?.A?.generation;
+  panel.hidden = !(add || (showGuide && editorSourceBContext()) || upload?.attachB);
+  if (panel.hidden) return;
+  button.hidden = !add;
+  button.disabled = !add || foregroundBusy() || Boolean(state.project?.manual?.track_locks?.B);
+  button.textContent = uiCopy("הוסף מקור B", "Add Source B");
+  document.getElementById("editorSourceBTitle").textContent = uiCopy("הקלטה מקבילה (מקור B)", "Parallel recording (Source B)");
+  document.getElementById("editorSourceBHelp").textContent = showGuide
+    ? uiCopy("בחרו ערימה או תמונה בתוך תמונה. תחת מסגור קליפ אפשר לבחור A או B בנפרד; כדי לשנות מתי B מופיע בלי לחתוך את A, בחרו בטיימליין B בלבד.",
+             "Choose Stacked or Picture in Picture below. Under Clip framing, select A or B separately. To change when B appears without cutting A, use B only in the timeline.")
+    : uiCopy("להקלטה נוספת מאותו זמן, למשל מצלמה לצד משחק. היא לא תתווסף כשכבה ולא תשנה את הפריסה הנוכחית. בדקו את הסנכרון אחר כך.",
+             "For a second recording of the same moment, such as a camera with gameplay. No overlay or layout change. Check alignment after adding it.");
+  const progress = document.getElementById("editorSourceBProgress");
+  const stop = document.getElementById("editorStopSourceB");
+  progress.hidden = stop.hidden = !upload?.attachB;
+  const status = upload?.attachB ? uploadStatusText(upload) : "";
+  if (progress.textContent !== status) progress.textContent = status;
+  stop.disabled = Boolean(upload?.cancelRequested);
+}
+
+function bindEditorSourceB() {
+  const button = document.getElementById("editorAddSourceB");
+  const input = document.getElementById("editorSourceBInput");
+  if (!button || !input) return;
+  let reviewedView = null;
+  button.addEventListener("click", () => {
+    if (button.disabled || button.hidden || !editorSourceBContext() || state.project.sources.B) return;
+    reviewedView = {id:state.project.id, token:state.projectViewToken};
+    input.value = "";
+    input.click();
+  });
+  input.addEventListener("cancel", () => { reviewedView = null; });
+  input.addEventListener("change", () => {
+    const file = input.files?.[0], view = reviewedView;
+    reviewedView = null;
+    input.value = "";
+    if (!file || !view) return;
+    const current = () => state.project?.id === view.id && state.projectViewToken === view.token
+      && editorSourceBContext() && !state.project.sources.B;
+    if (current()) runUiAction(() => uploadSource("B", file, {attachB:true, shouldContinue:current}));
+  });
+  document.getElementById("editorStopSourceB")?.addEventListener("click", () => cancelUpload("B"));
+}
+
+function applyAttachedBPreview() {
+  renderSources();
+  setupPreviewSources();
+  if (state.timeline) {
+    state.timeline.project = editorProject();
+    state.timeline.scheduleDraw();
+  }
+  syncSecondaryPreview(previewPlaybackTime());
+  updateStudioStatus();
+}
+
+async function uploadSource(slot, file, {prepareInForeground = false, shouldContinue = () => true, attachB = false} = {}) {
   const validationError = validateUploadFile(file);
   if (validationError) {
     toast(validationError);
@@ -4196,6 +4266,8 @@ async function uploadSource(slot, file, {prepareInForeground = false, shouldCont
   const viewToken = state.projectViewToken;
   if (!(await flushCurrentProjectSaves())) return;
   if (state.project?.id !== projectId || state.projectViewToken !== viewToken || !shouldContinue()) return;
+  if (attachB && (slot !== "B" || !editorSourceBContext() || state.project.sources?.B
+      || !Number.isSafeInteger(state.project.revision) || state.project.revision < 1)) return;
   if (uploadStartBlocked(projectId, slot)) {
     toast(uiCopy("כבר מתבצע תהליך אחר", "Another process is already running"));
     elements[`sourceInput${slot}`].value = "";
@@ -4207,6 +4279,9 @@ async function uploadSource(slot, file, {prepareInForeground = false, shouldCont
     slot,
     uploadToken,
     purpose: "source",
+    attachB,
+    attachRevision: attachB ? state.project.revision : undefined,
+    viewToken,
     fileName: file.name,
     phase: "checking",
     progress: 0,
@@ -4241,6 +4316,7 @@ async function uploadSource(slot, file, {prepareInForeground = false, shouldCont
         else progress.removeAttribute("aria-valuenow");
       }
       renderActiveJobBar();
+      if (attachB) renderEditorSourceB();
     }, (xhr) => {
       uploadState.xhr = xhr;
       if (uploadState.cancelRequested) xhr.abort();
@@ -4266,12 +4342,15 @@ async function uploadSource(slot, file, {prepareInForeground = false, shouldCont
     }
     rememberProjectRevision(authoritativeProject);
     if (!authoritativeProject?.draft) clearDraftRebuild(projectId);
-    if (state.project?.id === projectId) {
+    if (state.project?.id === projectId && (!attachB || state.projectViewToken === viewToken)) {
       state.project = reconcileProjectSnapshot(authoritativeProject);
-      renderSources();
-      hydrateSettings();
-      if (state.project.settings?.workflow === "manual") {
-        if (state.project.draft) showResult(); else showEmptyManualEditor();
+      if (attachB) applyAttachedBPreview();
+      else {
+        renderSources();
+        hydrateSettings();
+        if (state.project.settings?.workflow === "manual") {
+          if (state.project.draft) showResult(); else showEmptyManualEditor();
+        }
       }
     }
     if (payload.job) {
@@ -4283,7 +4362,8 @@ async function uploadSource(slot, file, {prepareInForeground = false, shouldCont
     }
     loadProjects().catch(() => {});
     loadSystem().catch(() => {});
-    toast(`Ready: ${slot} · ${file.name}`, "success");
+    toast(attachB ? uiCopy("מקור B נוסף. בדקו את הסנכרון ובחרו פריסה ב־Layout.", "Source B added. Check alignment and choose a layout.")
+      : `Ready: ${slot} · ${file.name}`, "success");
     imported = payload;
   } catch (error) {
     if (error?.name === "AbortError") {
@@ -4357,7 +4437,8 @@ async function uploadWithProgress(url, file, uploadToken, onProgress, onRequest 
     notify("checking", 0);
     const preflight = await api(`/api/projects/${route[1]}/uploads/preflight`, {
       method: "POST", body: JSON.stringify({ purpose: upload.purpose, slot: upload.slot || undefined,
-        filename: file.name, size_bytes: file.size, upload_token: uploadToken }),
+        filename: file.name, size_bytes: file.size, upload_token: uploadToken,
+        attach_b_revision: upload.attachRevision }),
     });
     admitted = true;
     rememberUploadStorage(upload, preflight.storage_plan);
@@ -4387,6 +4468,7 @@ async function uploadWithProgress(url, file, uploadToken, onProgress, onRequest 
     notify("importing", 1);
     const result = await api(url, { method: "POST", body: "{}", headers: {
       "X-Cutroom-Upload-Transport": "chunked-v1", "X-Cutroom-Upload-Token": uploadToken,
+      ...(upload.attachB ? {"X-Cutroom-Source-Intent":"attach-empty-b"} : {}),
     } });
     committed = true;
     if (upload.cancelRequested && upload.purpose === "asset") return { ...result, import_stop_too_late: true };
@@ -4395,7 +4477,12 @@ async function uploadWithProgress(url, file, uploadToken, onProgress, onRequest 
   } catch (error) {
     rememberUploadStorage(upload, error?.payload?.storage_plan);
     if (admitted && !committed && upload.cancelUrl) {
-      await api(upload.cancelUrl, { method: "POST", body: "{}" }).catch(() => {});
+      const status = await api(upload.cancelUrl, { method: "POST", body: "{}" }).catch(() => null);
+      if (upload.attachB && status?.too_late && status.generation && !upload.cancelRequested) {
+        const latest = await api(`/api/projects/${route[1]}`).catch(() => null);
+        const source = latest?.project?.sources?.B;
+        if (source?.generation === status.generation) return {project:latest.project, source};
+      }
     }
     if (upload.cancelRequested) throw uploadAbortError();
     throw error;
@@ -4456,17 +4543,19 @@ async function requestUploadCancellation(upload) {
   upload.cancelConfirmed = Boolean(payload?.cancelled);
   try {
     const latest = await api(`/api/projects/${encodeURIComponent(upload.projectId)}`);
-    if (state.project?.id === upload.projectId && latest?.project) {
+    if (state.project?.id === upload.projectId && latest?.project
+        && (!upload.attachB || state.projectViewToken === upload.viewToken)) {
       state.project = reconcileProjectSnapshot(latest.project);
       rememberProjectRevision(state.project);
-      renderSources();
-      hydrateSettings();
+      if (upload.attachB) applyAttachedBPreview();
+      else { renderSources(); hydrateSettings(); }
     }
   } catch (error) {
     if (Number(error?.status) !== 404) console.warn("Upload cancellation reconciliation failed", error);
   }
   loadProjects().catch(() => {});
   if (upload.cancelConfirmed && upload.purpose !== "asset") toast(t("uploadCancelled"), "success", 2600);
+  if (upload.attachB && payload?.too_late) toast(uiCopy("מקור B כבר נשמר. העריכה נשארה כפי שהייתה.", "Source B was already added. The saved edit was kept."), "info", 3500);
   return payload;
 }
 
@@ -6325,7 +6414,8 @@ function sourceMixerSettings() {
   const firstSlot = ["A", "B"].includes(String(raw.first_slot || "").toUpperCase()) ? String(raw.first_slot).toUpperCase() : vertical ? cameraSlot : "A";
   const primaryRole = ["screen", "camera"].includes(raw.primary_role) ? raw.primary_role : "screen";
   let audioSlot = ["A", "B"].includes(String(raw.audio_slot || "").toUpperCase()) ? String(raw.audio_slot).toUpperCase() : "A";
-  if (!state.project?.sources?.[audioSlot]?.has_audio) {
+  const attachedB = state.project?.sources?.B?.parallel_a_generation;
+  if (!state.project?.sources?.[audioSlot]?.has_audio && !(attachedB && attachedB === state.project.sources?.A?.generation)) {
     audioSlot = state.project?.sources?.A?.has_audio ? "A" : state.project?.sources?.B?.has_audio ? "B" : "A";
   }
   const automaticOffset = Number(state.project?.analysis?.sync?.offset || 0);

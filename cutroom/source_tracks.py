@@ -85,7 +85,50 @@ def _clip_limit(project: dict[str, Any]) -> int:
 
 def has_source_tracks(project: dict[str, Any]) -> bool:
     tracks = (project.get("manual") or {}).get("source_tracks")
-    return isinstance(tracks, dict) and any(slot in tracks for slot in ("A", "B"))
+    return bool(attached_b_generation(project) or
+                (isinstance(tracks, dict) and any(slot in tracks for slot in ("A", "B"))))
+
+
+def attached_b_generation(project: dict[str, Any]) -> str | None:
+    sources = project.get("sources") or {}
+    a, b = (sources.get(slot) or {} for slot in ("A", "B"))
+    anchor, identity = a.get("generation"), b.get("generation")
+    return identity if isinstance(anchor, str) and anchor and b.get("parallel_a_generation") == anchor and isinstance(identity, str) and identity else None
+
+
+def uses_default_b_alignment(project: dict[str, Any]) -> bool:
+    generation = attached_b_generation(project)
+    if not generation:
+        return False
+    manual = project.get("manual") or {}
+    if has_sequence(project):
+        # Old history snapshots may contain an explicit empty B lane from before
+        # the media was attached. Only a lane saved for this exact B generation
+        # can suppress the default mapping (including an intentional empty lane).
+        return manual["sequence"].get("attached_b_generation") != generation
+    tracks = manual.get("source_tracks")
+    return not isinstance(tracks, dict) or "B" not in tracks
+
+
+def aligned_source_b_clips(project: dict[str, Any], a_clips: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Map B against A's original, normal-speed clock on the very same edit spans."""
+    source = (project.get("sources") or {}).get("B") or {}
+    duration = _duration(project, "B")
+    video_duration = _finite(source.get("video_duration"))
+    if video_duration > 0:
+        duration = min(duration, video_duration)
+    offset = source_sync_offset(project)
+    minimum = 1 / max(EXPORT_FPS_CHOICES) if has_sequence(project) else MIN_CLIP_SECONDS
+    clips = []
+    for index, a in enumerate(a_clips):
+        start_b = a["source_start"] - offset
+        left = max(0.0, -start_b)
+        right = min(a["end"] - a["start"], duration - start_b)
+        start, end = round(a["start"] + left, 9), round(a["start"] + right, 9)
+        if end - start >= minimum - EPSILON:
+            clips.append({"id": f"B:aligned:{index}", "start": start, "end": end,
+                          "source_start": round(max(0.0, start_b + left), 9)})
+    return _validated(project, "B", clips)
 
 
 def _implicit(project: dict[str, Any], slot: str) -> list[dict[str, Any]]:
@@ -188,6 +231,8 @@ def source_track_clips(project: dict[str, Any], slot: str) -> list[dict[str, Any
     slot = str(slot).upper()
     if slot not in {"A", "B"} or not _duration(project, slot):
         return []
+    if slot == "B" and uses_default_b_alignment(project):
+        return aligned_source_b_clips(project, source_track_clips(project, "A"))
     tracks = (project.get("manual") or {}).get("source_tracks")
     if not isinstance(tracks, dict) or slot not in tracks:
         return [] if has_sequence(project) else _implicit(project, slot)
@@ -222,7 +267,7 @@ def source_track_boundaries(project: dict[str, Any]) -> list[float]:
 def validate_source_track_sync(project: dict[str, Any], payload: dict[str, Any]) -> None:
     """Global B sync cannot silently remap an independently edited B track."""
     tracks = (project.get("manual") or {}).get("source_tracks")
-    if "sync_offset" not in payload or not isinstance(tracks, dict) or "B" not in tracks:
+    if "sync_offset" not in payload or not isinstance(tracks, dict) or "B" not in tracks or uses_default_b_alignment(project):
         return
     proposed = copy.deepcopy(project)
     mixer = proposed.setdefault("manual", {}).setdefault("source_mixer", {})
@@ -255,6 +300,8 @@ def prepare_source_track_edit(project: dict[str, Any], payload: dict[str, Any]) 
     slot = str(payload.get("slot") or "").upper()
     if slot not in {"A", "B"} or _duration(project, slot) <= 0:
         raise SourceTrackError("Choose an existing source track A or B")
+    if slot == "B" and has_sequence(project) and attached_b_generation(project):
+        raise SourceTrackError("Use the current edit-timeline tools to change the attached B track")
     if not isinstance(project.get("draft"), dict):
         raise SourceTrackError("Generate a draft before editing source tracks")
     raw_tracks = (project.get("manual") or {}).get("source_tracks")
@@ -266,7 +313,7 @@ def prepare_source_track_edit(project: dict[str, Any], payload: dict[str, Any]) 
             return None
         tracks.pop(slot)
         return tracks
-    current = _validated(project, slot, tracks[slot]) if slot in tracks else _implicit(project, slot)
+    current = _validated(project, slot, tracks[slot]) if slot in tracks else source_track_clips(project, slot)
     updated = copy.deepcopy(current)
     if action == "track_split":
         time = _number(payload.get("time"), "time")
@@ -293,7 +340,9 @@ def prepare_source_track_edit(project: dict[str, Any], payload: dict[str, Any]) 
                 updated.append({**clip, **_shift_video_start(clip, end - clip["start"]), "id": _new_id(slot) if clip["start"] < start else clip["id"], "start": end, "source_start": clip["source_start"] + end - clip["start"]})
     elif action == "track_restore_range":
         start, end = _range(project, payload)
-        for base in _implicit(project, slot):
+        base_clips = (aligned_source_b_clips(project, source_track_clips(project, "A"))
+                      if slot == "B" and attached_b_generation(project) else _implicit(project, slot))
+        for base in base_clips:
             left, right = max(start, base["start"]), min(end, base["end"])
             cursor = left
             for clip in current:

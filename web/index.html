@@ -561,6 +561,14 @@
               <div class="source-mixer-empty" id="sourceMixerEmpty">
                 <b>Add a video first</b><span>After upload, choose whether the camera is embedded in the recording or supplied as source B.</span>
               </div>
+              <section id="editorSourceB" class="source-workflow-step" aria-labelledby="editorSourceBTitle" hidden>
+                <header><h4 id="editorSourceBTitle">Source B</h4></header>
+                <p id="editorSourceBHelp"></p>
+                <button class="button ghost compact" id="editorAddSourceB" type="button" aria-describedby="editorSourceBHelp">Add Source B</button>
+                <input type="file" id="editorSourceBInput" accept="video/*,.mkv,.m4v,.mts,.m2ts" hidden>
+                <p id="editorSourceBProgress" role="status" hidden></p>
+                <button class="button ghost compact" id="editorStopSourceB" type="button" hidden data-i18n="stopProcess">Stop process</button>
+              </section>
               <details class="embedded-camera-editor" id="embeddedCameraEditor" aria-labelledby="embeddedCameraTitle" hidden>
                 <summary>Camera area in this recording</summary>
                 <div class="embedded-camera-head">

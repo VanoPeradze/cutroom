@@ -18,8 +18,8 @@
 
 <p align="center">
   <a href="https://cutroom-studio.expo.app/"><strong>Website</strong></a> ·
-  <a href="https://github.com/VanoPeradze/cutroom/releases/download/v1.3-beta-20261123-style-families1/CUTROOM-1.3-Beta-Windows-71ea417.zip"><strong>Windows ZIP</strong></a> ·
-  <a href="https://github.com/VanoPeradze/cutroom/releases/download/v1.3-beta-20261123-style-families1/CUTROOM-1.3-Beta-combined-71ea417.zip"><strong>Mac ZIP</strong></a> ·
+  <a href="https://github.com/VanoPeradze/cutroom/releases/download/v1.3-beta-20261124-source-b1/CUTROOM-1.3-Beta-Windows-4a9a5d9.zip"><strong>Windows ZIP</strong></a> ·
+  <a href="https://github.com/VanoPeradze/cutroom/releases/download/v1.3-beta-20261124-source-b1/CUTROOM-1.3-Beta-combined-4a9a5d9.zip"><strong>Mac ZIP</strong></a> ·
   <a href="docs/USER_GUIDE_EN.md">User guide</a> ·
   <a href="docs/README_HE.md">Hebrew README</a>
 </p>
@@ -31,6 +31,8 @@
 [What's new](#whats-new) · [Highlights](#highlights) · [Quick start](#quick-start) · [How it works](#how-it-works) · [AI, your way](#ai-your-way) · [Privacy](#privacy) · [Requirements](#requirements) · [Beta status](#beta-status) · [Documentation](#documentation) · [Contributing and support](#contributing-and-support) · [License and credits](#license-and-credits)
 
 ## What's new
+
+The Source B update lets you add a second recording in parallel from Layout in a saved manual edit. With A available and B empty, choose **Add Source B** without resetting the edit. Frame A and B separately and adjust B-only timing while leaving A intact. Review timing if the recordings started independently.
 
 These features are available in the [23 November 1.3 Beta](https://github.com/VanoPeradze/cutroom/releases/tag/v1.3-beta-20261123-style-families1). The [changelog](CHANGELOG.md) has the exact behavior and limits.
 
@@ -112,8 +114,8 @@ These ten views show the main editing windows. See the [full screen gallery](doc
 
 | Platform | Download | Launcher |
 | --- | --- | --- |
-| **Windows** | [Windows ZIP](https://github.com/VanoPeradze/cutroom/releases/download/v1.3-beta-20261123-style-families1/CUTROOM-1.3-Beta-Windows-71ea417.zip) | **START CUTROOM.bat** |
-| **macOS** | [Mac ZIP](https://github.com/VanoPeradze/cutroom/releases/download/v1.3-beta-20261123-style-families1/CUTROOM-1.3-Beta-combined-71ea417.zip) | **START CUTROOM.command** |
+| **Windows** | [Windows ZIP](https://github.com/VanoPeradze/cutroom/releases/download/v1.3-beta-20261124-source-b1/CUTROOM-1.3-Beta-Windows-4a9a5d9.zip) | **START CUTROOM.bat** |
+| **macOS** | [Mac ZIP](https://github.com/VanoPeradze/cutroom/releases/download/v1.3-beta-20261124-source-b1/CUTROOM-1.3-Beta-combined-4a9a5d9.zip) | **START CUTROOM.command** |
 
 1. Extract the entire ZIP into a fresh folder. Keep **App**, **START HERE.html** and the launcher together.
 2. Open the launcher beside **App** and let setup finish. In a combined ZIP, open **windows** or **mac** first.
@@ -124,7 +126,7 @@ These ten views show the main editing windows. See the [full screen gallery](doc
 > [!IMPORTANT]
 > Before the first Windows launch, make sure WinGet is available and install the [official Microsoft Visual C++ x64 runtime](https://aka.ms/vc14/vc_redist.x64.exe). The CUTROOM launcher does not install this prerequisite.
 
-The [23 November beta release](https://github.com/VanoPeradze/cutroom/releases/tag/v1.3-beta-20261123-style-families1) includes the exact source, recorded checks and SHA-256 sidecars. Downloads can differ from the current repository. To update, extract a fresh copy separately and back up projects before moving them. The [24 October 1.2 beta](https://github.com/VanoPeradze/cutroom/releases/tag/v1.2-beta-20261024-update1) remains available for rollback.
+The [24 November Source B beta release](https://github.com/VanoPeradze/cutroom/releases/tag/v1.3-beta-20261124-source-b1) includes the exact source, recorded checks and SHA-256 sidecars. Downloads can differ from the current repository. To update, extract a fresh copy separately and back up projects before moving them. The [24 October 1.2 beta](https://github.com/VanoPeradze/cutroom/releases/tag/v1.2-beta-20261024-update1) remains available for rollback.
 
 ### Run from source
 

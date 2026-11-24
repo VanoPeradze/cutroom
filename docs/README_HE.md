@@ -4,13 +4,15 @@
 
 עורך וידאו חינמי בקוד פתוח ל־YouTube, ל־Shorts ול־Reels. חיתוך וידאו, עיצוב הפריים, מיקס סאונד וכתוביות. אפשר לערוך ידנית, או להיעזר בטיוטת AI ולשנות אותה בעצמך.
 
-[הורדת הבטא](https://github.com/VanoPeradze/cutroom/releases/tag/v1.3-beta-20261123-style-families1) · [האתר](https://cutroom-studio.expo.app/?lang=he) · [מדריך למשתמש](USER_GUIDE_HE.md) · [English](../README.md)
+[הורדת הבטא](https://github.com/VanoPeradze/cutroom/releases/tag/v1.3-beta-20261124-source-b1) · [האתר](https://cutroom-studio.expo.app/?lang=he) · [מדריך למשתמש](USER_GUIDE_HE.md) · [English](../README.md)
 
 [![חלון העריכה של CUTROOM: תצוגה מקדימה, ספריית מדיה, כלי קליפים וציר זמן](images/readme/studio-edit-20261122.png)](images/readme/studio-edit-20261122.png?raw=1)
 
 *צילום אמיתי של הממשק. לחיצה פותחת את אותה תמונת PNG בגודל המקורי. זהו צילום מ־22 בנובמבר 2026 עם חומר הדגמה סינתטי. הוא מציג את הממשק, לא את איכות ה־AI או את כל הפקדים בבטא הנוכחית. [גלריה ורשימת החלונות](GALLERY.md).*
 
 ## מה חדש
+
+בעדכון מקור B, בפרויקט ידני שמור עם מקור A ומקור B ריק, בוחרים Layout ואז הוסף מקור B. ההקלטה השנייה מצטרפת במקביל בלי לאפס את העריכה. אפשר למסגר את שני המקורות בנפרד ולשנות את הטווח של B בלי לחתוך את A. אם ההקלטות התחילו בנפרד, בודקים את הסנכרון.
 
 היכולות האלה זמינות ב[בטא 1.3 מ־23 בנובמבר](https://github.com/VanoPeradze/cutroom/releases/tag/v1.3-beta-20261123-style-families1). [יומן השינויים](../CHANGELOG.md) מפרט התנהגות ומגבלות.
 
@@ -38,7 +40,7 @@
 
 ## מתחילים לערוך
 
-1. מורידים את [קובץ ה־ZIP ל־Windows](https://github.com/VanoPeradze/cutroom/releases/download/v1.3-beta-20261123-style-families1/CUTROOM-1.3-Beta-Windows-71ea417.zip) או את [החבילה המשולבת ל־Mac](https://github.com/VanoPeradze/cutroom/releases/download/v1.3-beta-20261123-style-families1/CUTROOM-1.3-Beta-combined-71ea417.zip) ומחלצים את כל ה־ZIP.
+1. מורידים את [קובץ ה־ZIP ל־Windows](https://github.com/VanoPeradze/cutroom/releases/download/v1.3-beta-20261124-source-b1/CUTROOM-1.3-Beta-Windows-4a9a5d9.zip) או את [החבילה המשולבת ל־Mac](https://github.com/VanoPeradze/cutroom/releases/download/v1.3-beta-20261124-source-b1/CUTROOM-1.3-Beta-combined-4a9a5d9.zip) ומחלצים את כל ה־ZIP.
 2. משאירים את **App**, את **START HERE.html** ואת קובץ ההפעלה יחד. ב־Windows מפעילים **START CUTROOM.bat**, וב־Mac את **START CUTROOM.command**. בחבילה המשולבת פותחים קודם את תיקיית הפלטפורמה המתאימה.
 3. מחכים לסיום ההתקנה ופותחים פרויקט בדפדפן. משאירים את חלון ההפעלה פתוח בזמן העבודה.
 
@@ -52,7 +54,7 @@
 
 ## לפני שמפרסמים
 
-**1.3 Beta היא עדיין גרסת בטא.** שומרים את קובצי המקור, מתחילים בסרטון קצר ובודקים כתוביות, תזמון, סאונד ויצוא. טיוטות AI דורשות בדיקה. מצב הבדיקות והמגבלות מפורטים ב[גרסת 23 בנובמבר](https://github.com/VanoPeradze/cutroom/releases/tag/v1.3-beta-20261123-style-families1), ולא נקבעים לפי הצילומים. [מצב הבטא](BETA_STATUS.md) · [מגבלות ידועות](QUALITY_AND_LIMITS.md).
+**1.3 Beta היא עדיין גרסת בטא.** שומרים את קובצי המקור, מתחילים בסרטון קצר ובודקים כתוביות, תזמון, סאונד ויצוא. טיוטות AI דורשות בדיקה. מצב הבדיקות והמגבלות מפורטים ב[גרסת מקור B מ־24 בנובמבר](https://github.com/VanoPeradze/cutroom/releases/tag/v1.3-beta-20261124-source-b1), ולא נקבעים לפי הצילומים. [מצב הבטא](BETA_STATUS.md) · [מגבלות ידועות](QUALITY_AND_LIMITS.md).
 
 [כל המדריכים](README.md) · [קיצורי מקלדת](KEYBOARD_SHORTCUTS.md) · [שינויים](../CHANGELOG.md) · [דיווח על תקלה](https://github.com/VanoPeradze/cutroom/issues/new/choose)
 
