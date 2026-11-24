@@ -1,46 +1,32 @@
-name: Temporary Windows candidate qualification
+name: CUTROOM direct Source B exact Windows candidate
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened]
+  push:
+    branches:
+      - 'release-ci/cutroom-source-b-20261124-windows'
 
 permissions:
   contents: read
 
 concurrency:
-  group: windows-candidate-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
-  cancel-in-progress: true
+  group: cutroom-source-b-frozen-windows
+  cancel-in-progress: false
 
 jobs:
-  scope:
-    # Disabled after exact ba67003 Windows and native Mac qualification.
-    # All previously published archives and validation records remain untouched.
-    if: ${{ false }}
-    runs-on: ubuntu-latest
-    outputs:
-      build_candidate: ${{ steps.scope.outputs.build_candidate }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          fetch-depth: 2
-          persist-credentials: false
-      - id: scope
-        shell: bash
-        run: |
-          changed="$(git diff-tree --no-commit-id --name-only -r HEAD)"
-          if [[ "$changed" =~ ^packaging/review-candidates/ci-[0-9a-f]{7}\.json$ ]]; then
-            echo 'build_candidate=false' >> "$GITHUB_OUTPUT"
-          else
-            echo 'build_candidate=true' >> "$GITHUB_OUTPUT"
-          fi
   candidate:
-    needs: scope
-    if: ${{ needs.scope.outputs.build_candidate == 'true' }}
+    name: Frozen application / Windows x64 qualification
+    if: ${{ github.repository == 'VanoPeradze/cutroom' && github.ref == 'refs/heads/release-ci/cutroom-source-b-20261124-windows' }}
     runs-on: windows-2022
-    timeout-minutes: 60
+    timeout-minutes: 100
     env:
-      TESTED_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      # Keep application bytes identical to Git on Windows; installer CRLF
+      # blobs are already pinned with -text attributes and stay unchanged.
+      GIT_CONFIG_COUNT: '2'
+      GIT_CONFIG_KEY_0: core.autocrlf
+      GIT_CONFIG_VALUE_0: 'false'
+      GIT_CONFIG_KEY_1: core.eol
+      GIT_CONFIG_VALUE_1: lf
+      TESTED_HEAD_SHA: '4a9a5d9d880b584a22f6a8143efc583697bdd15b'
       CUTROOM_NO_BROWSER: '1'
       HF_HUB_OFFLINE: '1'
       TRANSFORMERS_OFFLINE: '1'
@@ -54,11 +40,21 @@ jobs:
         shell: pwsh
         run: |
           "CUTROOM_DATA_DIR=$(Join-Path $env:RUNNER_TEMP 'cutroom-test-data')" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-      - name: Check out the reviewed PR head
+      - name: Check out the frozen reviewed app
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: '4a9a5d9d880b584a22f6a8143efc583697bdd15b'
           persist-credentials: false
+      - name: Verify exact tested source and clean checkout
+        shell: pwsh
+        run: |
+          if ((git rev-parse HEAD).Trim() -ne $env:TESTED_HEAD_SHA) { throw 'Frozen app source identity mismatch.' }
+          if (@(git status --porcelain).Count -ne 0) { throw 'Frozen app checkout is not clean.' }
+          foreach ($file in @('server.py', 'web/app.js', 'web/styles.css', 'tests/frontend_transcript_batch_receipt.test.cjs', 'tests/frontend_source_b_attachment.test.cjs', 'cutroom/source_b_attachment.py', 'tests/test_source_b_attachment.py', 'setup_windows.ps1', 'run_windows.bat')) {
+            $expected = (git rev-parse ('HEAD:' + $file)).Trim()
+            $actual = (git hash-object --no-filters $file).Trim()
+            if ($LASTEXITCODE -ne 0 -or $expected -ne $actual) { throw ('Working tree changed frozen bytes: ' + $file) }
+          }
       - name: Set up Python
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
@@ -196,18 +192,34 @@ jobs:
           & $env:CUTROOM_TEST_PYTHON -m pytest -q tests/test_three_point_editing.py tests/test_hebrew_auto_refinement.py tests/test_caption_bidi_presentation.py tests/test_caption_bidi_render.py
           if ($LASTEXITCODE -ne 0) { throw 'Packaged three-point editing regressions failed' }
       - name: Run complete source and exact packaged speech regressions
-        timeout-minutes: 15
+        timeout-minutes: 45
         shell: pwsh
         run: |
           # Repository tests need cross-platform packaging fixtures intentionally
           # absent from the end-user Windows App. Run the full suite at source,
           # then the changed speech/privacy/render contracts inside the exact ZIP.
           Set-Location -LiteralPath $env:GITHUB_WORKSPACE
-          & $env:CUTROOM_TEST_PYTHON -m pytest -ra
+          & $env:CUTROOM_TEST_PYTHON -m pytest -v -ra --durations=25 --durations-min=0.5
           if ($LASTEXITCODE -ne 0) { throw 'Complete source Python regression suite failed' }
           Set-Location -LiteralPath $env:CUTROOM_EXTRACTED_APP
           & $env:CUTROOM_TEST_PYTHON -m pytest -ra tests/test_transcription_adapter.py tests/test_transcription_admission.py tests/test_transcription_routing.py tests/test_hebrew_profile_resources.py tests/test_hebrew_auto_refinement.py tests/test_transcription_profiles.py tests/test_caption_bidi_presentation.py tests/test_caption_bidi_render.py tests/test_cloud_cache_identity.py
           if ($LASTEXITCODE -ne 0) { throw 'Exact packaged speech/privacy/render regressions failed' }
+      - name: Require parallel Source B on the exact extracted Windows app
+        timeout-minutes: 8
+        shell: pwsh
+        run: |
+          Set-Location -LiteralPath $env:CUTROOM_EXTRACTED_APP
+          $report = Join-Path $env:RUNNER_TEMP 'cutroom-source-b-tests.xml'
+          & $env:CUTROOM_TEST_PYTHON -m pytest -v -ra tests/test_source_b_attachment.py --junitxml $report
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged parallel Source B regressions failed' }
+          [xml]$results = Get-Content -LiteralPath $report -Raw
+          $suite = $results.testsuites.testsuite
+          if ([int]$suite.tests -lt 17 -or [int]$suite.skipped -ne 0 -or [int]$suite.failures -ne 0 -or [int]$suite.errors -ne 0) {
+            throw 'Packaged Source B coverage is incomplete'
+          }
+          if (-not ($suite.testcase | Where-Object { $_.name -eq 'test_real_portrait_render_keeps_independent_crops_b_gaps_and_a_audio' })) {
+            throw 'Exact Windows Source B render regression did not run'
+          }
       - name: Test synthetic portrait, audio and process restart
         timeout-minutes: 12
         shell: pwsh
@@ -246,6 +258,7 @@ jobs:
             ${{ runner.temp }}/cutroom-features-sanitized.json
             ${{ runner.temp }}/cutroom-windows-smoke.json
             ${{ runner.temp }}/cutroom-setup-result.txt
+            ${{ runner.temp }}/cutroom-source-b-tests.xml
           if-no-files-found: error
           compression-level: 0
           retention-days: 7
@@ -256,132 +269,4 @@ jobs:
           path: ${{ runner.temp }}/cutroom-private-review
           if-no-files-found: error
           compression-level: 0
-          retention-days: 7
-
-  committed_review_record:
-    needs: candidate
-    runs-on: ubuntu-latest
-    outputs:
-      ready: ${{ steps.verify.outputs.ready }}
-      record_commit: ${{ steps.verify.outputs.record_commit }}
-    env:
-      TESTED_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-    steps:
-      - name: Read the current draft branch
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.event.pull_request.head.ref }}
-          fetch-depth: 0
-          persist-credentials: false
-      - name: Wait for the exact candidate review record
-        shell: bash
-        run: |
-          set -euo pipefail
-          record="packaging/review-candidates/ci-${TESTED_HEAD_SHA:0:7}.json"
-          for attempt in $(seq 1 36); do
-            git fetch --no-tags origin "${{ github.event.pull_request.head.ref }}"
-            head="$(git rev-parse FETCH_HEAD)"
-            if [[ "$head" != "$TESTED_HEAD_SHA" ]] && git cat-file -e "$head:$record" 2>/dev/null; then
-              echo "Review record found; its exact bytes and ancestry are checked in the next step."
-              exit 0
-            fi
-            echo "Waiting for the private review record ($attempt/36)."
-            sleep 10
-          done
-          echo "Review record not available; native review remains pending."
-      - name: Download this run's immutable review inputs
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: CUTROOM-private-review-inputs
-          path: ${{ runner.temp }}/cutroom-private-review
-      - name: Require the exact committed review record
-        id: verify
-        shell: bash
-        run: |
-          set -euo pipefail
-          record="packaging/review-candidates/ci-${TESTED_HEAD_SHA:0:7}.json"
-          head="$(git rev-parse FETCH_HEAD)"
-          if [[ "$head" == "$TESTED_HEAD_SHA" && ! -e "$record" ]]; then
-            echo 'ready=false' >> "$GITHUB_OUTPUT"
-            echo 'The exact private review record has not been committed yet; native review is pending.'
-            exit 0
-          fi
-          git merge-base --is-ancestor "$TESTED_HEAD_SHA" "$head"
-          [[ "$(git diff --name-only "$TESTED_HEAD_SHA" "$head")" == "$record" ]]
-          git show "$head:$record" | cmp - "$RUNNER_TEMP/cutroom-private-review/review-record.json"
-          echo 'ready=true' >> "$GITHUB_OUTPUT"
-          echo "record_commit=$head" >> "$GITHUB_OUTPUT"
-
-  macos_private_review:
-    needs: [candidate, committed_review_record]
-    if: ${{ needs.committed_review_record.outputs.ready == 'true' }}
-    name: Private candidate / macOS 15 / ${{ matrix.architecture }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - runner: macos-15
-            architecture: arm64
-          - runner: macos-15-intel
-            architecture: x64
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 60
-    env:
-      TESTED_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-      CUTROOM_NO_BROWSER: '1'
-      HOMEBREW_NO_AUTO_UPDATE: '1'
-      HOMEBREW_NO_INSTALL_CLEANUP: '1'
-      HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: '1'
-      PIP_DISABLE_PIP_VERSION_CHECK: '1'
-      PYTHONDONTWRITEBYTECODE: '1'
-    steps:
-      - name: Check out the committed review record
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ needs.committed_review_record.outputs.record_commit }}
-          fetch-depth: 0
-          persist-credentials: false
-      - name: Download this run's exact review inputs
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: CUTROOM-private-review-inputs
-          path: ${{ runner.temp }}/cutroom-private-review
-      - name: Set up native Python
-        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
-        with:
-          python-version: '3.12'
-          architecture: ${{ matrix.architecture }}
-      - name: Install FFmpeg 7 in the temporary Mac runner
-        timeout-minutes: 10
-        shell: bash
-        run: |
-          brew install ffmpeg@7
-          echo "$(brew --prefix ffmpeg@7)/bin" >> "$GITHUB_PATH"
-      - name: Install the existing isolated Mac test dependencies
-        timeout-minutes: 10
-        shell: bash
-        run: |
-          python -m venv "$RUNNER_TEMP/cutroom-private-review-venv"
-          "$RUNNER_TEMP/cutroom-private-review-venv/bin/python" -m pip install -r tests/requirements.txt -c packaging/mac/constraints-macos.txt
-      - name: Run the unchanged native private-review gates
-        timeout-minutes: 40
-        shell: bash
-        run: |
-          set -euo pipefail
-          record="packaging/review-candidates/ci-${TESTED_HEAD_SHA:0:7}.json"
-          cmp "$record" "$RUNNER_TEMP/cutroom-private-review/review-record.json"
-          "$RUNNER_TEMP/cutroom-private-review-venv/bin/python" -B -X utf8 packaging/native_review_candidate.py \
-            --record "$record" --repo . \
-            --windows-zip "$RUNNER_TEMP/cutroom-private-review/candidate-windows.zip" \
-            --combined-zip "$RUNNER_TEMP/cutroom-private-review/candidate-combined.zip" \
-            --source-archive "$RUNNER_TEMP/cutroom-private-review/candidate-source.zip" \
-            --output-dir "$RUNNER_TEMP/cutroom-native-review" --native
-          "$RUNNER_TEMP/cutroom-private-review-venv/bin/python" .github/scripts/sanitize_private_review.py \
-            "$RUNNER_TEMP/cutroom-native-review/native-review.json" "$RUNNER_TEMP/cutroom-native-review-sanitized.json"
-      - name: Retain sanitized native evidence
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: CUTROOM-private-macos-${{ matrix.architecture }}
-          path: ${{ runner.temp }}/cutroom-native-review-sanitized.json
-          if-no-files-found: error
           retention-days: 7
