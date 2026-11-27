@@ -34,6 +34,7 @@ Clip tools are grouped by intent: **Cut** (Split leads on its own row, then Cut 
 - `Ctrl/Cmd+Shift+P` or the Commands button in the top bar opens a palette of every visible, enabled command on the current screen. Choosing one clicks that same button, so handlers, checks and undo are unchanged. `Ctrl/Cmd+K` stays Split.
 - Right-click on the timeline selects the clip under the pointer (Select or Move tool only) and opens Split, Duplicate, Remove, Add to edit, Layout, Zoom to selection, Clear selection and Close gaps. Track headers and shelf items list their own buttons. Each item clicks the existing button and is disabled while it is. Shift+right-click and text fields keep the browser menu (`context-menu.js`).
 - Tooltips (`tooltips.js`) share one style, appear on hover and on keyboard focus, and show the shortcut of the active keyboard profile (also set as `aria-keyshortcuts`). The control's title stays the text source.
+- Accessibility audit (axe-core, WCAG 2.0/2.1 AA, all six screens, both themes): zero violations after darkening two light-theme labels (`--ok-text`, `--cyan-text`). WCAG 2.2 target size: crop sliders get a 24px hit area; the ducking checkbox sits in a 32px clickable label row (`a11y.css`).
 
 ## Composition
 

@@ -1,0 +1,6 @@
+/* Accessibility floor (WCAG 2.2 AA target size): sliders and small
+   checkboxes in the inspector get at least a 24px hit area. */
+.studio-workspace input[type="range"]:is(#cropX, #cropY, #cropZoom) { min-height: 24px; }
+.studio-workspace input[type="checkbox"][data-ducking] { flex: 0 0 20px; width: 20px; min-width: 20px; height: 20px; margin: 2px; }
+/* The whole label is the checkbox's hit area; give it a 32px row. */
+.studio-workspace .ducking-choice { min-height: 32px; align-items: center; cursor: pointer; }

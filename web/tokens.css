@@ -54,6 +54,7 @@
   --marker:#bca9df;
   --cyan:#90bcc8;
   --cyan-text:#b6d8e0;
+  --ok-text:#8de79a;
   --room-accent:#b5a1eb;
   --room-rule:#383b44;
   --room-soft:#202126;
@@ -183,6 +184,7 @@ html[data-theme=light] {
   --signal-label:#57416f;
   --cyan-text:#254e65;
   --cyan:#3b6579;
+  --ok-text:#17561f;
   --primary-fill:#665084;
   --signal:#69528e;
   --marker:#63517f;

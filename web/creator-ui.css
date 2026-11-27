@@ -251,7 +251,7 @@ html[data-theme="light"] :is(.studio-section,.transcript-editor-card,.caption-to
 html[data-theme="light"] .runtime-status-dock .model-status,
 html[data-theme="light"] #studioDirectorDock .verdict-block { background:var(--surface-inset); border-color:var(--line); }
 html[data-theme="light"] .source-upload-cancel { color:#fff; }
-html[data-theme="light"] .source-mixer-status { color:#247431; }
+html[data-theme="light"] .source-mixer-status { color:var(--ok-text); }
 html[data-theme="light"] .embedded-camera-state { color:#247431; }
 html[data-theme="light"] .timeline-cut-status:not([data-tool="remove_between"]) { color:var(--paper-dim); background:var(--surface-inset); }
 html[data-theme="light"] .studio-workspace .studio-preview-dock,
