@@ -122,7 +122,7 @@ def test_visual_layer_is_shipped_after_existing_geometry_styles():
     # The flow layer (motion and feedback only) follows them; the grouped Edit
     # panel, built only from tokens.css, is last.
     assert style_paths[0] == "/assets/tokens.css"
-    assert style_paths[-19:] == ["/assets/creator-ui.css", "/assets/editor-panels.css",
+    assert style_paths[-20:] == ["/assets/creator-ui.css", "/assets/editor-panels.css",
                                 "/assets/studio-design.css", "/assets/studio-chrome.css",
                                 "/assets/studio-screens.css", "/assets/ui-polish.css",
                                 "/assets/studio-finish.css", "/assets/studio-workbench.css",
@@ -130,7 +130,7 @@ def test_visual_layer_is_shipped_after_existing_geometry_styles():
                                 "/assets/source-view.css", "/assets/track-lift.css",
                                 "/assets/clip-opacity.css", "/assets/mark-selection.css",
                                 "/assets/color-motion.css", "/assets/ui-precision.css",
-                                "/assets/ui-flow.css", "/assets/timeline-toolbar.css", "/assets/edit-panel.css"]
+                                "/assets/ui-flow.css", "/assets/timeline-toolbar.css", "/assets/command-palette.css", "/assets/edit-panel.css"]
     assert len(style_paths) == len(set(style_paths))
     for href in page.styles:
         assert href.startswith("/assets/")

@@ -28,6 +28,11 @@ New and reworked screens use the design-system scale at the end of `tokens.css`:
 
 Clip tools are grouped by intent: **Cut** (Split leads on its own row, then Cut out and Duplicate clip), **Selection** (Range, Clear selection, Zoom to selection) and **Footage** (Review original footage or Add to edit, Layout, Reset to draft). Each group is a labelled `role="group"`. The keyboard profile and Shortcuts sit in a quiet footer. `edit-panel.css` loads last and uses only the `tokens.css` scale. Every button keeps its id, label, disabled state and handler. An odd last button spans its row. Compact layouts keep 44px targets.
 
+### Timeline toolbar and command palette (28 November)
+
+- At 1440px and wider (and at least 540px tall) the timeline's tool row and navigation row join into one 44px line: tools, navigation, status, timecode, zoom, more (`timeline-toolbar.css`). Narrower screens keep the two rows. An empty timeline draws a 30-second ruler instead of a crowded one.
+- `Ctrl/Cmd+Shift+P` or the Commands button in the top bar opens a palette of every visible, enabled command on the current screen. Choosing one clicks that same button, so handlers, checks and undo are unchanged. `Ctrl/Cmd+K` stays Split.
+
 ## Composition
 
 The application launcher presents three real starting actions as compact rows beside the welcome statement, followed by recent projects and optional AI setup. It is not a second marketing landing page.
