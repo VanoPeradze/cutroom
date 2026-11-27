@@ -40,7 +40,7 @@ function host(over={}){
     timeline:{project:{id:'p',revision:9},playhead:12.5,selection:{start:2,end:6},selectionIsRange:true,draws:0,scheduleDraw(){this.draws++;}}};
   s.manualSelection=s.timeline.selection;
   const button={hidden:true,disabled:true,title:''},toasts=[],calls=[],seeks=[];
-  const c=vm.createContext({state:s,document:{getElementById:id=>id==='addToClipsButton'?button:null},elements:{resultPanel:{hidden:false},playButton:{disabled:false}},
+  const c=vm.createContext({state:s,elements:{resultPanel:{hidden:false},playButton:{disabled:false},addToClipsButton:button},
     manualClipRows:lib.manualClipRows,sourcePieces:lib.sourcePieces,editClock:lib.editClock,makeExportRangePlan,
     foregroundBusy:()=>false,previewUsesSourceTime:()=>false,rangeInputPending:()=>false,requireResolvedExplicitDrafts:()=>true,requireSavedTranscript:()=>true,
     flushProjectSaves:async()=>{},editorProject:()=>({...s.project}),rememberProjectRevision:p=>{s.remembered=p.revision;},

@@ -192,7 +192,7 @@ function cacheElements() {
     "directorInstruction", "directorInstructionCounter", "uploadStorageInfo", "directorOutcomeNotice", "instructionResults", "instructionResultsTitle", "instructionResultsSummary", "instructionResultsList", "allowExtractiveRoughCut", "readiness", "generateButton", "jobMessage", "jobProgress", "cancelJobButton", "analysisError", "analysisErrorTitle", "analysisErrorMessage", "retryDirectorButton", "backFromErrorButton", "draftTitle", "draftSummary", "draftEngineBadge",
     "reelCandidates", "reelCandidatesTitle", "reelCandidateList", "draftWarning", "draftWarningText", "reviewSpeechSettings", "gameplayMoments",
     "beforeDuration", "afterDuration", "decisionCount", "decisionList", "retainedEditPreview", "previewStage", "previewA", "previewB", "previewPaneA", "previewPaneB", "previewPlay", "playButton",
-    "previewTime", "previewSeek", "previewMode", "previewModeHint", "previewCaption", "restartPreview", "backToBriefButton", "timelineCanvas", "timelineScroll", "timelineFit", "timelineZoomOut",
+    "previewTime", "previewSeek", "previewMode", "addToClipsButton", "previewModeHint", "previewCaption", "restartPreview", "backToBriefButton", "timelineCanvas", "timelineScroll", "timelineFit", "timelineZoomOut",
     "timelineZoomIn", "timelineZoomLabel", "timelineZoomSelection", "timelineSnap", "timelineSelectionHint", "timelineCutStatus", "timelineCutHint", "cancelTimelineCut", "manualSelectionLabel", "manualClear", "manualRestore", "manualDelete", "manualSplit", "manualUndo", "manualRedo",
     "cropPreview", "cropVideo", "layoutSelect", "cropSourceSelect", "cropX", "cropY", "cropZoom", "resetCrop", "embeddedCropHelp", "cropScopeStatus",
     "sourceMixer", "sourceMixerTitle", "sourceMixerHelp", "sourceMixerStatus", "sourceMixerEmpty", "sourceMixerBody",
@@ -2609,7 +2609,7 @@ function bindEvents() {
 
   elements.previewPlay.addEventListener("click", togglePreview);
   elements.playButton.addEventListener("click", togglePreview);
-  document.getElementById("addToClipsButton")?.addEventListener("click", () => { addRangeToClips(); });
+  elements.addToClipsButton?.addEventListener("click", () => { addRangeToClips(); });
   elements.restartPreview.addEventListener("click", () => { seekPreview(previewUsesSourceTime() ? 0 : firstKeptTime()); playPreview(); });
   elements.previewMode.addEventListener("change", () => setPreviewMode(elements.previewMode.value));
   elements.previewA.addEventListener("timeupdate", onPreviewTimeUpdate);
@@ -13012,7 +13012,7 @@ function addToClipsPlan() {
 }
 
 function syncAddToClipsButton() {
-  const button = document.getElementById("addToClipsButton");
+  const button = elements.addToClipsButton;
   if (!button) return;
   const snapshot = rangeAuditionSnapshot();
   button.hidden = !snapshot.editor;
