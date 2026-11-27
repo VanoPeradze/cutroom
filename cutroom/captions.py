@@ -7,10 +7,46 @@ from pathlib import Path
 from typing import Any
 
 
-CAPTION_STYLE_CHOICES = frozenset({"clean", "bold", "boxed", "highlight"})
-# "highlight" is the short-form social style: a few words at a time, with the
-# word being spoken coloured as it is said.
+# Word-timed social styles: a few words at a time, the word being spoken
+# styled as it is said. "highlight" colours it; "pop" also scales it in;
+# "box" puts it on a coloured plate; "neon" makes it glow; "word" shows one
+# word at a time; "emphasis" also colours numbers and key words for the whole
+# line. All share one timing model, so they differ only in the active-word look.
+WORD_CAPTION_STYLES = ("highlight", "pop", "box", "neon", "word", "emphasis")
+CAPTION_STYLE_CHOICES = frozenset({"clean", "bold", "boxed", *WORD_CAPTION_STYLES})
 HIGHLIGHT_WORDS_PER_CAPTION = 4
+EMPHASIS_COLOUR = "&H3D8AFF&"  # ASS BGR for #FF8A3D
+NEON_COLOUR = "&H88FF39&"  # ASS BGR for #39FF88
+NEON_GLOW = "&H2E9A22&"
+BOX_TEXT_COLOUR = "&H141414&"
+_EMPHASIS_STOPWORDS = frozenset("""about after again against because before being between could doesn't during everything
+nothing really should something through without would actually basically literally probably""".split())
+
+
+def is_word_caption_style(style: Any) -> bool:
+    return style in WORD_CAPTION_STYLES
+
+
+def word_caption_limit(style: Any, words_per_caption: int) -> int:
+    """Words per line for a style: one for "word", at most four for the other
+    word-timed styles, the project value otherwise."""
+    if style == "word":
+        return 1
+    if is_word_caption_style(style):
+        return min(int(words_per_caption), HIGHLIGHT_WORDS_PER_CAPTION)
+    return int(words_per_caption)
+
+
+def emphasis_indices(labels: list[str]) -> list[int]:
+    """Numbers and long content words, the words a viewer should catch."""
+    out = []
+    for index, label in enumerate(labels):
+        core = re.sub(r"^[^\w]+|[^\w]+$", "", label)
+        if not core:
+            continue
+        if any(ch.isdigit() for ch in core) or (len(core) >= 7 and core.isalpha() and core.lower() not in _EMPHASIS_STOPWORDS):
+            out.append(index)
+    return out
 HIGHLIGHT_VERTICAL_POSITION = 0.64
 HIGHLIGHT_ACTIVE_COLOUR = "&H4DE1FF&"  # ASS BGR for #FFE14D
 _RTL_CHARACTERS = re.compile("[֐-ࣿיִ-﷿ﹰ-﻿]")
@@ -196,7 +232,8 @@ def _caption_entries(
     """Caption lines in output time. When ``word_timings`` is a list, it receives
     each line's words in output time (empty for wordless transcripts)."""
     if words_per_caption is not None:
-        words_per_caption = max(CAPTION_WORDS_PER_LINE_RANGE[0], min(CAPTION_WORDS_PER_LINE_RANGE[1], int(words_per_caption)))
+        # One word per line is reserved for the "word" style; the project setting stays 2-12.
+        words_per_caption = max(1, min(CAPTION_WORDS_PER_LINE_RANGE[1], int(words_per_caption)))
     entries: list[tuple[float, float, str]] = []
     for segment in transcript.get("segments", []):
         words = segment.get("words") or []
@@ -271,13 +308,32 @@ def _highlight_entries(
     return output
 
 
-def _ass_caption_text(value: Any) -> str:
+def _active_word_override(style: str, font_size: int, outline: int) -> str:
+    if style == "pop":
+        return f"\\c{HIGHLIGHT_ACTIVE_COLOUR}\\fscx125\\fscy125\\t(0,120,\\fscx108\\fscy108)"
+    if style == "box":
+        return f"\\c{BOX_TEXT_COLOUR}\\3c{HIGHLIGHT_ACTIVE_COLOUR}\\bord{max(outline + 2, round(font_size * 0.2))}\\shad0"
+    if style == "neon":
+        return f"\\c{NEON_COLOUR}\\3c{NEON_GLOW}\\blur{max(2, round(font_size * 0.05))}"
+    if style == "word":
+        return "\\fscx118\\fscy118\\t(0,100,\\fscx100\\fscy100)"
+    return f"\\c{HIGHLIGHT_ACTIVE_COLOUR}"
+
+
+def _ass_caption_text(value: Any, style: str = "highlight", font_size: int = 0, outline: int = 0) -> str:
     if isinstance(value, tuple):
         labels, active = value
-        return " ".join(
-            f"{{\\c{HIGHLIGHT_ACTIVE_COLOUR}}}{_ass_escape(label)}{{\\r}}" if index == active else _ass_escape(label)
-            for index, label in enumerate(labels)
-        )
+        active_override = _active_word_override(style, font_size, outline)
+        keywords = set(emphasis_indices(labels)) if style == "emphasis" else set()
+        rendered = []
+        for index, label in enumerate(labels):
+            if index == active:
+                rendered.append(f"{{{active_override}}}{_ass_escape(label)}{{\\r}}")
+            elif index in keywords:
+                rendered.append(f"{{\\c{EMPHASIS_COLOUR}}}{_ass_escape(label)}{{\\r}}")
+            else:
+                rendered.append(_ass_escape(label))
+        return " ".join(rendered)
     return _ass_plain_caption(str(value))
 
 
@@ -410,7 +466,7 @@ def _ass_style(name: str, width: int, height: int, caption_style: str, caption_p
         "clean": {"bold": 0, "border_style": 1, "outline": max(1, round(font_size * 0.055)), "shadow": max(1, round(font_size * 0.025)), "outline_color": "&HD9000000", "back_color": "&H99000000"},
         "boxed": {"bold": -1, "border_style": 3, "outline": max(3, round(font_size * 0.12)), "shadow": 0, "outline_color": "&H00131008", "back_color": "&H99131008"},
         "highlight": {"bold": -1, "border_style": 1, "outline": max(3, round(font_size * 0.11)), "shadow": max(1, round(font_size * 0.03)), "outline_color": "&H00000000", "back_color": "&H80000000"},
-    }[caption_style]
+    }.get(caption_style) or {"bold": -1, "border_style": 1, "outline": max(3, round(font_size * 0.11)), "shadow": max(1, round(font_size * 0.03)), "outline_color": "&H00000000", "back_color": "&H80000000"}
     outline = int(style_values["outline"])
     alignment = {"auto": 2, "bottom": 2, "center": 5, "top": 8}[caption_position]
     line = f"Style: {name},Arial,{font_size},&H00FFFFFF,&H000000FF,{style_values['outline_color']},{style_values['back_color']},{style_values['bold']},0,0,0,100,100,0,0,{style_values['border_style']},{outline},{style_values['shadow']},{alignment},42,42,{margin_v},1\n"
@@ -481,7 +537,7 @@ def automatic_caption_plan(caption_lines, keep_ranges, width, height, *, layout_
         line_start, line_end, line_text = float(line["start"]), float(line["end"]), str(line.get("text") or "")
         # Estimated timing (corrected text with a different word count) must not
         # colour words that are not being said yet.
-        if style == "highlight" and not any(word.get("estimated") for word in line.get("words") or []):
+        if is_word_caption_style(style) and not any(word.get("estimated") for word in line.get("words") or []):
             words = [(float(word["start"]), float(word["end"]), str(word.get("word") or "").strip())
                      for word in line.get("words") or [] if str(word.get("word") or "").strip()]
             values = _highlight_entries([(line_start, line_end, line_text)], [words])
@@ -490,7 +546,7 @@ def automatic_caption_plan(caption_lines, keep_ranges, width, height, *, layout_
         # Shorts/Reels place their own title and buttons over the bottom of the
         # frame, and gameplay often has subtitles there. The social style sits at
         # about two thirds of the height instead; older styles keep their position.
-        social_ratio = HIGHLIGHT_VERTICAL_POSITION if style == "highlight" and position == "auto" and height > width else None
+        social_ratio = HIGHLIGHT_VERTICAL_POSITION if is_word_caption_style(style) and position == "auto" and height > width else None
         for start, end, value, layout in _entries_with_layout(values, projected_layouts if position == "auto" else []):
             if not value:
                 continue
@@ -505,13 +561,14 @@ def automatic_caption_plan(caption_lines, keep_ranges, width, height, *, layout_
                 "end": max(0, int(round(end * 100))) / 100,
                 "text": " ".join(tokens) if tokens is not None else str(value),
                 "tokens": list(tokens) if tokens is not None else None, "active_index": active,
+                "keywords": emphasis_indices(list(tokens)) if tokens is not None and style == "emphasis" else None,
                 "style": style, "position": position, "scale": key[2], "layout": layout,
                 "font_size": size, "margin_v": margin, "outline": border,
-                "shadow": max(1, round(size * .025)) if style == "clean" else max(1, round(size * .03)) if style == "highlight" else 0,
+                "shadow": max(1, round(size * .025)) if style == "clean" else max(1, round(size * .03)) if is_word_caption_style(style) else 0,
                 "positioned": positioned,
                 "alignment": 8 if positioned else {"auto":2,"bottom":2,"center":5,"top":8}[position],
                 "layer": 0, "order": len(events),
-                "_ass": f"Dialogue: 0,{_ass_timestamp(start)},{_ass_timestamp(end)},{name},,0,0,0,,{override}{_ass_caption_text(value)}\n",
+                "_ass": f"Dialogue: 0,{_ass_timestamp(start)},{_ass_timestamp(end)},{name},,0,0,0,,{override}{_ass_caption_text(value, style, size, border)}\n",
             }
             if anchor:
                 event.update(x=int(anchor[1]), y=int(anchor[2]))
@@ -562,7 +619,7 @@ def build_ass(
     caption_scale = normalized["caption_scale"]
     words_per_caption = normalized["caption_words_per_line"]
     if caption_lines is None:
-        limit = min(words_per_caption, HIGHLIGHT_WORDS_PER_CAPTION) if caption_style == "highlight" else words_per_caption
+        limit = word_caption_limit(caption_style, words_per_caption)
         word_timings: list[list[tuple[float, float, str]]] = []
         rows = _caption_entries(transcript, keep_ranges, limit, word_timings)
         caption_lines = [

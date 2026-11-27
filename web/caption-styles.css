@@ -1,0 +1,20 @@
+/* Preview of the word-timed caption styles. These colours are part of the
+   video (they match the burned-in ASS colours in cutroom/captions.py), so
+   they are fixed and do not follow the app theme. */
+.preview-caption:is([data-caption-style="pop"], [data-caption-style="box"], [data-caption-style="neon"], [data-caption-style="word"], [data-caption-style="emphasis"]) {
+  background: transparent; font-weight: 900;
+  text-shadow: 0 2px 3px #000, 0 0 9px #000, 1px 1px 0 #000, -1px -1px 0 #000;
+}
+.preview-stage[data-aspect="9:16"] .preview-caption:is([data-caption-style="pop"], [data-caption-style="box"], [data-caption-style="neon"], [data-caption-style="word"], [data-caption-style="emphasis"])[data-caption-position="auto"]:not([data-caption-layout="stacked"]):not([data-caption-layout="embedded_stack"]) {
+  top: 64%; bottom: auto !important; transform-origin: center top;
+}
+.preview-caption[data-caption-style="pop"] .caption-active-word { display: inline-block; color: #ffe14d; transform: scale(1.08); animation: caption-pop .12s ease-out both; }
+@keyframes caption-pop { from { transform: scale(1.25); } to { transform: scale(1.08); } }
+.preview-caption[data-caption-style="box"] .caption-active-word { color: #141414; background: #ffe14d; border-radius: .18em; padding: 0 .16em; text-shadow: none; box-decoration-break: clone; }
+.preview-caption[data-caption-style="neon"] .caption-active-word { color: #39ff88; text-shadow: 0 0 .2em #2e9a22, 0 0 .45em #2e9a22, 0 2px 3px #000; }
+.preview-caption[data-caption-style="word"] .caption-active-word { display: inline-block; color: inherit; animation: caption-word .1s ease-out both; }
+@keyframes caption-word { from { transform: scale(1.18); } to { transform: scale(1); } }
+.preview-caption[data-caption-style="emphasis"] .caption-keyword { color: #ff8a3d; }
+@media (prefers-reduced-motion: reduce) {
+  .preview-caption .caption-active-word { animation: none !important; }
+}

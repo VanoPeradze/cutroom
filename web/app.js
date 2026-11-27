@@ -49,7 +49,7 @@ import { ReelProposalReview, supportsReelReview } from "./reel-proposals.js?v=20
 import { ClipBoard } from "./clip-board.js?v=20261123-soundevents1";
 import { AiDraftReview } from "./ai-draft-review.js?v=20261116-ai-review2";
 import { CaptionAlternatives } from "./caption-alternatives.js?v=20261023";
-import { initCaptionPreview, captionPreviewIssue } from "./caption-preview.js?v=20261116-caption-preview3";
+import { initCaptionPreview, captionPreviewIssue } from "./caption-preview.js?v=20261128-wordstyles1";
 import { reviewEditingRequest } from "./request-review.js?v=20261116-settings1";
 
 const $ = (selector, root = document) => root.querySelector(selector);
@@ -8814,7 +8814,7 @@ function renderCaptionItemPreview(time) {
   const active = captionItems().filter(item => !item.hidden && time >= item.start && time < item.end);
   const item = active.at(-1);
   const style = item?.style || settings.style, position = item?.position || settings.position, scale = item?.scale || settings.scale;
-  const limit = style === "highlight" ? Math.min(settings.words, HIGHLIGHT_WORDS_PER_CAPTION) : settings.words;
+  const limit = wordCaptionLimit(style, settings.words);
   const line = item ? captionItemLine(item, time, limit) : null;
   caption.dataset.captionStyle = style;
   caption.dataset.captionPosition = position;
@@ -8824,7 +8824,7 @@ function renderCaptionItemPreview(time) {
   if (line) caption.dataset.captionId = item.id; else delete caption.dataset.captionId;
   const text = line?.text || "";
   // Estimated word timing (a corrected text with a new word count) is never coloured.
-  const activeWord = style === "highlight" && line?.words.length && !item.estimated_words && !RTL_CHARACTERS.test(text)
+  const activeWord = WORD_CAPTION_STYLES.has(style) && line?.words.length && !item.estimated_words && !RTL_CHARACTERS.test(text)
     ? Math.max(0, line.words.findLastIndex(word => time >= word[0])) : -1;
   if (activeWord >= 0) {
     caption.replaceChildren(...line.words.flatMap((word, index) => {
@@ -8887,8 +8887,8 @@ function updatePreviewCaption(sourceTime) {
     if (segment && (transcriptTime < segment.start || transcriptTime >= segment.end)) segment = null;
   }
   const captionSettings = captionSettingsFromControls();
-  const highlight = captionSettings.style === "highlight";
-  const wordsPerCaption = highlight ? Math.min(captionSettings.words, HIGHLIGHT_WORDS_PER_CAPTION) : captionSettings.words;
+  const highlight = WORD_CAPTION_STYLES.has(captionSettings.style);
+  const wordsPerCaption = wordCaptionLimit(captionSettings.style, captionSettings.words);
   const text = captionPreviewText(segment, transcriptTime, wordsPerCaption);
   elements.previewCaption.dataset.captionStyle = captionSettings.style;
   elements.previewCaption.dataset.captionPosition = captionSettings.position;
@@ -8911,6 +8911,8 @@ function updatePreviewCaption(sourceTime) {
 // Word highlight shows a few words at a time and colours the one being spoken,
 // matching the export. Right-to-left lines stay plain, as they do in the export.
 const HIGHLIGHT_WORDS_PER_CAPTION = 4;
+const WORD_CAPTION_STYLES = new Set(["highlight", "pop", "box", "neon", "word", "emphasis"]);
+const wordCaptionLimit = (style, words) => style === "word" ? 1 : WORD_CAPTION_STYLES.has(style) ? Math.min(words, HIGHLIGHT_WORDS_PER_CAPTION) : words;
 const RTL_CHARACTERS = /[֐-ࣿיִ-﷿ﹰ-﻿]/;
 function captionActiveWord(segment, sourceTime, wordsPerCaption) {
   const chunk = captionPreviewChunk(segment, sourceTime, wordsPerCaption);

@@ -36,6 +36,10 @@ Clip tools are grouped by intent: **Cut** (Split leads on its own row, then Cut 
 - Tooltips (`tooltips.js`) share one style, appear on hover and on keyboard focus, and show the shortcut of the active keyboard profile (also set as `aria-keyshortcuts`). The control's title stays the text source.
 - Accessibility audit (axe-core, WCAG 2.0/2.1 AA, all six screens, both themes): zero violations after darkening two light-theme labels (`--ok-text`, `--cyan-text`). WCAG 2.2 target size: crop sliders get a 24px hit area; the ducking checkbox sits in a 32px clickable label row (`a11y.css`).
 
+### Animated word captions (28 November)
+
+Six word-timed caption styles share one timing model (`WORD_CAPTION_STYLES` in `cutroom/captions.py`) and differ only in how the spoken word looks: Word highlight (yellow), Word pop (yellow, scales in), Word box (dark text on a yellow plate), Neon word (green glow), One word (a single word at a time, scales in) and Key words (yellow active word, numbers and long content words in orange for the whole line). The preview (`caption-styles.css`) uses the same colours as the burned-in ASS. Right-to-left lines stay plain short phrases, as before, because libass loses Hebrew word order once colour overrides split a line. Animations stop under reduced motion.
+
 ## Composition
 
 The application launcher presents three real starting actions as compact rows beside the welcome statement, followed by recent projects and optional AI setup. It is not a second marketing landing page.
