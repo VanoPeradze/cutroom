@@ -9,14 +9,15 @@ const packageSource = fs.readFileSync(path.join(root, 'scripts/build_test_packag
 const luminance = hex => hex.slice(1).match(/../g).map(x => parseInt(x,16)/255).map(v=>v<=.04045?v/12.92:((v+.055)/1.055)**2.4).reduce((s,v,i)=>s+v*[.2126,.7152,.0722][i],0);
 const ratio = (a,b) => { const l=[luminance(a),luminance(b)].sort((a,b)=>a-b); return (l[1]+.05)/(l[0]+.05); };
 const tokens = block => Object.fromEntries([...block.matchAll(/--([\w-]+):(#[\da-f]{6})/g)].map(m=>[m[1],m[2]]));
-const dark = tokens(css.match(/:root\s*\{([^}]+)\}/)[1]);
-const light = tokens(css.match(/html\[data-theme=light\]\s*\{([^}]+)\}/)[1]);
+const themeTokens = fs.readFileSync(path.join(root, 'web/tokens.css'), 'utf8');
+const dark = tokens(themeTokens.match(/:root\s*\{([^}]+)\}/)[1]);
+const light = tokens(themeTokens.match(/html\[data-theme=light\]\s*\{([^}]+)\}/)[1]);
 test('workbench ships its own licensed proportional fonts, independent of the marketing site',()=>{
   for(const name of ['Geist.ttf','Geist-OFL.txt','NotoSansHebrew.ttf','NotoSansHebrew-OFL.txt']) {
     assert.ok(fs.statSync(path.join(root,'web/fonts',name)).size>100);
     assert.ok(packageSource.includes(`"web/fonts/${name}"`),`${name} must be included by source packages`);
   }
-  assert.match(css,/--mono:var\(--font\)/);
+  assert.match(themeTokens,/--mono:var\(--font\)/);
   assert.doesNotMatch(css,/ui-monospace|font-family:[^;}]*monospace|url\(['"]?https?:/);
   assert.match(css,/font-display:swap/);
   assert.match(html,/studio-finish.css\?v=20261112-workbench1/);

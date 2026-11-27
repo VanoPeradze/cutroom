@@ -1,16 +1,5 @@
 /* Shared room system: the library, monitor and properties keep their own space.
    These rules change presentation only; every control still edits the same data. */
-:root {
-  --ink:#121a20; --ink-2:#151e24; --ink-3:#1b252d; --ink-4:#24313a;
-  --paper:#edf2f5; --paper-dim:#bfcbd3; --muted:#8c9ca7;
-  --line:#2b3740; --line-strong:#42535f;
-  --surface-chrome:#182127; --surface-panel:#1c262e; --surface-inset:#121a20;
-  --surface-raised:#25313a; --surface-hover:#2b3943; --surface-selected:#163c3e;
-  --cyan:#1bd9ce; --cyan-text:#61e4db; --signal:#9684c4;
-  --primary-fill:#1bd9ce; --marker:#1bd9ce;
-  --room-accent:#1bd9ce; --lobby-accent:#1bd9ce;
-}
-html[data-theme=light] { --ink:#edf2f3; --ink-2:#f6f8f9; --ink-3:#e3eaed; --ink-4:#d6e1e5; --paper:#15252c; --paper-dim:#394f5d; --muted:#566c78; --line:#cbd8de; --line-strong:#a6bbc5; --surface-chrome:#f7f9fa; --surface-panel:#fff; --surface-inset:#eaf0f3; --surface-raised:#fff; --surface-hover:#e0eaee; --surface-selected:#d5efed; --cyan:#008b83; --cyan-text:#00716b; --primary-fill:#008b83; }
 body { background:var(--ink); color:var(--paper); }
 * { scrollbar-color:var(--line-strong) var(--surface-chrome); }
 ::-webkit-scrollbar-thumb { background:var(--line-strong); }

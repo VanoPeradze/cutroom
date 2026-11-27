@@ -12,6 +12,18 @@
 - Source tracks remain distinguishable through muted blue-gray and violet. Sound and text retain semantic colors without neon or glow.
 - Geist with Noto Sans Hebrew is shipped locally with both SIL Open Font Licenses. Proportional text and tabular numerals replace decorative monospace. Caption and video pixels are not restyled by the UI theme.
 
+## Design tokens
+
+`tokens.css` loads first and is the only place theme values are defined: surfaces, text, lines, accents, status, type, spacing, motion, timeline canvas colors and toolbar icons, for dark (default) and light. Feature stylesheets read tokens and never redefine them at `:root` or `html[data-theme=light]`. Scoped overrides that belong to one region, such as the darker monitor and timeline wells in light mode, stay beside that region.
+
+New and reworked screens use the design-system scale at the end of `tokens.css`:
+
+- Type: `--fs-12` captions and meta, `--fs-13` controls, `--fs-15` body and inspector values, `--fs-20` panel titles.
+- Spacing: the 4px grid, `--space-1` (4px) through `--space-10` (40px).
+- Surfaces: `--surface-1` app frame, `--surface-2` panels, `--surface-3` controls and cards, plus `--surface-well` for inputs and lists.
+- Text: `--text-1`, `--text-2`, `--text-3`.
+- Accent: one `--accent` for primary action, selection and focus, with `--accent-text`, `--accent-soft` and `--on-accent`.
+
 ## Composition
 
 The application launcher presents three real starting actions as compact rows beside the welcome statement, followed by recent projects and optional AI setup. It is not a second marketing landing page.

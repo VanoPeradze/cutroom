@@ -14,6 +14,7 @@ TIMELINE = (ROOT / "web" / "timeline.js").read_text(encoding="utf-8")
 CSS = (ROOT / "web" / "styles.css").read_text(encoding="utf-8")
 AUDIO_METER = (ROOT / "web" / "audio-meter.js").read_text(encoding="utf-8")
 WORKBENCH_CSS = (ROOT / "web" / "studio-finish.css").read_text(encoding="utf-8")
+THEME_TOKENS_CSS = (ROOT / "web" / "tokens.css").read_text(encoding="utf-8")
 
 
 def function_block(source: str, name: str, next_name: str) -> str:
@@ -21,8 +22,8 @@ def function_block(source: str, name: str, next_name: str) -> str:
 
 
 def test_workbench_palette_is_semantic_accessible_and_canvas_consistent():
-    # The final workbench layer owns appearance, not the retired base palette.
-    css = WORKBENCH_CSS.lower()
+    # tokens.css owns every theme value (the cascade-final workbench palette).
+    css = THEME_TOKENS_CSS.lower()
     dark = re.search(r":root\s*\{([^}]+)\}", css).group(1)
     light = re.search(r"html\[data-theme=light\]\s*\{([^}]+)\}", css).group(1)
     required = ("bg", "ruler", "lane", "lane-alt", "grid", "text", "clip", "clip-b",
@@ -46,13 +47,17 @@ def test_workbench_palette_is_semantic_accessible_and_canvas_consistent():
             low, high = sorted((luminance(colors[fg]), luminance(colors[bg])))
             assert (high + .05) / (low + .05) >= 4.5
     assert 'content="#22252a"' in HTML.lower()
-    assert "--surface-chrome:#c2c6cb" in light
+    # Cascade-final day chrome (studio-console.css used to override studio-finish.css).
+    assert "--surface-chrome:#bdc3cb" in light
     assert 'getpropertyvalue(`--timeline-${name}`)' in TIMELINE.lower()
     assert 'color("--timeline-bg"' in AUDIO_METER.lower()
     assert 'color("--timeline-selected"' in AUDIO_METER.lower()
     assert "monospace" not in f"{TIMELINE}\n{AUDIO_METER}".lower()
     for retired in ("#1bb92a", "#44b9c6", "#c9b62c"):
-        assert retired not in css
+        # The base palette stays defined once in tokens.css; theme roles must not use it.
+        assert retired not in WORKBENCH_CSS.lower()
+        assert retired not in dark.split("/* surfaces", 1)[1]
+        assert retired not in light
 
     retired_accents = (
         "#7c8cff",

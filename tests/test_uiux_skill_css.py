@@ -85,13 +85,26 @@ def test_disclosure_uses_native_marker_and_a_visible_focus_ring():
     assert "transition-duration: .01ms !important" in CSS
 
 
-@pytest.mark.parametrize("background", ["#0d181c", "#1b2630", "#24313b", "#29263a"])
-def test_new_dark_surfaces_have_readable_labels_and_control_boundaries(background):
-    tokens = _properties(":root")
-    assert _contrast(tokens["--paper-dim"], background) >= 4.5
-    assert _contrast(tokens["--muted"], background) >= 4.5
-    assert _contrast(tokens["--control-border"], background) >= 3
-    assert _contrast(tokens["--palette-cyan"], background) >= 3
+def _theme_tokens():
+    """Cascade-final dark theme values: web/tokens.css owns every theme token."""
+    import re
+    text = (Path(__file__).resolve().parents[1] / "web/tokens.css").read_text(encoding="utf-8")
+    block = re.search(r":root\s*\{([^}]+)\}", text).group(1)
+    return dict(re.findall(r"(--[\w-]+):(#[0-9a-f]{6})", block))
+
+
+@pytest.mark.parametrize("surface", ["--surface-inset", "--surface-raised", "--surface-hover", "--surface-selected"])
+def test_dark_surfaces_keep_readable_labels(surface):
+    tokens = _theme_tokens()
+    assert _contrast(tokens["--paper-dim"], tokens[surface]) >= 4.5
+    assert _contrast(tokens["--muted"], tokens[surface]) >= 4.5
+    assert _contrast(tokens["--palette-cyan"], tokens[surface]) >= 3
+
+
+@pytest.mark.parametrize("surface", ["--surface-inset", "--surface-chrome", "--surface-panel"])
+def test_control_boundaries_stand_out_from_the_panels_they_sit_on(surface):
+    tokens = _theme_tokens()
+    assert _contrast(tokens["--control-border"], tokens[surface]) >= 3
 
 
 def test_phone_actions_stay_in_flow_and_header_does_not_need_sideways_scrolling():

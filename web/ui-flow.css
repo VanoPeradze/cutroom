@@ -4,20 +4,6 @@
    adds one shared motion vocabulary on top of them. The global reduced-motion
    rule in studio-finish.css still switches every animation here off. */
 
-:root {
-  --flow-ease: cubic-bezier(.22, 1, .36, 1);        /* fast out, soft landing */
-  --flow-spring: cubic-bezier(.34, 1.4, .64, 1);    /* small overshoot */
-  --flow-fast: 120ms;
-  --flow-base: 200ms;
-  --flow-slow: 340ms;
-  --flow-accent: var(--room-accent, #b5a1eb);
-  --flow-ring: color-mix(in srgb, var(--flow-accent) 42%, transparent);
-  --flow-glow: color-mix(in srgb, var(--flow-accent) 16%, transparent);
-  --flow-lift: 0 10px 28px -12px #0a0b0e99, 0 2px 6px -2px #0a0b0e66;
-}
-html[data-theme=light] {
-  --flow-lift: 0 10px 26px -14px #2a303a59, 0 2px 6px -3px #2a303a33;
-}
 
 /* ---------- 1. Theme switch fades instead of snapping ---------- */
 html.flow-theme-switching,
