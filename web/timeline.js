@@ -1659,18 +1659,24 @@ export class TimelineView {
   drawRuler(ctx, duration, width, px) {
     ctx.fillStyle = this.color("ruler", "#151e25");
     ctx.fillRect(0, 0, width, 30);
+    // An empty edit has no real clock yet: label a nominal 30 s scale instead
+    // of repeating "00:00". Only the ruler labels use it; no geometry changes.
+    const empty = !this.sourceReview && !(timelineDuration(this.project) > 0);
+    const markReviews = !empty;
+    if (empty) { px = width / 30; duration = 30; }
     const ideal = 92 / px;
-    const steps = [.25,.5,1,2,5,10,15,30,60,120,300,600];
-    const step = steps.find((value) => value >= ideal) || 900;
+    const steps = [.5,1,2,5,10,15,30,60,120,300,600,900,1800,3600];
+    const step = steps.find((value) => value >= ideal) || 7200;
+    const tenths = step < 1;
     ctx.strokeStyle = this.color("grid", "rgba(235,240,242,.16)");
     ctx.fillStyle = this.color("text", "#8da1a6");
     ctx.font = this.font(10);
     for (let time = 0; time <= duration + step; time += step) {
       const x = time * px;
       ctx.beginPath(); ctx.moveTo(x, 20); ctx.lineTo(x, 30); ctx.stroke();
-      ctx.fillText(formatTime(time), x + 5, 14);
+      ctx.fillText(formatTime(time, tenths), x + 5, 14);
     }
-    this.reviewMarkers?.draw(ctx,px,duration);
+    if (markReviews) this.reviewMarkers?.draw(ctx,px,duration);
   }
 
   drawFilmstrip(ctx, width) {
