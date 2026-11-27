@@ -1924,7 +1924,7 @@ def render_project(context: JobContext, project_id: str, store: ProjectStore, se
         if caption_ass is not None:
             caption_ass.unlink(missing_ok=True)
         raise
-    safe_name = sanitize_filename(project.get("name", "cutroom-edit"))
+    safe_name = sanitize_filename(str(options.get("_export_name") or project.get("name", "cutroom-edit")))
     suffix = f"-range-{scope.start_frame}-{scope.end_frame}" if scope else ""
     output = settings.exports_dir / f"{safe_name}{suffix}-{export_id[-8:]}.mp4"
     partial = output.with_suffix(".partial.mp4")
