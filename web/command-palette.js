@@ -29,7 +29,7 @@ function areaOf(el) {
 
 function shortcutOf(el) {
   const m = /\(([^()]*(?:Ctrl|Cmd|Shift|Alt|⌘|[A-Z]\b)[^()]*)\)\s*$/.exec(el.title || '');
-  return m ? m[1] : (el.getAttribute('aria-keyshortcuts') || '');
+  return el.dataset.shortcut || (m ? m[1] : '');
 }
 
 function visible(el) {

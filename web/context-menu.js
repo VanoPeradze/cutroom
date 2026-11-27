@@ -5,9 +5,9 @@
    menu, and Shift+right-click always gives the browser's menu. */
 
 const TIMELINE_ITEMS = [
-  ['manualSplit', 'Split at playhead', 'Ctrl+K'],
+  ['manualSplit', 'Split at playhead'],
   ['clipDuplicate', 'Duplicate'],
-  ['manualDelete', 'Remove', 'Delete'],
+  ['manualDelete', 'Remove'],
   null,
   ['manualRestore', 'Add to edit'],
   ['manualLayout', 'Layout…'],
@@ -28,9 +28,10 @@ function nameOf(button) {
 export function timelineEntries(doc) {
   return TIMELINE_ITEMS.map((row) => {
     if (!row) return null;
-    const [id, label, shortcut] = row, button = doc.getElementById(id);
+    const [id, label] = row, button = doc.getElementById(id);
     if (!button || button.hidden) return undefined;
-    return { button, label, shortcut, disabled: !isUsable(button) };
+    // Shortcut of the active keyboard profile, set by tooltips.js.
+    return { button, label, shortcut: button.dataset.shortcut || '', disabled: !isUsable(button) };
   }).filter((entry) => entry !== undefined);
 }
 
