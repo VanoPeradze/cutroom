@@ -29,7 +29,7 @@ from .media_render import append_media_graph, library_input_args, library_clips,
 from .render_inventory import RenderInputInventory, chroma_background_slots, compile_render_inputs, qualify_library_pictures
 from .output_review import remaining_picture_gaps, review_export
 from .projects import ProjectStore
-from .sequence import editor_keep_ranges
+from .sequence import editor_keep_ranges, materialize_sequence
 from .source_tracks import has_sequence, has_source_tracks, source_track_clips, timeline_duration, validate_sequence_version
 from .text_clips import validated_text_clips
 from .utils import new_id, now_iso, sanitize_filename
@@ -1419,6 +1419,45 @@ def build_filter_graph(project: dict[str, Any], width: int, height: int, caption
     return ";\n".join(filters), maps, has_audio
 
 
+RANGE_SOURCE_MARGIN = 2.0
+
+
+def _range_source_limits(project: dict[str, Any], scope: ExportRange) -> dict[str, float] | None:
+    """How far into each recording a marked range needs to read.
+
+    Everything the range shows comes from source time at or before the last
+    timeline row that starts before Out. Reading past that only feeds the
+    discarded remainder of the full-timeline graph, which for a short clip of a
+    long recording means decoding hours of footage. Returns None (read all)
+    whenever the sequence cannot be resolved.
+    """
+    try:
+        effective, _ = materialize_sequence(project)
+    except Exception:
+        return None
+    tracks = ((effective.get("manual") or {}).get("source_tracks") or {})
+    limits: dict[str, float] = {}
+    out = scope.end + RANGE_SOURCE_MARGIN
+    for slot in ("A", "B"):
+        rows = tracks.get(slot)
+        if not isinstance(rows, list):
+            return None
+        need = 0.0
+        for row in rows:
+            try:
+                start, end, source = float(row["start"]), float(row["end"]), float(row["source_start"])
+                speed = float(row.get("video_speed") or 1.0)
+            except (KeyError, TypeError, ValueError):
+                return None
+            if not all(math.isfinite(v) for v in (start, end, source, speed)) or speed <= 0:
+                return None
+            if start >= out:
+                continue
+            need = max(need, source + (min(end, out) - start) * speed)
+        limits[slot] = need + RANGE_SOURCE_MARGIN
+    return limits
+
+
 def resolve_export_range(project: dict[str, Any], options: dict[str, Any]) -> ExportRange | None:
     if "range" not in options:
         return None
@@ -1919,7 +1958,10 @@ def render_project(context: JobContext, project_id: str, store: ProjectStore, se
             graph, maps = scope.mapped_graph(graph, maps, trim_audio=not normalizes_audio(project))
         needs_source_b_input = input_inventory.needs_source_b(graph)
         input_demand = input_inventory.demand(graph, include_source_b=needs_source_b_input)
-        input_args = input_inventory.input_args(store.project_dir(project_id), include_source_b=needs_source_b_input)
+        source_limits = (_range_source_limits(project, scope)
+                         if scope and not normalizes_audio(project) else None)
+        input_args = input_inventory.input_args(store.project_dir(project_id), include_source_b=needs_source_b_input,
+                                                source_limits=source_limits)
     except BaseException:
         if caption_ass is not None:
             caption_ass.unlink(missing_ok=True)
@@ -1946,7 +1988,11 @@ def render_project(context: JobContext, project_id: str, store: ProjectStore, se
     expected_duration = scope.duration if scope else whole_duration
     normalization_filter = _final_audio_filter(project) if has_audio else "anull"
     normalize_audio = has_audio and normalization_filter != "anull"
-    stage_duration = whole_duration if normalize_audio else expected_duration
+    # A marked range with sound selects its frames from the full graph (see
+    # ExportRange.mapped_graph); an output -t at the range length would close
+    # both streams early, which FFmpeg 7 aborts on. The picture still ends at Out.
+    stage_duration = whole_duration if normalize_audio or (scope and has_audio) else expected_duration
+    progress_duration = stage_duration if normalize_audio else expected_duration
     render_target = normalization_stage if normalize_audio else partial
     command = [capabilities.executable, "-hide_banner", "-loglevel", "error", "-y",
                *input_args]
@@ -1975,7 +2021,7 @@ def render_project(context: JobContext, project_id: str, store: ProjectStore, se
     process_returncode = None
     try:
         render_context = _ScaledProgressContext(context, 0.04, 0.82, "Rendering") if normalize_audio else context
-        process_returncode, stderr = _run_ffmpeg_process(render_context, command, stage_duration)
+        process_returncode, stderr = _run_ffmpeg_process(render_context, command, progress_duration)
         if process_returncode != 0:
             if encoder != "libx264" and not options.get("_force_software"):
                 render_target.unlink(missing_ok=True)

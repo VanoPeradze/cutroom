@@ -296,3 +296,17 @@ def test_acceptance_long_recording_two_ranges_export_one_then_reopen_and_export_
         first, last = edge_luma(ffmpeg, out)
         assert first == pytest.approx(16 + first_s * RAMP, abs=3)
         assert last == pytest.approx(16 + (last_s - 1 / 30) * RAMP, abs=3)
+
+
+def test_range_export_reads_only_the_recording_it_needs():
+    from cutroom.range_export import ExportRange
+    from cutroom.render import RANGE_SOURCE_MARGIN, _range_source_limits
+    p = project()
+    def limits(a, b):
+        return _range_source_limits(p, ExportRange(a, b, 30))
+    # Edit 2–6 s is recording 2–6 s; read through Out plus margins, not the whole 40 s.
+    assert limits(60, 180)["A"] == pytest.approx(6 + 2 * RANGE_SOURCE_MARGIN)
+    # After the 5 s cut, edit 20–23 s is recording 25–28 s.
+    assert limits(600, 690)["A"] == pytest.approx(28 + 2 * RANGE_SOURCE_MARGIN)
+    p["draft"] = "broken"
+    assert limits(60, 180) is None
