@@ -24,6 +24,10 @@ New and reworked screens use the design-system scale at the end of `tokens.css`:
 - Text: `--text-1`, `--text-2`, `--text-3`.
 - Accent: one `--accent` for primary action, selection and focus, with `--accent-text`, `--accent-soft` and `--on-accent`.
 
+### Edit panel (27 November)
+
+Clip tools are grouped by intent: **Cut** (Split leads on its own row, then Cut out and Duplicate clip), **Selection** (Range, Clear selection, Zoom to selection) and **Footage** (Review original footage or Add to edit, Layout, Reset to draft). Each group is a labelled `role="group"`. The keyboard profile and Shortcuts sit in a quiet footer. `edit-panel.css` loads last and uses only the `tokens.css` scale. Every button keeps its id, label, disabled state and handler. An odd last button spans its row. Compact layouts keep 44px targets.
+
 ## Composition
 
 The application launcher presents three real starting actions as compact rows beside the welcome statement, followed by recent projects and optional AI setup. It is not a second marketing landing page.

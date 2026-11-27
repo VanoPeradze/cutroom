@@ -36,6 +36,7 @@
   <link rel="stylesheet" href="/assets/color-motion.css?v=20261122-color1">
   <link rel="stylesheet" href="/assets/ui-precision.css?v=20261122-precision1">
   <link rel="stylesheet" href="/assets/ui-flow.css?v=20261123-flow2-tokens1">
+  <link rel="stylesheet" href="/assets/edit-panel.css?v=20261127-editgroups1">
 </head>
 <body class="welcome-mode">
   <a class="skip-link" href="#main" data-i18n="skip">Skip to content</a>
@@ -496,12 +497,17 @@
               <div class="editor-more-panel"><button id="trackLockA" type="button" aria-pressed="false">Lock A</button><button id="trackLockB" type="button" aria-pressed="false" hidden>Lock B</button></div>
               <p id="trackProtectionStatus" role="status">Locks protect edits without muting or hiding footage.</p>
             </details>
-            <details class="editor-more" id="editorMoreTools" open><summary>Clip tools</summary><div class="editor-more-panel">
-              <button id="manualSplit" type="button" disabled>Split at playhead</button><button id="manualRestore" type="button" disabled>Add to edit</button><button id="manualClear" type="button" disabled>Clear selection</button>
-              <button id="clipDuplicate" type="button" disabled>Duplicate clip</button><button id="manualRange" type="button" aria-expanded="false" aria-controls="timelineRangeForm">Range…</button><button id="manualLayout" type="button" disabled>Layout…</button>
-              <button type="button" data-timeline-tool="remove_between" aria-pressed="false">Cut out</button><button type="button" data-timeline-tool="move" aria-pressed="false" disabled hidden>Move clip</button><button type="button" id="trackReset" hidden>Reset track</button>
-              <button id="timelineZoomSelection" type="button" disabled>Zoom to selection</button>
-              <label class="keyboard-profile-label">Keys <select id="keyboardProfile" aria-label="Keyboard shortcut profile"><option value="cutroom">CUTROOM</option></select></label><button type="button" id="keyboardHelp">Shortcuts</button>
+            <details class="editor-more" id="editorMoreTools" open><summary>Clip tools</summary><div class="editor-more-panel edit-groups">
+              <div class="edit-group" role="group" aria-labelledby="editGroupCut"><h4 class="edit-group-label" id="editGroupCut" data-i18n="editGroupCut">Cut</h4>
+                <button id="manualSplit" type="button" disabled>Split at playhead</button><button type="button" data-timeline-tool="remove_between" aria-pressed="false">Cut out</button><button id="clipDuplicate" type="button" disabled>Duplicate clip</button><button type="button" data-timeline-tool="move" aria-pressed="false" disabled hidden>Move clip</button>
+              </div>
+              <div class="edit-group" role="group" aria-labelledby="editGroupSelection"><h4 class="edit-group-label" id="editGroupSelection" data-i18n="editGroupSelection">Selection</h4>
+                <button id="manualRange" type="button" aria-expanded="false" aria-controls="timelineRangeForm">Range…</button><button id="manualClear" type="button" disabled>Clear selection</button><button id="timelineZoomSelection" type="button" disabled>Zoom to selection</button>
+              </div>
+              <div class="edit-group" role="group" aria-labelledby="editGroupFootage"><h4 class="edit-group-label" id="editGroupFootage" data-i18n="editGroupFootage">Footage</h4>
+                <button id="manualRestore" type="button" disabled>Add to edit</button><button id="manualLayout" type="button" disabled>Layout…</button><button type="button" id="trackReset" hidden>Reset track</button>
+              </div>
+              <div class="edit-group-footer"><label class="keyboard-profile-label">Keys <select id="keyboardProfile" aria-label="Keyboard shortcut profile"><option value="cutroom">CUTROOM</option></select></label><button type="button" id="keyboardHelp">Shortcuts</button></div>
             </div></details>
           <form id="timelineRangeForm" class="source-range-form timeline-range-form" novalidate hidden>
             <label>From<input id="timelineRangeStart" type="text" inputmode="decimal" placeholder="00:00.000" aria-describedby="timelineRangeStatus" autocomplete="off"></label>
