@@ -34,7 +34,7 @@ import {planGroupJoin,verifyGroupJoin} from "./group-join.js?v=20261118-join1-ti
 import {takeContext, planTake, verifyTake, initTakeReplacement} from "./replace-take.js?v=20261118-take1";
 import { rollPair, planRoll, verifyRoll, initRollingEdit } from "./rolling-edit.js?v=20261118-slide1";
 import { makeExportRangePlan, sameExportRangePlan, exportFrameTime, exportRangeLabel } from "./range-export.js?v=20261117-1";
-import { initColorMotion } from "./color-motion.js?v=20261122-color1";
+import { initColorMotion } from "./color-motion.js?v=20261128-autozoom1";
 import { initFirstRecordingGuide } from "./first-recording-guide.js?v=20261117-firstrecording1";
 import { KEYBOARD_PROFILES, resolveEditorShortcut, isEditorTransportSpace, shortcutRows } from "./keyboard.js?v=20261116-slip1-markers1-markrange1";
 import { AudioThresholdView } from "./audio-meter.js?v=20261112-workbench1";
@@ -13393,4 +13393,5 @@ if (typeof window !== "undefined") window.cutroomCleanupHost = Object.freeze({
     return "";
   },
   apply: (ranges) => applyManualEdit("sequence_ripple_delete_ranges", { ranges }),
+  opener: (start, end) => applyManualEdit("sequence_duplicate_range", { start, end, to: 0 }),
 });

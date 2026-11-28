@@ -44,6 +44,11 @@ Six word-timed caption styles share one timing model (`WORD_CAPTION_STYLES` in `
 
 Edit > Cut > Clean up… (also in the command palette) reads the edit's own captions in edit time and lists long pauses (a 0.25 s breath stays), isolated hesitation sounds, optional filler words (unticked: they often carry meaning) and repeated takes (a caption whose opening words the next one repeats). Nothing changes until Remove. The approved places go to the server as one `sequence_ripple_delete_ranges` edit, applied from the end backwards, so it is one Undo step. Edits with imported media or text layers keep using Cut out one range at a time. Captions without trustworthy word timing are ignored.
 
+### Opener and auto zoom (28 November)
+
+- Edit > Cut > Opener… ranks the edit's sentences (numbers, key words, questions, exclamations, talking to the viewer; each result says why) and copies the chosen one to the start as a cold open with `sequence_duplicate_range` (one Undo step; the original stays in place).
+- Color & motion > Auto zoom on key words adds a short punch-in (ease in 0.25 s, hold 1 s at 115%, ease out) on numbers, long content words and exclamations, at least 4 s apart, within the 32-keyframe limit and never over existing keyframes. Each punch is four ordinary keyframes the user can delete.
+
 ## Composition
 
 The application launcher presents three real starting actions as compact rows beside the welcome statement, followed by recent projects and optional AI setup. It is not a second marketing landing page.

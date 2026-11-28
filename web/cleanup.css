@@ -27,3 +27,9 @@
 .cleanup-play { flex: none; }
 .cleanup-total { flex: 1; color: var(--text-2); }
 .cleanup-apply:not(:disabled) { background: var(--accent); color: var(--on-accent); border-color: transparent; }
+/* Opener dialog reuses the cleanup layout. */
+.hook-list li { align-items: flex-start; padding-block: var(--space-2); }
+.hook-text { flex: 1; min-width: 0; display: grid; grid-template-columns: auto 1fr; gap: 2px var(--space-3); }
+.hook-text time { grid-row: span 2; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.hook-text span { white-space: normal; }
+.hook-text small { color: var(--text-3); font-size: var(--fs-12); }
