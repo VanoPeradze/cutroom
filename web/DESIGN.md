@@ -168,6 +168,13 @@ languages and downloads a separate .srt with the same timing (Hebrew ↔ English
 by default). The project's captions are never changed; a line the AI does not
 return keeps its original text, and the status says how many were translated.
 
+## Quick tour
+
+The first time an edit is on screen, a five-stop tour rings the real controls
+(Script, Clean up, Type an edit, Clips, Export) with a short bubble beside
+each. Skip, Escape or Done ends it and it is remembered per browser; "Quick
+tour" in the keyboard help starts it again. Automated browsers never get it.
+
 ## Composition
 
 The application launcher presents three real starting actions as compact rows beside the welcome statement, followed by recent projects and optional AI setup. It is not a second marketing landing page.

@@ -124,3 +124,15 @@
 .caption-translate select { min-height: 32px; max-width: 100%; }
 .caption-translate-link { color: var(--accent, #7cc4ff); font-weight: 600; text-decoration: underline; }
 .caption-translate small { flex-basis: 100%; font-size: 12px; }
+
+/* Quick tour: a ring on the real control and a small bubble beside it. */
+.tour-layer { position: fixed; inset: 0; z-index: 9000; pointer-events: none; }
+.tour-ring { position: fixed; border-radius: 10px; box-shadow: 0 0 0 3px var(--accent, #7cc4ff), 0 0 0 9999px rgba(0, 0, 0, 0.45); transition: all 0.2s ease; }
+.tour-bubble { position: fixed; width: min(340px, calc(100vw - 32px)); padding: 14px 16px; border-radius: 12px; background: var(--surface-2); color: var(--text-1); border: 1px solid var(--line); box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35); pointer-events: auto; }
+.tour-bubble h2 { margin: 2px 0 6px; font-size: 16px; }
+.tour-bubble p { margin: 0; font-size: 14px; line-height: 1.45; color: var(--text-2); }
+.tour-bubble .tour-count { font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+.tour-actions { display: flex; gap: 8px; align-items: center; margin-top: 12px; }
+.tour-actions span { flex: 1; }
+.tour-actions button:not(.button) { background: none; border: 0; color: var(--text-2); cursor: pointer; padding: 6px 4px; font: inherit; font-size: 13px; }
+@media (prefers-reduced-motion: reduce) { .tour-ring { transition: none; } }
