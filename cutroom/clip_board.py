@@ -1,4 +1,6 @@
-"""Read-only Clips board: ranked short moments across one source recording.
+"""Read-only Clips board: ranked short moments across one source recording,
+or across the finished edit (scope "edit"): the composed timeline with the
+user's screen/camera layout, whose moments export exactly as arranged.
 
 The board reuses analysis that is already saved with the project (the audio
 level profile, an optional transcript and optional gameplay-vision windows). It
@@ -21,6 +23,7 @@ from .director import (
 from .visual_moments import VisualTimeline, apply_visual_overrides
 
 CLIP_LENGTHS = (15, 30, 45, 60)
+SCOPES = ("source", "edit")
 DEFAULT_LENGTH = 30
 DEFAULT_COUNT = 12
 MAX_COUNT = 24
@@ -211,8 +214,58 @@ def _reasons(signals: dict[str, Any], strength: int, reactions: int, has_speech:
     return reasons
 
 
-def build_clip_board(project: dict[str, Any], *, length: Any = DEFAULT_LENGTH, count: Any = DEFAULT_COUNT) -> dict[str, Any]:
-    """Rank non-overlapping windows of ``length`` seconds across source A."""
+def _edit_pieces(project: dict[str, Any]) -> tuple[dict[str, list[tuple[float, float, float]]], float] | None:
+    """Source-track pieces (edit start, edit end, source start) per slot, or None."""
+    from .sequence import editor_sequence_snapshot
+    try:
+        snapshot = editor_sequence_snapshot(project)
+    except Exception:  # an unreadable/legacy timeline simply has no edit scope
+        return None
+    duration = _finite_number((snapshot or {}).get("duration"))
+    if not snapshot or duration <= 0:
+        return None
+    pieces: dict[str, list[tuple[float, float, float]]] = {}
+    for slot in ("A", "B"):
+        rows = []
+        for clip in (snapshot.get("source_tracks") or {}).get(slot) or []:
+            if not isinstance(clip, dict) or "video_speed" in clip:
+                continue  # retimed clips do not map source seconds 1:1
+            start, end = _finite_number(clip.get("start")), min(duration, _finite_number(clip.get("end")))
+            if end > start:
+                rows.append((start, end, _finite_number(clip.get("source_start"))))
+        pieces[slot] = sorted(rows)
+    return pieces, duration
+
+
+def _to_edit(rows: list[dict[str, Any]], pieces: list[tuple[float, float, float]]) -> list[dict[str, Any]]:
+    """Place source-clock rows at every point of the edit that shows them."""
+    mapped = []
+    for start, end, source_start in pieces:
+        source_end = source_start + end - start
+        for row in rows:
+            left, right = max(source_start, _finite_number(row.get("start"))), min(source_end, _finite_number(row.get("end")))
+            if right > left:
+                item = {key: value for key, value in row.items() if key != "words"}
+                item["start"], item["end"] = start + left - source_start, start + right - source_start
+                mapped.append(item)
+    return sorted(mapped, key=lambda row: (row["start"], row["end"]))
+
+
+def _source_span(start: float, end: float, pieces: list[tuple[float, float, float]]) -> tuple[float, float] | None:
+    """The source-A seconds of the longest stretch of A inside an edit window."""
+    best = None
+    for left, right, source_start in pieces:
+        a, b = max(start, left), min(end, right)
+        if b > a and (best is None or b - a > best[1] - best[0]):
+            best = (source_start + a - left, source_start + b - left)
+    return (round(best[0], 3), round(best[1], 3)) if best else None
+
+
+def build_clip_board(project: dict[str, Any], *, length: Any = DEFAULT_LENGTH, count: Any = DEFAULT_COUNT,
+                     scope: Any = "source") -> dict[str, Any]:
+    """Rank non-overlapping windows of ``length`` seconds across source A or the edit."""
+    if scope not in SCOPES:
+        raise ClipBoardError("Clip scope must be source or edit.")
     try:
         length = int(length)
         count = int(count)
@@ -229,6 +282,7 @@ def build_clip_board(project: dict[str, Any], *, length: Any = DEFAULT_LENGTH, c
         "revision": project.get("revision"),
         "length": length,
         "source_clock": "A",
+        "scope": "source",
         "clips": [],
         "heat": [],
         "signals": {"audio": False, "transcript": False, "vision": False},
@@ -241,13 +295,37 @@ def build_clip_board(project: dict[str, Any], *, length: Any = DEFAULT_LENGTH, c
         return {**base, "available": False, "reason": "no_source"}
 
     waveform = _waveform(project)
+    segments = _segments(project)
+    visual = _visual(project)
+    events = _sound_events(project)
+    a_pieces: list[tuple[float, float, float]] = []
+    if scope == "edit":
+        edit = _edit_pieces(project)
+        if edit is None:
+            return {**base, "available": False, "reason": "no_edit"}
+        pieces, duration = edit
+        a_pieces = pieces.get("A") or []
+        base.update(scope="edit", source_clock="edit", source_duration=round(duration, 3))
+        # Measure what the edit plays: the routed sound source when its level
+        # profile exists, else source A's, each on the clips that show it.
+        from .render import _effective_audio_slot
+        slot = _effective_audio_slot(project) or "A"
+        profile = ((project.get("pre_analysis") or {}).get("audio") or {}).get(slot) or {}
+        slot_waveform = [row for row in (profile.get("waveform") if isinstance(profile, dict) else None) or [] if isinstance(row, dict)]
+        if slot != "A" and slot_waveform and pieces.get(slot):
+            waveform = _to_edit(slot_waveform, pieces[slot])
+        else:
+            waveform = _to_edit(waveform, a_pieces)
+        segments = _to_edit(segments, a_pieces)
+        events = _to_edit(events, a_pieces)
+        if visual:
+            visual.windows = _to_edit(visual.windows, a_pieces)
+            visual._starts = [row["start"] for row in visual.windows]
+            visual = visual or None
     levels = _energy_levels(waveform) if waveform else None
     if not levels:
         reason = "no_audio" if source.get("has_audio") is False else "audio_profile_missing"
         return {**base, "available": False, "reason": reason}
-    segments = _segments(project)
-    visual = _visual(project)
-    events = _sound_events(project)
     base["signals"] = {"audio": True, "transcript": bool(segments), "vision": bool(visual)}
     if events:
         base["signals"]["sound_events"] = True
@@ -301,5 +379,14 @@ def build_clip_board(project: dict[str, Any], *, length: Any = DEFAULT_LENGTH, c
             "excerpt": excerpt,
             "reasons": _reasons(signals, strength, reactions, bool(excerpt), _events_in(start, end, events)),
             "content": _content_scores(start, end, segments),
+            "clock": base["source_clock"],
         })
+        if scope == "edit":
+            # Source-A seconds for the posting kit and full-frame thumbnails.
+            span = _source_span(start, end, a_pieces)
+            peak = _source_span(clips[-1]["peak"], clips[-1]["peak"] + 0.001, a_pieces)
+            if span:
+                clips[-1]["source_start"], clips[-1]["source_end"] = span
+            if peak:
+                clips[-1]["source_peak"] = peak[0]
     return {**base, "available": True, "reason": None, "clips": clips}

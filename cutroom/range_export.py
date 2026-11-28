@@ -45,26 +45,36 @@ class ExportRange:
             raise ValueError("The finished output streams cannot be identified.")
         result = list(maps)
         # Keep the full timeline clock through compositing, motion, fades and ASS subtitles.
-        # Video uses select, which passes only the marked frames but keeps
-        # reading to the end of the graph, so the picture output never closes
-        # while FFmpeg still has frames to pull. Closing every output early
-        # (trim on both streams, or -t) while a drain still needed input made
-        # FFmpeg 7 abort ("best_input >= 0"); ending both trims inside an early
-        # source gap could also hang. The audio is cut sample-exactly by atrim
-        # and its remainder drains into anullsink. A normalized stage keeps all
-        # unmodified PCM for the second pass.
+        # Let the finite finished streams drain independently. Otherwise, when
+        # both trim filters end inside an early source gap, FFmpeg can stop
+        # requesting a split/concat counterpart and never deliver EOF. The
+        # drain branches go to a separate null output (see drain_output_args),
+        # not to in-graph nullsinks: FFmpeg 7.0/7.1 abort with "Assertion
+        # best_input >= 0" when two nullsinks outlive the range outputs on a
+        # two-source layout, and each version needs a different single drain.
         paired = trim_audio and len(maps) == 4
-        if len(maps) == 4:
+        if not trim_audio and len(maps) == 4:
+            # A normalized stage must carry ALL unmodified PCM for the second
+            # pass. select drains its source to EOF; trim can close the video
+            # input early and truncate a shared decoder's final audio packet.
             video = f"{maps[1]}select='between(n,{self.start_frame},{self.end_frame - 1})'"
         else:
-            video = f"{maps[1]}trim=start_frame={self.start_frame}:end_frame={self.end_frame}"
+            prefix = f"{maps[1]}split=2[vrangedrain][vrangeselect];[vrangeselect]" if paired else maps[1]
+            video = f"{prefix}trim=start_frame={self.start_frame}:end_frame={self.end_frame}"
         graph += f";\n{video},settb=1/{self.fps},setpts=N[vrange]"
         result[1] = "[vrange]"
         if paired:
-            graph += (f";\n{maps[3]}asplit=2[arangedrain][arangeselect];[arangedrain]anullsink;"
+            graph += (f";\n{maps[3]}asplit=2[arangedrain][arangeselect];"
                       f"[arangeselect]{self.audio_trim()}[arange]")
             result[3] = "[arange]"
         return graph, result
+
+    @staticmethod
+    def drain_output_args(graph: str) -> list[str]:
+        """A discarded second output that consumes the range drain branches."""
+        if "[vrangedrain]" not in graph:
+            return []
+        return ["-map", "[vrangedrain]", "-map", "[arangedrain]", "-f", "null", "-"]
 
     def rows(self, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         # Cues crossing In/Out retain the visible wording. The public sidecar and output review

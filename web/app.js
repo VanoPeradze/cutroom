@@ -46,8 +46,8 @@ import { initTrackProtection } from "./track-protection.js?v=1.2-beta";
 import { TextStudio } from "./text-studio.js?v=20261116-caption-preview3";
 import { initNumericScrub } from "./numeric-scrub.js?v=20261116-move2";
 import { ReelProposalReview, supportsReelReview } from "./reel-proposals.js?v=20261022";
-import { ClipBoard } from "./clip-board.js?v=20261128-editor-manual1";
-import { manualClipRows, sourcePieces, editClock } from "./manual-clips.js?v=20261127-1";
+import { ClipBoard } from "./clip-board.js?v=20261128-layout-manual2";
+import { manualClipRows, editClock } from "./manual-clips.js?v=20261127-1";
 import { AiDraftReview } from "./ai-draft-review.js?v=20261116-ai-review2";
 import { CaptionAlternatives } from "./caption-alternatives.js?v=20261023";
 import { initCaptionPreview, captionPreviewIssue } from "./caption-preview.js?v=20261128-brand1";
@@ -5012,6 +5012,7 @@ function activeJobKindLabel(kind) {
   if (kind === "render") return t("activeExport");
   if (kind === "model_install") return t("activeModel");
   if (kind === "manual_transcript") return uiCopy("תמלול מקומי", "Local transcription");
+  if (kind === "caption_refresh") return uiCopy("עדכון כתוביות", "Updating captions");
   return t("activeDirector");
 }
 
@@ -12886,6 +12887,8 @@ function clipTimelineRange(clip) {
   if (!state.project?.draft || !Number.isFinite(start) || !Number.isFinite(end) || end <= start) return null;
   const project = editorProject();
   if (project?.__timelineUnavailable) return null;
+  // "My edit" moments are already on the edit clock: the range is the moment.
+  if (clip.clock === "edit") return state.project.editor_sequence && end <= timelineDuration(project) + 1e-3 ? { start, end } : null;
   if (!hasSourceTracks(project)) return { start, end };
   const pieces = [];
   for (const item of trackClips(project, "A")) {
@@ -12903,6 +12906,43 @@ function clipTimelineRange(clip) {
   // Only one continuous span of the edit that holds (nearly) the whole moment.
   if (merged.length !== 1 || merged[0].end - merged[0].start < (end - start) * .95) return null;
   return merged[0];
+}
+
+// A Clips card shows the composed edit, not one raw recording: for each moment
+// it reports the layout (stacked, side by side, PiP or one source) and where
+// A and B are at that point of the edit, on the same clock as Export.
+function clipComposition(clip, range = clipTimelineRange(clip)) {
+  const project = editorProject();
+  if (!range || !project?.sources?.A || project.__timelineUnavailable) return null;
+  if (!project.sources.B && clip?.clock !== "edit") return null;
+  const mixer = sourceMixerSettings();
+  const [width, height] = previewExportDimensions();
+  const pip = width > 0 && height > 0 ? creatorPipGeometry(width, height, mixer) : null;
+  const independent = hasSourceTracks(project);
+  const plan = Array.isArray(project.draft?.camera_plan) ? project.draft.camera_plan : [];
+  const sourceB = project.sources.B;
+  const durationB = !sourceB ? 0 : Number(sourceB.video_duration) > 0 ? Number(sourceB.video_duration) : Number(sourceB.duration) || 0;
+  const twoSource = ["stacked", "side_by_side", "pip"];
+  return {
+    mixer: { ...mixer, pip: pip && { x: pip.x / width, y: pip.y / height, w: pip.width / width, h: pip.height / height } },
+    at(offset) {
+      const time = Number(range.start) + Math.max(0, Number(offset) || 0);
+      let camera = String(plan.find(row => time >= Number(row.start) && time < Number(row.end))?.camera || "A");
+      if (camera === "screen") camera = mixer.screenSlot;
+      else if (camera === "camera") camera = mixer.cameraSlot;
+      else if (camera === "embedded_stack" && !sourceB) camera = embeddedLayoutConfirmed() ? camera : "A";
+      else if (camera !== "B" && !twoSource.includes(camera)) camera = "A";
+      const a = independent ? trackAt(project, "A", time, mixer.syncOffset)?.sourceTime ?? null : time;
+      const rawB = !sourceB ? null : independent ? trackAt(project, "B", time, mixer.syncOffset)?.sourceTime ?? null : time - mixer.syncOffset;
+      const b = rawB != null && rawB >= 0 && rawB < durationB ? rawB : null;
+      // Same fallbacks as the editor preview and render plan: never a black
+      // panel when one recording is simply absent at this moment.
+      if (a == null && b == null) camera = "black";
+      else if (a == null) camera = "B";
+      else if (b == null && (camera === "B" || twoSource.includes(camera))) camera = "A";
+      return { camera, A: a, B: b };
+    },
+  };
 }
 
 // Marked-range export is a separate capability; without it Export would mean the whole edit.
@@ -12985,7 +13025,7 @@ async function exportClipBatch(clips, { onProgress = () => {}, isStopped = () =>
     let jobId = null;
     try {
       onProgress({ index, total: clips.length, clip, progress: 0 });
-      const payload = await api(`/api/projects/${encodeURIComponent(projectId)}/render`, { method: "POST", body: JSON.stringify(body) });
+      const payload = await postRender(projectId, body, (_text, progress) => onProgress({ index, total: clips.length, clip, progress: progress * .5 }));
       jobId = payload.job.id;
       setActiveJob(jobId, { projectId, kind: "render" });
       let job = payload.job;
@@ -13082,13 +13122,6 @@ async function refreshManualClips() {
   }
 }
 
-function manualClipPieces(row) {
-  const project = editorProject();
-  if (!project || project.__timelineUnavailable || !hasSourceTracks(project)) return [];
-  const start = row.start_frame / row.fps, end = row.end_frame / row.fps;
-  return sourcePieces(trackClips(project, "A"), start, end);
-}
-
 function showManualClip(row) {
   if (!state.project || !state.timeline) return;
   if (!state.studio.open) setAdvanced(true);
@@ -13161,6 +13194,9 @@ async function openClipBoard() {
     api, notify: message => toast(message),
     getProject: () => state.project,
     mediaUrl: project => sourceMediaUrl(project.sources.A),
+    mediaUrlB: project => project.sources?.B ? sourceMediaUrl(project.sources.B) : "",
+    composition: clipComposition,
+    canUseEdit: () => Boolean(state.project?.editor_sequence && !state.project.editor_sequence.error && state.project.editor_sequence.duration > 0),
     outputAspect: clipBoardAspect,
     stillLayout: clipStillLayout,
     canExport: clipRangeExportSupported,
@@ -13171,12 +13207,13 @@ async function openClipBoard() {
     canPlace: () => Boolean(state.project?.editor_sequence && !state.project.editor_sequence.error),
     writeManual: body => writeManualClip(body),
     refreshManual: refreshManualClips,
-    manualPieces: manualClipPieces,
     showManual: showManualClip,
     placeClip: placeClipFromBoard,
     postingKit: (clip, useAi) => api(`/api/projects/${state.project.id}/posting-kit`, {
       method: "POST",
-      body: JSON.stringify({ start: clip.start, end: clip.end, use_ai: Boolean(useAi), goal: state.project?.settings?.goal === "youtube" ? "youtube" : "short" }),
+      // An edit moment's words come from the source-A seconds it shows.
+      body: JSON.stringify({ ...(clip.clock === "edit" && clip.source_start != null
+        ? { start: clip.source_start, end: clip.source_end } : { start: clip.start, end: clip.end }), use_ai: Boolean(useAi), goal: state.project?.settings?.goal === "youtube" ? "youtube" : "short" }),
     }).then(result => result.kit),
     pauseEditor: () => pauseAllMedia(),
     canMakeShorts: () => Boolean(state.project?.draft && initializeProjectCopies()),
@@ -13258,7 +13295,7 @@ async function startExport() {
     // uses the accepted project settings, not stale/rounded hidden form values.
     if (!rangeMatches()) throw new Error(changedExportRangeMessage());
     const body = selected ? {range:intent.range} : {};
-    const payload = await api(`/api/projects/${encodeURIComponent(projectId)}/render`, { method: "POST", body: JSON.stringify(body) });
+    const payload = await postRender(projectId, body, text => { if (current()) elements.exportDescription.textContent = text; });
     if (state.project?.id === projectId) showExportLayoutWarning(payload.layout_fallback);
     if(storageInfo){const estimate=payload.storage_estimate;
       storageInfo.textContent=estimate?storagePlanText({filesystems:estimate.volumes.map(row=>({...row,required_bytes:row.working_bytes,disk_free_bytes:row.free_bytes,reserved_bytes:0,available_bytes:Math.max(0,row.free_bytes-row.reserve_bytes)}))}):"";
@@ -13294,6 +13331,54 @@ async function startExport() {
   }
 }
 
+// Captions built from another sound (e.g. the edit plays the camera mic but
+// the transcript came from the screen recording) block export. Transcribe the
+// routed sound again and export: the timeline, cuts and layout never change.
+async function refreshCaptionsForExport(projectId, onStatus = () => {}) {
+  onStatus(uiCopy("מעדכנים את הכתוביות לשמע של העריכה…", "Updating captions to match the sound of this edit…"), 0);
+  const payload = await api(`/api/projects/${encodeURIComponent(projectId)}/caption-refresh`, {
+    method: "POST", body: JSON.stringify({ expected_revision: state.project.revision }),
+  });
+  let job = payload.job;
+  setActiveJob(job.id, { projectId, kind: "caption_refresh" });
+  try {
+    while (!["completed", "failed", "interrupted", "cancelled"].includes(job.status)) {
+      await new Promise(resolve => setTimeout(resolve, 800));
+      job = (await api(`/api/jobs/${encodeURIComponent(job.id)}`)).job;
+      onStatus(uiCopy("מעדכנים את הכתוביות לשמע של העריכה…", "Updating captions to match the sound of this edit…"), Number(job.progress) || 0);
+    }
+  } finally { clearActiveJob(job.id); }
+  if (job.status === "cancelled") throw new Error("Cancelled");
+  if (job.status !== "completed") throw new Error(job.error || uiCopy("עדכון הכתוביות לא הצליח. העריכה נשמרה.", "Captions could not be updated. Your edit was kept."));
+  const fresh = await api(`/api/projects/${encodeURIComponent(projectId)}`);
+  if (state.project?.id === projectId && fresh.project?.id === projectId) {
+    state.project = reconcileProjectSnapshot(fresh.project);
+    rememberProjectRevision(state.project);
+    if (state.timeline) { state.timeline.project = editorProject(); state.timeline.scheduleDraw?.(); }
+    renderTranscript();
+    renderCaptionControls();
+    renderCaptionInspector();
+    updatePreviewCaption(previewPlaybackTime());
+  }
+  toast(uiCopy("הכתוביות עודכנו לשמע של העריכה. ממשיכים בייצוא.", "Captions now follow the sound of this edit. Exporting."), "success");
+}
+
+// Start a render; when only the captions are out of date, refresh them once
+// and retry. A marked range is re-pinned to the new revision (its frames are
+// unchanged: refreshing captions does not touch the timeline).
+async function postRender(projectId, body, onStatus) {
+  const send = () => api(`/api/projects/${encodeURIComponent(projectId)}/render`, { method: "POST", body: JSON.stringify(body) });
+  try {
+    return await send();
+  } catch (error) {
+    if (error?.code !== "captions_out_of_date") throw error;
+  }
+  await refreshCaptionsForExport(projectId, onStatus);
+  if (state.project?.id !== projectId) throw new Error("Cancelled");
+  if (body.range) body = { ...body, range: { ...body.range, expected_revision: state.project.revision } };
+  return send();
+}
+
 function friendlyRenderError(message) {
   const value = String(message || "");
   if (value.includes("Cannot inspect configured FFmpeg") || /(?:ENOENT|FileNotFoundError).*ffmpeg/i.test(value)) {
@@ -13305,8 +13390,8 @@ function friendlyRenderError(message) {
 
   if (value === "captions_out_of_date" || value.includes("Captions no longer match")) {
     return uiCopy(
-      "מקור האודיו או הסנכרון השתנו מאז יצירת הכתוביות. בנו את ה־Draft מחדש ואז ייצאו.",
-      "The audio source or sync changed after captions were created. Rebuild the Draft, then export again.",
+      "הכתוביות לא תואמות לשמע של העריכה ולא ניתן היה לעדכן אותן אוטומטית. בדקו את המודלים המקומיים ונסו שוב.",
+      "Captions do not match the sound of this edit and could not be updated automatically. Check Local models, then export again.",
     );
   }
   return value;

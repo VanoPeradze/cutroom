@@ -212,6 +212,7 @@ def _render_plan(project: dict[str, Any], *, layout_coverage: list[dict[str, Any
         )
 
     plan: list[dict[str, Any]] = []
+    output_cursor = 0.0  # finished-output seconds before the current fragment
     for keep in keeps:
         boundaries = {float(keep["start"]), float(keep["end"])}
         if independent:
@@ -240,6 +241,7 @@ def _render_plan(project: dict[str, Any], *, layout_coverage: list[dict[str, Any
         for start, end in zip(ordered, ordered[1:]):
             if end - start < 0.005:
                 continue
+            output_start, output_cursor = output_cursor, output_cursor + end - start
             midpoint = (start + end) / 2.0
             camera = next(
                 (
@@ -265,6 +267,7 @@ def _render_plan(project: dict[str, Any], *, layout_coverage: list[dict[str, Any
                                 for left, right in track_video_ranges["A"]) if independent else
                             _source_has_video(source) and output_end <= math.floor(_source_video_duration(source) * fps + 0.5) / fps + 1e-6)
                 layout_coverage.append({"start": start, "end": end, "camera": camera,
+                                        "output_start": output_start,
                                         "missing_slots": missing_slots,
                                         "fallback_camera": "A" if missing_slots == ["B"] and a_covers else None})
             # A shorter/offset B must not turn part of a camera-only shot black
@@ -332,10 +335,20 @@ class LayoutCoverageError(ValueError):
         return {"error": "layout_coverage_incomplete", "message": str(self), "layout_coverage": self.coverage}
 
 
-def composition_layout_coverage(project: dict[str, Any]) -> dict[str, Any]:
-    """Read-only layout feasibility on the same clocks/boundaries as export."""
+def composition_layout_coverage(project: dict[str, Any], window: tuple[float, float] | None = None) -> dict[str, Any]:
+    """Read-only layout feasibility on the same clocks/boundaries as export.
+
+    ``window`` limits the check to finished-output seconds [start, end), as a
+    marked (Clips) export only renders that part of the timeline.
+    """
     rows: list[dict[str, Any]] = []
     _render_plan(project, layout_coverage=rows)
+    if window is not None:
+        rows = [row for row in rows
+                if row["output_start"] < window[1] - 1e-6
+                and row["output_start"] + row["end"] - row["start"] > window[0] + 1e-6]
+    for row in rows:
+        row.pop("output_start", None)
     missing = [row for row in rows if row["missing_slots"]]
     manual = project.get("manual") or {}
     multi = {"B", "screen", "camera", "stacked", "side_by_side", "pip"}
@@ -364,10 +377,20 @@ def _layout_fallback_notice(coverage: dict[str, Any]) -> dict[str, Any] | None:
                         "The saved edit, duration, captions and selected audio are unchanged. Missing B sound is not replaced.")}
 
 
+def _range_window(options: dict[str, Any] | None) -> tuple[float, float] | None:
+    spec = (options or {}).get("range")
+    try:
+        fps = int(spec["fps"])
+        return (int(spec["start_frame"]) / fps, int(spec["end_frame"]) / fps) if fps > 0 else None
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
 def require_layout_coverage(project: dict[str, Any], options: dict[str, Any] | None = None) -> dict[str, Any] | None:
+    window = _range_window(options)
     if options:
         project = with_export_options(project, options)
-    coverage = composition_layout_coverage(project)
+    coverage = composition_layout_coverage(project, window)
     if coverage["export_blocked"]:
         raise LayoutCoverageError(coverage)
     return _layout_fallback_notice(coverage)
@@ -1839,7 +1862,9 @@ def _run_ffmpeg_process(context: JobContext, command: list[str], expected_durati
                     newest_seconds = seconds
 
             if newest_seconds is not None:
-                last_seconds = max(last_seconds, newest_seconds)
+                # A marked range's discarded drain output can report the
+                # whole-timeline clock; never show more than the planned length.
+                last_seconds = max(last_seconds, min(newest_seconds, expected_duration) if expected_duration > 0 else newest_seconds)
                 ratio = min(1.0, last_seconds / expected_duration) if expected_duration > 0 else 0.0
                 progress = min(0.95, 0.04 + ratio * 0.91)
                 context.update(progress, f"Rendering... {last_seconds:.1f}s / {expected_duration:.1f}s" if expected_duration > 0 else "Rendering...")
@@ -1890,8 +1915,14 @@ def render_project(context: JobContext, project_id: str, store: ProjectStore, se
     scope = resolve_export_range(project, options)
     saved_input_fingerprint = _render_input_fingerprint(project)
     project = with_export_options(project, options)
-    layout_fallback = (require_layout_coverage(project) if options.get("_require_layout_coverage")
-                       else _layout_fallback_notice(composition_layout_coverage(project)))
+    window = _range_window(options) if scope else None
+    if options.get("_require_layout_coverage"):
+        coverage = composition_layout_coverage(project, window)
+        if coverage["export_blocked"]:
+            raise LayoutCoverageError(coverage)
+        layout_fallback = _layout_fallback_notice(coverage)
+    else:
+        layout_fallback = _layout_fallback_notice(composition_layout_coverage(project, window))
     render_input_fingerprint = _render_input_fingerprint(project)
     if scope:
         render_input_fingerprint = stable_fingerprint("range-export-v1", {"input": render_input_fingerprint, **scope.public()})
@@ -1990,11 +2021,7 @@ def render_project(context: JobContext, project_id: str, store: ProjectStore, se
     expected_duration = scope.duration if scope else whole_duration
     normalization_filter = _final_audio_filter(project) if has_audio else "anull"
     normalize_audio = has_audio and normalization_filter != "anull"
-    # A marked range with sound selects its frames from the full graph (see
-    # ExportRange.mapped_graph); an output -t at the range length would close
-    # both streams early, which FFmpeg 7 aborts on. The picture still ends at Out.
-    stage_duration = whole_duration if normalize_audio or (scope and has_audio) else expected_duration
-    progress_duration = stage_duration if normalize_audio else expected_duration
+    stage_duration = whole_duration if normalize_audio else expected_duration
     render_target = normalization_stage if normalize_audio else partial
     command = [capabilities.executable, "-hide_banner", "-loglevel", "error", "-y",
                *input_args]
@@ -2018,12 +2045,13 @@ def render_project(context: JobContext, project_id: str, store: ProjectStore, se
         # avoids AAC packet boundaries dropping the final planned video frame.
         "-t", f"{stage_duration:.6f}",
         "-progress", "pipe:1", "-nostats", str(render_target),
+        *(scope.drain_output_args(graph) if scope else []),
     ]
     context.update(0.04, f"Rendering with {encoder}")
     process_returncode = None
     try:
         render_context = _ScaledProgressContext(context, 0.04, 0.82, "Rendering") if normalize_audio else context
-        process_returncode, stderr = _run_ffmpeg_process(render_context, command, progress_duration)
+        process_returncode, stderr = _run_ffmpeg_process(render_context, command, stage_duration)
         if process_returncode != 0:
             if encoder != "libx264" and not options.get("_force_software"):
                 render_target.unlink(missing_ok=True)

@@ -64,6 +64,7 @@ export function unavailableMessage(reason) {
     no_audio: "This recording has no sound track, so there is nothing to measure yet.",
     audio_profile_missing: "The sound analysis for this recording is not ready. Wait for import to finish, then try again.",
     too_short: "This recording is shorter than the chosen clip length. Choose a shorter length.",
+    no_edit: "Make an edit first, then find clips in it. Or switch to Whole recording.",
   }[reason] || "Clips are not available for this project yet.";
 }
 
@@ -98,11 +99,77 @@ function drawCover(context, video, region, target, focus) {
   context.drawImage(video, crop.sx, crop.sy, crop.sw, crop.sh, target.x, target.y, target.w, target.h);
 }
 
+// Letterbox a whole source inside a rectangle (FFmpeg "fit" in render.py).
+export function containRect(sourceWidth, sourceHeight, target) {
+  if (!(sourceWidth > 0 && sourceHeight > 0)) return { ...target };
+  const scale = Math.min(target.w / sourceWidth, target.h / sourceHeight);
+  const w = sourceWidth * scale, h = sourceHeight * scale;
+  return { x: target.x + (target.w - w) / 2, y: target.y + (target.h - h) / 2, w, h };
+}
+
+// The panels of one composed output frame, in canvas pixels. Mirrors the
+// layout geometry of render._segment_nodes so a Clips card shows the same
+// screen/camera arrangement that Export renders for that moment.
+export function layoutPanels(camera, mixer, width, height) {
+  const screen = mixer?.screenSlot === "B" ? "B" : "A";
+  const face = screen === "A" ? "B" : "A";
+  const screenFit = ["cover", "contain"].includes(mixer?.screenFit) ? mixer.screenFit : null;
+  const fitFor = (slot, fallback) => (slot === screen && screenFit) || fallback;
+  const full = { x: 0, y: 0, w: width, h: height };
+  if (camera === "A" || camera === "B") return [{ slot: camera, rect: full, fit: fitFor(camera, "cover") }];
+  if (camera === "stacked") {
+    const faceH = Math.round(height * (mixer?.primaryRole === "camera" ? .70 : .30));
+    const stackFit = mixer?.stackFit === "contain" ? "contain" : "cover";
+    const faceFirst = (mixer?.firstSlot || face) === face;
+    const top = faceFirst ? faceH : height - faceH;
+    const [upper, lower] = faceFirst ? [face, screen] : [screen, face];
+    return [
+      { slot: upper, rect: { x: 0, y: 0, w: width, h: top }, fit: fitFor(upper, stackFit) },
+      { slot: lower, rect: { x: 0, y: top, w: width, h: height - top }, fit: fitFor(lower, stackFit) },
+    ];
+  }
+  if (camera === "side_by_side") {
+    const left = Math.floor(width / 2);
+    const [first, second] = (mixer?.firstSlot || screen) === screen ? [screen, face] : [face, screen];
+    return [
+      { slot: first, rect: { x: 0, y: 0, w: left, h: height }, fit: fitFor(first, "contain") },
+      { slot: second, rect: { x: left, y: 0, w: width - left, h: height }, fit: fitFor(second, "contain") },
+    ];
+  }
+  if (camera === "pip") {
+    const base = mixer?.primaryRole === "camera" ? face : screen;
+    const inset = base === screen ? face : screen;
+    const pip = mixer?.pip || { x: .66 - 32 / 1080, y: .72 - 32 / 1920, w: .34, h: .28 };
+    return [
+      { slot: base, rect: full, fit: fitFor(base, "cover") },
+      { slot: inset, rect: { x: pip.x * width, y: pip.y * height, w: pip.w * width, h: pip.h * height }, fit: fitFor(inset, "contain") },
+    ];
+  }
+  return [];
+}
+
+// Paint one composed frame from the A and B video elements.
+export function paintLayout(context, videos, camera, mixer, width, height) {
+  context.fillStyle = "#000";
+  context.fillRect(0, 0, width, height);
+  for (const panel of layoutPanels(camera, mixer, width, height)) {
+    const video = videos[panel.slot];
+    if (!video?.videoWidth || !video.videoHeight) continue;
+    if (panel.fit === "contain") {
+      const box = containRect(video.videoWidth, video.videoHeight, panel.rect);
+      context.drawImage(video, box.x, box.y, box.w, box.h);
+    } else {
+      drawCover(context, video, { x: 0, y: 0, w: 1, h: 1 }, panel.rect, { x: .5, y: .5 });
+    }
+  }
+}
+
 export class ClipBoard {
   constructor(options) {
     this.options = options;
     this.doc = options.document || document;
     this.length = 30;
+    this.scope = null;
     this.cache = new Map();
     this.cards = new Map();
     this.request = 0;
@@ -159,7 +226,23 @@ export class ClipBoard {
     this.shortsButton.hidden = true;
     this.shortsButton.title = "Save a vertical copy of this edit with the same cuts, colour and captions, then find clips in it. This project is not changed.";
     this.shortsButton.addEventListener("click", () => { if (this.batchRunning) return; this.handingOff = true; this.close(); this.options.makeShorts?.(); });
-    head.append(titles, this.shortsButton, this.batchButton, lengths, close);
+    // "My edit" ranks moments of the finished timeline, so cards and exports
+    // show the arranged layout (screen + camera). "Whole recording" searches
+    // all of source A, including parts that are not in the edit.
+    const scopes = this.el("div", "clip-length clip-scope");
+    scopes.setAttribute("role", "group");
+    scopes.setAttribute("aria-label", "Find clips in");
+    this.scopeButtons = [["edit", "My edit"], ["source", "Whole recording"]].map(([value, text]) => {
+      const button = this.el("button", null, text);
+      button.type = "button";
+      button.dataset.scope = value;
+      button.title = value === "edit" ? "Moments of your edit, in your layout" : "Moments anywhere in the main recording";
+      button.addEventListener("click", () => this.setScope(value));
+      scopes.append(button);
+      return button;
+    });
+    this.scopeGroup = scopes;
+    head.append(titles, this.shortsButton, this.batchButton, scopes, lengths, close);
 
     const radar = this.el("section", "clip-radar");
     radar.setAttribute("aria-label", "Moment strength across the recording");
@@ -207,12 +290,15 @@ export class ClipBoard {
     this.previewVideo.playsInline = true;
     this.previewVideo.preload = "auto";
     this.previewVideo.addEventListener("timeupdate", () => this.trackPreview());
-    this.previewVideo.addEventListener("ended", () => this.stopPreview());
-    this.manualVideo = this.el("video", "clip-manual-video");
-    this.manualVideo.playsInline = true;
-    this.manualVideo.preload = "auto";
-    this.manualVideo.addEventListener("timeupdate", () => this.trackManual());
-    this.manualVideo.addEventListener("ended", () => this.stopManual());
+    this.previewVideo.addEventListener("ended", () => { if (!this.composed) this.stopPreview(); });
+    // Second recording (camera or screen) for cards composed from both sources.
+    this.stillVideoB = this.el("video");
+    this.stillVideoB.muted = true;
+    this.stillVideoB.preload = "auto";
+    this.stillVideoB.playsInline = true;
+    this.previewVideoB = this.el("video");
+    this.previewVideoB.playsInline = true;
+    this.previewVideoB.preload = "auto";
   }
 
   async open() {
@@ -225,10 +311,20 @@ export class ClipBoard {
     this.dialog.classList.toggle("vertical", this.aspect < 1);
     this.shortsButton.hidden = !(this.aspect > 1 && this.options.canMakeShorts?.());
     this.layout = this.aspect < 1 ? this.options.stillLayout?.() || null : null;
+    const editAvailable = Boolean(this.options.canUseEdit?.());
+    this.scopeGroup.hidden = !editAvailable;
+    if (!editAvailable) this.scope = "source";
+    else if (!this.scope || this.scopeProject !== project.id) this.scope = "edit";
+    this.scopeProject = project.id;
     const url = this.options.mediaUrl(project);
     if (this.stillVideo.dataset.src !== url) { this.stillVideo.src = url; this.stillVideo.dataset.src = url; }
     if (this.previewVideo.dataset.src !== url) { this.previewVideo.src = url; this.previewVideo.dataset.src = url; }
-    if (this.manualVideo.dataset.src !== url) { this.manualVideo.src = url; this.manualVideo.dataset.src = url; }
+    const urlB = this.options.mediaUrlB?.(project) || "";
+    for (const video of [this.stillVideoB, this.previewVideoB]) {
+      if (video.dataset.src === urlB) continue;
+      if (urlB) video.src = urlB; else video.removeAttribute("src");
+      video.dataset.src = urlB;
+    }
     this.handingOff = false;
     this.manualSelected = new Set();
     this.batchSupported = Boolean(this.options.canBatch?.());
@@ -245,12 +341,17 @@ export class ClipBoard {
 
   teardown() {
     this.stopPreview();
-    this.stopManual();
     this.stillQueue = [];
     this.request += 1;
     const handedOff = Boolean(this.handingOff);
     this.handingOff = false;
     this.options.onClose?.({ handedOff });
+  }
+
+  setScope(scope) {
+    if (scope === this.scope || this.batchRunning) return;
+    this.scope = scope;
+    this.load();
   }
 
   setLength(seconds) {
@@ -265,12 +366,13 @@ export class ClipBoard {
     const ticket = ++this.request;
     this.stopPreview();
     this.lengthButtons.forEach(button => button.setAttribute("aria-pressed", String(Number(button.dataset.length) === this.length)));
-    const key = `${project.id}:${project.revision}:${this.length}`;
+    this.scopeButtons.forEach(button => button.setAttribute("aria-pressed", String(button.dataset.scope === this.scope)));
+    const key = `${project.id}:${project.revision}:${this.scope}:${this.length}`;
     let board = this.cache.get(key);
     if (!board) {
       this.renderLoading();
       try {
-        const payload = await this.options.api(`/api/projects/${encodeURIComponent(project.id)}/clip-board?length=${this.length}`);
+        const payload = await this.options.api(`/api/projects/${encodeURIComponent(project.id)}/clip-board?length=${this.length}&scope=${this.scope}`);
         board = payload.board;
         this.cache.set(key, board);
       } catch (error) {
@@ -318,6 +420,9 @@ export class ClipBoard {
     if (!this.thumbPanel) return;
     this.thumbPanel.hidden = !clips.length;
     const row = this.el("div", "clip-thumbs-row");
+    // Full source frames: an edit-clock moment uses its source-A second.
+    clips = clips.map(clip => clip.clock === "edit" ? (clip.source_peak != null ? { ...clip, peak: clip.source_peak, start: clip.source_start } : null) : clip).filter(Boolean);
+    this.thumbPanel.hidden = !clips.length;
     for (const clip of clips) {
       const figure = this.el("figure", "clip-thumb");
       const canvas = this.el("canvas");
@@ -364,7 +469,10 @@ export class ClipBoard {
     }
     const clips = Array.isArray(board.clips) ? board.clips : [];
     const source = this.options.getProject()?.sources?.A;
-    this.summary.textContent = `${clips.length} ${clips.length === 1 ? "clip" : "clips"} from ${formatClock(board.source_duration)} of footage. ${boardSummary(board)}`;
+    const noun = `${clips.length} ${clips.length === 1 ? "clip" : "clips"}`;
+    this.summary.textContent = board.scope === "edit"
+      ? `${noun} from your ${formatClock(board.source_duration)} edit, shown in your layout. ${boardSummary(board)}`
+      : `${noun} from ${formatClock(board.source_duration)} of footage. ${boardSummary(board)}`;
     if (source?.name) this.summary.title = source.name;
     this.status.hidden = true;
     this.renderRadar(board, clips);
@@ -504,7 +612,8 @@ export class ClipBoard {
         : "This moment is not in your current edit. Preview it here, or restore that part of the timeline to open it."));
     }
     node.append(media, body);
-    this.cards.set(clip.id, { node, canvas, play, progress, media, clip });
+    const composition = range ? this.options.composition?.(clip, range) || null : null;
+    this.cards.set(clip.id, { node, canvas, play, progress, media, clip, composition });
     return node;
   }
 
@@ -621,6 +730,7 @@ export class ClipBoard {
     if (!id) return;
     const card = typeof id === "string" ? this.cards.get(id) : id;
     if (!card) { this.drawNextStill(ticket); return; }
+    if (card.composition) { this.drawComposedStill(card, ticket); return; }
     const video = this.stillVideo;
     let settled = false;
     const done = () => {
@@ -647,6 +757,40 @@ export class ClipBoard {
     if (video.readyState >= 1) seek(); else video.addEventListener("loadedmetadata", seek, { once: true });
   }
 
+  // Seek both recordings to the clip's peak and paint the layout the edit uses there.
+  drawComposedStill(card, ticket) {
+    const offset = Math.max(0, Math.min(Number(card.clip.end) - Number(card.clip.start) - .05,
+      (Number(card.clip.peak) || Number(card.clip.start)) - Number(card.clip.start)));
+    const frame = card.composition.at(offset);
+    const videos = { A: this.stillVideo, B: this.stillVideoB };
+    const pending = ["A", "B"].filter(slot => frame[slot] != null);
+    let settled = false, remaining = pending.length;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (ticket === this.stillTicket) {
+        const context = card.canvas.getContext("2d");
+        try {
+          if (frame.camera === "embedded_stack" && this.layout) this.paint(card.canvas, videos.A);
+          else if (context) paintLayout(context, videos, frame.camera, card.composition.mixer, card.canvas.width, card.canvas.height);
+        } catch { /* unreadable frame */ }
+      }
+      card.node.classList.add("has-still");
+      this.drawNextStill(ticket);
+    };
+    const timer = setTimeout(finish, 4000);
+    if (!remaining) { finish(); return; }
+    for (const slot of pending) {
+      const video = videos[slot];
+      const onSeeked = () => { video.removeEventListener("error", onSeeked); if (--remaining <= 0) finish(); };
+      video.addEventListener("seeked", onSeeked, { once: true });
+      video.addEventListener("error", onSeeked, { once: true });
+      const seek = () => { try { video.currentTime = Math.max(0, frame[slot]); } catch { onSeeked(); } };
+      if (video.readyState >= 1) seek(); else video.addEventListener("loadedmetadata", seek, { once: true });
+    }
+  }
+
   paint(canvas, video) {
     const context = canvas.getContext("2d");
     const width = video.videoWidth, height = video.videoHeight;
@@ -667,21 +811,25 @@ export class ClipBoard {
 
   togglePreview(clip) {
     if (this.playing?.clip.id === clip.id) {
-      if (this.previewVideo.paused) this.previewVideo.play().catch(() => {});
+      if (this.composed) this.setComposedPaused(!this.composed.paused);
+      else if (this.previewVideo.paused) this.previewVideo.play().catch(() => {});
       else this.previewVideo.pause();
       this.syncPlayButton();
       return;
     }
     this.stopPreview();
-    this.stopManual();
     const card = this.cards.get(clip.id);
     if (!card) return;
     this.options.pauseEditor?.();
     this.playing = card;
     card.node.classList.add("playing");
     card.media.insertBefore(this.previewVideo, card.media.firstChild.nextSibling);
-    // With a camera stack, play through the card canvas so the preview keeps that framing.
-    this.previewVideo.classList.toggle("composited", Boolean(this.layout));
+    // With a camera stack or a two-source layout, play through the card
+    // canvas so the preview keeps the framing that Export renders.
+    const composition = card.composition;
+    this.previewVideo.classList.toggle("composited", Boolean(this.layout || composition));
+    if (composition) { this.playComposed(card); return; }
+    this.previewVideo.muted = false;
     if (this.layout) {
       const draw = () => {
         if (this.playing !== card) return;
@@ -699,9 +847,58 @@ export class ClipBoard {
     this.previewVideo.onplay = this.previewVideo.onpause = () => this.syncPlayButton();
   }
 
+  // A composed preview follows the edit clock: each frame it asks where A and
+  // B are in the edit (cuts included) and paints the layout used there.
+  playComposed(card) {
+    const { composition, clip } = card;
+    const duration = Math.max(.1, Number(clip.end) - Number(clip.start));
+    const audioSlot = composition.mixer?.audioSlot === "B" ? "B" : "A";
+    this.previewVideo.muted = audioSlot !== "A";
+    this.previewVideoB.muted = audioSlot !== "B";
+    const clock = this.composed = { offset: 0, startedAt: performance.now(), paused: false };
+    const now = () => clock.paused ? clock.offset : clock.offset + (performance.now() - clock.startedAt) / 1000;
+    const videos = { A: this.previewVideo, B: this.previewVideoB };
+    const draw = () => {
+      if (this.playing !== card || this.composed !== clock) return;
+      const offset = now();
+      if (offset >= duration - .04) { this.stopPreview(); return; }
+      const frame = composition.at(offset);
+      for (const slot of ["A", "B"]) {
+        const video = videos[slot], target = frame[slot];
+        if (target == null) { if (!video.paused) video.pause(); continue; }
+        if (video.readyState >= 1 && Math.abs(video.currentTime - target) > .35) { try { video.currentTime = target; } catch { /* pending */ } }
+        if (clock.paused) { if (!video.paused) video.pause(); } else if (video.paused && video.getAttribute("src")) video.play().catch(() => {});
+      }
+      const context = card.canvas.getContext("2d");
+      if (context && (frame.A == null || videos.A.readyState >= 2)) {
+        try {
+          if (frame.camera === "embedded_stack" && this.layout) this.paint(card.canvas, videos.A);
+          else paintLayout(context, videos, frame.camera, composition.mixer, card.canvas.width, card.canvas.height);
+        } catch { /* unreadable frame */ }
+      }
+      card.progress.style.setProperty("--progress", `${Math.max(0, Math.min(100, (100 * offset) / duration))}%`);
+      this.frame = requestAnimationFrame(draw);
+    };
+    this.frame = requestAnimationFrame(draw);
+    this.syncPlayButton();
+  }
+
+  setComposedPaused(paused) {
+    const clock = this.composed;
+    if (!clock || clock.paused === paused) return;
+    if (paused) {
+      clock.offset += (performance.now() - clock.startedAt) / 1000;
+      this.previewVideo.pause();
+      this.previewVideoB.pause();
+    } else {
+      clock.startedAt = performance.now();
+    }
+    clock.paused = paused;
+  }
+
   trackPreview() {
     const card = this.playing;
-    if (!card) return;
+    if (!card || this.composed) return;
     const { start, end } = card.clip;
     const time = this.previewVideo.currentTime;
     card.progress.style.setProperty("--progress", `${Math.max(0, Math.min(100, (100 * (time - start)) / Math.max(0.1, end - start)))}%`);
@@ -711,9 +908,14 @@ export class ClipBoard {
   syncPlayButton() {
     const card = this.playing;
     if (!card) return;
-    const paused = this.previewVideo.paused;
-    card.play.replaceChildren(icon(this.doc, paused ? "play" : "pause", true));
-    card.play.setAttribute("aria-label", `${paused ? "Resume" : "Pause"} clip ${card.clip.rank}`);
+    const paused = this.composed ? this.composed.paused : this.previewVideo.paused;
+    if (card.manual) {
+      card.play.textContent = paused ? "Play" : "Pause";
+      card.play.setAttribute("aria-label", `${paused ? "Resume" : "Pause"} ${card.row.name}`);
+    } else {
+      card.play.replaceChildren(icon(this.doc, paused ? "play" : "pause", true));
+      card.play.setAttribute("aria-label", `${paused ? "Resume" : "Pause"} clip ${card.clip.rank}`);
+    }
     card.node.classList.toggle("paused", paused);
   }
 
@@ -721,15 +923,23 @@ export class ClipBoard {
     const card = this.playing;
     if (!this.previewVideo) return;
     if (this.frame) { cancelAnimationFrame(this.frame); this.frame = null; }
+    this.composed = null;
     this.previewVideo.pause();
+    this.previewVideoB?.pause();
     this.previewVideo.onplay = this.previewVideo.onpause = null;
     this.previewVideo.remove();
     if (!card) return;
     this.playing = null;
     card.node.classList.remove("playing", "paused");
     card.progress.style.removeProperty("--progress");
-    card.play.replaceChildren(icon(this.doc, "play", true));
-    card.play.setAttribute("aria-label", `Preview clip ${card.clip.rank}`);
+    if (card.manual) {
+      card.media.hidden = true;
+      card.play.textContent = "Play";
+      card.play.setAttribute("aria-label", `Play ${card.row.name}`);
+    } else {
+      card.play.replaceChildren(icon(this.doc, "play", true));
+      card.play.setAttribute("aria-label", `Preview clip ${card.clip.rank}`);
+    }
   }
 
   syncBatchButton() {
@@ -743,7 +953,7 @@ export class ClipBoard {
   setBusy(busy) {
     this.batchRunning = busy;
     this.dialog.classList.toggle("batch-running", busy);
-    this.lengthButtons.forEach(button => { button.disabled = busy; });
+    [...this.lengthButtons, ...this.scopeButtons].forEach(button => { button.disabled = busy; });
     this.grid.querySelectorAll(".clip-actions button, .clip-pick input").forEach(control => { control.disabled = busy; });
     if (busy) this.manualPanel?.querySelectorAll("button, input").forEach(control => { control.disabled = true; });
     else this.renderManual();
@@ -759,7 +969,6 @@ export class ClipBoard {
     const clips = items || [...this.selectedManualItems(), ...(this.board?.clips || []).filter(clip => this.selected?.has(clip.id))];
     if (!clips.length || this.batchRunning) return;
     this.stopPreview();
-    this.stopManual();
     this.batchStopped = false;
     this.setBusy(true);
     const line = this.el("p", "clip-batch-line", `Preparing ${clips.length} ${clips.length === 1 ? "clip" : "clips"}…`);
@@ -835,7 +1044,7 @@ export class ClipBoard {
   renderManual() {
     const panel = this.manualPanel;
     if (!panel) return;
-    this.stopManual();
+    if (this.playing?.manual) this.stopPreview();
     const project = this.options.getProject();
     const rows = manualClipRows(project?.manual_clips);
     const head = this.el("div", "clip-radar-head");
@@ -900,7 +1109,10 @@ export class ClipBoard {
 
     const media = this.el("div", "clip-manual-media");
     const progress = this.el("span", "clip-progress");
-    media.append(progress);
+    const canvas = this.el("canvas");
+    canvas.width = this.aspect < 1 ? 270 : 384;
+    canvas.height = Math.round(canvas.width / this.aspect);
+    media.append(canvas, progress);
     media.hidden = true;
 
     const actions = this.el("div", "clip-actions");
@@ -911,15 +1123,15 @@ export class ClipBoard {
       actions.append(control);
       return control;
     };
-    const play = button("Play", () => this.toggleManual(row, node, media, progress, play));
-    play.disabled = row.status === "outside" || !this.options.manualPieces;
+    const play = button("Play", () => this.toggleManual({ row, node, media, canvas, progress, play }));
+    play.disabled = row.status === "outside" || !this.options.composition;
     play.setAttribute("aria-label", `Play ${row.name}`);
     const exportButton = button("Export clip", () => { const item = this.freshItem({ manual: true, id: row.id }); if (item) this.runBatch([item]); },
       ready ? "button primary compact" : "button ghost compact");
     exportButton.disabled = !ready || !this.batchSupported;
     if (!this.batchSupported) exportButton.title = "Open the edited timeline to export clips.";
     if (!ready) exportButton.title = manualStatusText(row.status);
-    if (this.options.showManual) button("Show on timeline", () => { this.stopManual(); this.handingOff = true; this.close(); this.options.showManual(row); });
+    if (this.options.showManual) button("Show on timeline", () => { this.stopPreview(); this.handingOff = true; this.close(); this.options.showManual(row); });
     if (row.status === "changed") {
       button("Keep as is", async () => {
         try { await this.writeManual({ action: "accept", id: row.id }); }
@@ -943,64 +1155,23 @@ export class ClipBoard {
     if (this.dialog?.open) this.renderManual();
   }
 
-  // Quick preview of a saved range: plays the recording pieces the edit shows
-  // there, inside the card, without moving the editor playhead.
-  toggleManual(row, node, media, progress, play) {
-    const video = this.manualVideo;
-    if (this.manualPlaying?.row.id === row.id) {
-      if (video.paused) video.play().catch(() => this.stopManual()); else video.pause();
-      play.textContent = video.paused ? "Play" : "Pause";
+  // Use the same edited-layout player as suggested clips; the editor playhead stays put.
+  toggleManual(card) {
+    if (this.playing?.manual && this.playing.row.id === card.row.id) {
+      this.setComposedPaused(!this.composed?.paused);
+      this.syncPlayButton();
       return;
     }
     this.stopPreview();
-    this.stopManual();
-    const { start, end } = manualClipTimes(row);
-    const pieces = this.options.manualPieces?.(row) || [];
-    if (!pieces.length) { this.options.notify?.("This range has no footage to preview."); return; }
+    const { start, end } = manualClipTimes(card.row);
+    const clip = { clock: "edit", start, end };
+    const composition = this.options.composition?.(clip, { start, end });
+    if (!composition) { this.options.notify?.("This range has no footage to preview."); return; }
     this.options.pauseEditor?.();
-    this.manualPlaying = { row, node, media, progress, play, pieces, index: 0, start, end };
-    media.hidden = false;
-    media.insertBefore(video, media.firstChild);
-    node.classList.add("playing");
-    play.textContent = "Pause";
-    const begin = () => {
-      if (this.manualPlaying?.row.id !== row.id) return;
-      try { video.currentTime = pieces[0].from; } catch { /* metadata pending */ }
-      video.play().catch(() => this.stopManual());
-    };
-    if (video.readyState >= 1) begin(); else video.addEventListener("loadedmetadata", begin, { once: true });
-    video.onplay = video.onpause = () => { if (this.manualPlaying) this.manualPlaying.play.textContent = video.paused ? "Play" : "Pause"; };
-  }
-
-  trackManual() {
-    const state = this.manualPlaying;
-    if (!state) return;
-    const video = this.manualVideo, piece = state.pieces[state.index];
-    if (!piece) { this.stopManual(); return; }
-    const time = video.currentTime;
-    const editTime = piece.start + Math.max(0, time - piece.from);
-    state.progress.style.setProperty("--progress", `${Math.max(0, Math.min(100, (100 * (editTime - state.start)) / Math.max(0.1, state.end - state.start)))}%`);
-    if (time >= piece.to - 0.04) {
-      state.index += 1;
-      const next = state.pieces[state.index];
-      if (!next) { this.stopManual(); return; }
-      try { video.currentTime = next.from; } catch { this.stopManual(); }
-    }
-  }
-
-  stopManual() {
-    const state = this.manualPlaying;
-    const video = this.manualVideo;
-    if (!video) return;
-    video.pause();
-    video.onplay = video.onpause = null;
-    video.remove();
-    if (!state) return;
-    this.manualPlaying = null;
-    state.node.classList.remove("playing");
-    state.media.hidden = true;
-    state.progress.style.removeProperty("--progress");
-    state.play.textContent = "Play";
+    const active = this.playing = { ...card, manual: true, clip, composition };
+    active.media.hidden = false;
+    active.node.classList.add("playing");
+    this.playComposed(active);
   }
 
   async place(clip) {

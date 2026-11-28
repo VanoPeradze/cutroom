@@ -685,10 +685,11 @@ def test_two_source_preview_uses_roles_and_matches_export_order_in_rtl():
     assert '[dir="rtl"] .preview-stage.layout-pip' not in CSS
 
 
-def test_stale_caption_export_has_a_localized_rebuild_message():
+def test_stale_caption_export_refreshes_captions_then_explains_failures():
     assert "function friendlyRenderError" in APP
     assert 'value === "captions_out_of_date"' in APP
-    assert "בנו את ה־Draft מחדש" in APP
+    assert 'error?.code !== "captions_out_of_date"' in APP and "/caption-refresh" in APP
+    assert "ולא ניתן היה לעדכן אותן אוטומטית" in APP
 
 
 def test_studio_is_task_oriented_and_caption_controls_are_real_settings():

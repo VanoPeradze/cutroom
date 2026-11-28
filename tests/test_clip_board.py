@@ -93,3 +93,40 @@ def test_board_clips_carry_content_scores_only_with_a_transcript():
     segments = [{"start": 104.0, "end": 108.0, "text": "No way, did you see that!"}]
     assert build_clip_board(_project(segments=segments), length=30, count=1)["clips"][0]["content"]["hook"]["score"] > 30
     assert build_clip_board(_project(), length=30, count=1)["clips"][0]["content"] is None
+
+
+def _edited(project):
+    # The edit shows source A 100-130 s (the loud part) at 0-30 s, then A 10-40 s at 30-60 s.
+    project["draft"] = {"source_duration": 300.0, "keep_ranges": [{"start": 0.0, "end": 300.0}], "cuts": [],
+                        "camera_plan": [{"start": 0.0, "end": 300.0, "camera": "A"}]}
+    project["settings"] = {"fps": 30}
+    project["manual"] = {"sequence": {"version": 1, "duration": 60.0,
+                                      "camera_plan": [{"start": 0.0, "end": 60.0, "camera": "stacked"}]},
+                         "source_tracks": {"A": [{"id": "A:loud", "start": 0.0, "end": 30.0, "source_start": 100.0},
+                                                 {"id": "A:calm", "start": 30.0, "end": 60.0, "source_start": 10.0}]}}
+    return project
+
+
+def test_edit_scope_ranks_moments_on_the_edit_clock():
+    segments = [{"start": 104.0, "end": 108.0, "text": "No way, did you see that!"}]
+    project = _edited(_project(segments=segments))
+    before = copy.deepcopy(project)
+    board = build_clip_board(project, length=15, count=3, scope="edit")
+    assert project == before
+    assert board["available"] and board["scope"] == "edit" and board["source_clock"] == "edit"
+    assert board["source_duration"] == pytest.approx(60.0)
+    top = board["clips"][0]
+    assert top["clock"] == "edit" and 0.0 <= top["start"] < top["end"] <= 30.0
+    assert top["hook"] == "No way, did you see that!"
+    # Source-A seconds of the same moment, for the posting kit and thumbnails.
+    assert 100.0 <= top["source_start"] < top["source_end"] <= 130.0
+    assert 100.0 <= top["source_peak"] <= 130.0
+    assert all(clip["end"] <= 60.0 + 1e-6 for clip in board["clips"])
+    # The default scope is unchanged: moments across the whole recording.
+    assert build_clip_board(project, length=15, count=3)["source_clock"] == "A"
+
+
+def test_edit_scope_needs_an_edit_and_a_known_scope():
+    assert build_clip_board(_project(), length=15, scope="edit")["reason"] == "no_edit"
+    with pytest.raises(ClipBoardError):
+        build_clip_board(_project(), length=15, scope="timeline")

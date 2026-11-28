@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased - 2026-11-28 - Clips follow your layout
+
+- **Clips → My edit** (the default once there is an edit) finds moments in the finished timeline instead of the raw main recording. Cards, previews and exports show the arranged layout: stacked, side by side, picture in picture or one source, using both recordings and their placement on the timeline. **Whole recording** keeps the previous search across all of source A.
+- A Clips export checks layout coverage only inside its own range, so a clip is no longer blocked by a missing camera section elsewhere in the edit.
+- When captions were built from a different sound than the edit plays (for example the screen recording's audio while the edit uses the camera mic), Export now transcribes the selected sound locally, updates the captions and continues. Cuts, layout and the timeline are not changed; no Draft rebuild is needed.
+
 ## Unreleased - 2026-11-27 - Save your own clips while watching
 
 - **Add to Clips** beside the player saves the In/Out range marked on the **Edited video** timeline. It does not cut the timeline, open a window or move the playhead, so you keep watching from the same point and can mark the next range.

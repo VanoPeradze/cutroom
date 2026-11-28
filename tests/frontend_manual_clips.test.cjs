@@ -90,10 +90,9 @@ function batch(results){
     exportRequiresDraftRebuild:()=>false,requireResolvedExplicitDrafts:()=>true,requireSavedTranscript:()=>true,pauseAllMedia(){},
     acquireJobStartLock:()=>({}),releaseJobStartLock(){},setActiveJob(){},clearActiveJob(){},friendlyRenderError:m=>m,t:x=>x,setTimeout:f=>f(),
     clipTimelineRange:()=>null,completeExportJob:async()=>{s.project={...s.project,revision:s.project.revision+1};},
-    api:async(url,opts)=>{
-      if(url.endsWith('/render')){const body=JSON.parse(opts.body);bodies.push(body);const r=results[n++];
-        if(r instanceof Error)throw r;return{job:{id:'j'+n,status:r,result:{url:'/x'+n,export:{name:'n'+n}}}};}
-      return{job:{status:'completed'}};}});
+    postRender:async(_projectId,body)=>{bodies.push(body);const r=results[n++];
+      if(r instanceof Error)throw r;return{job:{id:'j'+n,status:r,result:{url:'/x'+n,export:{name:'n'+n}}}};},
+    api:async()=>({job:{status:'completed'}})});
   vm.runInContext(batchSrc,c);return{c,s,bodies};
 }
 test('manual clips export their exact frames with their id; one failure does not stop the queue',async()=>{
