@@ -1,13 +1,13 @@
 {
-  "bytes": 16463694,
-  "sha256": "324710fd470908943c62b96c198e68dda82fad3ce6cdabe901cd6df2775412bd",
-  "manifest_sha256": "42cf9c9dd84e594904083bb2af8fd8a00af618ccd04d679e46ba11fa22a76e63",
-  "build_id": "CUTROOM-1.3-beta-mac-20261128-064011",
-  "filename": "CUTROOM-1.3-Beta-combined-e9b6997.zip",
-  "url": "https://cutroom-studio--xk2tlfb7jk.expo.app/downloads/CUTROOM-1.3-Beta-combined-e9b6997.zip",
+  "bytes": 16536948,
+  "sha256": "24a79fa7966a786af0ae4f0b0cc3b885439d527685b56ad2f43b68f97baef51d",
+  "manifest_sha256": "94fb5a9592e7bb349608a5bae0e8ab2c22a9531410d8a9bf79d457b05760703f",
+  "build_id": "CUTROOM-1.3-beta-mac-20261128-120255",
+  "filename": "CUTROOM-1.3-Beta-combined-cdbf6a8.zip",
+  "url": "https://cutroom-studio--cqs9n4qy04.expo.app/downloads/CUTROOM-1.3-Beta-combined-cdbf6a8.zip",
   "mirrors": [],
   "version": "1.3-beta",
-  "source_commit": "e9b69978661fbb3705daeb6770c68b4f0df0812d",
-  "note": "PR 138 source candidate built from a clean git archive; package and immutable staging readback verified. Native Mac qualification pending.",
+  "source_commit": "cdbf6a8bc46b9979f3c1dcbcb20f4d3044c51318",
+  "note": "Combined Clips candidate (PRs 137 and 139) from a clean source archive. Immutable staging readback matches; native package qualification pending.",
   "layout": "windows-mac-folders-v1"
 }
