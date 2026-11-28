@@ -107,6 +107,7 @@ SOURCE_TRACK_EDIT_FIELDS = {
 }
 JSON_BODY_ENDPOINTS = {
     "clip_posting_kit",
+    "caption_translation",
     "review_ai_draft",
     "retained_edit_resume",
     "create_project_copy",
