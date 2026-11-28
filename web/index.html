@@ -42,7 +42,7 @@
   <link rel="stylesheet" href="/assets/tooltips.css?v=20261128-tips1">
   <link rel="stylesheet" href="/assets/a11y.css?v=20261128-a11y1">
   <link rel="stylesheet" href="/assets/caption-styles.css?v=20261128-wordstyles1">
-  <link rel="stylesheet" href="/assets/cleanup.css?v=20261128-hook1">
+  <link rel="stylesheet" href="/assets/cleanup.css?v=20261128-sfx1">
   <link rel="stylesheet" href="/assets/edit-panel.css?v=20261127-editgroups1">
 </head>
 <body class="welcome-mode">
@@ -463,6 +463,7 @@
           <section id="studioShelfMedia" data-shelf="media timeline audio" aria-label="Project media">
             <header class="shelf-heading"><h3>Project media</h3><span>Footage &amp; sound</span></header>
             <div class="source-library" id="studioSourceLibrary"></div>
+            <details class="sfx-library" id="sfxLibrary"><summary>Sound effects</summary><p class="sfx-note">Original Cutroom sounds, free to use in any video. Add one to the project media, then drag it to the timeline.</p><ul class="sfx-list" aria-label="Sound effects"></ul></details>
           </section>
           <section id="studioShelfCaptions" data-shelf="transcript" aria-label="Text and caption library" hidden><header class="shelf-heading"><h3>Text &amp; captions</h3><span>Your edit, in words</span></header></section>
           <section id="studioShelfOutput" data-shelf="settings" aria-label="Output frame" hidden><header class="shelf-heading"><h3>Output frame</h3><span>Preview &amp; export</span></header><p class="shelf-help">Choose the shape of your finished video. Your edits stay in place.</p></section>
@@ -1101,7 +1102,7 @@
       <footer class="connection-actions"><button class="button ghost" id="forgetCloudKey" type="button">Forget session key</button><button class="button primary" id="saveAIConnection" type="submit">Use this connection</button></footer>
     </form>
   </dialog>
-  <script type="module" src="/assets/app.js?v=20261117-transcript-sections1-console1-firstrecording1-mixer1-range2-export1-markers1-roll1-slide1-take1-ow1-sourceview1-lift1-opacity1-markrange1-groupsplit1-join1-titleclock1-ripplechapter1-matchseam1-editorflow1-sourcedrag1-frame1-handoff1-manualtranscript1-clips10-precision2-flow1-stylefamilies1-wordstyles1-cleanup1-autozoom1-hook1"></script>
+  <script type="module" src="/assets/app.js?v=20261117-transcript-sections1-console1-firstrecording1-mixer1-range2-export1-markers1-roll1-slide1-take1-ow1-sourceview1-lift1-opacity1-markrange1-groupsplit1-join1-titleclock1-ripplechapter1-matchseam1-editorflow1-sourcedrag1-frame1-handoff1-manualtranscript1-clips10-precision2-flow1-stylefamilies1-wordstyles1-cleanup1-autozoom1-hook1-sfx1"></script>
   <script src="/assets/studio-screens.js?v=20261119-output1" defer></script>
   <script type="module" src="/assets/studio-workbench.js?v=20261116-ai-pane2"></script>
   <script type="module" src="/assets/studio-console.js?v=20261117-console1"></script>
@@ -1112,5 +1113,6 @@
   <script type="module" src="/assets/tooltips.js?v=20261128-tips1"></script>
   <script type="module" src="/assets/cleanup.js?v=20261128-cleanup1"></script>
   <script type="module" src="/assets/hook.js?v=20261128-hook1"></script>
+  <script type="module" src="/assets/sfx.js?v=20261128-sfx1"></script>
 </body>
 </html>

@@ -33,3 +33,13 @@
 .hook-text time { grid-row: span 2; color: var(--text-3); font-variant-numeric: tabular-nums; }
 .hook-text span { white-space: normal; }
 .hook-text small { color: var(--text-3); font-size: var(--fs-12); }
+/* Sound effects library in the media shelf. */
+.sfx-library { margin-top: var(--space-4); border-top: 1px solid var(--line); padding-top: var(--space-2); font-size: var(--fs-13); }
+.sfx-library > summary { min-height: 32px; display: flex; align-items: center; cursor: pointer; font-weight: 600; color: var(--text-1); }
+.sfx-note { margin: 0 0 var(--space-2); color: var(--text-3); font-size: var(--fs-12); line-height: var(--leading-ui); }
+.sfx-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-1); }
+.sfx-list li { display: flex; align-items: center; gap: var(--space-2); min-height: 40px; padding: var(--space-1) var(--space-2); border-radius: var(--radius-m); background: var(--surface-well); }
+.sfx-text { flex: 1; min-width: 0; display: grid; }
+.sfx-text b { font-weight: 600; }
+.sfx-text small { color: var(--text-3); font-size: var(--fs-12); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sfx-list button { min-height: 32px; padding: 0 var(--space-2); border-radius: var(--radius-m); }

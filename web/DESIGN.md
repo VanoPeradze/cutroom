@@ -49,6 +49,10 @@ Edit > Cut > Clean up… (also in the command palette) reads the edit's own capt
 - Edit > Cut > Opener… ranks the edit's sentences (numbers, key words, questions, exclamations, talking to the viewer; each result says why) and copies the chosen one to the start as a cold open with `sequence_duplicate_range` (one Undo step; the original stays in place).
 - Color & motion > Auto zoom on key words adds a short punch-in (ease in 0.25 s, hold 1 s at 115%, ease out) on numbers, long content words and exclamations, at least 4 s apart, within the 32-keyframe limit and never over existing keyframes. Each punch is four ordinary keyframes the user can delete.
 
+### Sound effects (28 November)
+
+Media shelf > Sound effects lists seven original sounds (whoosh, swipe, pop, click, ding, hit, riser) synthesized by `scripts/generate_sfx.py` with fixed seeds, so they are Cutroom's own and rebuild byte for byte. Play previews; Add imports the sound into the project media through the normal import, where it is placed and mixed like any audio.
+
 ## Composition
 
 The application launcher presents three real starting actions as compact rows beside the welcome statement, followed by recent projects and optional AI setup. It is not a second marketing landing page.

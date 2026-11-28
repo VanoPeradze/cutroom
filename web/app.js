@@ -13394,4 +13394,5 @@ if (typeof window !== "undefined") window.cutroomCleanupHost = Object.freeze({
   },
   apply: (ranges) => applyManualEdit("sequence_ripple_delete_ranges", { ranges }),
   opener: (start, end) => applyManualEdit("sequence_duplicate_range", { start, end, to: 0 }),
+  importFiles: (files) => state.mediaStudio?.uploadFiles(files),
 });

@@ -1,0 +1,55 @@
+{
+ "version": 1,
+ "license": "Original Cutroom sounds, free to use in any video.",
+ "sounds": [
+  {
+   "id": "whoosh",
+   "name": "Whoosh",
+   "use": "Transitions and fast moves",
+   "file": "whoosh.wav",
+   "seconds": 0.7
+  },
+  {
+   "id": "swipe",
+   "name": "Swipe",
+   "use": "Quick cuts and slides",
+   "file": "swipe.wav",
+   "seconds": 0.32
+  },
+  {
+   "id": "pop",
+   "name": "Pop",
+   "use": "Text and emoji appearing",
+   "file": "pop.wav",
+   "seconds": 0.16
+  },
+  {
+   "id": "click",
+   "name": "Click",
+   "use": "Buttons, lists, small accents",
+   "file": "click.wav",
+   "seconds": 0.05
+  },
+  {
+   "id": "ding",
+   "name": "Ding",
+   "use": "A point made, a correct answer",
+   "file": "ding.wav",
+   "seconds": 1.2
+  },
+  {
+   "id": "hit",
+   "name": "Hit",
+   "use": "Impact on a key moment",
+   "file": "hit.wav",
+   "seconds": 0.9
+  },
+  {
+   "id": "riser",
+   "name": "Riser",
+   "use": "Build-up before a reveal",
+   "file": "riser.wav",
+   "seconds": 2.0
+  }
+ ]
+}
