@@ -136,6 +136,14 @@ when. Layouts that show A and B together put B on the track above A. Layers,
 captions, colour, zooms and the audio mix stay in CUTROOM and are named in a note
 inside the file, so nothing is silently dropped.
 
+## Supercut (keep only what matches)
+
+In the script's find bar, "Keep only these" keeps each sentence where the
+search is said (widened to the sentence by punctuation or a pause, at most 25
+words each way) with a little air around it, and removes everything else in
+one Undo step. Typed edits understand "keep only the parts about …",
+"supercut …" and "השאר רק את …".
+
 ## Composition
 
 The application launcher presents three real starting actions as compact rows beside the welcome statement, followed by recent projects and optional AI setup. It is not a second marketing landing page.

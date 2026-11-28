@@ -4,7 +4,7 @@
    imported image or video's file name matches what is said, it is offered as
    the shot and can be placed full frame for a few seconds in one Undo step.
    Everything runs on this computer; nothing is searched online. */
-import { normalizeWord } from './transcript-search.js?v=20261128-find1';
+import { normalizeWord } from './transcript-search.js?v=20261128-find2';
 
 const STOP = new Set(`about above after again against also always another because been before being below between both
 could didn't doesn't doing don't down during each even every everything few from further going gonna have having here

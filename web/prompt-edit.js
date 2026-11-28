@@ -7,7 +7,7 @@
 import { findCleanup, removalRanges } from './cleanup.js?v=20261128-cleanup1';
 import { rankHooks } from './hook.js?v=20261128-hook1';
 import { autoZoomKeyframes } from './color-motion.js?v=20261128-autozoom1';
-import { scriptParagraphs, selectionRange, findMatches, mergeRanges, parseTime } from './transcript-search.js?v=20261128-find1';
+import { scriptParagraphs, selectionRange, findMatches, mergeRanges, parseTime, sentenceSpan, keepOnlyRanges } from './transcript-search.js?v=20261128-find2';
 
 const REMOVE = /(?:^|\s)(?:remove|delete|cut|trim|drop|get rid of|take out|clean(?: up)?|הסר|תסיר|תסירי|להסיר|מחק|תמחק|תמחקי|למחוק|חתוך|תחתוך|תחתכי|לחתוך|הורד|תוריד|תורידי|להוריד|נקה|תנקה|תנקי|לנקות)(?=\s|$)/i;
 const FIND = /^(?:find|search(?: for)?|where (?:do i|did i|is|are)(?: say)?|show me|go to|jump to|חפש|תחפש|תחפשי|מצא|תמצא|תמצאי|איפה(?: אמרתי)?|עבור ל-?|תעבור ל-?|קפוץ ל-?|תקפוץ ל-?|לך ל-?)\s*/i;
@@ -25,6 +25,7 @@ const ZOOM = /zoom|punch.?in|זום/i;
 const QUOTE = /^["“”'‘’״׳](.+)["“”'‘’״׳]$/;
 const fmt = (t) => `${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, '0')}`;
 const total = (ranges) => ranges.reduce((s, r) => s + r.end - r.start, 0);
+const KEEP = /^(?:keep only|only keep|supercut(?: of)?|make a supercut of|just keep)\s+(?:the\s+)?(?:(?:parts?|sentences?|bits?|moments?)\s+(?:about|where (?:i|we|they) (?:say|mention|talk about)|with|that mention)\s+)?(.+)$|^(?:השאר|תשאיר|השאירו|תשאירו)\s+רק\s+(?:את\s+)?(?:(?:החלקים|המשפטים|הקטעים|הרגעים)\s+(?:על|עם|שמדברים על|שאומרים|שמוזכר בהם|שבהם)\s+)?(.+)$/i;
 const phraseOf = (text) => {
   const bare = text.replace(/^(?:the words?|every|all(?: the)?|each|את המילים|את המילה|המילה|כל ה-?|את כל ה-?|את)\s+/i, '').replace(/\s+(?:everywhere|from the video|מהסרטון|מכל הסרטון)$/i, '').trim();
   return (bare.match(QUOTE)?.[1] ?? bare).trim();
@@ -39,6 +40,18 @@ export function planPrompt(prompt, project) {
   const captions = project?.editor_captions || [];
   const duration = Number(project?.editor_sequence?.duration);
   if (!text) return { kind: 'none', summary: '' };
+  const keep = text.match(KEEP);
+  if (keep) {
+    const query = phraseOf((keep[1] ?? keep[2] ?? '').trim());
+    if (!query) return { kind: 'none', summary: 'Say what to keep, for example: keep only the parts about pricing.' };
+    const words = scriptParagraphs(captions).flatMap((p) => p.words);
+    const matches = findMatches(words, query);
+    if (!matches.length) return { kind: 'none', summary: `“${query}” isn't in the transcript.` };
+    const ranges = keepOnlyRanges(words, matches.map(([lo, hi]) => sentenceSpan(words, lo, hi)), Number.isFinite(duration) ? duration : words.at(-1).end);
+    if (!ranges.length) return { kind: 'none', summary: 'Nothing else to remove.' };
+    const left = (Number.isFinite(duration) ? duration : words.at(-1).end) - total(ranges);
+    return { kind: 'remove', ranges, query, summary: `Supercut: keep the ${matches.length === 1 ? 'sentence' : `${matches.length} sentences`} with “${query}” and remove the rest (${left.toFixed(1)} s left).` };
+  }
   const removing = REMOVE.test(text);
 
   const range = text.match(RANGE);
@@ -108,7 +121,7 @@ export function planPrompt(prompt, project) {
   return { kind: 'none', summary: "Not sure what to do. Try one of the examples below." };
 }
 
-const EXAMPLES = ['Remove the long pauses', 'Remove um and uh', 'Cut from 0:05 to 0:08', 'Delete every “basically”', 'Find pricing', 'Add an opener', 'Zoom on key words', 'תסיר את השתיקות'];
+const EXAMPLES = ['Remove the long pauses', 'Remove um and uh', 'Cut from 0:05 to 0:08', 'Delete every “basically”', 'Find pricing', 'Add an opener', 'Zoom on key words', 'Keep only the parts about pricing', 'תסיר את השתיקות'];
 
 export function initPromptEdit(doc = document) {
   const button = doc.getElementById('promptEditButton');

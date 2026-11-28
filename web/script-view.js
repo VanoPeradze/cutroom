@@ -7,7 +7,7 @@
    in one Undo step. Hebrew and other right-to-left text flows in
    its own direction per paragraph. */
 
-import { scriptParagraphs, selectionRange, findMatches, mergeRanges } from './transcript-search.js?v=20261128-find1';
+import { scriptParagraphs, selectionRange, findMatches, mergeRanges, sentenceSpan, keepOnlyRanges } from './transcript-search.js?v=20261128-find2';
 
 export { scriptParagraphs, selectionRange, findMatches };
 
@@ -20,7 +20,7 @@ export function initScriptView(doc = document) {
   panel.setAttribute('aria-labelledby', 'scriptViewTitle');
   panel.innerHTML = `
     <header><h2 id="scriptViewTitle">Script</h2><span class="script-hint">Click a word to jump. Select words and press Delete to cut them.</span><button type="button" class="script-close" aria-label="Close script">×</button></header>
-    <div class="script-find" role="search"><input type="search" class="script-find-input" placeholder="Find in video" aria-label="Find words in the video" dir="auto"><span class="script-find-count" aria-live="polite"></span><button type="button" class="script-find-prev" aria-label="Previous match" disabled>↑</button><button type="button" class="script-find-next" aria-label="Next match" disabled>↓</button><button type="button" class="script-find-remove" hidden>Remove all</button></div>
+    <div class="script-find" role="search"><input type="search" class="script-find-input" placeholder="Find in video" aria-label="Find words in the video" dir="auto"><span class="script-find-count" aria-live="polite"></span><button type="button" class="script-find-prev" aria-label="Previous match" disabled>↑</button><button type="button" class="script-find-next" aria-label="Next match" disabled>↓</button><button type="button" class="script-find-remove" hidden>Remove all</button><button type="button" class="script-find-keep" hidden title="Supercut: keep only the sentences where this is said and remove the rest, in one Undo step">Keep only these</button></div>
     <div class="script-body" tabindex="0" role="textbox" aria-readonly="true" aria-multiline="true" aria-label="Edit script"></div>
     <footer><span class="script-status" aria-live="polite"></span><button type="button" class="script-undo" hidden>Undo</button><button type="button" class="script-remove" disabled>Remove selection</button></footer>`;
   doc.body.append(panel);
@@ -28,7 +28,7 @@ export function initScriptView(doc = document) {
   const remove = panel.querySelector('.script-remove'), undo = panel.querySelector('.script-undo');
   const host = () => doc.defaultView.cutroomCleanupHost;
   const findInput = panel.querySelector('.script-find-input'), findCount = panel.querySelector('.script-find-count');
-  const findPrev = panel.querySelector('.script-find-prev'), findNext = panel.querySelector('.script-find-next'), findRemove = panel.querySelector('.script-find-remove');
+  const findPrev = panel.querySelector('.script-find-prev'), findNext = panel.querySelector('.script-find-next'), findRemove = panel.querySelector('.script-find-remove'), findKeep = panel.querySelector('.script-find-keep');
   let words = [], nodes = [], anchor = null, focus = null, raf = 0, active = -1, dragging = false, matches = [], matchAt = -1;
 
   const selected = () => (anchor === null || focus === null ? null : [Math.min(anchor, focus), Math.max(anchor, focus)]);
@@ -59,7 +59,11 @@ export function initScriptView(doc = document) {
     findPrev.disabled = findNext.disabled = !matches.length;
     findRemove.hidden = !matches.length;
     findRemove.textContent = matches.length > 1 ? `Remove all ${matches.length}` : 'Remove';
+    findKeep.hidden = !matches.length;
+    findKeep.textContent = matches.length > 1 ? `Keep only these ${matches.length}` : 'Keep only this';
   }
+  const keepRanges = () => keepOnlyRanges(words, matches.map(([lo, hi]) => sentenceSpan(words, lo, hi)),
+    Number(host()?.project()?.editor_sequence?.duration) || words.at(-1)?.end || 0);
   const findRanges = () => mergeRanges(matches.map(([lo, hi]) => selectionRange(words, lo, hi)));
 
   let shown = null, shownKey = '';
@@ -103,9 +107,9 @@ export function initScriptView(doc = document) {
     if (!ranges.length || !h) return;
     const issue = h.issue?.(ranges);
     if (issue) { status.textContent = issue; return; }
-    remove.disabled = findRemove.disabled = true;
+    remove.disabled = findRemove.disabled = findKeep.disabled = true;
     const result = await h.apply(ranges);
-    findRemove.disabled = false;
+    findRemove.disabled = findKeep.disabled = false;
     if (result) {
       render();
       status.textContent = `Removed ${label}.`;
@@ -128,6 +132,11 @@ export function initScriptView(doc = document) {
   findRemove.addEventListener('click', () => {
     const n = matches.length, query = findInput.value.trim();
     return removeRanges(findRanges(), n > 1 ? `${n} × “${query}”` : `“${query}”`);
+  });
+  findKeep.addEventListener('click', () => {
+    const ranges = keepRanges(), n = matches.length, query = findInput.value.trim();
+    if (!ranges.length) { status.textContent = 'Nothing else to remove.'; return; }
+    return removeRanges(ranges, `everything except ${n === 1 ? 'the sentence' : `${n} sentences`} with “${query}”`);
   });
   panel.addEventListener('keydown', (e) => {
     if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'f') { e.preventDefault(); e.stopPropagation(); findInput.focus(); findInput.select(); }

@@ -67,6 +67,46 @@ export function mergeRanges(ranges) {
   return merged.filter((r) => r.end - r.start >= MIN_RANGE).map((r) => ({ start: round(r.start), end: round(r.end) }));
 }
 
+const ENDS_SENTENCE = /[.?!…。؟]["'”’)\]]*$/u;
+
+/**
+ * Widen a match [lo, hi] to the sentence it is said in: back to the end of the
+ * previous sentence and on to the end of this one. A pause of `gap` seconds
+ * also ends a sentence, and `reach` words each way is the most it widens, so
+ * a transcript without punctuation still gives short pieces.
+ */
+export function sentenceSpan(words, lo, hi, { gap = 0.7, reach = 25 } = {}) {
+  const text = (w) => String(w?.text ?? w?.word ?? '');
+  let a = lo, b = hi;
+  while (a > 0 && lo - a < reach && !ENDS_SENTENCE.test(text(words[a - 1])) && words[a].start - words[a - 1].end < gap) a--;
+  while (b + 1 < words.length && b - hi < reach && !ENDS_SENTENCE.test(text(words[b])) && words[b + 1].start - words[b].end < gap) b++;
+  return [a, b];
+}
+
+/**
+ * Supercut: the ranges to remove so that only the given word spans remain,
+ * each with a little air before and after. Returns [] when nothing would go.
+ */
+export function keepOnlyRanges(words, spans, duration, { lead = 0.2, tail = 0.3 } = {}) {
+  const end = Number(duration);
+  if (!Number.isFinite(end) || end <= 0 || !spans?.length) return [];
+  const keep = mergeRanges(spans.map(([lo, hi]) => {
+    const first = words[lo], last = words[hi];
+    if (!first || !last) return null;
+    const before = words[lo - 1], after = words[hi + 1];
+    return {
+      start: Math.max(0, before ? Math.max(before.end, first.start - lead) : first.start - lead),
+      end: Math.min(end, after ? Math.min(after.start, last.end + tail) : last.end + tail),
+    };
+  }));
+  if (!keep.length) return [];
+  const gaps = [];
+  let at = 0;
+  for (const k of keep) { if (k.start > at) gaps.push({ start: at, end: k.start }); at = Math.max(at, k.end); }
+  if (at < end) gaps.push({ start: at, end });
+  return gaps.filter((g) => g.end - g.start >= MIN_RANGE).map((g) => ({ start: round(g.start), end: round(g.end) }));
+}
+
 /** "1:23.5", "83", "83s", "1:02:03" → seconds, or null. */
 export function parseTime(text) {
   const raw = String(text ?? '').trim().replace(/(?:s|sec|secs|seconds|שניות|שנ׳)$/i, '').trim();
