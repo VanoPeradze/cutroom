@@ -45,9 +45,9 @@ test('the 1.3 beta uses exact Windows, shared Mac/combined and source downloads'
     assert.match(mirror[0][2], /mirror/i);
     assert.ok(linksTo(html, `/downloads/${entry.filename}.sha256`).length >= 1);
   }
-  assert.equal(release.filename, 'CUTROOM-1.3-Beta-combined-e9b6997.zip');
-  assert.equal(release.platforms.windows.filename, 'CUTROOM-1.3-Beta-Windows-e9b6997.zip');
-  assert.equal(release.platforms.mac.filename, 'CUTROOM-1.3-Beta-combined-e9b6997.zip');
+  assert.equal(release.filename, 'CUTROOM-1.3-Beta-combined-cdbf6a8.zip');
+  assert.equal(release.platforms.windows.filename, 'CUTROOM-1.3-Beta-Windows-cdbf6a8.zip');
+  assert.equal(release.platforms.mac.filename, 'CUTROOM-1.3-Beta-combined-cdbf6a8.zip');
   assert.equal(release.platforms.mac.filename, release.filename);
   assert.equal(release.platforms.mac.folder,'mac', 'Mac uses the shared combined archive mac folder');
   assert.equal(linksTo(html, release.url).length, 2); // Optional combined ZIP help link, separate from the Mac button.
@@ -56,7 +56,7 @@ test('the 1.3 beta uses exact Windows, shared Mac/combined and source downloads'
   assert.match(html, /Mac uses the combined ZIP\. Extract it, open mac, then run START CUTROOM\.command beside App\./);
   assert.match(region('details', 'install-help'), /The optional combined ZIP has exactly two folders: windows and mac/);
   const source = release.source_archive;
-  assert.equal(source.filename, 'SOURCE-cdd1e83.zip');
+  assert.equal(source.filename, 'SOURCE-c857aaa.zip');
   for (const url of [source.url, `/downloads/${source.filename}`, `/downloads/${source.filename}.sha256`]) assert.equal(linksTo(html,url).length,1);
   assert.equal(downloadEntries(release).length,3);
   assert.match(html, /1\.3 Beta: Transcript editing and animated captions/);
@@ -70,9 +70,9 @@ test('the 1.3 beta uses exact Windows, shared Mac/combined and source downloads'
 
 test('download metadata pins a dated release and preserves Expo mirrors and provenance', () => {
   const release = JSON.parse(readFileSync(new URL('./release.json', import.meta.url), 'utf8'));
-  assert.equal(release.github_release.tag, 'v1.3-beta-20261128-editor1');
-  assert.equal(release.github_release.previous_public_tag, 'v1.3-beta-20261124-source-b1');
-  assert.equal(release.github_release.tag_commit, 'cdd1e834635098f4cfe0ff36dbb0c1ab4f934dd5');
+  assert.equal(release.github_release.tag, 'v1.3-beta-20261128-clips2');
+  assert.equal(release.github_release.previous_public_tag, 'v1.3-beta-20261128-editor1');
+  assert.equal(release.github_release.tag_commit, 'c857aaaabce7072120b4d9c8949b5363a76635a2');
   assert.equal(release.github_release.package_bytes_changed, true);
   assert.equal(release.github_release.url, `${repository}/releases/tag/${release.github_release.tag}`);
   for (const entry of downloadEntries(release)) {
@@ -86,10 +86,10 @@ test('public beta retains exact automated native provenance and visible pending 
   assertPublishable(release);
   assert.equal(release.release_state,'beta');
   assert.equal(release.full_release_qualified,false);
-  assert.equal(release.source_commit,'e9b69978661fbb3705daeb6770c68b4f0df0812d');
-  assert.equal(release.github_release.tag,'v1.3-beta-20261128-editor1');
-  assert.equal(release.native_validation.run_id,46119423004);
-  assert.equal(release.validated_pr_head,'08fb4968d1364e6d25b7d0a966379a2cc10737f7');
+  assert.equal(release.source_commit,'cdbf6a8bc46b9979f3c1dcbcb20f4d3044c51318');
+  assert.equal(release.github_release.tag,'v1.3-beta-20261128-clips2');
+  assert.equal(release.native_validation.run_id,46142857247);
+  assert.equal(release.validated_pr_head,'fe2acb877964e6de150256e62ee9dde5daa122f4');
   assert.equal(release.native_validation.head_commit,release.validated_pr_head);
   assert.equal(release.native_validation.application_source_commit,release.source_commit);
   assert.equal(release.native_validation.transcription_run,false);
@@ -103,7 +103,7 @@ test('public beta retains exact automated native provenance and visible pending 
     assert.equal(checks.required_cases_passed,50);
     assert.equal(checks.skipped,0);
     assert.equal(checks.source_audio_and_caption_checks,'passed');
-    assert.equal(checks.job_id,architecture === 'arm64' ? 140900478383 : 140900478205);
+    assert.equal(checks.job_id,architecture === 'arm64' ? 140972439425 : 140972439644);
     for (const gate of ['fresh_app_install','missing_pip_recovery','restart_persistence']) assert.equal(checks[gate],'passed');
     assert.equal(checks.combined_archive_sha256,release.sha256);
   }
@@ -581,7 +581,7 @@ test('current release discloses archival screenshots and preserves preceding Nov
   assert.equal(release.historical_native_validation.find(row=>row.release_tag==='v1.3-beta-20261108-studio1').native_validation.run_id,42489336008);
   assert.equal(release.historical_native_validation.find(row=>row.release_tag==='v1.3-beta-20261111-gray1').native_validation.run_id,42965402773);
   const retained = JSON.parse(readFileSync(new URL('./retained-downloads.json', import.meta.url),'utf8'));
-  assert.equal(retained.length,54);
+  assert.equal(retained.length,57);
   for (const entry of retained) {
     assert.ok(new URL(entry.url).protocol==='https:');
     assert.match(entry.sha256,/^[a-f0-9]{64}$/);

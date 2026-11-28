@@ -37,11 +37,11 @@ assert.equal(JSON.parse(readFileSync(resolve(root,'package.json'),'utf8')).versi
 assert.ok(html.includes('WINDOWS + MAC · 1.3 BETA'), 'The download must display both platforms and 1.3 Beta');
 assertPublishable(release);
 assert.equal(release.release_state, 'beta');
-assert.equal(release.source_commit, 'e9b69978661fbb3705daeb6770c68b4f0df0812d');
-assert.equal(release.filename, 'CUTROOM-1.3-Beta-combined-e9b6997.zip');
-assert.equal(release.platforms.windows.filename, 'CUTROOM-1.3-Beta-Windows-e9b6997.zip');
-assert.equal(release.platforms.mac.filename, 'CUTROOM-1.3-Beta-combined-e9b6997.zip');
-assert.equal(release.source_archive.filename, 'SOURCE-cdd1e83.zip');
+assert.equal(release.source_commit, 'cdbf6a8bc46b9979f3c1dcbcb20f4d3044c51318');
+assert.equal(release.filename, 'CUTROOM-1.3-Beta-combined-cdbf6a8.zip');
+assert.equal(release.platforms.windows.filename, 'CUTROOM-1.3-Beta-Windows-cdbf6a8.zip');
+assert.equal(release.platforms.mac.filename, 'CUTROOM-1.3-Beta-combined-cdbf6a8.zip');
+assert.equal(release.source_archive.filename, 'SOURCE-c857aaa.zip');
 assert.equal(downloadEntries(release).length,3,'Three exact public archives must be prepared');
 assert.equal(release.platforms.mac.filename, release.filename);
 assert.equal(release.platforms.mac.folder,'mac','Mac uses the shared combined archive mac folder');
@@ -53,12 +53,13 @@ assert.ok(html.includes('/downloads/'+zip+'.sha256"'), 'The checksum link must m
 assert.ok(!html.includes('5.6.1'), 'Stale application version on the public page');
 assert.match(release.sha256, /^[a-f0-9]{64}$/);
 assert.ok(Number.isSafeInteger(release.bytes) && release.bytes > 0);
-assert.equal(release.github_release.tag, 'v1.3-beta-20261128-editor1');
-assert.equal(release.github_release.previous_public_tag, 'v1.3-beta-20261124-source-b1');
-assert.equal(release.github_release.tag_commit, 'cdd1e834635098f4cfe0ff36dbb0c1ab4f934dd5');
+assert.equal(release.github_release.tag, 'v1.3-beta-20261128-clips2');
+assert.equal(release.github_release.previous_public_tag, 'v1.3-beta-20261128-editor1');
+assert.equal(release.github_release.tag_commit, 'c857aaaabce7072120b4d9c8949b5363a76635a2');
 const releaseBase = `https://github.com/VanoPeradze/cutroom/releases/download/${release.github_release.tag}/`;
 const retained = JSON.parse(readFileSync(resolve(root,'retained-downloads.json'),'utf8'));
 const retainedTags = new Map([
+  ...["CUTROOM-1.3-Beta-Windows-e9b6997.zip", "CUTROOM-1.3-Beta-combined-e9b6997.zip", "SOURCE-cdd1e83.zip"].map(filename=>[filename,'v1.3-beta-20261128-editor1']),
   ...['CUTROOM-1.3-Beta-Windows-4a9a5d9.zip','CUTROOM-1.3-Beta-combined-4a9a5d9.zip','SOURCE-4a9a5d9.zip'].map(filename=>[filename,'v1.3-beta-20261124-source-b1']),
   ...['CUTROOM-1.3-Beta-Windows-ba67003.zip','CUTROOM-1.3-Beta-combined-ba67003.zip','SOURCE-ba67003.zip'].map(filename=>[filename,'v1.3-beta-20261111-hebrew1']),
   ...['CUTROOM-1.3-Beta-Windows-4fc52ae.zip','CUTROOM-1.3-Beta-combined-4fc52ae.zip','SOURCE-4fc52ae.zip'].map(filename=>[filename,'v1.3-beta-20261111-gray1']),
@@ -88,7 +89,7 @@ const retainedTags = new Map([
   ...['CUTROOM-1.2-Beta-Windows-review-fe35453.zip','CUTROOM-1.2-Beta-combined-review-fe35453.zip','SOURCE-fe35453.zip'].map(filename=>[filename,'v1.2-beta-20261018']),
   ...['CUTROOM-1.2-Beta-20261019.zip','CUTROOM-1.2-Beta-Windows-20261019.zip','CUTROOM-1.2-Beta-Mac-20261019.zip','SOURCE-20261019.zip'].map(filename=>[filename,'v1.2-beta-20261019']),
 ]);
-assert.deepEqual(retained.map(entry=>entry.filename).sort(),[...retainedTags.keys()].sort(),'Preserve all 54 historical archives including the preceding live website downloads');
+assert.deepEqual(retained.map(entry=>entry.filename).sort(),[...retainedTags.keys()].sort(),'Preserve all 57 historical archives including the preceding live website downloads');
 uniqueDownloadEntries([...downloadEntries(release), ...retained]);
 for (const entry of downloadEntries(release)) {
   assert.equal(entry.url, releaseBase + entry.filename);
@@ -103,7 +104,7 @@ for (const entry of downloadEntries(release)) {
   assert.equal(sidecar[1], entry.filename);
 }
 for (const entry of retained) {
-  if (/4a9a5d9|ba67003/.test(entry.filename)) {
+  if (/4a9a5d9|ba67003|e9b6997|cdd1e83/.test(entry.filename)) {
     assert.equal(entry.url, `https://github.com/VanoPeradze/cutroom/releases/download/${retainedTags.get(entry.filename)}/${entry.filename}`);
     assert.deepEqual(entry.mirrors,[`https://cutroom-studio.expo.app/downloads/${entry.filename}`]);
   } else {

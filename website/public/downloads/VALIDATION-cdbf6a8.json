@@ -1,0 +1,65 @@
+{
+  "native": {
+    "run_id": 46142857247,
+    "head_commit": "fe2acb877964e6de150256e62ee9dde5daa122f4",
+    "application_source_commit": "cdbf6a8bc46b9979f3c1dcbcb20f4d3044c51318",
+    "transcription_run": false,
+    "architectures": {
+      "arm64": {
+        "status": "passed",
+        "feature_tests_passed": 357,
+        "required_cases_passed": 50,
+        "skipped": 0,
+        "job_id": 140972439425,
+        "job_url": "https://github.com/VanoPeradze/cutroom/actions/runs/46142857247/job/140972439425",
+        "source_audio_and_caption_checks": "passed",
+        "fresh_app_install": "passed",
+        "missing_pip_recovery": "passed",
+        "restart_persistence": "passed",
+        "combined_archive_sha256": "24a79fa7966a786af0ae4f0b0cc3b885439d527685b56ad2f43b68f97baef51d",
+        "installation_checks": {
+          "status": "passed",
+          "launcher_health_and_api": "passed",
+          "restart_persistence": "passed",
+          "repeat_launch": "passed",
+          "different_data_port_collision": "passed",
+          "source_audio_and_caption_checks": "passed",
+          "offline_ready_setup": "passed",
+          "installed_packages_unchanged": "passed",
+          "unicode_and_spaces_path": true
+        }
+      },
+      "x64": {
+        "status": "passed",
+        "feature_tests_passed": 357,
+        "required_cases_passed": 50,
+        "skipped": 0,
+        "job_id": 140972439644,
+        "job_url": "https://github.com/VanoPeradze/cutroom/actions/runs/46142857247/job/140972439644",
+        "source_audio_and_caption_checks": "passed",
+        "fresh_app_install": "passed",
+        "missing_pip_recovery": "passed",
+        "restart_persistence": "passed",
+        "combined_archive_sha256": "24a79fa7966a786af0ae4f0b0cc3b885439d527685b56ad2f43b68f97baef51d",
+        "installation_checks": {
+          "status": "passed",
+          "launcher_health_and_api": "passed",
+          "restart_persistence": "passed",
+          "repeat_launch": "passed",
+          "different_data_port_collision": "passed",
+          "source_audio_and_caption_checks": "passed",
+          "offline_ready_setup": "passed",
+          "installed_packages_unchanged": "passed",
+          "unicode_and_spaces_path": true
+        }
+      }
+    }
+  },
+  "windows": {
+    "application_source_commit": "cdbf6a8bc46b9979f3c1dcbcb20f4d3044c51318",
+    "archive_sha256": "61f0ff866ec24990b7745906f0089a0d50aed422b17178246ea7edc73c0680e0",
+    "result": "not_run",
+    "status": "not_verified",
+    "guest_report_received": false
+  }
+}
