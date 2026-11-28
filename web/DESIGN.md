@@ -57,6 +57,17 @@ Media shelf > Sound effects lists seven original sounds (whoosh, swipe, pop, cli
 
 Edit > Cut > Style pack… asks "How should it feel?" and offers eight packs (Clean, Bold social, Podcast, Gaming, Minimal, Explainer, Cinematic, Vintage). A pack sets the caption style and the colour look together; the energetic ones also add auto zooms on key words. Each part stays editable in its own control. What the video is (content type) stays with the existing edit styles.
 
+## Script view
+
+`Script…` in the Edit panel opens a non-modal panel docked right
+(`script-view.js`, `script-view.css`). It shows the edit's captions as
+running text in edit time, one paragraph per caption, each in its own
+direction. Click a word to jump; drag or Shift+click to select; Delete,
+Backspace or Remove selection cuts that span (padded 0.04 s into the
+surrounding pauses) through `sequence_ripple_delete_ranges`, one Undo step.
+The spoken word is highlighted during playback. Paragraphs with estimated
+word timing carry a dotted underline and a tooltip.
+
 ## Composition
 
 The application launcher presents three real starting actions as compact rows beside the welcome statement, followed by recent projects and optional AI setup. It is not a second marketing landing page.

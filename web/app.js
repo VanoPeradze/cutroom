@@ -13397,4 +13397,6 @@ if (typeof window !== "undefined") window.cutroomCleanupHost = Object.freeze({
   importFiles: (files) => state.mediaStudio?.uploadFiles(files),
   saveManual: (manual) => schedulePatch({ manual }),
   refreshMotion: () => state.colorMotion?.render?.(),
+  time: () => colorMotionOutputTime(),
+  undo: () => applyManualEdit("undo"),
 });
