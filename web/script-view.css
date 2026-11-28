@@ -14,14 +14,28 @@
 .script-hint { flex: 1; min-width: 0; color: var(--text-3); font-size: var(--fs-12); }
 .script-view button { min-height: 32px; padding: 0 var(--space-3); border-radius: var(--radius-m); }
 .script-close { min-width: 32px; }
+.script-find { display: flex; align-items: center; gap: var(--space-1); padding: var(--space-2) var(--space-4); border-bottom: 1px solid var(--line); }
+.script-find-input { flex: 1; min-width: 0; min-height: 32px; padding: 0 var(--space-2); border: 1px solid var(--line); border-radius: var(--radius-m); background: var(--surface-1); color: var(--text-1); font: inherit; }
+.script-find-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.script-find-count { flex: none; color: var(--text-3); font-size: var(--fs-12); font-variant-numeric: tabular-nums; }
+.script-view .script-find button { min-width: 32px; padding: 0 var(--space-2); }
 .script-body { flex: 1; overflow-y: auto; padding: var(--space-3) var(--space-4); line-height: 1.9; font-size: var(--fs-15); user-select: none; outline: none; }
 .script-body:focus-visible { box-shadow: inset 0 0 0 1px var(--line-strong, var(--accent)); }
 .script-body p { margin: 0 0 var(--space-3); unicode-bidi: plaintext; }
 .script-body p[title] { text-decoration: underline dotted var(--text-3); text-underline-offset: 4px; }
 .script-word { padding: 2px 1px; border-radius: 4px; cursor: text; }
 .script-word:hover { background: var(--surface-3); }
+.script-word.is-match { box-shadow: inset 0 -2px 0 var(--accent); background: var(--surface-3); }
 .script-word.is-current { color: var(--accent); font-weight: 600; }
 .script-word.is-selected { background: var(--accent); color: var(--on-accent); }
 .script-status { flex: 1; min-width: 0; color: var(--text-2); }
 .script-remove:not(:disabled) { background: var(--accent); color: var(--on-accent); border-color: transparent; }
 @media (max-width: 720px) { .script-view { inset: auto var(--space-4) var(--space-4) var(--space-4); width: auto; height: 60vh; } }
+/* Edit by prompt dialog (layout from cleanup.css). */
+.prompt-edit-form { display: grid; gap: var(--space-2); padding: var(--space-3) var(--space-4); }
+.prompt-edit-input { min-height: 40px; padding: 0 var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-m); background: var(--surface-1); color: var(--text-1); font: inherit; font-size: var(--fs-15); }
+.prompt-edit-input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.prompt-edit-plan { min-height: 2.6em; margin: 0; color: var(--text-3); line-height: var(--leading-ui); }
+.prompt-edit-plan[data-ready="true"] { color: var(--text-1); }
+.prompt-edit-examples { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+.prompt-edit-dialog .prompt-edit-examples button { min-height: 28px; padding: 0 var(--space-2); border-radius: 999px; font-size: var(--fs-12); color: var(--text-2); }

@@ -68,6 +68,20 @@ surrounding pauses) through `sequence_ripple_delete_ranges`, one Undo step.
 The spoken word is highlighted during playback. Paragraphs with estimated
 word timing carry a dotted underline and a tooltip.
 
+Find (Ctrl+F inside the panel) highlights every place a phrase is said;
+Enter and Shift+Enter step through them and Remove all cuts them together.
+Shared pure helpers live in `transcript-search.js`.
+
+## Type an edit
+
+`Type an edit…` opens a dialog where the user writes what should change, in
+English or Hebrew: remove pauses / hesitations / fillers / repeated takes,
+cut a time range, delete every use of a phrase, find a phrase or go to a time,
+add an opener, zoom on key words. `prompt-edit.js` matches known edit phrases
+on this computer (no network, no model) and always shows what will happen
+before the Remove / Go / Do it button runs it. Unknown requests say so and
+point to the example chips.
+
 ## Composition
 
 The application launcher presents three real starting actions as compact rows beside the welcome statement, followed by recent projects and optional AI setup. It is not a second marketing landing page.
