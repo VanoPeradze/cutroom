@@ -2351,7 +2351,7 @@ export class MediaStudio {
     item.analyser.disconnect(); item.analyser.connect(bus.gain); item.busRole = role;
   }
   syncPlayer(item, time, speed, playing, gain = 0) {
-    const element = item.element; element.playbackRate = speed; element.preservesPitch = true;
+    const element = item.element; element.playbackRate = speed * (this.options?.rate?.() || 1); element.preservesPitch = true;
     if (item.gain) item.gain.gain.value = gain; else element.volume = Math.max(0,Math.min(1,gain*10**(Number(this.mixer().master_db||0)/20)));
     if (Math.abs(element.currentTime-time) > (playing ? .12 : 1e-6)) { try { element.currentTime = Math.max(0,time); this.meterResetUntil = performance.now()+120; } catch {} }
     item.wanted = playing;

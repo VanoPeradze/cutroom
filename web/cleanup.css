@@ -93,3 +93,9 @@
 .broll-text span { white-space: normal; }
 .broll-text small { color: var(--text-3); font-size: var(--fs-12); }
 .broll-list select { min-height: 32px; max-width: 180px; }
+/* J/K/L shuttle speed badge on the preview. */
+#previewStage:is([data-shuttle]:not([data-shuttle=""]), [data-reverse])::after {
+  content: attr(data-shuttle); position: absolute; top: var(--space-2); left: 50%; transform: translateX(-50%); z-index: 20;
+  padding: 2px var(--space-2); border-radius: 999px; background: rgba(0, 0, 0, .65); color: #fff; font: 600 var(--fs-12)/1.6 var(--font-ui, sans-serif); pointer-events: none;
+}
+#previewStage[data-reverse]::after { content: "◀ " attr(data-reverse); }

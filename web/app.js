@@ -36,7 +36,7 @@ import { rollPair, planRoll, verifyRoll, initRollingEdit } from "./rolling-edit.
 import { makeExportRangePlan, sameExportRangePlan, exportFrameTime, exportRangeLabel } from "./range-export.js?v=20261117-1";
 import { initColorMotion } from "./color-motion.js?v=20261128-autozoom1";
 import { initFirstRecordingGuide } from "./first-recording-guide.js?v=20261117-firstrecording1";
-import { KEYBOARD_PROFILES, resolveEditorShortcut, isEditorTransportSpace, shortcutRows } from "./keyboard.js?v=20261116-slip1-markers1-markrange1";
+import { KEYBOARD_PROFILES, resolveEditorShortcut, isEditorTransportSpace, shortcutRows } from "./keyboard.js?v=20261116-slip1-markers1-markrange1-shuttle1";
 import { AudioThresholdView } from "./audio-meter.js?v=20261112-workbench1";
 import { initWelcome, workflowSettings, cloudProviderName } from "./welcome.js?v=20261119-manual-entry1";
 import { initTranscriptionEngine } from "./transcription-engine.js?v=20261111";
@@ -520,7 +520,7 @@ function initializeMediaStudio() {
   tab.addEventListener("keydown", handleStudioTabKeydown);
   initializePreviewRepairs();
   state.mediaStudio = new MediaStudio(panel, elements.previewStage, {
-    libraryRoot: document.getElementById("studioShelfMedia"), saveStateChanged: renderProjectSaveState,
+    libraryRoot: document.getElementById("studioShelfMedia"), saveStateChanged: renderProjectSaveState, rate: shuttleRate,
     usage: {issue:mediaUsageNavigationIssue,find:openMediaAssetUses,reveal:revealMediaPoolAsset},
     audioSource: {
       create: typeof initAudioSourceReview==="function" ? initAudioSourceReview : null, issue: audioSourceNavigationIssue, place: placeAudioSource,
@@ -7966,7 +7966,51 @@ function stopPreviewPlayback() {
   setPreviewPlaying(false);
 }
 
+function shuttleRate() {
+  return [1, 2, 4].includes(state.preview?.shuttle) ? state.preview.shuttle : 1;
+}
+
+function setShuttle(rate) {
+  state.preview.shuttle = [1, 2, 4].includes(rate) ? rate : 1;
+  state.preview.clock?.setRate?.(state.preview.shuttle);
+  for (const video of [elements.previewA, elements.previewB]) if (video && !video.paused) video.playbackRate = state.preview.shuttle;
+  elements.previewStage?.toggleAttribute("data-shuttle", state.preview.shuttle !== 1);
+  if (elements.previewStage) elements.previewStage.dataset.shuttle = state.preview.shuttle === 1 ? "" : `${state.preview.shuttle}×`;
+}
+
+function stopReverseShuttle() {
+  if (state.preview.reverse?.frame != null) cancelAnimationFrame(state.preview.reverse.frame);
+  const was = Boolean(state.preview.reverse);
+  state.preview.reverse = null;
+  if (elements.previewStage && was) delete elements.previewStage.dataset.reverse;
+  return was;
+}
+
+// J plays backwards by stepping the playhead (sound stays silent, as in most
+// editors); repeated J doubles the speed up to 4×. Seeks are throttled so the
+// players can keep up.
+function startReverseShuttle(rate) {
+  stopReverseShuttle();
+  const reverse = { rate, last: performance.now(), lastSeek: 0, frame: null };
+  state.preview.reverse = reverse;
+  if (elements.previewStage) elements.previewStage.dataset.reverse = `${rate}×`;
+  const step = (now) => {
+    if (state.preview.reverse !== reverse) return;
+    const elapsed = (now - reverse.last) / 1000;
+    if (now - reverse.lastSeek >= 80) {
+      const time = Math.max(0, previewTimelineTime() - elapsed * reverse.rate);
+      reverse.last = now; reverse.lastSeek = now;
+      seekPreview(time);
+      if (time <= 0) { stopReverseShuttle(); return; }
+    }
+    reverse.frame = requestAnimationFrame(step);
+  };
+  reverse.frame = requestAnimationFrame(step);
+}
+
 function pauseAllMedia(except = null) {
+  stopReverseShuttle();
+  if (state.preview.shuttle && state.preview.shuttle !== 1) setShuttle(1);
   state.rangeAudition?.clear();
   state.mediaStudio?.pause();
   state.preview.playRequest += 1;
@@ -8152,7 +8196,7 @@ function syncIndependentMedia(slot, point, needed, forceSeek = false, sourceSlot
   // player at the last picture would also pause the selected source audio.
   const nativeAudioClock = !video.muted && speed === 1 && Math.abs(rawPictureTime - point.sourceTime) < .000001;
   const pictureTime = retimed && !nativeAudioClock ? Math.max(0, Math.min(rawPictureTime, limit > 0 ? Math.max(0,limit-.04) : rawPictureTime)) : point.sourceTime;
-  video.playbackRate = speed;
+  video.playbackRate = speed * shuttleRate();
   if (forceSeek || changedClip || Math.abs(video.currentTime - pictureTime) > .12) {
     try { video.currentTime = pictureTime; } catch { /* loadedmetadata/timeupdate can retry. */ }
   }
@@ -8320,7 +8364,7 @@ function syncSecondaryPreview(globalTime) {
     return;
   }
   const needsBPlayback = (showB || audioFromB) && Boolean(elements.previewB.src);
-  elements.previewA.playbackRate = 1; elements.previewB.playbackRate = 1;
+  elements.previewA.playbackRate = shuttleRate(); elements.previewB.playbackRate = shuttleRate();
   if (needsBPlayback) {
     const desired = camera === "embedded_stack" ? globalTime : sourceB ? globalTime - offset : globalTime;
     const withinSource = camera === "embedded_stack" || sourceBAvailable;
@@ -10017,7 +10061,7 @@ function renderKeyboardHelp() {
   elements.keyboardLimitations.textContent = profile.limitations || "CUTROOM's own editing keys. Commands apply to your current Together, A only or B only scope.";
   const rows = shortcutRows(profile.id);
   const groups = [
-    ["Playback & navigation", ["toggle_play", "stop", "play_forward", "frame_back", "frame_forward", "previous_edit", "next_edit", "jump_start", "jump_end", "review_marker"]],
+    ["Playback & navigation", ["toggle_play", "stop", "play_forward", "play_reverse", "frame_back", "frame_forward", "previous_edit", "next_edit", "jump_start", "jump_end", "review_marker"]],
     ["Tools & cuts", ["tool_select", "tool_range", "tool_blade", "tool_remove_between", "split", "delete_selection", "restore_selection"]],
     ["Selection & trimming", ["mark_in", "mark_out", "select_clip", "mark_selected_layers", "clear_selection", "trim_start", "trim_end"]],
     ["Timeline view", ["toggle_snapping", "zoom_in", "zoom_out", "fit"]],
@@ -10245,9 +10289,18 @@ function handleEditorShortcut(event) {
   event.preventDefault();
   if (action === "toggle_play") { togglePreview(); return; }
   if (action === "play_forward") {
-    elements.previewA.playbackRate = 1;
-    elements.previewB.playbackRate = 1;
+    // L: play forward; each further L doubles the speed up to 4×.
+    const reversing = stopReverseShuttle();
+    if (state.preview.playing && !reversing) { setShuttle(Math.min(4, shuttleRate() * 2)); return; }
+    setShuttle(1);
     if (!state.preview.playing) togglePreview();
+    return;
+  }
+  if (action === "play_reverse") {
+    // J: play backwards; each further J doubles the speed up to 4×.
+    const rate = state.preview.reverse ? Math.min(4, state.preview.reverse.rate * 2) : 1;
+    if (state.preview.playing) pauseAllMedia();
+    startReverseShuttle(rate);
     return;
   }
   if (action === "stop") { pauseAllMedia(); return; }

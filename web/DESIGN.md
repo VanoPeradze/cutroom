@@ -119,6 +119,14 @@ plain reason: what the first line does, whether the clip starts and ends on
 whole sentences, and filler, pace and how much is spoken. They sit beside the
 measured sound/energy strength and never replace it.
 
+## J/K/L shuttle
+
+In the CUTROOM, Resolve, Premiere and Final Cut profiles, L plays forward and
+each further L doubles the speed to 2× and 4× (`SourceTimelineClock.setRate`,
+players and library media follow); J plays backwards by stepping the playhead
+(silent), also up to 4×; K stops and returns to 1×. A small badge on the
+preview shows the speed. Pro Tools keeps its own L.
+
 ## Composition
 
 The application launcher presents three real starting actions as compact rows beside the welcome statement, followed by recent projects and optional AI setup. It is not a second marketing landing page.
