@@ -86,3 +86,10 @@
 .brand-templates small { flex: 1; min-width: 0; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .brand-template-swatch { flex: none; width: 14px; height: 14px; border-radius: 50%; background: var(--swatch, transparent); box-shadow: 0 0 0 1px var(--line); }
 .brand-templates .brand-empty { background: none; color: var(--text-3); }
+/* B-roll ideas reuse the opener row layout. */
+.broll-list li { align-items: flex-start; padding-block: var(--space-2); flex-wrap: wrap; }
+.broll-text { flex: 1 1 260px; min-width: 0; display: grid; grid-template-columns: auto 1fr; gap: 2px var(--space-3); }
+.broll-text time { grid-row: span 2; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.broll-text span { white-space: normal; }
+.broll-text small { color: var(--text-3); font-size: var(--fs-12); }
+.broll-list select { min-height: 32px; max-width: 180px; }

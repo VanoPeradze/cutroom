@@ -42,7 +42,7 @@
   <link rel="stylesheet" href="/assets/tooltips.css?v=20261128-tips1">
   <link rel="stylesheet" href="/assets/a11y.css?v=20261128-a11y1-voice1">
   <link rel="stylesheet" href="/assets/caption-styles.css?v=20261128-brand1">
-  <link rel="stylesheet" href="/assets/cleanup.css?v=20261128-brand1">
+  <link rel="stylesheet" href="/assets/cleanup.css?v=20261128-broll1">
   <link rel="stylesheet" href="/assets/script-view.css?v=20261128-find1">
   <link rel="stylesheet" href="/assets/edit-panel.css?v=20261127-editgroups1">
 </head>
@@ -508,7 +508,7 @@
             </details>
             <details class="editor-more" id="editorMoreTools" open><summary>Clip tools</summary><div class="editor-more-panel edit-groups">
               <div class="edit-group" role="group" aria-labelledby="editGroupCut"><h4 class="edit-group-label" id="editGroupCut" data-i18n="editGroupCut">Cut</h4>
-                <button id="manualSplit" type="button" disabled>Split at playhead</button><button type="button" data-timeline-tool="remove_between" aria-pressed="false">Cut out</button><button id="clipDuplicate" type="button" disabled>Duplicate clip</button><button id="cleanupButton" type="button" aria-haspopup="dialog" title="Find long pauses, hesitations and repeated takes, then choose what to remove">Clean up…</button><button id="hookButton" type="button" aria-haspopup="dialog" title="Find the strongest sentence and copy it to the start as a cold open">Opener…</button><button id="lookPackButton" type="button" aria-haspopup="dialog" title="Set caption style, colour look and zooms together">Style pack…</button><button id="scriptViewButton" type="button" aria-haspopup="dialog" title="Edit by text: select words in the transcript and delete them">Script…</button><button id="promptEditButton" type="button" aria-haspopup="dialog" title="Type what should change, like “remove the long pauses” or “find pricing”">Type an edit…</button><button id="brandKitButton" type="button" aria-haspopup="dialog" title="Brand colour, logo and saved templates">Brand kit…</button><button type="button" data-timeline-tool="move" aria-pressed="false" disabled hidden>Move clip</button>
+                <button id="manualSplit" type="button" disabled>Split at playhead</button><button type="button" data-timeline-tool="remove_between" aria-pressed="false">Cut out</button><button id="clipDuplicate" type="button" disabled>Duplicate clip</button><button id="cleanupButton" type="button" aria-haspopup="dialog" title="Find long pauses, hesitations and repeated takes, then choose what to remove">Clean up…</button><button id="hookButton" type="button" aria-haspopup="dialog" title="Find the strongest sentence and copy it to the start as a cold open">Opener…</button><button id="lookPackButton" type="button" aria-haspopup="dialog" title="Set caption style, colour look and zooms together">Style pack…</button><button id="scriptViewButton" type="button" aria-haspopup="dialog" title="Edit by text: select words in the transcript and delete them">Script…</button><button id="promptEditButton" type="button" aria-haspopup="dialog" title="Type what should change, like “remove the long pauses” or “find pricing”">Type an edit…</button><button id="brandKitButton" type="button" aria-haspopup="dialog" title="Brand colour, logo and saved templates">Brand kit…</button><button id="brollButton" type="button" aria-haspopup="dialog" title="Find places in what is said where a cutaway would help, and place your own shots there">B-roll ideas…</button><button type="button" data-timeline-tool="move" aria-pressed="false" disabled hidden>Move clip</button>
               </div>
               <div class="edit-group" role="group" aria-labelledby="editGroupSelection"><h4 class="edit-group-label" id="editGroupSelection" data-i18n="editGroupSelection">Selection</h4>
                 <button id="manualRange" type="button" aria-expanded="false" aria-controls="timelineRangeForm">Range…</button><button id="manualClear" type="button" disabled>Clear selection</button><button id="timelineZoomSelection" type="button" disabled>Zoom to selection</button>
@@ -1119,5 +1119,6 @@
   <script type="module" src="/assets/script-view.js?v=20261128-find1"></script>
   <script type="module" src="/assets/prompt-edit.js?v=20261128-prompt1"></script>
   <script type="module" src="/assets/brand-kit.js?v=20261128-brand1"></script>
+  <script type="module" src="/assets/broll.js?v=20261128-broll1"></script>
 </body>
 </html>

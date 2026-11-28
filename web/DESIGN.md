@@ -102,6 +102,15 @@ chain (`VOICE_CLEANUP_FILTER` in `cutroom/media_render.py`: high-pass,
 FFT noise reduction, light compression, presence EQ) before their faders and
 ducking. The preview plays the original sound, and the label says so.
 
+## B-roll ideas
+
+`B-roll ideas…` (`broll.js`) reads the edit's transcript and lists sentences
+where a cutaway would help (they point at something, give a number or name
+things), at most one every 6 s and never in the first 1.5 s, with what to
+show. An imported image or clip whose file name matches what is said is
+preselected; Place adds it full frame, without its sound, for about 3 s as one
+Undo step. Nothing is searched online.
+
 ## Composition
 
 The application launcher presents three real starting actions as compact rows beside the welcome statement, followed by recent projects and optional AI setup. It is not a second marketing landing page.
