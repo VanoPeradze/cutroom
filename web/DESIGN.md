@@ -160,6 +160,14 @@ project copy (same cuts, colour, captions and layers; the original is not
 changed), names it "… shorts", switches the copy to 9:16 with the existing
 output-aspect path, and opens its Clips board so moments can be exported.
 
+## Translated subtitles
+
+The Export dialog's "Subtitles in another language" asks the configured Story
+AI to translate the edit's visible caption lines, 30 at a time, into one of 12
+languages and downloads a separate .srt with the same timing (Hebrew ↔ English
+by default). The project's captions are never changed; a line the AI does not
+return keeps its original text, and the status says how many were translated.
+
 ## Composition
 
 The application launcher presents three real starting actions as compact rows beside the welcome statement, followed by recent projects and optional AI setup. It is not a second marketing landing page.

@@ -86,6 +86,7 @@ from cutroom.review_markers import MarkerError, apply_marker
 from cutroom.render import _dimensions as render_dimensions, _effective_audio_slot as render_audio_slot, resolve_export_range, InsufficientStorageError, LayoutCoverageError, available_encoders, ensure_render_storage, project_caption_items, caption_preview_scene, render_project, require_layout_coverage
 from cutroom.utils import sanitize_filename
 from cutroom.interchange import build_edl, build_fcpxml
+from cutroom.caption_translation import LANGUAGES as TRANSLATION_LANGUAGES, TranslationUnavailable, translate_project_captions
 from cutroom.upload_storage import CHUNK_BYTES, UploadStorage, UploadStorageError, is_storage_full
 from cutroom.upload_transport import LEGACY_ASSET_UPLOAD_BYTES, MULTIPART_ALLOWANCE_BYTES
 from cutroom.native_paths import native_io_path
@@ -1425,6 +1426,27 @@ def create_app(settings: Settings | None = None) -> Flask:
         response.headers["Content-Type"] = mime
         response.headers["Content-Disposition"] = f"attachment; filename*=UTF-8''{urllib.parse.quote(stem + '.' + kind)}"
         return response
+
+    @app.post("/api/projects/<project_id>/caption-translation")
+    def caption_translation(project_id: str):
+        # Read-only: returns a translated .srt; the project's captions never change.
+        payload = _json_object()
+        _reject_unknown_fields(payload, {"language"})
+        language = payload.get("language")
+        if not isinstance(language, str) or language not in TRANSLATION_LANGUAGES:
+            raise APIInputError("invalid_field", "Choose a supported language.")
+        project = store.load(project_id)
+        try:
+            validate_sequence_version(project)
+            items = project_caption_items(project, aligned=False)
+        except (ValueError, TypeError, KeyError):
+            items = []
+        try:
+            result = translate_project_captions(connections.job_settings(settings), items, language)
+        except TranslationUnavailable as error:
+            raise APIInputError("translation_unavailable", str(error), 409) from error
+        stem = sanitize_filename(str(project.get("name") or "captions"))[:100] or "captions"
+        return jsonify({"translation": {**result, "name": f"{stem}.{language}.srt"}})
 
     @app.post("/api/projects/<project_id>/posting-kit")
     def clip_posting_kit(project_id: str):

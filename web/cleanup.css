@@ -117,3 +117,10 @@
 .batch-list li[data-state="done"] small { color: var(--success, #3fb27f); }
 .batch-list li[data-state="failed"] small { color: var(--danger, #e5484d); }
 .batch-list li[data-state="running"] small::before { content: "● "; color: var(--accent, #7cc4ff); }
+
+/* Export dialog: translated subtitles. */
+.caption-translate { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; margin-top: 10px; font-size: 13px; color: var(--text-2); }
+.caption-translate label { display: flex; gap: 8px; align-items: center; }
+.caption-translate select { min-height: 32px; max-width: 100%; }
+.caption-translate-link { color: var(--accent, #7cc4ff); font-weight: 600; text-decoration: underline; }
+.caption-translate small { flex-basis: 100%; font-size: 12px; }
