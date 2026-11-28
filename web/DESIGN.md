@@ -144,6 +144,15 @@ words each way) with a little air around it, and removes everything else in
 one Undo step. Typed edits understand "keep only the parts about …",
 "supercut …" and "השאר רק את …".
 
+## Batch: several recordings at once
+
+Projects → "Process several recordings…" takes many files. Each becomes its
+own project (named after the file, with the open project's look and the chosen
+goal) and runs import → prepare → transcribe and first edit, one after another
+so the computer never does two heavy jobs at once. "Clean up" is the default
+because it needs no Story AI. The page keeps the screen awake while it runs and
+must stay open; a failure is shown on its row and the queue moves on.
+
 ## Composition
 
 The application launcher presents three real starting actions as compact rows beside the welcome statement, followed by recent projects and optional AI setup. It is not a second marketing landing page.

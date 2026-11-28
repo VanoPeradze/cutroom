@@ -13469,4 +13469,12 @@ if (typeof window !== "undefined") window.cutroomCleanupHost = Object.freeze({
   undo: () => applyManualEdit("undo"),
   edit: (action, detail) => applyManualEdit(action, detail),
   saveSettings: (settings) => scheduleSettingsPatch({ reason: "captions", settings }),
+  // Batch: send a recording to another project's source A without opening it.
+  api: (path, options) => api(path, options),
+  uploadSourceTo: (projectId, file, onProgress) => {
+    const token = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    return uploadWithProgress(`/api/projects/${encodeURIComponent(projectId)}/sources/A`, file, token, onProgress);
+  },
+  validateFile: (file) => validateUploadFile(file),
+  refreshProjects: () => loadProjects(),
 });

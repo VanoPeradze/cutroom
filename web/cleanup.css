@@ -104,3 +104,16 @@
 .export-handoff { margin: 10px 0 0; font-size: 13px; color: var(--muted, #9aa3ad); line-height: 1.5; }
 .export-handoff a { color: var(--accent, #7cc4ff); font-weight: 600; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
 .export-handoff small { display: block; font-size: 12px; opacity: 0.85; }
+
+/* Batch: several recordings, one project each. */
+.batch-options { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; margin: 0; padding: var(--space-3) var(--space-4); }
+.batch-options label { display: flex; gap: 8px; align-items: center; font-size: 14px; }
+.batch-options select { max-width: 100%; min-height: 36px; }
+.batch-files { cursor: pointer; }
+.batch-list li { padding: var(--space-2); display: flex; gap: 10px; align-items: center; justify-content: space-between; }
+.batch-name { display: grid; gap: 2px; min-width: 0; }
+.batch-name strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.batch-name small { color: var(--text-2); }
+.batch-list li[data-state="done"] small { color: var(--success, #3fb27f); }
+.batch-list li[data-state="failed"] small { color: var(--danger, #e5484d); }
+.batch-list li[data-state="running"] small::before { content: "● "; color: var(--accent, #7cc4ff); }
