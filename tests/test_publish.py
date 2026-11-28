@@ -308,3 +308,11 @@ def test_bat_is_small_ascii_launcher_not_a_shell_publish_script():
     assert "DisableDelayedExpansion" in source
     assert "git add" not in source and "git push" not in source
     assert "pip install" not in source and "npx" not in source
+
+
+def test_only_the_generated_sound_effects_are_approved_media():
+    from scripts.publish import path_issue
+    assert path_issue("web/sfx/whoosh.wav") is None
+    assert path_issue("web/sfx/other.wav") == "private/runtime file or unapproved media"
+    assert path_issue("web/whoosh.wav") == "private/runtime file or unapproved media"
+    assert path_issue("data/web/sfx/whoosh.wav") is not None
