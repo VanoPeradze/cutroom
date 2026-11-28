@@ -3,10 +3,10 @@
 // after it accepts an action. Nothing here changes media or document state.
 export const KEYBOARD_PROFILES = Object.freeze([
   Object.freeze({ id: "cutroom", label: "CUTROOM", description: "Fast editing keys. D selects Cut out; click twice to remove the section." }),
-  Object.freeze({ id: "resolve", label: "DaVinci Resolve", description: "Core editing keys: A selects, B blades, Ctrl/Cmd+B splits, N toggles snapping.", limitations: "An editing subset, not full Resolve emulation. No reverse or multi-speed J/K/L shuttle. Alt/Option, browser shortcuts and function keys stay native." }),
-  Object.freeze({ id: "premiere", label: "Adobe Premiere Pro", description: "Core editing keys: V selects, C razors, Q/W ripple-trim, S toggles snapping, apostrophe extracts a range.", limitations: "An editing subset, not full Premiere emulation. No reverse or multi-speed J/K/L shuttle or clipboard editing. Alt/Option, browser shortcuts and function keys stay native." }),
+  Object.freeze({ id: "resolve", label: "DaVinci Resolve", description: "Core editing keys: A selects, B blades, Ctrl/Cmd+B splits, N toggles snapping.", limitations: "An editing subset, not full Resolve emulation. J/K/L shuttles at 1×, 2× and 4×; reverse is silent. Alt/Option, browser shortcuts and function keys stay native." }),
+  Object.freeze({ id: "premiere", label: "Adobe Premiere Pro", description: "Core editing keys: V selects, C razors, Q/W ripple-trim, S toggles snapping, apostrophe extracts a range.", limitations: "An editing subset, not full Premiere emulation. No clipboard editing. J/K/L shuttles at 1×, 2× and 4×; reverse is silent. Alt/Option, browser shortcuts and function keys stay native." }),
   Object.freeze({ id: "protools", label: "Pro Tools", description: "Commands Keyboard Focus: B separates, A/S trim, R/T zoom, L / ' navigate edits. F7/F8 select timeline tools.", limitations: "F7/F8 work only on the focused timeline canvas. Tab changes focus; no Tab to Transients, source A/B Slip/Shuffle modes, sample-accurate nudge or clipboard editing. Trims use CUTROOM's edit scope. Imported-media Slip is a separate toolbar tool." }),
-  Object.freeze({ id: "finalcut", label: "Final Cut Pro", description: "Core timeline keys: A selects, B blades, R selects a range, N toggles snapping. Command shortcuts also accept Ctrl on Windows.", limitations: "An editing subset, not full Final Cut emulation. No skimming or reverse/multi-speed shuttle. Alt/Option, browser shortcuts and function keys stay native." }),
+  Object.freeze({ id: "finalcut", label: "Final Cut Pro", description: "Core timeline keys: A selects, B blades, R selects a range, N toggles snapping. Command shortcuts also accept Ctrl on Windows.", limitations: "An editing subset, not full Final Cut emulation. No skimming. J/K/L shuttles at 1×, 2× and 4×; reverse is silent. Alt/Option, browser shortcuts and function keys stay native." }),
 ]);
 
 const ACTION_LABELS = {
@@ -19,7 +19,7 @@ const ACTION_LABELS = {
   next_edit: "Next edit point", zoom_in: "Zoom timeline in",
   zoom_out: "Zoom timeline out", fit: "Fit timeline",
   tool_select: "Select tool", tool_range: "Range tool", tool_blade: "Blade tool",
-  tool_remove_between: "Cut out tool (two clicks)", play_forward: "Play forward at 1×",
+  tool_remove_between: "Cut out tool (two clicks)", play_forward: "Play forward (again: 2×, 4×)", play_reverse: "Play backwards (again: 2×, 4×)",
   trim_start: "Trim clip start to playhead", trim_end: "Trim clip end to playhead",
   jump_start: "Go to timeline start", jump_end: "Go to timeline end", toggle_snapping: "Toggle timeline snapping",
 };
@@ -38,7 +38,8 @@ const COMMON = [
 ];
 const NLE_NAVIGATION = [
   key("review_marker", "KeyM", "M", { custom: true, note: "Open timeline review markers; save the note deliberately." }),
-  key("stop", "KeyK", "K"), key("play_forward", "KeyL", "L", { custom: true, note: "Starts forward playback at 1×; repeated presses do not increase speed." }),
+  key("play_reverse", "KeyJ", "J", { custom: true, note: "Plays backwards (silent); press again for 2× and 4×." }),
+  key("stop", "KeyK", "K"), key("play_forward", "KeyL", "L", { custom: true, note: "Plays forward; press again for 2× and 4×. K stops and returns to 1×." }),
   key("mark_in", "KeyI", "I"), key("mark_out", "KeyO", "O"),
   key("select_clip", "KeyX", "X"),
   key("frame_back", "ArrowLeft", "Left"), key("frame_forward", "ArrowRight", "Right"),

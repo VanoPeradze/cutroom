@@ -1,33 +1,5 @@
 /* CUTROOM console: one calm instrument surface. The geometry controller owns
    resizing; no video pixels, rendering planes or timeline coordinates change. */
-:root {
-  --ink:#17181c; --ink-2:#202126; --ink-3:#282a30; --ink-4:#30333b;
-  --paper:#e9eaf0; --paper-dim:#c1c4ce; --muted:#a7acb8;
-  --surface-chrome:#202126; --surface-panel:#25272d; --surface-inset:#18191e;
-  --surface-raised:#30333b; --surface-hover:#3a3e48; --surface-selected:#353143;
-  --line:#383b44; --line-strong:#666d7c; --control-line:#666d7c; --control-border:#727b8b;
-  --cyan:#90bcc8; --cyan-text:#b6d8e0; --signal:#b5a1eb; --signal-text:#c7b6f2;
-  --primary-fill:#b5a1eb; --room-accent:#b5a1eb; --lobby-accent:#b5a1eb;
-  --focus-ring:#a7cdd8; --room-rule:#383b44; --room-soft:#202126;
-  --timeline-bg:#17181c; --timeline-ruler:#202228; --timeline-lane:#24262d; --timeline-lane-alt:#292c34;
-  --timeline-grid:#3c414d; --timeline-text:#c2c8d5; --timeline-clip:#345461; --timeline-clip-b:#5c4c73;
-  --timeline-clip-edge:#8aa8bc; --timeline-selected:#baa5f0; --timeline-label:#f3f5fa;
-  --timeline-wave:#a9c9c2; --timeline-wave-bg:#2d4445; --timeline-layout:#4b6175;
-}
-html[data-theme=light] {
-  --ink:#b4bac3; --ink-2:#bec4cc; --ink-3:#b8bec7; --ink-4:#aeb6c0;
-  --paper:#222731; --paper-dim:#343c49; --muted:#3b4452;
-  --surface-chrome:#bdc3cb; --surface-panel:#cbd0d6; --surface-inset:#b5bdc7;
-  --surface-raised:#d7dbe0; --surface-hover:#a9b3c0; --surface-selected:#bcb7cf;
-  --line:#96a0af; --line-strong:#6f7b8d; --control-line:#6f7b8d; --control-border:#626f83;
-  --cyan:#3b6579; --cyan-text:#254e65; --signal:#69528e; --signal-text:#513772;
-  --primary-fill:#665084; --room-accent:#665084; --lobby-accent:#665084;
-  --focus-ring:#315c76; --room-rule:#96a0af; --room-soft:#b8bec7;
-  --timeline-bg:#aeb7c3; --timeline-ruler:#bcc4cf; --timeline-lane:#bec6d0; --timeline-lane-alt:#c9d0d9;
-  --timeline-grid:#909dac; --timeline-text:#2c394b; --timeline-clip:#4b6c81; --timeline-clip-b:#715d87;
-  --timeline-clip-edge:#354e67; --timeline-selected:#655080; --timeline-label:#ffffff;
-  --timeline-wave:#2e5156; --timeline-wave-bg:#a4b7bb; --timeline-layout:#849aaa;
-}
 body.console-shell { background:var(--ink); }
 /* Project, history, library and delivery are direct. Setup/help are one menu. */
 body.studio-open.console-shell .app-chrome .topbar { display:flex; align-items:center; gap:12px; height:48px; min-height:48px; padding:0 14px; background:var(--ink); border-color:var(--line); }

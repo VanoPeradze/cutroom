@@ -14,8 +14,8 @@ test("every profile exposes every supported action with readable nonempty help",
   assert.deepEqual(Array.from(KEYBOARD_PROFILES, (profile) => profile.id), ["cutroom", "resolve", "premiere", "protools", "finalcut"]);
   for (const { id } of KEYBOARD_PROFILES) {
     const rows = shortcutRows(id);
-    assert.equal(rows.length, 30);
-    assert.equal(new Set(rows.map((row) => row.action)).size, 30);
+    assert.equal(rows.length, 31);
+    assert.equal(new Set(rows.map((row) => row.action)).size, 31);
     const selectedMarks=rows.find(row=>row.action==="mark_selected_layers");
     assert.equal(selectedMarks.bound,id==="cutroom");
     assert.equal(resolve(event("X",{shiftKey:true}),id),id==="cutroom"?"mark_selected_layers":null);
@@ -40,7 +40,7 @@ test("each profile routes split to its actual CUTROOM action, without leaking ot
   assert.equal(resolve(event("b", { ctrlKey: true }), "protools"), null);
 });
 
-test("NLE navigation stays familiar without inventing reverse or accelerated shuttle", () => {
+test("NLE navigation stays familiar, with J/K/L shuttle on the NLE profiles", () => {
   const common = { " ": "toggle_play", k: "stop", i: "mark_in", o: "mark_out", x: "select_clip",
     Escape: "clear_selection", ArrowLeft: "frame_back", ArrowRight: "frame_forward",
     ArrowUp: "previous_edit", ArrowDown: "next_edit", "=": "zoom_in", "-": "zoom_out" };
@@ -50,7 +50,7 @@ test("NLE navigation stays familiar without inventing reverse or accelerated shu
       assert.equal(resolve(event(key), id), action);
     }
     assert.equal(resolve(event("l"), id), "play_forward");
-    assert.equal(resolve(event("j"), id), null);
+    assert.equal(resolve(event("j"), id), "play_reverse");
     assert.equal(resolve(event("L", { shiftKey: true }), id), null);
     assert.equal(resolve(event("Home"), id), "jump_start");
     assert.equal(resolve(event("End"), id), "jump_end");
@@ -355,4 +355,20 @@ test("every advertised bound action is reachable in its supported focus scope", 
     const advertised = shortcutRows(id).filter((row) => row.bound).map((row) => row.action);
     assert.deepEqual([...observed].sort(), Array.from(advertised).sort(), id);
   }
+});
+
+test("Pro Tools keeps J unassigned and L as previous edit", () => {
+  assert.equal(resolve(event("j"), "protools"), null);
+  assert.equal(resolve(event("l"), "protools"), "previous_edit");
+});
+
+test("the timeline clock shuttles at 1x, 2x and 4x and keeps its position", async () => {
+  const { SourceTimelineClock } = await import("../web/source-tracks.js");
+  let now = 0;
+  const clock = new SourceTimelineClock(() => now);
+  clock.seek(10); clock.play();
+  now = 1000; assert.equal(clock.time(), 11);
+  clock.setRate(4); now = 1500; assert.equal(clock.time(), 13);
+  assert.equal(clock.setRate(3), 1);
+  now = 2500; assert.equal(clock.time(), 14);
 });

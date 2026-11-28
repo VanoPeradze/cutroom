@@ -28,7 +28,7 @@ import math
 import re
 from typing import Any
 
-from .captions import CAPTION_POSITION_CHOICES, CAPTION_SCALE_RANGE, CAPTION_STYLE_CHOICES, HIGHLIGHT_WORDS_PER_CAPTION
+from .captions import CAPTION_POSITION_CHOICES, CAPTION_SCALE_RANGE, CAPTION_STYLE_CHOICES, word_caption_limit
 from .caption_alternatives import caption_transcript
 from .source_tracks import has_sequence, has_source_tracks, source_track_clips
 
@@ -461,9 +461,7 @@ def caption_lines(items: list[dict[str, Any]], words_per_caption: int, *,
         if item.get("hidden"):
             continue
         style = {key: item.get(key) for key in _STYLE_KEYS}
-        limit = max(1, int(words_per_caption))
-        if (item.get("style") or default_style) == "highlight":
-            limit = min(limit, HIGHLIGHT_WORDS_PER_CAPTION)
+        limit = max(1, word_caption_limit(item.get("style") or default_style, max(1, int(words_per_caption))))
         words = item.get("words") or []
         if not words:
             # Without word timing a long text is still split at word boundaries;

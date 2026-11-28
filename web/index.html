@@ -8,25 +8,26 @@
   <script src="/assets/ui-shell.js?v=20261123-flow2"></script>
   <title>CUTROOM 1.3 Beta — Your editing workspace</title>
   <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/assets/styles.css?v=1.3-beta-20261123-stylefamilies1">
+  <link rel="stylesheet" href="/assets/tokens.css?v=20261128-a11y1">
+  <link rel="stylesheet" href="/assets/styles.css?v=1.3-beta-20261123-stylefamilies1-tokens1-a11y1-brand1">
   <link rel="stylesheet" href="/assets/workspace.css?v=1.2-beta-20261019">
   <link rel="stylesheet" href="/assets/media-studio.css?v=1.3-beta-20261107-source-marks1-roll1-slide1-take1-ow1-groupsplit1-join1">
   <link rel="stylesheet" href="/assets/stabilization-studio.css?v=1.2-beta-20261019">
   <link rel="stylesheet" href="/assets/chroma-studio.css?v=1.3-beta-20261101-ui1">
   <link rel="stylesheet" href="/assets/text-studio.css?v=20261116-caption-preview3-authoredbidi1">
-  <link rel="stylesheet" href="/assets/welcome.css?v=1.3-beta-20261111-transcription1">
+  <link rel="stylesheet" href="/assets/welcome.css?v=1.3-beta-20261111-transcription1-tokens1">
   <link rel="stylesheet" href="/assets/range-export.css?v=20261117-1">
   <link rel="stylesheet" href="/assets/review-markers.css?v=20261117-1">
-  <link rel="stylesheet" href="/assets/clip-board.css?v=20261122-clips11-kit2">
-  <link rel="stylesheet" href="/assets/creator-ui.css?v=1.2-beta-20261024-ui-clarity1">
+  <link rel="stylesheet" href="/assets/clip-board.css?v=20261122-clips11-kit2-content1">
+  <link rel="stylesheet" href="/assets/creator-ui.css?v=1.2-beta-20261024-ui-clarity1-tokens1-a11y1">
   <link rel="stylesheet" href="/assets/editor-panels.css?v=1.2-beta-20261019">
-  <link rel="stylesheet" href="/assets/studio-design.css?v=1.2-beta-20261019">
-  <link rel="stylesheet" href="/assets/studio-chrome.css?v=1.2-beta-20261019">
+  <link rel="stylesheet" href="/assets/studio-design.css?v=1.2-beta-20261019-tokens1">
+  <link rel="stylesheet" href="/assets/studio-chrome.css?v=1.2-beta-20261019-tokens1">
   <link rel="stylesheet" href="/assets/studio-screens.css?v=1.2-beta-20261019">
   <link rel="stylesheet" href="/assets/ui-polish.css?v=1.3-beta-20261107-monitor1">
-  <link rel="stylesheet" href="/assets/studio-finish.css?v=20261112-workbench1-20261115-edit-suite1">
+  <link rel="stylesheet" href="/assets/studio-finish.css?v=20261112-workbench1-20261115-edit-suite1-tokens1">
   <link rel="stylesheet" href="/assets/studio-workbench.css?v=20261117-urgent-alignment2">
-  <link rel="stylesheet" href="/assets/studio-console.css?v=20261119-export1">
+  <link rel="stylesheet" href="/assets/studio-console.css?v=20261119-export1-tokens1">
   <link rel="stylesheet" href="/assets/timeline-command-strip.css?v=20261118-geometry1">
   <link rel="stylesheet" href="/assets/source-view.css?v=20261120-handoff1">
   <link rel="stylesheet" href="/assets/track-lift.css?v=20261118-lift1">
@@ -34,7 +35,16 @@
   <link rel="stylesheet" href="/assets/mark-selection.css?v=20261118-markrange1">
   <link rel="stylesheet" href="/assets/color-motion.css?v=20261122-color1">
   <link rel="stylesheet" href="/assets/ui-precision.css?v=20261122-precision1">
-  <link rel="stylesheet" href="/assets/ui-flow.css?v=20261123-flow2">
+  <link rel="stylesheet" href="/assets/ui-flow.css?v=20261123-flow2-tokens1">
+  <link rel="stylesheet" href="/assets/timeline-toolbar.css?v=20261128-onerow1">
+  <link rel="stylesheet" href="/assets/command-palette.css?v=20261128-palette1">
+  <link rel="stylesheet" href="/assets/context-menu.css?v=20261128-menu1">
+  <link rel="stylesheet" href="/assets/tooltips.css?v=20261128-tips1">
+  <link rel="stylesheet" href="/assets/a11y.css?v=20261128-a11y1-voice1">
+  <link rel="stylesheet" href="/assets/caption-styles.css?v=20261128-brand1">
+  <link rel="stylesheet" href="/assets/cleanup.css?v=20261128-shuttle1">
+  <link rel="stylesheet" href="/assets/script-view.css?v=20261128-find1">
+  <link rel="stylesheet" href="/assets/edit-panel.css?v=20261127-editgroups1">
 </head>
 <body class="welcome-mode">
   <a class="skip-link" href="#main" data-i18n="skip">Skip to content</a>
@@ -454,6 +464,7 @@
           <section id="studioShelfMedia" data-shelf="media timeline audio" aria-label="Project media">
             <header class="shelf-heading"><h3>Project media</h3><span>Footage &amp; sound</span></header>
             <div class="source-library" id="studioSourceLibrary"></div>
+            <details class="sfx-library" id="sfxLibrary"><summary>Sound effects</summary><p class="sfx-note">Original Cutroom sounds, free to use in any video. Add one to the project media, then drag it to the timeline.</p><ul class="sfx-list" aria-label="Sound effects"></ul></details>
           </section>
           <section id="studioShelfCaptions" data-shelf="transcript" aria-label="Text and caption library" hidden><header class="shelf-heading"><h3>Text &amp; captions</h3><span>Your edit, in words</span></header></section>
           <section id="studioShelfOutput" data-shelf="settings" aria-label="Output frame" hidden><header class="shelf-heading"><h3>Output frame</h3><span>Preview &amp; export</span></header><p class="shelf-help">Choose the shape of your finished video. Your edits stay in place.</p></section>
@@ -495,12 +506,17 @@
               <div class="editor-more-panel"><button id="trackLockA" type="button" aria-pressed="false">Lock A</button><button id="trackLockB" type="button" aria-pressed="false" hidden>Lock B</button></div>
               <p id="trackProtectionStatus" role="status">Locks protect edits without muting or hiding footage.</p>
             </details>
-            <details class="editor-more" id="editorMoreTools" open><summary>Clip tools</summary><div class="editor-more-panel">
-              <button id="manualSplit" type="button" disabled>Split at playhead</button><button id="manualRestore" type="button" disabled>Add to edit</button><button id="manualClear" type="button" disabled>Clear selection</button>
-              <button id="clipDuplicate" type="button" disabled>Duplicate clip</button><button id="manualRange" type="button" aria-expanded="false" aria-controls="timelineRangeForm">Range…</button><button id="manualLayout" type="button" disabled>Layout…</button>
-              <button type="button" data-timeline-tool="remove_between" aria-pressed="false">Cut out</button><button type="button" data-timeline-tool="move" aria-pressed="false" disabled hidden>Move clip</button><button type="button" id="trackReset" hidden>Reset track</button>
-              <button id="timelineZoomSelection" type="button" disabled>Zoom to selection</button>
-              <label class="keyboard-profile-label">Keys <select id="keyboardProfile" aria-label="Keyboard shortcut profile"><option value="cutroom">CUTROOM</option></select></label><button type="button" id="keyboardHelp">Shortcuts</button>
+            <details class="editor-more" id="editorMoreTools" open><summary>Clip tools</summary><div class="editor-more-panel edit-groups">
+              <div class="edit-group" role="group" aria-labelledby="editGroupCut"><h4 class="edit-group-label" id="editGroupCut" data-i18n="editGroupCut">Cut</h4>
+                <button id="manualSplit" type="button" disabled>Split at playhead</button><button type="button" data-timeline-tool="remove_between" aria-pressed="false">Cut out</button><button id="clipDuplicate" type="button" disabled>Duplicate clip</button><button id="cleanupButton" type="button" aria-haspopup="dialog" title="Find long pauses, hesitations and repeated takes, then choose what to remove">Clean up…</button><button id="hookButton" type="button" aria-haspopup="dialog" title="Find the strongest sentence and copy it to the start as a cold open">Opener…</button><button id="lookPackButton" type="button" aria-haspopup="dialog" title="Set caption style, colour look and zooms together">Style pack…</button><button id="scriptViewButton" type="button" aria-haspopup="dialog" title="Edit by text: select words in the transcript and delete them">Script…</button><button id="promptEditButton" type="button" aria-haspopup="dialog" title="Type what should change, like “remove the long pauses” or “find pricing”">Type an edit…</button><button id="brandKitButton" type="button" aria-haspopup="dialog" title="Brand colour, logo and saved templates">Brand kit…</button><button id="brollButton" type="button" aria-haspopup="dialog" title="Find places in what is said where a cutaway would help, and place your own shots there">B-roll ideas…</button><button type="button" data-timeline-tool="move" aria-pressed="false" disabled hidden>Move clip</button>
+              </div>
+              <div class="edit-group" role="group" aria-labelledby="editGroupSelection"><h4 class="edit-group-label" id="editGroupSelection" data-i18n="editGroupSelection">Selection</h4>
+                <button id="manualRange" type="button" aria-expanded="false" aria-controls="timelineRangeForm">Range…</button><button id="manualClear" type="button" disabled>Clear selection</button><button id="timelineZoomSelection" type="button" disabled>Zoom to selection</button>
+              </div>
+              <div class="edit-group" role="group" aria-labelledby="editGroupFootage"><h4 class="edit-group-label" id="editGroupFootage" data-i18n="editGroupFootage">Footage</h4>
+                <button id="manualRestore" type="button" disabled>Add to edit</button><button id="manualLayout" type="button" disabled>Layout…</button><button type="button" id="trackReset" hidden>Reset track</button>
+              </div>
+              <div class="edit-group-footer"><label class="keyboard-profile-label">Keys <select id="keyboardProfile" aria-label="Keyboard shortcut profile"><option value="cutroom">CUTROOM</option></select></label><button type="button" id="keyboardHelp">Shortcuts</button></div>
             </div></details>
           <form id="timelineRangeForm" class="source-range-form timeline-range-form" novalidate hidden>
             <label>From<input id="timelineRangeStart" type="text" inputmode="decimal" placeholder="00:00.000" aria-describedby="timelineRangeStatus" autocomplete="off"></label>
@@ -753,7 +769,7 @@
               <div class="caption-item-grid">
                 <label><span>Start (s)</span><input id="captionItemStart" type="number" step="0.01" min="0" inputmode="decimal"></label>
                 <label><span>End (s)</span><input id="captionItemEnd" type="number" step="0.01" min="0" inputmode="decimal"></label>
-                <label><span>Style</span><select id="captionItemStyle"><option value="">Project style</option><option value="highlight">Word highlight</option><option value="clean">Clean</option><option value="bold">Bold</option><option value="boxed">Boxed</option></select></label>
+                <label><span>Style</span><select id="captionItemStyle"><option value="">Project style</option><option value="highlight">Word highlight</option><option value="pop">Word pop</option><option value="box">Word box</option><option value="neon">Neon word</option><option value="word">One word</option><option value="emphasis">Key words</option><option value="clean">Clean</option><option value="bold">Bold</option><option value="boxed">Boxed</option></select></label>
                 <label><span>Position</span><select id="captionItemPosition"><option value="">Project position</option><option value="auto">Automatic safe area</option><option value="top">Top</option><option value="center">Center</option><option value="bottom">Bottom</option></select></label>
                 <label><span>Size (%)</span><input id="captionItemScale" type="number" min="75" max="150" step="5" placeholder="Project" inputmode="numeric"></label>
               </div>
@@ -775,7 +791,7 @@
               </div>
               <div class="caption-option-grid">
                 <label class="caption-language-control"><span><b>Speech language</b><small>Auto-detect checks evidence across the recording.</small><small class="rebuild-chip" data-rebuild-chip>Draft rebuild</small></span><select id="spokenLanguageSelect"><option value="auto">Auto-detect</option><option value="he">Hebrew</option><option value="en">English</option><option value="ar">Arabic</option><option value="es">Spanish</option><option value="fr">French</option><option value="ru">Russian</option></select><em id="captionLanguageStatus">Detected after analysis</em></label>
-                <label><span><b>Style</b><small>Visual treatment in the final video.</small></span><select id="captionStyleSelect"><option value="highlight">Word highlight</option><option value="clean">Clean</option><option value="bold" selected>Bold</option><option value="boxed">Boxed</option></select></label>
+                <label><span><b>Style</b><small>Visual treatment in the final video.</small></span><select id="captionStyleSelect"><option value="highlight">Word highlight</option><option value="pop">Word pop</option><option value="box">Word box</option><option value="neon">Neon word</option><option value="word">One word</option><option value="emphasis">Key words</option><option value="clean">Clean</option><option value="bold" selected>Bold</option><option value="boxed">Boxed</option></select></label>
                 <label><span><b>Position</b><small>Auto avoids faces in stacked layouts.</small></span><select id="captionPositionSelect"><option value="auto" selected>Automatic safe area</option><option value="top">Top</option><option value="center">Center</option><option value="bottom">Bottom</option></select></label>
                 <label><span><b>Size</b><small>Scale relative to the output frame.</small></span><div class="caption-range"><input id="captionScale" type="range" min="75" max="150" step="1" value="100"><output id="captionScaleOut">100%</output></div></label>
                 <label><span><b>Words per caption</b><small>Fewer words create faster, punchier captions.</small></span><div class="caption-range"><input id="captionWordsPerLine" type="range" min="2" max="12" step="1" value="9"><output id="captionWordsPerLineOut">9</output></div></label>
@@ -1008,6 +1024,7 @@
       <a class="button primary full" id="downloadExport" hidden data-i18n="downloadVideo">Download video</a>
       <a class="button ghost full" id="downloadExportCaptions" hidden>Download subtitles (.srt)</a>
       <ul id="exportReview" class="export-review" aria-label="Checks of the finished video" hidden></ul>
+      <p class="export-handoff" id="exportHandoff" hidden>Finish in another editor: <a data-handoff="fcpxml" title="Final Cut Pro, DaVinci Resolve, Premiere Pro">FCPXML</a> · <a data-handoff="edl" title="CMX3600 edit decision list">EDL</a> <small>Main edit only. Layers, captions, colour and the mix stay here.</small></p>
       </div>
       <div class="export-actions" id="exportActions"><button class="button ghost" id="cancelExport">Back to edit</button><button class="button render" id="confirmExport" data-i18n="startExport">Start export</button></div>
     </div>
@@ -1087,11 +1104,25 @@
       <footer class="connection-actions"><button class="button ghost" id="forgetCloudKey" type="button">Forget session key</button><button class="button primary" id="saveAIConnection" type="submit">Use this connection</button></footer>
     </form>
   </dialog>
-  <script type="module" src="/assets/app.js?v=20261117-transcript-sections1-console1-firstrecording1-mixer1-range2-export1-markers1-roll1-slide1-take1-ow1-sourceview1-lift1-opacity1-markrange1-groupsplit1-join1-titleclock1-ripplechapter1-matchseam1-editorflow1-sourcedrag1-frame1-handoff1-manualtranscript1-clips10-precision2-flow1-stylefamilies1"></script>
+  <script type="module" src="/assets/app.js?v=20261117-transcript-sections1-console1-firstrecording1-mixer1-range2-export1-markers1-roll1-slide1-take1-ow1-sourceview1-lift1-opacity1-markrange1-groupsplit1-join1-titleclock1-ripplechapter1-matchseam1-editorflow1-sourcedrag1-frame1-handoff1-manualtranscript1-clips10-precision2-flow1-stylefamilies1-wordstyles1-cleanup1-autozoom1-hook1-sfx1-packs1-script1-prompt1-brand1-voiceclean1-shuttle1-xml1-batch1-shorts1"></script>
   <script src="/assets/studio-screens.js?v=20261119-output1" defer></script>
   <script type="module" src="/assets/studio-workbench.js?v=20261116-ai-pane2"></script>
   <script type="module" src="/assets/studio-console.js?v=20261117-console1"></script>
   <script type="module" src="/assets/timeline-command-strip.js?v=20261118-geometry1"></script>
   <script type="module" src="/assets/source-view.js?v=20261118-sourceview1-frame1"></script>
+  <script type="module" src="/assets/command-palette.js?v=20261128-palette1"></script>
+  <script type="module" src="/assets/context-menu.js?v=20261128-menu1"></script>
+  <script type="module" src="/assets/tooltips.js?v=20261128-tips1"></script>
+  <script type="module" src="/assets/cleanup.js?v=20261128-cleanup1"></script>
+  <script type="module" src="/assets/hook.js?v=20261128-hook1"></script>
+  <script type="module" src="/assets/sfx.js?v=20261128-sfx1"></script>
+  <script type="module" src="/assets/look-packs.js?v=20261128-packs1"></script>
+  <script type="module" src="/assets/script-view.js?v=20261128-find2"></script>
+  <script type="module" src="/assets/prompt-edit.js?v=20261128-prompt3"></script>
+  <script type="module" src="/assets/brand-kit.js?v=20261128-brand1"></script>
+  <script type="module" src="/assets/broll.js?v=20261128-broll2"></script>
+  <script type="module" src="/assets/batch.js?v=20261128-batch1"></script>
+  <script type="module" src="/assets/caption-translate.js?v=20261128-translate1"></script>
+  <script type="module" src="/assets/tour.js?v=20261128-tour1"></script>
 </body>
 </html>

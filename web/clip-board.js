@@ -13,6 +13,14 @@ export function formatClock(seconds) {
   return hours ? `${hours}:${pad(minutes)}:${pad(rest)}` : `${minutes}:${pad(rest)}`;
 }
 
+/** Hook, completeness and clarity rows from a clip's transcript scores. */
+export function contentRows(content) {
+  if (!content || typeof content !== "object") return [];
+  return [["hook", "Hook"], ["complete", "Complete"], ["clarity", "Clarity"]]
+    .filter(([key]) => Number.isFinite(Number(content[key]?.score)))
+    .map(([key, label]) => ({ key, label, score: Math.max(0, Math.min(100, Math.round(Number(content[key].score)))), note: String(content[key].note || "") }));
+}
+
 export function strengthLabel(strength) {
   const value = Math.max(0, Math.min(100, Math.round(Number(strength) || 0)));
   if (value >= 95) return "Top moment";
@@ -138,7 +146,14 @@ export class ClipBoard {
     this.batchButton.type = "button";
     this.batchButton.hidden = true;
     this.batchButton.addEventListener("click", () => this.runBatch());
-    head.append(titles, this.batchButton, lengths, close);
+    // A wide (YouTube) edit can become a vertical copy for shorts that keeps
+    // the edit, colour and captions; the original stays as it is.
+    this.shortsButton = this.el("button", "button ghost compact clip-shorts-button", "Make shorts copy (9:16)");
+    this.shortsButton.type = "button";
+    this.shortsButton.hidden = true;
+    this.shortsButton.title = "Save a vertical copy of this edit with the same cuts, colour and captions, then find clips in it. This project is not changed.";
+    this.shortsButton.addEventListener("click", () => { if (this.batchRunning) return; this.handingOff = true; this.close(); this.options.makeShorts?.(); });
+    head.append(titles, this.shortsButton, this.batchButton, lengths, close);
 
     const radar = this.el("section", "clip-radar");
     radar.setAttribute("aria-label", "Moment strength across the recording");
@@ -195,6 +210,7 @@ export class ClipBoard {
     this.aspect = this.options.outputAspect?.() || 16 / 9;
     this.dialog.style.setProperty("--clip-aspect", String(this.aspect));
     this.dialog.classList.toggle("vertical", this.aspect < 1);
+    this.shortsButton.hidden = !(this.aspect > 1 && this.options.canMakeShorts?.());
     this.layout = this.aspect < 1 ? this.options.stillLayout?.() || null : null;
     const url = this.options.mediaUrl(project);
     if (this.stillVideo.dataset.src !== url) { this.stillVideo.src = url; this.stillVideo.dataset.src = url; }
@@ -426,6 +442,20 @@ export class ClipBoard {
     }
     reasons.append(this.el("li", "peak", `Peak ${formatClock(clip.peak)}`));
     body.append(reasons);
+    const content = contentRows(clip.content);
+    if (content.length) {
+      const list = this.el("dl", "clip-content");
+      list.setAttribute("aria-label", "How it works as content");
+      for (const row of content) {
+        const item = this.el("div", "clip-content-row");
+        const meter = this.el("span", "clip-content-meter");
+        meter.style.setProperty("--score", String(row.score));
+        meter.setAttribute("aria-hidden", "true");
+        item.append(this.el("dt", null, row.label), meter, this.el("dd", null, `${row.score} · ${row.note}`));
+        list.append(item);
+      }
+      body.append(list);
+    }
 
     const actions = this.el("div", "clip-actions");
     let openButton = this.el("button", "button primary compact", "Open in editor");

@@ -4,52 +4,10 @@
 @font-face { font-family:'Noto Sans Hebrew'; src:url('/assets/fonts/NotoSansHebrew.ttf') format('truetype'); font-weight:100 900; font-display:swap; }
 :root {
   color-scheme:dark;
-  --font:Geist,'Noto Sans Hebrew','Segoe UI',sans-serif; --mono:var(--font);
-  --ink:#17191c; --ink-2:#1d1f23; --ink-3:#26292e; --ink-4:#30343a;
-  --paper:#f1eee9; --paper-dim:#cccac6; --muted:#b1b1b2;
-  --line:#3c4047; --line-strong:#656a73;
-  --surface-chrome:#22252a; --surface-panel:#292c31; --surface-inset:#1b1d21;
-  --surface-raised:#34383f; --surface-hover:#3c4047; --surface-selected:#343341;
-  --cyan:#9cbfd0; --cyan-text:#b6d7e2; --signal:#b7a6de;
-  --primary-fill:#bca9df; --marker:#bca9df; --room-accent:#bca9df; --lobby-accent:#bca9df;
-  --room-rule:#3c4047; --room-soft:#26292e;
-  --control-line:#656a73; --control-border:#777d87; --focus-ring:#a8cdd7;
-  --signal-text:#c5b5e6; --signal-deep-text:#c5b5e6; --signal-label:#c5b5e6;
-  --keep:#88aa9b; --keep-text:#b0c9bd; --warning:#d4b775; --warning-text:#e3cb96; --danger:#eea0a5;
-  --shadow:0 18px 50px #10111440;
-  --timeline-bg:#191b1f; --timeline-ruler:#24272c; --timeline-lane:#22252a; --timeline-lane-alt:#292d33;
-  --timeline-grid:#3e434c; --timeline-text:#c6c9cf; --timeline-clip:#365564; --timeline-clip-b:#5e4e77;
-  --timeline-clip-edge:#9db9ca; --timeline-selected:#bca9df; --timeline-label:#f1f3f6;
-  --timeline-wave:#aac8c3; --timeline-wave-bg:#2d4243; --timeline-layout:#55697c;
-  --timeline-caption:#66532e; --timeline-caption-edited:#505c3f; --timeline-caption-edge:#bba77b;
-  --timeline-media-wave:#d0e1d8; --timeline-keep:#38584b; --timeline-keep-alt:#3e6152; --timeline-keep-selected:#496b58;
-  --timeline-selection-fill:rgba(188,169,223,.14); --timeline-move-fill:rgba(176,201,189,.6);
-  --timeline-danger:var(--danger); --timeline-danger-soft:rgba(238,160,165,.20); --timeline-danger-fill:rgba(238,160,165,.55); --timeline-danger-label:#30161b;
-  --timeline-gap-fill:rgba(188,169,223,.08); --timeline-gap-edge:#9a8db5; --timeline-layout-label:#f1f3f6; --timeline-on-selected:#271c16;
 }
 /* The day workspace is gray, not a white dashboard. Video remains unaltered. */
 html[data-theme=light] {
   color-scheme:light;
-  --ink:#b5b9bf; --ink-2:#c2c6cb; --ink-3:#b9bec5; --ink-4:#aeb4bc;
-  --paper:#24282e; --paper-dim:#333a43; --muted:#363e48;
-  --line:#999fa8; --line-strong:#727b87;
-  --surface-chrome:#c2c6cb; --surface-panel:#cdd0d4; --surface-inset:#b9bec5;
-  --surface-raised:#d8dade; --surface-hover:#abb2bb; --surface-selected:#b9bdca;
-  --cyan:#526b7a; --cyan-text:#304d5d; --primary-fill:#63517f; --signal:#67517f;
-  --marker:#63517f; --room-accent:#63517f; --lobby-accent:#63517f; --room-rule:#999fa8; --room-soft:#b9bec5;
-  --control-line:#7b8490; --control-border:#65707e; --focus-ring:#456475;
-  --signal-text:#57416f; --signal-deep-text:#57416f; --signal-label:#57416f;
-  --keep:#456b5a; --keep-text:#2b4d3d; --warning:#806024; --warning-text:#5a420f; --danger:#902e3c;
-  --shadow:0 18px 50px #292e3529;
-  --timeline-bg:#b5b9bf; --timeline-ruler:#c9cdd2; --timeline-lane:#bfc4cb; --timeline-lane-alt:#cbd0d6;
-  --timeline-grid:#979faa; --timeline-text:#333c48; --timeline-clip:#577486; --timeline-clip-b:#77648e;
-  --timeline-clip-edge:#314b61; --timeline-selected:#63517f; --timeline-label:#ffffff;
-  --timeline-wave:#2e5252; --timeline-wave-bg:#a9bab9; --timeline-layout:#879dad;
-  --timeline-caption:#6f5b36; --timeline-caption-edited:#526044; --timeline-caption-edge:#55401f;
-  --timeline-media-wave:#e0eeea; --timeline-keep:#4c6859; --timeline-keep-alt:#506e5e; --timeline-keep-selected:#3f5c4e;
-  --timeline-selection-fill:rgba(99,81,127,.14); --timeline-move-fill:rgba(69,107,90,.38);
-  --timeline-danger:var(--danger); --timeline-danger-soft:rgba(144,46,60,.20); --timeline-danger-fill:rgba(144,46,60,.45); --timeline-danger-label:#ffffff;
-  --timeline-gap-fill:rgba(99,81,127,.08); --timeline-gap-edge:#6c6080; --timeline-layout-label:#24282e; --timeline-on-selected:#ffffff;
 }
 body { font-family:var(--font); -webkit-font-smoothing:antialiased; }
 button,a,input,select,textarea,summary { -webkit-tap-highlight-color:transparent; }

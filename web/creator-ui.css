@@ -1,13 +1,5 @@
 /* CUTROOM / Free video editor for creators.
    Authored interface skin. Playback and timeline geometry live in workspace.css. */
-:root {
-  --ink:#171817; --ink-2:#202120; --ink-3:#282a28; --ink-4:#373a36;
-  --surface-chrome:#1b1d1b; --surface-panel:#222522; --surface-inset:#151715;
-  --surface-raised:#2c302c; --surface-hover:#333833; --surface-selected:#34303e;
-  --paper:#f2f0e9; --paper-dim:#c7c9c2; --muted:#a9afa4;
-  --line:#383d36; --line-strong:#65705f; --primary-fill:#7459a3;
-  --room-accent:#bca6d6; --room-rule:#44483f; --room-soft:#252923;
-}
 body { font-family:"Segoe UI Variable Text","Segoe UI",Arial,sans-serif; }
 .button { border-radius:10px; }
 .button.primary,.button.render { box-shadow:none; }
@@ -183,7 +175,6 @@ body.welcome-mode { background:var(--ink); }
 }
 
 /* A single measured header stack, not competing sticky bars. */
-:root { --app-chrome-height:64px; }
 .app-chrome { position:sticky; top:0; z-index:210; background:var(--surface-chrome); }
 body .app-chrome .topbar {
   position:relative; inset:auto; height:auto; min-height:64px; z-index:auto;
@@ -234,17 +225,6 @@ body.studio-open:has(#activeJobBar:not([hidden])) .advanced-panel.studio-workspa
 }
 
 /* Day mode changes the interface, never the video pixels or caption colors. */
-html[data-theme="light"] {
-  --ink:#f2f0e9; --ink-2:#faf9f5; --ink-3:#eae8df; --ink-4:#dedfd5;
-  --surface-chrome:#f2f0e9; --surface-panel:#faf9f5; --surface-inset:#eae8df;
-  --surface-raised:#fffefa; --surface-hover:#e7e5dc; --surface-selected:#e7dff0;
-  --paper:#20231e; --paper-dim:#494f44; --muted:#62685c;
-  --line:#d2d3c7; --line-strong:#949b88; --control-line:#a9ae9f; --control-border:#838d77;
-  --room-accent:#684690; --room-rule:#b6bcac; --room-soft:#e8e7de;
-  --signal-text:#67428f; --signal-deep-text:#67428f; --signal-label:#573378;
-  --cyan-text:#1d6b75; --keep-text:#247431; --warning-text:#756311; --danger:#b72c44;
-  --focus-ring:#67428f; --shadow:0 12px 32px #23352b20;
-}
 html[data-theme="light"] .button.render { color:#fff; }
 html[data-theme="light"] .button.danger { color:#a52338; border-color:#d48a96; background:#fbeef0; }
 html[data-theme="light"] .button.danger:hover:not(:disabled) { color:#821a2b; background:#f6dbe0; }
@@ -271,7 +251,7 @@ html[data-theme="light"] :is(.studio-section,.transcript-editor-card,.caption-to
 html[data-theme="light"] .runtime-status-dock .model-status,
 html[data-theme="light"] #studioDirectorDock .verdict-block { background:var(--surface-inset); border-color:var(--line); }
 html[data-theme="light"] .source-upload-cancel { color:#fff; }
-html[data-theme="light"] .source-mixer-status { color:#247431; }
+html[data-theme="light"] .source-mixer-status { color:var(--ok-text); }
 html[data-theme="light"] .embedded-camera-state { color:#247431; }
 html[data-theme="light"] .timeline-cut-status:not([data-tool="remove_between"]) { color:var(--paper-dim); background:var(--surface-inset); }
 html[data-theme="light"] .studio-workspace .studio-preview-dock,

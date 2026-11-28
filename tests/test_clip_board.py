@@ -67,3 +67,29 @@ def test_unavailable_states_explain_why():
 def test_rejects_invalid_requests(length, count):
     with pytest.raises(ClipBoardError):
         build_clip_board(_project(), length=length, count=count)
+
+
+def test_content_scores_explain_hook_completeness_and_clarity():
+    from cutroom.clip_board import _content_scores
+
+    strong = [{"start": 10.0, "end": 13.0, "text": "Did you know 90% of creators skip this?"},
+              {"start": 13.5, "end": 18.0, "text": "Here is the fix."}]
+    scores = _content_scores(9.5, 19.0, strong)
+    assert scores["hook"]["score"] >= 90
+    assert "question" in scores["hook"]["note"] and "number" in scores["hook"]["note"] and "viewer" in scores["hook"]["note"]
+    assert scores["complete"] == {"score": 100, "note": "starts and ends on whole sentences"}
+    assert scores["clarity"]["score"] == 100
+
+    rough = [{"start": 5.0, "end": 9.0, "text": "and um so like the uh thing"},
+             {"start": 9.5, "end": 14.0, "text": "we were going to"}]
+    weak = _content_scores(7.0, 12.0, rough)
+    assert weak["hook"]["note"] == "a plain first line" and weak["hook"]["score"] == 30
+    assert weak["complete"]["note"] == "starts and ends mid-sentence"
+    assert weak["clarity"]["score"] < 80 and "filler" in weak["clarity"]["note"]
+    assert _content_scores(0, 5, []) is None
+
+
+def test_board_clips_carry_content_scores_only_with_a_transcript():
+    segments = [{"start": 104.0, "end": 108.0, "text": "No way, did you see that!"}]
+    assert build_clip_board(_project(segments=segments), length=30, count=1)["clips"][0]["content"]["hook"]["score"] > 30
+    assert build_clip_board(_project(), length=30, count=1)["clips"][0]["content"] is None

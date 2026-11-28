@@ -47,6 +47,36 @@ export function colorCssFilter(raw) {
   return parts.join(" ") || "none";
 }
 
+const EMPHASIS_STOP = new Set("about after again against because before being between could doesn't during everything nothing really should something through without would actually basically literally probably".split(" "));
+
+/** A word worth a punch-in: a number, a long content word, or an exclamation. */
+export function isEmphasisWord(word) {
+  const raw = String(word || "").trim(), core = raw.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
+  if (!core) return false;
+  return /\p{N}/u.test(core) || raw.endsWith("!") || (core.length >= 7 && /^\p{L}+$/u.test(core) && !EMPHASIS_STOP.has(core.toLowerCase()));
+}
+
+/** Punch-in keyframes on key words of the edit's captions (edit/output time).
+    Each punch eases in over 0.25 s, holds, and eases out; punches stay at least
+    `gap` seconds apart and never overlap existing keyframes. */
+export function autoZoomKeyframes(captions, existing = [], { zoom = 1.15, hold = 1.0, gap = 4, x = 0.5, y = 0.42 } = {}) {
+  const words = (captions || []).filter((c) => !c.hidden && !c.estimated_words && Array.isArray(c.words))
+    .flatMap((c) => c.words.map(([start, , word]) => ({ start: Number(start), word })))
+    .filter((w) => Number.isFinite(w.start) && w.start >= 0.3 && isEmphasisWord(w.word)).sort((a, b) => a.start - b.start);
+  const rows = normalizeKeyframes(existing);
+  const busy = rows.map((r) => r.time);
+  const out = [...rows];
+  let last = -Infinity;
+  for (const w of words) {
+    if (out.length + 4 > MAX_KEYFRAMES) break;
+    const t = w.start, span = [t - 0.25, t + hold + 0.35];
+    if (t - last < gap || busy.some((time) => time >= span[0] - 0.5 && time <= span[1] + 0.5)) continue;
+    out.push({ time: t - 0.25, zoom: 1, x, y }, { time: t, zoom, x, y }, { time: t + hold, zoom, x, y }, { time: t + hold + 0.35, zoom: 1, x, y });
+    last = t;
+  }
+  return normalizeKeyframes(out);
+}
+
 export function normalizeKeyframes(raw) {
   const rows = new Map();
   for (const item of Array.isArray(raw) ? raw : []) {
@@ -130,6 +160,8 @@ export function initColorMotion(root, options) {
   });
   const addKey = el("button", { type: "button", className: "button primary compact", textContent: copy("קיפריים במיקום הנוכחי", "Keyframe at playhead") });
   const clearKeys = el("button", { type: "button", className: "button ghost compact", textContent: copy("ניקוי הכול", "Clear all") });
+  const autoZoom = el("button", { type: "button", className: "button ghost compact", textContent: copy("זום אוטומטי על מילות מפתח", "Auto zoom on key words") });
+  autoZoom.title = copy("מוסיף פאנץ׳־אין קצר על מספרים ומילים חשובות בתמלול", "Adds a short punch-in on numbers and key words in the transcript");
   const keyList = el("ol", { className: "keyframe-list" });
   const motionNote = el("small", { className: "color-note" });
 
@@ -146,7 +178,7 @@ export function initColorMotion(root, options) {
       el("div", { className: "color-motion-head" }, [el("b", { textContent: copy("זום וקיפריימים", "Zoom keyframes") }),
         el("small", { textContent: copy("התמונה מתקרבת סביב נקודת המרכז, ונעה בהדרגה בין קיפריימים.", "The picture zooms around the center point and eases between keyframes.") })]),
       ...motionRows,
-      el("div", { className: "color-actions" }, [addKey, clearKeys]),
+      el("div", { className: "color-actions" }, [addKey, autoZoom, clearKeys]),
       keyList,
       motionNote,
     ]),
@@ -233,6 +265,15 @@ export function initColorMotion(root, options) {
     commitKeyframes(next);
   });
   clearKeys.addEventListener("click", () => commitKeyframes([]));
+  autoZoom.addEventListener("click", () => {
+    const captions = getProject()?.editor_captions || [];
+    if (!captions.some((c) => !c.hidden && c.words?.length && !c.estimated_words)) { toast(copy("זום אוטומטי צריך תמלול עם תזמון מילים.", "Auto zoom needs a transcript with word timing.")); return; }
+    const next = autoZoomKeyframes(captions, keyframes);
+    const added = (next.length - keyframes.length) / 4;
+    if (!added) { toast(copy("לא נמצאו מקומות חדשים לזום.", "No new places to zoom were found.")); return; }
+    commitKeyframes(next);
+    toast(copy(`נוספו ${added} זומים. אפשר למחוק כל קיפריים ברשימה.`, `Added ${added} zoom${added === 1 ? "" : "s"}. Delete any keyframe in the list.`));
+  });
 
   function showColor() {
     look.value = color.look;

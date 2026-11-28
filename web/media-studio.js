@@ -446,6 +446,7 @@ export class MediaStudio {
         <div class="mixer-bank-label"><h4>Channels</h4><small>Mute affects export. Solo is preview only.</small></div>
         <div class="mixer-channels" role="group" aria-label="Original, music, voiceover and effects"></div>
         <label class="ducking-choice"><input type="checkbox" data-ducking> Lower music while speech plays</label>
+        <label class="ducking-choice" title="Removes rumble and steady background noise, evens out the level and adds clarity. Applied when you export; the preview plays the original sound."><input type="checkbox" data-voice-cleanup> Clean up voice (export)</label>
         <p class="mixer-level-text">Play to monitor the mix.</p>
         <p class="mixer-help mixer-normalization" role="note"></p>
         <details class="mixer-reference"><summary>Fader controls and metering</summary>
@@ -2111,6 +2112,7 @@ export class MediaStudio {
     const sourceName = root.querySelector('[data-channel-name=source]');
     if (sourceName) sourceName.textContent = `Original ${this.options.audioSlot?.() || this.project()?.manual?.source_mixer?.audio_slot || this.project()?.settings?.audio_source || 'A'}`;
     root.querySelector('[data-ducking]').checked=Boolean(mixer.ducking);
+    const voiceCleanup=root.querySelector('[data-voice-cleanup]'); if(voiceCleanup)voiceCleanup.checked=mixer.voice_cleanup===true;
     for (const input of root.querySelectorAll('[data-mix]')) {
       const db = Number(mixer[input.dataset.mix]) || 0;
       // Ranges have no unfinished typed draft. Reset/undo while focused must
@@ -2159,6 +2161,7 @@ export class MediaStudio {
   change(input) {
     if (this.options.busy()) { this.render(); return; }
     if (input.hasAttribute('data-ducking')) { this.queueMixer({ducking:input.checked}); return; }
+    if (input.hasAttribute('data-voice-cleanup')) { this.queueMixer({voice_cleanup:input.checked}); return; }
     if (input.dataset.mix) { this.queueMixer({[input.dataset.mix]:Number(input.value)}); return; }
     if (input.dataset.mixNumber) {
       const value = Number(input.value);
@@ -2348,7 +2351,7 @@ export class MediaStudio {
     item.analyser.disconnect(); item.analyser.connect(bus.gain); item.busRole = role;
   }
   syncPlayer(item, time, speed, playing, gain = 0) {
-    const element = item.element; element.playbackRate = speed; element.preservesPitch = true;
+    const element = item.element; element.playbackRate = speed * (this.options?.rate?.() || 1); element.preservesPitch = true;
     if (item.gain) item.gain.gain.value = gain; else element.volume = Math.max(0,Math.min(1,gain*10**(Number(this.mixer().master_db||0)/20)));
     if (Math.abs(element.currentTime-time) > (playing ? .12 : 1e-6)) { try { element.currentTime = Math.max(0,time); this.meterResetUntil = performance.now()+120; } catch {} }
     item.wanted = playing;

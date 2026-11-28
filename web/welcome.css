@@ -1,11 +1,4 @@
 /* CUTROOM product UI. Existing timeline behavior and geometry remain in workspace.css. */
-:root {
-  --ink:#111319; --ink-2:#181c25; --ink-3:#202633; --ink-4:#2b3343;
-  --surface-chrome:#181c25; --surface-panel:#1b202b; --surface-inset:#131720;
-  --surface-raised:#242c3a; --surface-hover:#2b3545; --surface-selected:#332c45;
-  --paper:#f4f3fa; --paper-dim:#c8cdda; --muted:#a4adbe;
-  --line:#303746; --line-strong:#596078; --primary-fill:#7459a3; --shadow:0 12px 32px #0003;
-}
 body { background:var(--ink); }
 .topbar { background:#14171e; border-bottom:1px solid var(--line); }
 .top-actions { flex-wrap:wrap; gap:6px; }

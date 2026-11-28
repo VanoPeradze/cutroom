@@ -119,8 +119,10 @@ def test_visual_layer_is_shipped_after_existing_geometry_styles():
     # adds scoped Inspector/AI navigation and the media-pool collapse state.
     # The console refines chrome and native disclosures after those layers.
     style_paths = [urlsplit(href).path for href in page.styles]
-    # The flow layer (motion and feedback only) is last of all.
-    assert style_paths[-17:] == ["/assets/creator-ui.css", "/assets/editor-panels.css",
+    # The flow layer (motion and feedback only) follows them; the grouped Edit
+    # panel, built only from tokens.css, is last.
+    assert style_paths[0] == "/assets/tokens.css"
+    assert style_paths[-26:] == ["/assets/creator-ui.css", "/assets/editor-panels.css",
                                 "/assets/studio-design.css", "/assets/studio-chrome.css",
                                 "/assets/studio-screens.css", "/assets/ui-polish.css",
                                 "/assets/studio-finish.css", "/assets/studio-workbench.css",
@@ -128,7 +130,7 @@ def test_visual_layer_is_shipped_after_existing_geometry_styles():
                                 "/assets/source-view.css", "/assets/track-lift.css",
                                 "/assets/clip-opacity.css", "/assets/mark-selection.css",
                                 "/assets/color-motion.css", "/assets/ui-precision.css",
-                                "/assets/ui-flow.css"]
+                                "/assets/ui-flow.css", "/assets/timeline-toolbar.css", "/assets/command-palette.css", "/assets/context-menu.css", "/assets/tooltips.css", "/assets/a11y.css", "/assets/caption-styles.css", "/assets/cleanup.css", "/assets/script-view.css", "/assets/edit-panel.css"]
     assert len(style_paths) == len(set(style_paths))
     for href in page.styles:
         assert href.startswith("/assets/")

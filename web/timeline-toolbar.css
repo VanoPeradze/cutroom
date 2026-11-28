@@ -1,0 +1,110 @@
+/* Timeline: one toolbar row instead of two on wide screens.
+   The edit-tool row and the navigation row (Index, previous/next edit, loop,
+   markers, Go to timecode) become one flex line in a fixed order:
+   tools · navigation · status · timecode · zoom · more.
+   Every control keeps its element, id, handler and keyboard order inside its
+   own group; only their boxes join one line. Narrower screens keep the two
+   established rows and the compact Controls dialog. Uses tokens.css only. */
+
+@media (min-width: 1440px) and (min-height: 540px) {
+  #advancedPanel.console-ready .studio-timeline-dock {
+    flex-flow: row wrap;
+    align-content: flex-start;
+    align-items: center;
+    column-gap: var(--space-1);
+    row-gap: 0;
+    --timeline-row: 44px;
+  }
+  #advancedPanel.console-ready .studio-timeline-dock > :is(.editor-toolbar-main, .timeline-navigation) {
+    display: contents;
+  }
+  /* The joined row's own height and padding. */
+  #advancedPanel.console-ready .studio-timeline-dock::before {
+    content: "";
+    order: 0;
+    flex: 0 0 var(--space-2);
+    height: var(--timeline-row);
+  }
+  #advancedPanel.console-ready .studio-timeline-dock > .timeline-cut-status,
+  #advancedPanel.console-ready .studio-timeline-dock > .advanced-note { order: 50; flex: 0 0 100%; }
+  #advancedPanel.console-ready .studio-timeline-dock > .timeline-body {
+    order: 60;
+    flex: 0 0 100%;
+    height: calc(100% - var(--timeline-row));
+    min-height: 100px;
+    border-top: 1px solid var(--line);
+  }
+  #advancedPanel.console-ready .studio-timeline-dock:has(> .timeline-cut-status:not([hidden])) > .timeline-body {
+    height: calc(100% - var(--timeline-row) - 34px);
+  }
+  #advancedPanel.console-ready .studio-timeline-dock > .timeline-drop-feedback { order: 70; }
+
+  /* Order: editing tools first. */
+  #advancedPanel.console-ready .editor-toolbar-main > .timeline-tools { order: 1; }
+  #advancedPanel.console-ready .editor-toolbar-main > #timelineTargetField { order: 2; }
+  #advancedPanel.console-ready .editor-toolbar-main > #manualDelete { order: 3; }
+  #advancedPanel.console-ready .editor-toolbar-main > #reviewSourceButton { order: 4; }
+  #advancedPanel.console-ready .editor-toolbar-main > #closeTimelineGaps { order: 5; }
+  #advancedPanel.console-ready .editor-toolbar-main > #timelineSnap { order: 6; }
+
+  /* Navigation group, set off by one divider. */
+  #advancedPanel.console-ready .timeline-navigation > * { order: 10; }
+  #advancedPanel.console-ready .timeline-navigation > #timelineIndexButton {
+    margin-inline-start: var(--space-2);
+    padding-inline-start: var(--space-3);
+    border-inline-start: 1px solid var(--line);
+    border-radius: 0;
+  }
+  #advancedPanel.console-ready .timeline-navigation > .timeline-timecode-form { order: 30; margin-inline-start: var(--space-2); }
+
+  /* Status text takes what is left and never pushes controls to a new line. */
+  #advancedPanel.console-ready .editor-toolbar-main > .timeline-context {
+    order: 20;
+    flex: 1 1 0;
+    min-width: 0;
+    overflow: hidden;
+    padding-inline: var(--space-3);
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  #advancedPanel.console-ready .editor-toolbar-main > .timeline-context > * {
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  #advancedPanel.console-ready .editor-toolbar-main > .timeline-zoom-controls { order: 31; margin-inline-start: var(--space-2); }
+  #advancedPanel.console-ready .editor-toolbar-main > #editorMoreButton { order: 32; }
+  #advancedPanel.console-ready .editor-toolbar-main > :is(#timelineCommandTrigger, #timelineCommandDialog) { order: 40; }
+  #advancedPanel.console-ready .studio-timeline-dock::after {
+    content: "";
+    order: 33;
+    flex: 0 0 var(--space-2);
+    height: var(--timeline-row);
+  }
+
+  /* Navigation buttons match the tool row's height. */
+  #advancedPanel.console-ready .timeline-navigation > button,
+  #advancedPanel.console-ready .timeline-navigation .marker-controls button,
+  #advancedPanel.console-ready .timeline-navigation .timeline-timecode-form :is(button, input) {
+    min-height: 30px;
+    height: 30px;
+  }
+}
+
+/* Between 1440 and 1679px the joined row has no room for the hint sentence.
+   It stays in the accessibility tree (its live region still announces the
+   selection); only its box is removed from the line. */
+@media (min-width: 1440px) and (max-width: 1679px) and (min-height: 540px) {
+  #advancedPanel.console-ready .editor-toolbar-main > .timeline-context {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  #advancedPanel.console-ready .timeline-navigation > .timeline-timecode-form { margin-inline-start: auto; }
+}

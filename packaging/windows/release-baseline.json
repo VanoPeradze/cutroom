@@ -1,12 +1,12 @@
 {
-  "bytes": 7676289,
-  "sha256": "eb2ca57e2951128ab8905371f77d4ab14c532abd3cff23c3b5321f60d3072fe9",
-  "manifest_sha256": "3f6bff5726b1eadc7ec37d37d7779ef18f96fc5d2ec45ff2c3428eebd1fb4e51",
-  "build_id": "CUTROOM-1.3-beta-20261124-114803",
-  "filename": "CUTROOM-1.3-Beta-Windows-4a9a5d9.zip",
-  "url": "https://cutroom-studio--7sk115ueys.expo.app/downloads/CUTROOM-1.3-Beta-Windows-4a9a5d9.zip",
+  "bytes": 8194727,
+  "sha256": "96188b40df8eb2f340f9d190948c85ebcd0eb14390c465a33d76aeb4da76834b",
+  "manifest_sha256": "c44561689191d64b64fd801ed221b5eb3e15917b9cb95117b5a3e0ae67d95596",
+  "build_id": "CUTROOM-1.3-beta-20261128-063953",
+  "filename": "CUTROOM-1.3-Beta-Windows-e9b6997.zip",
+  "url": "https://cutroom-studio--xk2tlfb7jk.expo.app/downloads/CUTROOM-1.3-Beta-Windows-e9b6997.zip",
   "mirrors": [],
   "version": "1.3-beta",
-  "source_commit": "4a9a5d9d880b584a22f6a8143efc583697bdd15b",
-  "note": "Verified exact CUTROOM Source B archive staged after hosted Windows run 45387405847. Native Mac qualification remains separate; historical validation pins are unchanged."
+  "source_commit": "e9b69978661fbb3705daeb6770c68b4f0df0812d",
+  "note": "PR 138 source candidate built from a clean git archive; package and immutable staging readback verified. Native Mac qualification pending."
 }

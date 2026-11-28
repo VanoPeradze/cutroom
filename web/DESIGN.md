@@ -12,6 +12,174 @@
 - Source tracks remain distinguishable through muted blue-gray and violet. Sound and text retain semantic colors without neon or glow.
 - Geist with Noto Sans Hebrew is shipped locally with both SIL Open Font Licenses. Proportional text and tabular numerals replace decorative monospace. Caption and video pixels are not restyled by the UI theme.
 
+## Design tokens
+
+`tokens.css` loads first and is the only place theme values are defined: surfaces, text, lines, accents, status, type, spacing, motion, timeline canvas colors and toolbar icons, for dark (default) and light. Feature stylesheets read tokens and never redefine them at `:root` or `html[data-theme=light]`. Scoped overrides that belong to one region, such as the darker monitor and timeline wells in light mode, stay beside that region.
+
+New and reworked screens use the design-system scale at the end of `tokens.css`:
+
+- Type: `--fs-12` captions and meta, `--fs-13` controls, `--fs-15` body and inspector values, `--fs-20` panel titles.
+- Spacing: the 4px grid, `--space-1` (4px) through `--space-10` (40px).
+- Surfaces: `--surface-1` app frame, `--surface-2` panels, `--surface-3` controls and cards, plus `--surface-well` for inputs and lists.
+- Text: `--text-1`, `--text-2`, `--text-3`.
+- Accent: one `--accent` for primary action, selection and focus, with `--accent-text`, `--accent-soft` and `--on-accent`.
+
+### Edit panel (27 November)
+
+Clip tools are grouped by intent: **Cut** (Split leads on its own row, then Cut out and Duplicate clip), **Selection** (Range, Clear selection, Zoom to selection) and **Footage** (Review original footage or Add to edit, Layout, Reset to draft). Each group is a labelled `role="group"`. The keyboard profile and Shortcuts sit in a quiet footer. `edit-panel.css` loads last and uses only the `tokens.css` scale. Every button keeps its id, label, disabled state and handler. An odd last button spans its row. Compact layouts keep 44px targets.
+
+### Timeline toolbar and command palette (28 November)
+
+- At 1440px and wider (and at least 540px tall) the timeline's tool row and navigation row join into one 44px line: tools, navigation, status, timecode, zoom, more (`timeline-toolbar.css`). Narrower screens keep the two rows. An empty timeline draws a 30-second ruler instead of a crowded one.
+- `Ctrl/Cmd+Shift+P` or the Commands button in the top bar opens a palette of every visible, enabled command on the current screen. Choosing one clicks that same button, so handlers, checks and undo are unchanged. `Ctrl/Cmd+K` stays Split.
+- Right-click on the timeline selects the clip under the pointer (Select or Move tool only) and opens Split, Duplicate, Remove, Add to edit, Layout, Zoom to selection, Clear selection and Close gaps. Track headers and shelf items list their own buttons. Each item clicks the existing button and is disabled while it is. Shift+right-click and text fields keep the browser menu (`context-menu.js`).
+- Tooltips (`tooltips.js`) share one style, appear on hover and on keyboard focus, and show the shortcut of the active keyboard profile (also set as `aria-keyshortcuts`). The control's title stays the text source.
+- Accessibility audit (axe-core, WCAG 2.0/2.1 AA, all six screens, both themes): zero violations after darkening two light-theme labels (`--ok-text`, `--cyan-text`). WCAG 2.2 target size: crop sliders get a 24px hit area; the ducking checkbox sits in a 32px clickable label row (`a11y.css`).
+
+### Animated word captions (28 November)
+
+Six word-timed caption styles share one timing model (`WORD_CAPTION_STYLES` in `cutroom/captions.py`) and differ only in how the spoken word looks: Word highlight (yellow), Word pop (yellow, scales in), Word box (dark text on a yellow plate), Neon word (green glow), One word (a single word at a time, scales in) and Key words (yellow active word, numbers and long content words in orange for the whole line). The preview (`caption-styles.css`) uses the same colours as the burned-in ASS. Right-to-left lines stay plain short phrases, as before, because libass loses Hebrew word order once colour overrides split a line. Animations stop under reduced motion.
+
+### One-click cleanup (28 November)
+
+Edit > Cut > Clean up… (also in the command palette) reads the edit's own captions in edit time and lists long pauses (a 0.25 s breath stays), isolated hesitation sounds, optional filler words (unticked: they often carry meaning) and repeated takes (a caption whose opening words the next one repeats). Nothing changes until Remove. The approved places go to the server as one `sequence_ripple_delete_ranges` edit, applied from the end backwards, so it is one Undo step. Edits with imported media or text layers keep using Cut out one range at a time. Captions without trustworthy word timing are ignored.
+
+### Opener and auto zoom (28 November)
+
+- Edit > Cut > Opener… ranks the edit's sentences (numbers, key words, questions, exclamations, talking to the viewer; each result says why) and copies the chosen one to the start as a cold open with `sequence_duplicate_range` (one Undo step; the original stays in place).
+- Color & motion > Auto zoom on key words adds a short punch-in (ease in 0.25 s, hold 1 s at 115%, ease out) on numbers, long content words and exclamations, at least 4 s apart, within the 32-keyframe limit and never over existing keyframes. Each punch is four ordinary keyframes the user can delete.
+
+### Sound effects (28 November)
+
+Media shelf > Sound effects lists seven original sounds (whoosh, swipe, pop, click, ding, hit, riser) synthesized by `scripts/generate_sfx.py` with fixed seeds, so they are Cutroom's own and rebuild byte for byte. Play previews; Add imports the sound into the project media through the normal import, where it is placed and mixed like any audio.
+
+### Style packs (28 November)
+
+Edit > Cut > Style pack… asks "How should it feel?" and offers eight packs (Clean, Bold social, Podcast, Gaming, Minimal, Explainer, Cinematic, Vintage). A pack sets the caption style and the colour look together; the energetic ones also add auto zooms on key words. Each part stays editable in its own control. What the video is (content type) stays with the existing edit styles.
+
+## Script view
+
+`Script…` in the Edit panel opens a non-modal panel docked right
+(`script-view.js`, `script-view.css`). It shows the edit's captions as
+running text in edit time, one paragraph per caption, each in its own
+direction. Click a word to jump; drag or Shift+click to select; Delete,
+Backspace or Remove selection cuts that span (padded 0.04 s into the
+surrounding pauses) through `sequence_ripple_delete_ranges`, one Undo step.
+The spoken word is highlighted during playback. Paragraphs with estimated
+word timing carry a dotted underline and a tooltip.
+
+Find (Ctrl+F inside the panel) highlights every place a phrase is said;
+Enter and Shift+Enter step through them and Remove all cuts them together.
+Shared pure helpers live in `transcript-search.js`.
+
+## Type an edit
+
+`Type an edit…` opens a dialog where the user writes what should change, in
+English or Hebrew: remove pauses / hesitations / fillers / repeated takes,
+cut a time range, delete every use of a phrase, find a phrase or go to a time,
+add an opener, zoom on key words. `prompt-edit.js` matches known edit phrases
+on this computer (no network, no model) and always shows what will happen
+before the Remove / Go / Do it button runs it. Unknown requests say so and
+point to the example chips.
+
+## Brand kit
+
+`Brand kit…` (`brand-kit.js`) collects what makes every video look like the
+creator's. The brand colour is the project setting `caption_accent`
+(`#RRGGBB` or empty): it replaces the spoken-word colour of the word-timed
+caption styles and the key-word colour of Key words, both in the burned-in ASS
+(`cutroom/captions.py`) and in the preview (`--caption-accent` on the preview
+stage). A logo is an imported image added as one image layer for the whole
+edit, sized to keep its shape with an even margin in the chosen corner.
+Templates keep caption style, position, size, words per caption, brand colour
+and colour look, and are stored in this app on this computer.
+
+## Voice cleanup
+
+The Audio mixer's “Clean up voice (export)” sets `audio_mixer.voice_cleanup`.
+On export the recorded speech and voiceover buses go through a gentle local
+chain (`VOICE_CLEANUP_FILTER` in `cutroom/media_render.py`: high-pass,
+FFT noise reduction, light compression, presence EQ) before their faders and
+ducking. The preview plays the original sound, and the label says so.
+
+## B-roll ideas
+
+`B-roll ideas…` (`broll.js`) reads the edit's transcript and lists sentences
+where a cutaway would help (they point at something, give a number or name
+things), at most one every 6 s and never in the first 1.5 s, with what to
+show. An imported image or clip whose file name matches what is said is
+preselected; Place adds it full frame, without its sound, for about 3 s as one
+Undo step. Nothing is searched online.
+
+## Clip content scores
+
+Each Clips card with a transcript also shows Hook, Complete and Clarity
+(`content` from `cutroom/clip_board.py::_content_scores`), each 0–100 with the
+plain reason: what the first line does, whether the clip starts and ends on
+whole sentences, and filler, pace and how much is spoken. They sit beside the
+measured sound/energy strength and never replace it.
+
+## J/K/L shuttle
+
+In the CUTROOM, Resolve, Premiere and Final Cut profiles, L plays forward and
+each further L doubles the speed to 2× and 4× (`SourceTimelineClock.setRate`,
+players and library media follow); J plays backwards by stepping the playhead
+(silent), also up to 4×; K stops and returns to 1×. A small badge on the
+preview shows the speed. Pro Tools keeps its own L.
+
+## Finish in another editor (EDL / FCPXML)
+
+The Export dialog links to an FCPXML 1.8 file (Final Cut Pro, DaVinci Resolve,
+Premiere Pro) and a CMX3600 EDL. Both are built on request from the saved edit
+and describe the main edit only: which part of source A or B is seen and heard
+when. Layouts that show A and B together put B on the track above A. Layers,
+captions, colour, zooms and the audio mix stay in CUTROOM and are named in a note
+inside the file, so nothing is silently dropped.
+
+## Supercut (keep only what matches)
+
+In the script's find bar, "Keep only these" keeps each sentence where the
+search is said (widened to the sentence by punctuation or a pause, at most 25
+words each way) with a little air around it, and removes everything else in
+one Undo step. Typed edits understand "keep only the parts about …",
+"supercut …" and "השאר רק את …".
+
+Typed edits also understand "shorten to 8 minutes" / "תקצר ל-8 דקות": the
+lightest cleanup goes first (pauses, then hesitations, fillers, repeated takes;
+longest pieces first) until the edit fits. When cleanup alone cannot reach the
+length, the plan says how far it gets and points to AI Director's target length.
+
+## Batch: several recordings at once
+
+Projects → "Process several recordings…" takes many files. Each becomes its
+own project (named after the file, with the open project's look and the chosen
+goal) and runs import → prepare → transcribe and first edit, one after another
+so the computer never does two heavy jobs at once. "Clean up" is the default
+because it needs no Story AI. The page keeps the screen awake while it runs and
+must stay open; a failure is shown on its row and the queue moves on.
+
+## Long video → shorts
+
+On a wide edit, the Clips board shows "Make shorts copy (9:16)". It saves a
+project copy (same cuts, colour, captions and layers; the original is not
+changed), names it "… shorts", switches the copy to 9:16 with the existing
+output-aspect path, and opens its Clips board so moments can be exported.
+
+## Translated subtitles
+
+The Export dialog's "Subtitles in another language" asks the configured Story
+AI to translate the edit's visible caption lines, 30 at a time, into one of 12
+languages and downloads a separate .srt with the same timing (Hebrew ↔ English
+by default). The project's captions are never changed; a line the AI does not
+return keeps its original text, and the status says how many were translated.
+
+## Quick tour
+
+The first time an edit is on screen, a five-stop tour rings the real controls
+(Script, Clean up, Type an edit, Clips, Export) with a short bubble beside
+each. Skip, Escape or Done ends it and it is remembered per browser; "Quick
+tour" in the keyboard help starts it again. Automated browsers never get it.
+
 ## Composition
 
 The application launcher presents three real starting actions as compact rows beside the welcome statement, followed by recent projects and optional AI setup. It is not a second marketing landing page.

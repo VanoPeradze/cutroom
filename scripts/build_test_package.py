@@ -22,6 +22,14 @@ ROOT_FILES = (
 # Explicit support files stay in their source locations inside App as well.
 SUPPORT_FILES = (
     "scripts/verify_windows_installer.ps1", "tests/requirements.txt",
+    "web/sfx/catalog.json",
+    "web/sfx/click.wav",
+    "web/sfx/ding.wav",
+    "web/sfx/hit.wav",
+    "web/sfx/pop.wav",
+    "web/sfx/riser.wav",
+    "web/sfx/swipe.wav",
+    "web/sfx/whoosh.wav",
     "scripts/validate_caption_bidi_browser.cjs",
     "tests/fixtures/fonts/DejaVuSans.ttf", "tests/fixtures/fonts/DejaVuSans-Bold.ttf",
     "tests/fixtures/fonts/DejaVu-LICENSE.txt", "tests/fixtures/fonts/README.md",

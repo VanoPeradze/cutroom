@@ -40,6 +40,14 @@ def master_gain_db(project: dict[str, Any]) -> float:
     return max(-60, min(12, _number(((project.get("manual") or {}).get("audio_mixer") or {}).get("master_db"))))
 
 
+# Local voice cleanup for recorded speech and voiceover (export only): remove
+# rumble, reduce steady background noise, even out level and add a little
+# presence. Gentle on purpose so a voice never sounds processed.
+VOICE_CLEANUP_FILTER = ("highpass=f=80,afftdn=nr=12:nf=-40:tn=1,"
+                        "acompressor=threshold=0.1:ratio=3:attack=15:release=200:makeup=1.6,"
+                        "equalizer=f=3500:t=q:w=1.2:g=2")
+
+
 def append_media_graph(
     project: dict[str, Any], width: int, height: int, duration: float,
     video_label: str, audio_label: str | None,
@@ -236,7 +244,8 @@ def append_media_graph(
             continue
         labels = aligned(labels, role)
         mix = f"amix=inputs={len(labels)}:duration=longest:dropout_transition=0:normalize=0" if len(labels) > 1 else "anull"
-        filters.append(f"{''.join(labels)}{mix},volume={_gain(mixer, role):.9f}[libbus{role}]")
+        clean = f",{VOICE_CLEANUP_FILTER}" if mixer.get("voice_cleanup") is True and role in {"source", "voice"} else ""
+        filters.append(f"{''.join(labels)}{mix}{clean},volume={_gain(mixer, role):.9f}[libbus{role}]")
         buses[role] = f"[libbus{role}]"
     speech_roles = [role for role in ("source", "voice") if role in buses and _gain(mixer, role) > 0
                     and not (track_mixed and role == "voice" and track_muted_voice and not audible_voice)]

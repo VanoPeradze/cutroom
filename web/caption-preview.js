@@ -1,7 +1,7 @@
 // Edited-clock ASS event semantics; browser shaping/collision geometry remains approximate.
 const record = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const finite = (value, min, max) => typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max;
-const styles = new Set(['bold','clean','boxed','highlight']);
+const styles = new Set(['bold','clean','boxed','highlight','pop','box','neon','word','emphasis']);
 const positions = new Set(['auto','top','center','bottom']);
 const invalid = 'The caption preview is unavailable. Reload the current saved edit.';
 
@@ -89,13 +89,14 @@ export function initCaptionPreview(stage, primary, {select} = {}) {
     records.push(row);return row;
   }
   function content(row,event) {
-    const key=JSON.stringify([event.text,event.tokens,event.active_index]);
+    const key=JSON.stringify([event.text,event.tokens,event.active_index,event.keywords]);
     if(row.contentKey===key)return;
     row.contentKey=key;
     if(event.tokens===null)row.node.textContent=event.text;
     else row.node.replaceChildren(...event.tokens.flatMap((token,index)=>{
       const span=doc.createElement('span');span.textContent=token;
       if(index===event.active_index)span.classList.add('caption-active-word');
+      else if(Array.isArray(event.keywords)&&event.keywords.includes(index))span.classList.add('caption-keyword');
       return index?[' ',span]:[span];
     }));
   }
@@ -145,6 +146,8 @@ export function initCaptionPreview(stage, primary, {select} = {}) {
       tree=canonical?eventTree(canonical.events):null;layoutKey='';
     }
     if(cachedIssue)return unavailable(cachedIssue);
+    const accent=/^#[0-9A-Fa-f]{6}$/.test(canonical.settings.caption_accent||'')?canonical.settings.caption_accent:'';
+    if(accent)stage.style?.setProperty?.('--caption-accent',accent);else stage.style?.removeProperty?.('--caption-accent');
     if(!enabled){replay=null;release();return {available:true,issue:'',activeCount:0,collisionApproximate:false};}
     replay={scene,time,options:{projectId,revision,selectedId,enabled}};
     const events=activeEvents(tree,time).sort((a,b)=>a.order-b.order),width=stage.clientWidth,height=stage.clientHeight;

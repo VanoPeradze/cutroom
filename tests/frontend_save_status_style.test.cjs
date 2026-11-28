@@ -1,5 +1,5 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
-const root=path.join(__dirname,'..'),css=fs.readFileSync(path.join(root,'web/studio-workbench.css'),'utf8'),finish=fs.readFileSync(path.join(root,'web/studio-finish.css'),'utf8');
+const root=path.join(__dirname,'..'),css=fs.readFileSync(path.join(root,'web/studio-workbench.css'),'utf8'),finish=fs.readFileSync(path.join(root,'web/studio-finish.css'),'utf8'),themeTokens=fs.readFileSync(path.join(root,'web/tokens.css'),'utf8');
 const section=css.slice(css.indexOf('/* One existing save indicator'),css.indexOf('/* Temporary multi-selection'));
 const block=selector=>{const escaped=selector.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');const m=section.match(new RegExp(escaped+'\\s*\\{([^}]+)\\}'));assert.ok(m,selector);return m[1]};
 const luminance=hex=>hex.slice(1).match(/../g).map(x=>parseInt(x,16)/255).map(v=>v<=.04045?v/12.92:((v+.055)/1.055)**2.4).reduce((s,v,i)=>s+v*[.2126,.7152,.0722][i],0);
@@ -11,7 +11,7 @@ test('existing save status remains compact visible text rather than a new toolba
 });
 test('save phases use readable theme tokens without dimming inactive status',()=>{
  assert.match(block('.topbar #saveState:disabled'),/opacity:1/);assert.match(block('.topbar #saveState[data-save-state=saving]'),/var\(--cyan-text\)/);assert.match(block('.topbar #saveState[data-save-state=unsaved]'),/var\(--warning-text\)/);assert.match(block('.topbar #saveState[data-save-state=error]'),/var\(--danger\)/);
- for(const marker of [':root','html[data-theme=light]']){const start=finish.indexOf(marker),s=finish.slice(start,finish.indexOf('}',start)),tokens=Object.fromEntries([...s.matchAll(/--([\w-]+):(#[\da-f]{6})/g)].map(m=>[m[1],m[2]]));for(const fg of ['muted','cyan-text','warning-text','danger'])for(const bg of ['surface-chrome','surface-raised'])assert.ok(ratio(tokens[fg],tokens[bg])>=4.5,`${marker} ${fg}/${bg}`)}
+ for(const marker of [':root','html[data-theme=light]']){const start=themeTokens.indexOf(marker),s=themeTokens.slice(start,themeTokens.indexOf('}',start)),tokens=Object.fromEntries([...s.matchAll(/--([\w-]+):(#[\da-f]{6})/g)].map(m=>[m[1],m[2]]));for(const fg of ['muted','cyan-text','warning-text','danger'])for(const bg of ['surface-chrome','surface-raised'])assert.ok(ratio(tokens[fg],tokens[bg])>=4.5,`${marker} ${fg}/${bg}`)}
 });
 test('only actionable status has a recovery cue, with keyboard and forced-colors focus',()=>{
  assert.match(block('.topbar #saveState:not(:disabled)'),/cursor:pointer/);assert.match(block('.topbar #saveState:disabled'),/cursor:default/);assert.match(block('.topbar #saveState:not(:disabled)::after'),/content:''/);assert.match(section,/\[dir=rtl\] \.topbar #saveState:not\(:disabled\)::after/);assert.match(block('.topbar #saveState:focus-visible'),/outline:2px solid var\(--focus-ring\)/);assert.match(section,/@media \(forced-colors:active\)/);

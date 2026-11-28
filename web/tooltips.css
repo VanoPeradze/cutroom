@@ -1,0 +1,17 @@
+/* One tooltip style; uses tokens.css only. */
+.app-tooltip {
+  position: fixed; z-index: 1100; pointer-events: none;
+  display: flex; align-items: center; gap: var(--space-2);
+  max-width: 320px; padding: 5px var(--space-2);
+  border: 1px solid var(--line); border-radius: var(--radius-s);
+  background: var(--surface-3); color: var(--text-1);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .28);
+  font-size: var(--fs-12); line-height: var(--leading-ui);
+}
+.app-tooltip[hidden] { display: none; }
+.app-tooltip kbd {
+  flex: none; font: inherit; color: var(--text-2);
+  padding: 0 5px; border: 1px solid var(--line); border-radius: var(--radius-s); background: var(--surface-well);
+}
+.app-tooltip kbd[hidden] { display: none; }
+@media (forced-colors: active) { .app-tooltip { border-color: CanvasText; } }

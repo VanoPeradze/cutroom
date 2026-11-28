@@ -61,6 +61,7 @@ from cutroom.local_models import (
 )
 from cutroom.audio import analyze_audio
 from cutroom.captions import (
+    normalize_caption_accent,
     CAPTION_POSITION_CHOICES,
     CAPTION_SCALE_RANGE,
     CAPTION_STYLE_CHOICES,
@@ -82,8 +83,10 @@ from cutroom.group_split import group_split_receipt
 from cutroom.group_join import group_join_receipt
 from cutroom.range_export import RangeExportError
 from cutroom.review_markers import MarkerError, apply_marker
-from cutroom.render import resolve_export_range, InsufficientStorageError, LayoutCoverageError, available_encoders, ensure_render_storage, project_caption_items, caption_preview_scene, render_project, require_layout_coverage
+from cutroom.render import _dimensions as render_dimensions, _effective_audio_slot as render_audio_slot, resolve_export_range, InsufficientStorageError, LayoutCoverageError, available_encoders, ensure_render_storage, project_caption_items, caption_preview_scene, render_project, require_layout_coverage
 from cutroom.utils import sanitize_filename
+from cutroom.interchange import build_edl, build_fcpxml
+from cutroom.caption_translation import LANGUAGES as TRANSLATION_LANGUAGES, TranslationUnavailable, translate_project_captions
 from cutroom.upload_storage import CHUNK_BYTES, UploadStorage, UploadStorageError, is_storage_full
 from cutroom.upload_transport import LEGACY_ASSET_UPLOAD_BYTES, MULTIPART_ALLOWANCE_BYTES
 from cutroom.native_paths import native_io_path
@@ -104,6 +107,7 @@ SOURCE_TRACK_EDIT_FIELDS = {
 }
 JSON_BODY_ENDPOINTS = {
     "clip_posting_kit",
+    "caption_translation",
     "review_ai_draft",
     "retained_edit_resume",
     "create_project_copy",
@@ -154,6 +158,7 @@ SETTINGS_FIELDS = {
     "caption_position",
     "caption_scale",
     "caption_words_per_line",
+    "caption_accent",
     "spoken_language",
     "performance_mode",
     "visual_ai",
@@ -381,6 +386,7 @@ def _validate_settings_payload(payload: dict[str, Any]) -> None:
         "visual_ai": 8,
         "caption_style": 16,
         "caption_position": 16,
+        "caption_accent": 8,
     }
     for key, limit in string_limits.items():
         _require_optional_string(payload, key, max_length=limit)
@@ -397,6 +403,8 @@ def _validate_settings_payload(payload: dict[str, Any]) -> None:
     for key in ("auto_reframe", "editorial_effects", "captions", "burn_captions", "allow_extractive_rough_cut"):
         if key in payload and not isinstance(payload[key], bool):
             raise APIInputError("invalid_field", f"{key} must be a boolean.")
+    if payload.get("caption_accent") and not normalize_caption_accent(payload["caption_accent"]):
+        raise APIInputError("invalid_field", "caption_accent must be a colour like #FFD400, or empty.")
     if "caption_scale" in payload:
         value = payload["caption_scale"]
         if (
@@ -1387,6 +1395,59 @@ def create_app(settings: Settings | None = None) -> Flask:
         except ClipBoardError as error:
             raise APIInputError("invalid_field", str(error)) from error
         return jsonify({"board": board})
+
+    @app.get("/api/projects/<project_id>/interchange.<kind>")
+    def project_interchange(project_id: str, kind: str):
+        # Read-only hand-off of the main edit to another editor (EDL / FCPXML).
+        if kind not in {"edl", "fcpxml"}:
+            return jsonify({"error": "not_found", "message": "Choose edl or fcpxml."}), 404
+        if request.args:
+            raise APIInputError("unknown_field", f"Unknown query field: {sorted(request.args)[0]}.")
+        project = store.load(project_id)
+        snapshot = editor_sequence_snapshot(project)
+        if not snapshot or not ((snapshot.get("sequence") or {}).get("camera_plan")):
+            raise APIInputError("draft_required", "Make an edit first, then export it for another editor.", 409)
+        fps = (project.get("settings") or {}).get("fps") or 30
+        audio_slot = render_audio_slot(project)
+        stem = sanitize_filename(str(project.get("name") or "CUTROOM edit"))[:110] or "CUTROOM edit"
+        if kind == "edl":
+            body, mime = build_edl(project, snapshot, audio_slot, fps), "text/plain; charset=utf-8"
+        else:
+            paths = {}
+            for slot, source in (project.get("sources") or {}).items():
+                path = _safe_project_child(store.project_dir(project_id), (source or {}).get("relative_path"))
+                if path is not None and path.is_file():
+                    paths[slot] = path
+            try:
+                size = render_dimensions(project)
+            except (ValueError, KeyError, TypeError):
+                size = (1920, 1080)
+            body, mime = build_fcpxml(project, snapshot, audio_slot, paths, fps, size), "application/xml; charset=utf-8"
+        response = Response(body, mimetype=mime.split(";")[0])
+        response.headers["Content-Type"] = mime
+        response.headers["Content-Disposition"] = f"attachment; filename*=UTF-8''{urllib.parse.quote(stem + '.' + kind)}"
+        return response
+
+    @app.post("/api/projects/<project_id>/caption-translation")
+    def caption_translation(project_id: str):
+        # Read-only: returns a translated .srt; the project's captions never change.
+        payload = _json_object()
+        _reject_unknown_fields(payload, {"language"})
+        language = payload.get("language")
+        if not isinstance(language, str) or language not in TRANSLATION_LANGUAGES:
+            raise APIInputError("invalid_field", "Choose a supported language.")
+        project = store.load(project_id)
+        try:
+            validate_sequence_version(project)
+            items = project_caption_items(project, aligned=False)
+        except (ValueError, TypeError, KeyError):
+            items = []
+        try:
+            result = translate_project_captions(connections.job_settings(settings), items, language)
+        except TranslationUnavailable as error:
+            raise APIInputError("translation_unavailable", str(error), 409) from error
+        stem = sanitize_filename(str(project.get("name") or "captions"))[:100] or "captions"
+        return jsonify({"translation": {**result, "name": f"{stem}.{language}.srt"}})
 
     @app.post("/api/projects/<project_id>/posting-kit")
     def clip_posting_kit(project_id: str):

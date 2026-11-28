@@ -35,8 +35,16 @@ export class SourceTimelineClock {
     this.position = 0;
     this.startedAt = 0;
     this.playing = false;
+    this.rate = 1;
   }
-  time() { return this.position + (this.playing ? Math.max(0, this.now() - this.startedAt) / 1000 : 0); }
+  time() { return this.position + (this.playing ? Math.max(0, this.now() - this.startedAt) / 1000 * this.rate : 0); }
+  /** Shuttle speed (1, 2 or 4×). Rebases so the current position is kept. */
+  setRate(rate) {
+    this.position = this.time();
+    this.startedAt = this.now();
+    this.rate = [1, 2, 4].includes(rate) ? rate : 1;
+    return this.rate;
+  }
   seek(time) {
     this.position = Math.max(0, Number(time) || 0);
     this.startedAt = this.now();

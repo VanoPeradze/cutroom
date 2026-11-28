@@ -173,7 +173,7 @@ def test_invalid_caption_edits_change_nothing():
         {"action": "caption_update", "caption_id": "missing:w0", "text": "x"},
         {"action": "caption_update", "caption_id": "s1:w0", "start": 0.8, "end": 0.75},
         {"action": "caption_update", "caption_id": "s1:w0", "start": 5.5, "end": 6.5},
-        {"action": "caption_update", "caption_id": "s1:w0", "style": "neon"},
+        {"action": "caption_update", "caption_id": "s1:w0", "style": "sparkle"},
         {"action": "caption_update", "caption_id": "s1:w0", "scale": 300},
         {"action": "caption_update", "caption_id": "s1:w0", "text": "x", "scope": "everywhere"},
         {"action": "caption_visibility", "caption_id": "s1:w0", "hidden": "yes"},

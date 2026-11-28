@@ -38,6 +38,7 @@ AUDIO_MIXER_DEFAULTS = {
     "source_db": 0.0, "music_db": 0.0, "effects_db": 0.0, "voice_db": 0.0, "master_db": 0.0,
     "source_muted": False, "music_muted": False, "effects_muted": False, "voice_muted": False,
     "ducking": False,
+    "voice_cleanup": False,
 }
 MEDIA_ACTION_FIELDS = {
     "media_add": {"asset_id", "track_id", *CLIP_FIELDS},

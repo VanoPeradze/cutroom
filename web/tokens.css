@@ -1,0 +1,278 @@
+/* CUTROOM design tokens: the single source for theme values.
+
+   Every top-level :root and html[data-theme="light"] custom property used to be
+   redefined across eight layered stylesheets (styles, welcome, creator-ui,
+   studio-design, studio-chrome, studio-finish, studio-console, ui-flow).
+   The values below are the ones that won the cascade, so the interface looks
+   exactly as before. Define or change a theme value here, never in a feature
+   stylesheet. Scoped overrides (for example the darker monitor and timeline
+   wells in light mode) stay beside the components that need them.
+
+   Loaded first. Dark is the default; light overrides only what differs. */
+
+:root {
+  /* Base palette */
+  --palette-violet:#7459a3;
+  --palette-violet-deep:#501a91;
+  --palette-green:#1bb92a;
+  --palette-gold:#c9b62c;
+  --palette-cyan:#44b9c6;
+  --palette-ink:#081013;
+
+  /* Surfaces: app background (ink), chrome, panels, controls */
+  --ink:#17181c;
+  --ink-2:#202126;
+  --ink-3:#282a30;
+  --ink-4:#30333b;
+  --surface-chrome:#202126;
+  --surface-panel:#25272d;
+  --surface-inset:#18191e;
+  --surface-raised:#30333b;
+  --surface-hover:#3a3e48;
+  --surface-selected:#353143;
+
+  /* Text */
+  --paper:#e9eaf0;
+  --paper-dim:#c1c4ce;
+  --muted:#a7acb8;
+
+  /* Lines and focus */
+  --line:#383b44;
+  --line-strong:#666d7c;
+  --control-line:#666d7c;
+  --control-border:#727b8b;
+  --focus-ring:#a7cdd8;
+
+  /* Accent (violet = primary action, cyan = focused control) */
+  --signal:#b5a1eb;
+  --signal-strong:var(--palette-violet-deep);
+  --signal-text:#c7b6f2;
+  --signal-deep-text:#c5b5e6;
+  --signal-label:#c5b5e6;
+  --signal-soft:rgba(116,89,163,.14);
+  --primary-fill:#b5a1eb;
+  --marker:#bca9df;
+  --cyan:#90bcc8;
+  --cyan-text:#b6d8e0;
+  --ok-text:#8de79a;
+  --room-accent:#b5a1eb;
+  --room-rule:#383b44;
+  --room-soft:#202126;
+  --lobby-accent:#b5a1eb;
+
+  /* Status */
+  --keep:#88aa9b;
+  --keep-text:#b0c9bd;
+  --warning:#d4b775;
+  --warning-text:#e3cb96;
+  --threshold:var(--palette-gold);
+  --danger:#eea0a5;
+
+  /* Type, spacing, radius, depth */
+  --radius:12px;
+  --shadow:0 18px 50px #10111440;
+  --font:Geist,'Noto Sans Hebrew','Segoe UI',sans-serif;
+  --mono:var(--font);
+  --space-1:4px;
+  --space-2:8px;
+  --space-3:12px;
+  --space-4:16px;
+  --space-6:24px;
+  --space-8:32px;
+  --text-caption:12px;
+  --text-label:14px;
+  --text-body:16px;
+  --app-chrome-height:64px;
+
+  /* Motion */
+  --motion-feedback:120ms;
+  --motion-surface:180ms;
+  --flow-ease:cubic-bezier(.22, 1, .36, 1);
+  --flow-spring:cubic-bezier(.34, 1.4, .64, 1);
+  --flow-fast:120ms;
+  --flow-base:200ms;
+  --flow-slow:340ms;
+  --flow-accent:var(--room-accent, #b5a1eb);
+  --flow-ring:color-mix(in srgb, var(--flow-accent) 42%, transparent);
+  --flow-glow:color-mix(in srgb, var(--flow-accent) 16%, transparent);
+  --flow-lift:0 10px 28px -12px #0a0b0e99, 0 2px 6px -2px #0a0b0e66;
+
+  /* Timeline canvas (read by timeline.js) */
+  --timeline-bg:#17181c;
+  --timeline-ruler:#202228;
+  --timeline-lane:#24262d;
+  --timeline-lane-alt:#292c34;
+  --timeline-grid:#3c414d;
+  --timeline-text:#c2c8d5;
+  --timeline-clip:#345461;
+  --timeline-clip-b:#5c4c73;
+  --timeline-clip-edge:#8aa8bc;
+  --timeline-selected:#baa5f0;
+  --timeline-label:#f3f5fa;
+  --timeline-wave:#a9c9c2;
+  --timeline-wave-bg:#2d4445;
+  --timeline-layout:#4b6175;
+  --timeline-caption:#66532e;
+  --timeline-caption-edited:#505c3f;
+  --timeline-caption-edge:#bba77b;
+  --timeline-media-wave:#d0e1d8;
+  --timeline-keep:#38584b;
+  --timeline-keep-alt:#3e6152;
+  --timeline-keep-selected:#496b58;
+  --timeline-selection-fill:rgba(188,169,223,.14);
+  --timeline-move-fill:rgba(176,201,189,.6);
+  --timeline-danger:var(--danger);
+  --timeline-danger-soft:rgba(238,160,165,.20);
+  --timeline-danger-fill:rgba(238,160,165,.55);
+  --timeline-danger-label:#30161b;
+  --timeline-gap-fill:rgba(188,169,223,.08);
+  --timeline-gap-edge:#9a8db5;
+  --timeline-layout-label:#f1f3f6;
+  --timeline-on-selected:#271c16;
+
+  /* Toolbar icons (CSS masks) */
+  --icon-select:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linejoin='round'><path d='M6 3.5 18.5 12l-5.6 1.2 3.3 6.3-2.4 1.2-3.3-6.3L6 18.3z'/></svg>");
+  --icon-range:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'><path d='M9 4H5v16h4M15 4h4v16h-4M12 8v8'/></svg>");
+  --icon-blade:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round'><circle cx='6' cy='18' r='3'/><circle cx='18' cy='18' r='3'/><path d='M8.2 15.8 19 4M15.8 15.8 5 4'/></svg>");
+  --icon-snap:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round'><path d='M6 4v7a6 6 0 0 0 12 0V4M6 8h3.5M14.5 8H18'/></svg>");
+  --icon-trash:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'><path d='M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6'/></svg>");
+  --icon-film:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='5' width='18' height='14' rx='2'/><path d='M7 5v14M17 5v14M3 9h4M3 15h4M17 9h4M17 15h4'/></svg>");
+  --icon-more:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='5' cy='12' r='2'/><circle cx='12' cy='12' r='2'/><circle cx='19' cy='12' r='2'/></svg>");
+  --icon-undo:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'><path d='M9 14 4 9l5-5'/><path d='M4 9h10.5a5.5 5.5 0 0 1 0 11H11'/></svg>");
+  --icon-redo:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'><path d='m15 14 5-5-5-5'/><path d='M20 9H9.5a5.5 5.5 0 0 0 0 11H13'/></svg>");
+  --icon-restart:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M5 4h2.4v16H5z'/><path d='M19 4.8v14.4L8.6 12z'/></svg>");
+  --icon-fullscreen:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5'/></svg>");
+  --icon-exit-fullscreen:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M9 4v5H4M20 9h-5V4M15 20v-5h5M4 15h5v5'/></svg>");
+  --icon-panel:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.9' stroke-linejoin='round'><rect x='3' y='4' width='18' height='16' rx='2'/><path d='M15 4v16'/></svg>");
+  --icon-lock:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round'><rect x='5' y='11' width='14' height='10' rx='2'/><path d='M8 11V8a4 4 0 0 1 8 0v3'/></svg>");
+  --icon-unlock:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round'><rect x='5' y='11' width='14' height='10' rx='2'/><path d='M8 11V8a4 4 0 0 1 7.6-1.7'/></svg>");
+  --icon-speaker:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M11 5 6 9H3v6h3l5 4z'/><path d='M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13'/></svg>");
+  --icon-muted:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M11 5 6 9H3v6h3l5 4z'/><path d='m16 9 5 6M21 9l-5 6'/></svg>");
+}
+
+html[data-theme=light] {
+  /* Surfaces: app background (ink), chrome, panels, controls */
+  --ink:#b4bac3;
+  --ink-2:#bec4cc;
+  --ink-3:#b8bec7;
+  --ink-4:#aeb6c0;
+  --surface-chrome:#bdc3cb;
+  --surface-panel:#cbd0d6;
+  --surface-inset:#b5bdc7;
+  --surface-raised:#d7dbe0;
+  --surface-hover:#a9b3c0;
+  --surface-selected:#bcb7cf;
+
+  /* Text */
+  --paper:#222731;
+  --paper-dim:#343c49;
+  --muted:#3b4452;
+
+  /* Lines and focus */
+  --line:#96a0af;
+  --line-strong:#6f7b8d;
+  --control-line:#6f7b8d;
+  --control-border:#626f83;
+  --focus-ring:#315c76;
+
+  /* Accent (violet = primary action, cyan = focused control) */
+  --room-accent:#665084;
+  --room-rule:#96a0af;
+  --room-soft:#b8bec7;
+  --signal-text:#513772;
+  --signal-deep-text:#57416f;
+  --signal-label:#57416f;
+  --cyan-text:#254e65;
+  --cyan:#3b6579;
+  --ok-text:#17561f;
+  --primary-fill:#665084;
+  --signal:#69528e;
+  --marker:#63517f;
+  --lobby-accent:#665084;
+
+  /* Status */
+  --keep-text:#2b4d3d;
+  --warning-text:#5a420f;
+  --danger:#862a37; /* was #902e3c: 4.48:1 on chrome, now 4.9:1 */
+  --keep:#456b5a;
+  --warning:#806024;
+
+  /* Type, spacing, radius, depth */
+  --shadow:0 18px 50px #292e3529;
+
+  /* Motion */
+  --flow-lift:0 10px 26px -14px #2a303a59, 0 2px 6px -3px #2a303a33;
+
+  /* Timeline canvas (read by timeline.js) */
+  --timeline-bg:#aeb7c3;
+  --timeline-ruler:#bcc4cf;
+  --timeline-lane:#bec6d0;
+  --timeline-lane-alt:#c9d0d9;
+  --timeline-grid:#909dac;
+  --timeline-text:#2c394b;
+  --timeline-clip:#4b6c81;
+  --timeline-clip-b:#715d87;
+  --timeline-clip-edge:#354e67;
+  --timeline-selected:#655080;
+  --timeline-label:#ffffff;
+  --timeline-wave:#2e5156;
+  --timeline-wave-bg:#a4b7bb;
+  --timeline-layout:#849aaa;
+  --timeline-caption:#6f5b36;
+  --timeline-caption-edited:#526044;
+  --timeline-caption-edge:#55401f;
+  --timeline-media-wave:#e0eeea;
+  --timeline-keep:#4c6859;
+  --timeline-keep-alt:#506e5e;
+  --timeline-keep-selected:#3f5c4e;
+  --timeline-selection-fill:rgba(99,81,127,.14);
+  --timeline-move-fill:rgba(69,107,90,.38);
+  --timeline-danger:var(--danger);
+  --timeline-danger-soft:rgba(144,46,60,.20);
+  --timeline-danger-fill:rgba(144,46,60,.45);
+  --timeline-danger-label:#ffffff;
+  --timeline-gap-fill:rgba(99,81,127,.08);
+  --timeline-gap-edge:#6c6080;
+  --timeline-layout-label:#24282e;
+  --timeline-on-selected:#ffffff;
+}
+
+/* Design system scale. New and reworked screens use only these names.
+   Type: four sizes. Spacing: 4px grid. Surfaces: three levels plus a well.
+   Accent: one color for primary actions, selection and focus. */
+:root {
+  --fs-12: 12px;  /* captions, meta, timecode labels */
+  --fs-13: 13px;  /* controls and dense UI text */
+  --fs-15: 15px;  /* body and inspector values */
+  --fs-20: 20px;  /* panel and dialog titles */
+  --type-caption: var(--fs-12);
+  --type-ui: var(--fs-13);
+  --type-body: var(--fs-15);
+  --type-title: var(--fs-20);
+  --leading-tight: 1.25;
+  --leading-ui: 1.4;
+  --leading-body: 1.55;
+
+  --space-0: 0;
+  --space-5: 20px;
+  --space-10: 40px;
+
+  --radius-s: 4px;
+  --radius-m: 6px;
+  --radius-l: 10px;
+
+  --surface-1: var(--surface-chrome);   /* app frame: top bar, rails, timeline dock */
+  --surface-2: var(--surface-panel);    /* panels: media pool, inspector, dialogs */
+  --surface-3: var(--surface-raised);   /* controls and cards inside a panel */
+  --surface-well: var(--surface-inset); /* inputs, lists, monitor surround */
+
+  --text-1: var(--paper);      /* primary text */
+  --text-2: var(--paper-dim);  /* secondary text */
+  --text-3: var(--muted);      /* hints and disabled */
+
+  --accent: var(--room-accent);
+  --accent-text: var(--signal-text);
+  --accent-soft: color-mix(in srgb, var(--accent) 16%, transparent);
+  --on-accent: var(--ink);
+}
+html[data-theme=light] { --on-accent:#fff; }

@@ -23,6 +23,8 @@ SEQUENCE_ACTION_FIELDS = {
     "sequence_insert": {"slot", "start", "source_start", "source_end"},
     "sequence_overwrite": {"slot", "start", "source_start", "source_end", "scope"},
     "sequence_ripple_delete": {"start", "end"},
+    # Several Together removals in one Undo step (one-click cleanup).
+    "sequence_ripple_delete_ranges": {"ranges"},
     "sequence_split_all": {"time"},
     "sequence_move_range": {"start", "end", "to", "mode", "slot"},
     "sequence_duplicate_range": {"start", "end", "to"},
@@ -690,6 +692,49 @@ def _finish(value: dict[str, Any]) -> None:
         sequence.setdefault("camera_plan", []).append({"start": old_duration, "end": duration, "camera": camera})
 
 
+MAX_BATCH_RANGES = 2000
+
+
+def _ripple_delete_ranges(project: dict[str, Any], ranges: Any) -> dict[str, Any] | None:
+    """Remove several edit-time ranges from every source track at once.
+
+    Ranges are applied from the end of the edit backwards, so each one keeps
+    the edit-time position the user approved. Edits with imported media or
+    text layers use single removals, which carry their own caption and layer
+    checks.
+    """
+    manual = project.get("manual") or {}
+    if manual.get("media_clips") or manual.get("text_clips"):
+        raise SourceTrackError("This edit has media or text layers. Remove these ranges one at a time with Cut out.")
+    if not isinstance(ranges, list) or not ranges or len(ranges) > MAX_BATCH_RANGES:
+        raise SourceTrackError(f"Choose between 1 and {MAX_BATCH_RANGES} ranges to remove")
+    rows: list[tuple[float, float]] = []
+    for row in ranges:
+        if not isinstance(row, dict):
+            raise SourceTrackError("Each range needs a start and an end")
+        start, end = _number(row.get("start"), "start"), _number(row.get("end"), "end")
+        if end - start < MIN_BATCH_RANGE - EPSILON:
+            raise SourceTrackError("Each range must be at least 0.08 seconds")
+        rows.append((start, end))
+    rows.sort()
+    for (_, left_end), (right_start, _) in zip(rows, rows[1:]):
+        if right_start < left_end - EPSILON:
+            raise SourceTrackError("Ranges to remove must not overlap")
+    value, duration = materialize_sequence(project)
+    if rows[-1][1] > duration + EPSILON or rows[0][0] < -EPSILON:
+        raise SourceTrackError("Choose ranges inside the edited timeline")
+    changed = False
+    for start, end in reversed(rows):
+        result = _prepare_linked_edit(value, {"action": "sequence_ripple_delete", "start": start, "end": end}, "sequence_ripple_delete")
+        if result is not None:
+            value["manual"] = result
+            changed = True
+    return value["manual"] if changed else None
+
+
+MIN_BATCH_RANGE = 0.08
+
+
 def prepare_sequence_edit(project: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any] | None:
     """Return staged manual state, or None for a no-op; mutations are atomic."""
     action = str(payload.get("action") or "").strip().lower()
@@ -712,6 +757,8 @@ def prepare_sequence_edit(project: dict[str, Any], payload: dict[str, Any]) -> d
         else:
             manual.pop("source_tracks", None)
         return manual
+    if action == "sequence_ripple_delete_ranges":
+        return _ripple_delete_ranges(project, payload.get("ranges"))
     preparation_project = project
     mixed_delete = action == "sequence_ripple_delete" and bool(
         (project.get("manual") or {}).get("media_clips") or (project.get("manual") or {}).get("text_clips"))
