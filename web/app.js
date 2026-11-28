@@ -13380,3 +13380,17 @@ boot().catch((error) => {
 function escapeHtml(value) {
   return String(value).replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[character]));
 }
+
+// Host for one-click cleanup (cleanup.js): it reads the edit, seeks, and
+// removes approved edit-time ranges in one Undo step through the normal path.
+if (typeof window !== "undefined") window.cutroomCleanupHost = Object.freeze({
+  project: () => state.project,
+  seek: (time) => seekPreview(time),
+  issue: (ranges) => {
+    if (!state.project?.editor_sequence) return "Cleanup needs the edit timeline. Open the project in the editor first.";
+    if (state.project.manual?.media_clips?.length || state.project.manual?.text_clips?.length) return "This edit has media or text layers. Remove these places one at a time with Cut out.";
+    for (const range of ranges) { const issue = rangeDeleteIssue(range.start, range.end, "edit"); if (issue) return issue; }
+    return "";
+  },
+  apply: (ranges) => applyManualEdit("sequence_ripple_delete_ranges", { ranges }),
+});

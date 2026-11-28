@@ -40,6 +40,10 @@ Clip tools are grouped by intent: **Cut** (Split leads on its own row, then Cut 
 
 Six word-timed caption styles share one timing model (`WORD_CAPTION_STYLES` in `cutroom/captions.py`) and differ only in how the spoken word looks: Word highlight (yellow), Word pop (yellow, scales in), Word box (dark text on a yellow plate), Neon word (green glow), One word (a single word at a time, scales in) and Key words (yellow active word, numbers and long content words in orange for the whole line). The preview (`caption-styles.css`) uses the same colours as the burned-in ASS. Right-to-left lines stay plain short phrases, as before, because libass loses Hebrew word order once colour overrides split a line. Animations stop under reduced motion.
 
+### One-click cleanup (28 November)
+
+Edit > Cut > Clean up… (also in the command palette) reads the edit's own captions in edit time and lists long pauses (a 0.25 s breath stays), isolated hesitation sounds, optional filler words (unticked: they often carry meaning) and repeated takes (a caption whose opening words the next one repeats). Nothing changes until Remove. The approved places go to the server as one `sequence_ripple_delete_ranges` edit, applied from the end backwards, so it is one Undo step. Edits with imported media or text layers keep using Cut out one range at a time. Captions without trustworthy word timing are ignored.
+
 ## Composition
 
 The application launcher presents three real starting actions as compact rows beside the welcome statement, followed by recent projects and optional AI setup. It is not a second marketing landing page.
