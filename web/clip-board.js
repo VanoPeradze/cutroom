@@ -146,7 +146,14 @@ export class ClipBoard {
     this.batchButton.type = "button";
     this.batchButton.hidden = true;
     this.batchButton.addEventListener("click", () => this.runBatch());
-    head.append(titles, this.batchButton, lengths, close);
+    // A wide (YouTube) edit can become a vertical copy for shorts that keeps
+    // the edit, colour and captions; the original stays as it is.
+    this.shortsButton = this.el("button", "button ghost compact clip-shorts-button", "Make shorts copy (9:16)");
+    this.shortsButton.type = "button";
+    this.shortsButton.hidden = true;
+    this.shortsButton.title = "Save a vertical copy of this edit with the same cuts, colour and captions, then find clips in it. This project is not changed.";
+    this.shortsButton.addEventListener("click", () => { if (this.batchRunning) return; this.handingOff = true; this.close(); this.options.makeShorts?.(); });
+    head.append(titles, this.shortsButton, this.batchButton, lengths, close);
 
     const radar = this.el("section", "clip-radar");
     radar.setAttribute("aria-label", "Moment strength across the recording");
@@ -203,6 +210,7 @@ export class ClipBoard {
     this.aspect = this.options.outputAspect?.() || 16 / 9;
     this.dialog.style.setProperty("--clip-aspect", String(this.aspect));
     this.dialog.classList.toggle("vertical", this.aspect < 1);
+    this.shortsButton.hidden = !(this.aspect > 1 && this.options.canMakeShorts?.());
     this.layout = this.aspect < 1 ? this.options.stillLayout?.() || null : null;
     const url = this.options.mediaUrl(project);
     if (this.stillVideo.dataset.src !== url) { this.stillVideo.src = url; this.stillVideo.dataset.src = url; }

@@ -46,7 +46,7 @@ import { initTrackProtection } from "./track-protection.js?v=1.2-beta";
 import { TextStudio } from "./text-studio.js?v=20261116-caption-preview3";
 import { initNumericScrub } from "./numeric-scrub.js?v=20261116-move2";
 import { ReelProposalReview, supportsReelReview } from "./reel-proposals.js?v=20261022";
-import { ClipBoard } from "./clip-board.js?v=20261123-soundevents1-content1";
+import { ClipBoard } from "./clip-board.js?v=20261123-soundevents1-content1-shorts1";
 import { AiDraftReview } from "./ai-draft-review.js?v=20261116-ai-review2";
 import { CaptionAlternatives } from "./caption-alternatives.js?v=20261023";
 import { initCaptionPreview, captionPreviewIssue } from "./caption-preview.js?v=20261128-brand1";
@@ -12654,7 +12654,7 @@ async function openSavedProjectCopy() {
   if(!action || action.opening || entry?.status!=="completed" || !entry.copy_project_id)return;
   action.opening=true;action.noRestore=true;renderProjectCopyDialog();
   elements.projectCopyDialog.close();
-  try {const opened=await openProject(entry.copy_project_id);if(opened && elements.projectsDialog?.open)elements.projectsDialog.close();}
+  try {const opened=await openProject(entry.copy_project_id);if(opened && elements.projectsDialog?.open)elements.projectsDialog.close();if(opened && action.shorts && state.project?.id===entry.copy_project_id)await finishShortsCopy();}
   catch(error){toast(error.status===404 ? "This copy is no longer available. Its original was not changed." : error.message);}
 }
 function bindProjectCopyDialog() {
@@ -13003,6 +13003,33 @@ async function exportClipBatch(clips, { onProgress = () => {}, isStopped = () =>
   return results;
 }
 
+// Long video → shorts: a saved copy of this edit turned vertical. Cuts, colour
+// and captions come along; the copy opens on its Clips board.
+function openShortsCopy() {
+  const project = state.project;
+  if (!project?.id) return;
+  openProjectCopy(project, { fresh: true });
+  const action = projectLibrary.copy;
+  if (!action || action.started) return;
+  action.shorts = true;
+  elements.projectCopyName.value = Array.from(`${projectLabel(project)} shorts`).slice(0, 120).join("");
+  elements.projectCopyName.select();
+}
+async function finishShortsCopy() {
+  if (!state.project) return;
+  const projectId = state.project.id;
+  // Opening a project starts its own loading work; wait for it before the change.
+  for (let i = 0; i < 40 && (foregroundBusy() || state.manualEditBusy); i++) await new Promise(r => setTimeout(r, 250));
+  if (state.project?.id !== projectId) return;
+  if (state.project.settings?.aspect !== "9:16") {
+    setOutputAspect("9:16");
+    if (!(await flushCurrentProjectSaves())) return;
+    if (reconcileProjectSnapshot(state.project).settings?.aspect !== "9:16") { toast("The copy is saved. Choose 9:16 in Output to make it vertical."); return; }
+  }
+  toast("Vertical shorts copy ready. Pick the moments to export.", "success");
+  await openClipBoard();
+}
+
 async function openClipBoard() {
   if (!state.project?.sources?.A) { toast("Add a main recording before looking for clips."); return; }
   if (!(await flushCurrentProjectSaves())) return;
@@ -13025,6 +13052,8 @@ async function openClipBoard() {
       body: JSON.stringify({ start: clip.start, end: clip.end, use_ai: Boolean(useAi), goal: state.project?.settings?.goal === "youtube" ? "youtube" : "short" }),
     }).then(result => result.kit),
     pauseEditor: () => pauseAllMedia(),
+    canMakeShorts: () => Boolean(state.project?.draft && initializeProjectCopies()),
+    makeShorts: () => openShortsCopy(),
     onClose: ({ handedOff }) => { if (!handedOff && !document.querySelector("dialog[open]")) document.getElementById("clipBoardButton")?.focus({ preventScroll: true }); },
   });
   await clipBoard.open();

@@ -153,6 +153,13 @@ so the computer never does two heavy jobs at once. "Clean up" is the default
 because it needs no Story AI. The page keeps the screen awake while it runs and
 must stay open; a failure is shown on its row and the queue moves on.
 
+## Long video → shorts
+
+On a wide edit, the Clips board shows "Make shorts copy (9:16)". It saves a
+project copy (same cuts, colour, captions and layers; the original is not
+changed), names it "… shorts", switches the copy to 9:16 with the existing
+output-aspect path, and opens its Clips board so moments can be exported.
+
 ## Composition
 
 The application launcher presents three real starting actions as compact rows beside the welcome statement, followed by recent projects and optional AI setup. It is not a second marketing landing page.
