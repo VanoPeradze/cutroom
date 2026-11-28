@@ -62,3 +62,27 @@
 .look-pack-swatch i[data-caption="neon"] { color: #39ff88; text-shadow: 0 0 .3em #2e9a22, 0 1px 2px #000; }
 .look-pack-swatch i[data-caption="emphasis"] { color: #ff8a3d; }
 .look-pack-swatch i[data-caption="clean"] { font-weight: 600; }
+/* Brand kit dialog. */
+.brand-kit-dialog { width: min(720px, calc(100vw - 32px)); }
+.brand-kit-body { overflow-y: auto; padding: 0 var(--space-4) var(--space-3); }
+.brand-kit-body section { padding-top: var(--space-3); }
+.brand-kit-body section + section { margin-top: var(--space-3); border-top: 1px solid var(--line); }
+.brand-kit-body h3 { margin: 0 0 var(--space-1); font-size: var(--fs-13); font-weight: 600; }
+.brand-note { margin: 0 0 var(--space-2); color: var(--text-3); font-size: var(--fs-12); line-height: var(--leading-ui); }
+.brand-logo-row[hidden] { display: none; }
+.brand-colour-row, .brand-logo-row, .brand-save-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.brand-colour { width: 44px; height: 32px; padding: 2px; border: 1px solid var(--line); border-radius: var(--radius-m); background: var(--surface-1); cursor: pointer; }
+.brand-swatches { display: flex; gap: var(--space-1); }
+.brand-kit-dialog .brand-swatches button { width: 32px; min-width: 32px; padding: 0; border-radius: 50%; background: var(--swatch); border: 2px solid var(--surface-2); box-shadow: 0 0 0 1px var(--line); }
+.brand-kit-dialog .brand-swatches button[aria-pressed="true"], .brand-colour-reset[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--accent); }
+.brand-logo-row label { display: inline-flex; align-items: center; gap: var(--space-1); min-height: 32px; color: var(--text-2); }
+.brand-logo-row select { min-height: 32px; max-width: 200px; }
+.brand-logo-size { width: 110px; accent-color: var(--accent); }
+.brand-logo-size-out { min-width: 3ch; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.brand-template-name { flex: 1; min-width: 160px; min-height: 32px; padding: 0 var(--space-2); border: 1px solid var(--line); border-radius: var(--radius-m); background: var(--surface-1); color: var(--text-1); font: inherit; }
+.brand-templates { list-style: none; margin: var(--space-2) 0 0; padding: 0; display: grid; gap: var(--space-1); }
+.brand-templates li { display: flex; align-items: center; gap: var(--space-2); min-height: 40px; padding: 0 var(--space-2); border-radius: var(--radius-m); background: var(--surface-3); }
+.brand-templates b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.brand-templates small { flex: 1; min-width: 0; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.brand-template-swatch { flex: none; width: 14px; height: 14px; border-radius: 50%; background: var(--swatch, transparent); box-shadow: 0 0 0 1px var(--line); }
+.brand-templates .brand-empty { background: none; color: var(--text-3); }

@@ -58,7 +58,19 @@ DEFAULT_CAPTION_SETTINGS: dict[str, Any] = {
     "caption_position": "auto",
     "caption_scale": 100,
     "caption_words_per_line": 9,
+    "caption_accent": "",
 }
+_ACCENT = re.compile(r"^#[0-9A-Fa-f]{6}$")
+
+
+def normalize_caption_accent(value: Any) -> str:
+    """A brand colour as ``#RRGGBB``, or "" for each style's own colour."""
+    return value.upper() if isinstance(value, str) and _ACCENT.match(value) else ""
+
+
+def _ass_colour(accent: str) -> str:
+    """``#RRGGBB`` to the ASS ``&HBBGGRR&`` form."""
+    return f"&H{accent[5:7]}{accent[3:5]}{accent[1:3]}&"
 
 
 def normalize_caption_settings(settings: dict[str, Any] | None) -> dict[str, Any]:
@@ -87,6 +99,7 @@ def normalize_caption_settings(settings: dict[str, Any] | None) -> dict[str, Any
         "caption_position": position,
         "caption_scale": scale,
         "caption_words_per_line": words,
+        "caption_accent": normalize_caption_accent(value.get("caption_accent")),
     }
 
 
@@ -308,29 +321,33 @@ def _highlight_entries(
     return output
 
 
-def _active_word_override(style: str, font_size: int, outline: int) -> str:
+def _active_word_override(style: str, font_size: int, outline: int, accent: str = "") -> str:
+    """The spoken word's look. A brand accent replaces the style's own colour."""
+    colour = _ass_colour(accent) if accent else HIGHLIGHT_ACTIVE_COLOUR
     if style == "pop":
-        return f"\\c{HIGHLIGHT_ACTIVE_COLOUR}\\fscx125\\fscy125\\t(0,120,\\fscx108\\fscy108)"
+        return f"\\c{colour}\\fscx125\\fscy125\\t(0,120,\\fscx108\\fscy108)"
     if style == "box":
-        return f"\\c{BOX_TEXT_COLOUR}\\3c{HIGHLIGHT_ACTIVE_COLOUR}\\bord{max(outline + 2, round(font_size * 0.2))}\\shad0"
+        return f"\\c{BOX_TEXT_COLOUR}\\3c{colour}\\bord{max(outline + 2, round(font_size * 0.2))}\\shad0"
     if style == "neon":
-        return f"\\c{NEON_COLOUR}\\3c{NEON_GLOW}\\blur{max(2, round(font_size * 0.05))}"
+        return f"\\c{_ass_colour(accent) if accent else NEON_COLOUR}\\3c{NEON_GLOW}\\blur{max(2, round(font_size * 0.05))}"
     if style == "word":
-        return "\\fscx118\\fscy118\\t(0,100,\\fscx100\\fscy100)"
-    return f"\\c{HIGHLIGHT_ACTIVE_COLOUR}"
+        return ("\\c" + colour if accent else "") + "\\fscx118\\fscy118\\t(0,100,\\fscx100\\fscy100)"
+    return f"\\c{colour}"
 
 
-def _ass_caption_text(value: Any, style: str = "highlight", font_size: int = 0, outline: int = 0) -> str:
+def _ass_caption_text(value: Any, style: str = "highlight", font_size: int = 0, outline: int = 0, accent: str = "") -> str:
     if isinstance(value, tuple):
         labels, active = value
-        active_override = _active_word_override(style, font_size, outline)
+        accent = normalize_caption_accent(accent)
+        active_override = _active_word_override(style, font_size, outline, accent)
+        keyword_colour = _ass_colour(accent) if accent else EMPHASIS_COLOUR
         keywords = set(emphasis_indices(labels)) if style == "emphasis" else set()
         rendered = []
         for index, label in enumerate(labels):
             if index == active:
                 rendered.append(f"{{{active_override}}}{_ass_escape(label)}{{\\r}}")
             elif index in keywords:
-                rendered.append(f"{{\\c{EMPHASIS_COLOUR}}}{_ass_escape(label)}{{\\r}}")
+                rendered.append(f"{{\\c{keyword_colour}}}{_ass_escape(label)}{{\\r}}")
             else:
                 rendered.append(_ass_escape(label))
         return " ".join(rendered)
@@ -512,7 +529,7 @@ def _text_template(row: dict[str, Any], width: int, height: int, font_size: int)
 
 
 def automatic_caption_plan(caption_lines, keep_ranges, width, height, *, layout_ranges=None,
-                           caption_style="bold", caption_position="auto", caption_scale=100):
+                           caption_style="bold", caption_position="auto", caption_scale=100, caption_accent=""):
     """Pure automatic ASS event plan; export and read-only preview share expansion."""
     default_key = (caption_style, caption_position, caption_scale)
     style_line, font_size, margin_v, outline = _ass_style("Default", width, height, *default_key)
@@ -568,7 +585,7 @@ def automatic_caption_plan(caption_lines, keep_ranges, width, height, *, layout_
                 "positioned": positioned,
                 "alignment": 8 if positioned else {"auto":2,"bottom":2,"center":5,"top":8}[position],
                 "layer": 0, "order": len(events),
-                "_ass": f"Dialogue: 0,{_ass_timestamp(start)},{_ass_timestamp(end)},{name},,0,0,0,,{override}{_ass_caption_text(value, style, size, border)}\n",
+                "_ass": f"Dialogue: 0,{_ass_timestamp(start)},{_ass_timestamp(end)},{name},,0,0,0,,{override}{_ass_caption_text(value, style, size, border, caption_accent)}\n",
             }
             if anchor:
                 event.update(x=int(anchor[1]), y=int(anchor[2]))
@@ -588,6 +605,7 @@ def build_ass(
     caption_position: str = "auto",
     caption_scale: int = 100,
     words_per_caption: int = 9,
+    caption_accent: str = "",
     text_clips: list[dict[str, Any]] | None = None,
     caption_lines: list[dict[str, Any]] | None = None,
 ) -> Path:
@@ -629,7 +647,8 @@ def build_ass(
         ]
     style_line, planned = automatic_caption_plan(caption_lines, keep_ranges, width, height,
         layout_ranges=layout_ranges, caption_style=caption_style,
-        caption_position=caption_position, caption_scale=caption_scale)
+        caption_position=caption_position, caption_scale=caption_scale,
+        caption_accent=normalize_caption_accent(caption_accent))
     events = [event["_ass"] for event in planned]
     manual_styles: dict[tuple[str, str, int], str] = {}
     for row in text_clips or []:

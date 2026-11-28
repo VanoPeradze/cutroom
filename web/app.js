@@ -49,7 +49,7 @@ import { ReelProposalReview, supportsReelReview } from "./reel-proposals.js?v=20
 import { ClipBoard } from "./clip-board.js?v=20261123-soundevents1";
 import { AiDraftReview } from "./ai-draft-review.js?v=20261116-ai-review2";
 import { CaptionAlternatives } from "./caption-alternatives.js?v=20261023";
-import { initCaptionPreview, captionPreviewIssue } from "./caption-preview.js?v=20261128-wordstyles1";
+import { initCaptionPreview, captionPreviewIssue } from "./caption-preview.js?v=20261128-brand1";
 import { reviewEditingRequest } from "./request-review.js?v=20261116-settings1";
 
 const $ = (selector, root = document) => root.querySelector(selector);
@@ -8755,7 +8755,7 @@ function clearCaptionPreview() {
 
 function captionPreviewSettingsMatch(scene) {
   const queue = state.saveQueues.get(state.project?.id);
-  const sceneFields = ["caption_style", "caption_position", "caption_scale", "caption_words_per_line", "aspect", "resolution", "fps"];
+  const sceneFields = ["caption_style", "caption_position", "caption_scale", "caption_words_per_line", "caption_accent", "aspect", "resolution", "fps"];
   // Reconciled project settings may already include a later queued patch. They
   // cannot certify that the scene from the earlier response includes that intent.
   for (const patch of [queue?.pending, queue?.inFlightPatch]) {
@@ -13399,4 +13399,6 @@ if (typeof window !== "undefined") window.cutroomCleanupHost = Object.freeze({
   refreshMotion: () => state.colorMotion?.render?.(),
   time: () => colorMotionOutputTime(),
   undo: () => applyManualEdit("undo"),
+  edit: (action, detail) => applyManualEdit(action, detail),
+  saveSettings: (settings) => scheduleSettingsPatch({ reason: "captions", settings }),
 });

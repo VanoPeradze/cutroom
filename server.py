@@ -61,6 +61,7 @@ from cutroom.local_models import (
 )
 from cutroom.audio import analyze_audio
 from cutroom.captions import (
+    normalize_caption_accent,
     CAPTION_POSITION_CHOICES,
     CAPTION_SCALE_RANGE,
     CAPTION_STYLE_CHOICES,
@@ -154,6 +155,7 @@ SETTINGS_FIELDS = {
     "caption_position",
     "caption_scale",
     "caption_words_per_line",
+    "caption_accent",
     "spoken_language",
     "performance_mode",
     "visual_ai",
@@ -381,6 +383,7 @@ def _validate_settings_payload(payload: dict[str, Any]) -> None:
         "visual_ai": 8,
         "caption_style": 16,
         "caption_position": 16,
+        "caption_accent": 8,
     }
     for key, limit in string_limits.items():
         _require_optional_string(payload, key, max_length=limit)
@@ -397,6 +400,8 @@ def _validate_settings_payload(payload: dict[str, Any]) -> None:
     for key in ("auto_reframe", "editorial_effects", "captions", "burn_captions", "allow_extractive_rough_cut"):
         if key in payload and not isinstance(payload[key], bool):
             raise APIInputError("invalid_field", f"{key} must be a boolean.")
+    if payload.get("caption_accent") and not normalize_caption_accent(payload["caption_accent"]):
+        raise APIInputError("invalid_field", "caption_accent must be a colour like #FFD400, or empty.")
     if "caption_scale" in payload:
         value = payload["caption_scale"]
         if (

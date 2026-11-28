@@ -964,7 +964,8 @@ def caption_preview_scene(project: dict[str, Any]) -> dict[str, Any]:
         lines = caption_lines(items, settings["caption_words_per_line"], default_style=settings["caption_style"])
         _, events = automatic_caption_plan(lines, ranges, width, height,
             layout_ranges=_frame_aligned_plan(project), caption_style=settings["caption_style"],
-            caption_position=settings["caption_position"], caption_scale=settings["caption_scale"])
+            caption_position=settings["caption_position"], caption_scale=settings["caption_scale"],
+            caption_accent=settings["caption_accent"])
         # Export frame alignment can retain a boundary word absent from the
         # editor clock. Bind by source provenance only, never by displayed text
         # or the ordinal IDs which can differ between those two clocks.
@@ -1907,6 +1908,7 @@ def render_project(context: JobContext, project_id: str, store: ProjectStore, se
                 caption_position=caption_settings["caption_position"],
                 caption_scale=caption_settings["caption_scale"],
                 words_per_caption=caption_settings["caption_words_per_line"],
+                caption_accent=caption_settings["caption_accent"],
                 text_clips=text_clips,
                 caption_lines=burn_lines if burn_transcript else [],
             )

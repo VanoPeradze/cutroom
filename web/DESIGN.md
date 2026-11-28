@@ -82,6 +82,18 @@ on this computer (no network, no model) and always shows what will happen
 before the Remove / Go / Do it button runs it. Unknown requests say so and
 point to the example chips.
 
+## Brand kit
+
+`Brand kit…` (`brand-kit.js`) collects what makes every video look like the
+creator's. The brand colour is the project setting `caption_accent`
+(`#RRGGBB` or empty): it replaces the spoken-word colour of the word-timed
+caption styles and the key-word colour of Key words, both in the burned-in ASS
+(`cutroom/captions.py`) and in the preview (`--caption-accent` on the preview
+stage). A logo is an imported image added as one image layer for the whole
+edit, sized to keep its shape with an even margin in the chosen corner.
+Templates keep caption style, position, size, words per caption, brand colour
+and colour look, and are stored in this app on this computer.
+
 ## Composition
 
 The application launcher presents three real starting actions as compact rows beside the welcome statement, followed by recent projects and optional AI setup. It is not a second marketing landing page.

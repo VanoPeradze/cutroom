@@ -234,6 +234,9 @@ def test_settings_and_manual_patch_reject_values_that_would_crash_later(app):
         {"caption_scale": 100.5},
         {"caption_words_per_line": 0},
         {"caption_words_per_line": 4.5},
+        {"caption_accent": "red"},
+        {"caption_accent": "#GGGGGG"},
+        {"caption_accent": 16711680},
         {"audio_cleanup": {"normalize": "yes"}},
         {"audio_cleanup": {"silence_min_seconds": "soon"}},
         {"audio_cleanup": {"target_lufs": 12}},
@@ -254,6 +257,10 @@ def test_settings_and_manual_patch_reject_values_that_would_crash_later(app):
         response = client.patch(endpoint, json={"manual": manual})
         assert response.status_code == 400
         assert response.get_json()["error"] == "invalid_field"
+
+    accent = client.patch(endpoint, json={"settings": {"caption_accent": "#ff4d6d"}})
+    assert accent.status_code == 200
+    assert client.patch(endpoint, json={"settings": {"caption_accent": ""}}).status_code == 200
 
     source_aspect = client.patch(endpoint, json={"settings": {"aspect": "source"}})
     assert source_aspect.status_code == 200

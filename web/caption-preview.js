@@ -146,6 +146,8 @@ export function initCaptionPreview(stage, primary, {select} = {}) {
       tree=canonical?eventTree(canonical.events):null;layoutKey='';
     }
     if(cachedIssue)return unavailable(cachedIssue);
+    const accent=/^#[0-9A-Fa-f]{6}$/.test(canonical.settings.caption_accent||'')?canonical.settings.caption_accent:'';
+    if(accent)stage.style?.setProperty?.('--caption-accent',accent);else stage.style?.removeProperty?.('--caption-accent');
     if(!enabled){replay=null;release();return {available:true,issue:'',activeCount:0,collisionApproximate:false};}
     replay={scene,time,options:{projectId,revision,selectedId,enabled}};
     const events=activeEvents(tree,time).sort((a,b)=>a.order-b.order),width=stage.clientWidth,height=stage.clientHeight;
