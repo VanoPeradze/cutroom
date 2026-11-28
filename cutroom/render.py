@@ -1823,7 +1823,9 @@ def _run_ffmpeg_process(context: JobContext, command: list[str], expected_durati
                     newest_seconds = seconds
 
             if newest_seconds is not None:
-                last_seconds = max(last_seconds, newest_seconds)
+                # A marked range's discarded drain output can report the
+                # whole-timeline clock; never show more than the planned length.
+                last_seconds = max(last_seconds, min(newest_seconds, expected_duration) if expected_duration > 0 else newest_seconds)
                 ratio = min(1.0, last_seconds / expected_duration) if expected_duration > 0 else 0.0
                 progress = min(0.95, 0.04 + ratio * 0.91)
                 context.update(progress, f"Rendering... {last_seconds:.1f}s / {expected_duration:.1f}s" if expected_duration > 0 else "Rendering...")
@@ -2001,6 +2003,7 @@ def render_project(context: JobContext, project_id: str, store: ProjectStore, se
         # avoids AAC packet boundaries dropping the final planned video frame.
         "-t", f"{stage_duration:.6f}",
         "-progress", "pipe:1", "-nostats", str(render_target),
+        *(scope.drain_output_args(graph) if scope else []),
     ]
     context.update(0.04, f"Rendering with {encoder}")
     process_returncode = None

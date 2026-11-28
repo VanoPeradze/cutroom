@@ -98,3 +98,17 @@ def test_layout_coverage_is_checked_only_inside_the_marked_clip(media, tmp_path)
     record = render_project(JobContext(Job("clip-inside", "render", pid), threading.Lock()), pid, store, settings,
                             {"_force_software": True, "quality": "fast", "_require_layout_coverage": True, **inside})["export"]
     assert record["range"] == {"start_frame": 0, "end_frame": 30, "fps": 30}
+
+
+def test_range_drains_use_a_discarded_output_not_in_graph_nullsinks():
+    # FFmpeg 7.0/7.1 abort ("Assertion best_input >= 0") when both range
+    # drains are nullsinks on a two-source layout.
+    from cutroom.range_export import ExportRange
+
+    scope = ExportRange(30, 75, 30)
+    graph, maps = scope.mapped_graph("[x]null[vout];[y]anull[aout]", ["-map", "[vout]", "-map", "[aout]"], trim_audio=True)
+    assert maps == ["-map", "[vrange]", "-map", "[arange]"]
+    assert "nullsink" not in graph
+    assert scope.drain_output_args(graph) == ["-map", "[vrangedrain]", "-map", "[arangedrain]", "-f", "null", "-"]
+    single, _ = scope.mapped_graph("[x]null[vout]", ["-map", "[vout]"], trim_audio=True)
+    assert scope.drain_output_args(single) == []

@@ -48,7 +48,10 @@ class ExportRange:
         # Let the finite finished streams drain independently. Otherwise, when
         # both trim filters end inside an early source gap, FFmpeg can stop
         # requesting a split/concat counterpart and never deliver EOF. The
-        # sink branches create no file and cannot enter the exported maps.
+        # drain branches go to a separate null output (see drain_output_args),
+        # not to in-graph nullsinks: FFmpeg 7.0/7.1 abort with "Assertion
+        # best_input >= 0" when two nullsinks outlive the range outputs on a
+        # two-source layout, and each version needs a different single drain.
         paired = trim_audio and len(maps) == 4
         if not trim_audio and len(maps) == 4:
             # A normalized stage must carry ALL unmodified PCM for the second
@@ -56,15 +59,22 @@ class ExportRange:
             # input early and truncate a shared decoder's final audio packet.
             video = f"{maps[1]}select='between(n,{self.start_frame},{self.end_frame - 1})'"
         else:
-            prefix = f"{maps[1]}split=2[vrangedrain][vrangeselect];[vrangedrain]nullsink;[vrangeselect]" if paired else maps[1]
+            prefix = f"{maps[1]}split=2[vrangedrain][vrangeselect];[vrangeselect]" if paired else maps[1]
             video = f"{prefix}trim=start_frame={self.start_frame}:end_frame={self.end_frame}"
         graph += f";\n{video},settb=1/{self.fps},setpts=N[vrange]"
         result[1] = "[vrange]"
         if paired:
-            graph += (f";\n{maps[3]}asplit=2[arangedrain][arangeselect];[arangedrain]anullsink;"
+            graph += (f";\n{maps[3]}asplit=2[arangedrain][arangeselect];"
                       f"[arangeselect]{self.audio_trim()}[arange]")
             result[3] = "[arange]"
         return graph, result
+
+    @staticmethod
+    def drain_output_args(graph: str) -> list[str]:
+        """A discarded second output that consumes the range drain branches."""
+        if "[vrangedrain]" not in graph:
+            return []
+        return ["-map", "[vrangedrain]", "-map", "[arangedrain]", "-f", "null", "-"]
 
     def rows(self, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         # Cues crossing In/Out retain the visible wording. The public sidecar and output review
