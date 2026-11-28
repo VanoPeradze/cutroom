@@ -83,6 +83,7 @@ from cutroom.group_split import group_split_receipt
 from cutroom.group_join import group_join_receipt
 from cutroom.range_export import RangeExportError
 from cutroom.review_markers import MarkerError, apply_marker
+from cutroom.manual_clips import ManualClipError, apply_manual_clip, public_view as manual_clip_view, require_exportable as require_exportable_clip
 from cutroom.render import _dimensions as render_dimensions, _effective_audio_slot as render_audio_slot, resolve_export_range, InsufficientStorageError, LayoutCoverageError, available_encoders, ensure_render_storage, project_caption_items, caption_preview_scene, render_project, require_layout_coverage
 from cutroom.utils import sanitize_filename
 from cutroom.interchange import build_edl, build_fcpxml
@@ -117,10 +118,12 @@ JSON_BODY_ENDPOINTS = {
     "patch_project",
     "manual_edit",
     "write_review_marker",
+    "write_manual_clip",
     "review_reel_candidate",
     "import_caption_alternative",
     "generate_caption_alternative",
     "generate_manual_transcript_job",
+    "refresh_captions_job",
     "run_director",
     "refine",
     "render",
@@ -133,7 +136,7 @@ JSON_BODY_ENDPOINTS = {
     "preflight_upload",
 }
 UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
-FOREGROUND_JOB_KINDS = {"director", "refine", "render", "caption_alternative", "manual_transcript"}
+FOREGROUND_JOB_KINDS = {"director", "refine", "render", "caption_alternative", "manual_transcript", "caption_refresh"}
 INSTANCE_PROTOCOL_VERSION = 1
 INSTANCE_RESPONSE_LIMIT = 4 * 1024
 LEGACY_SYSTEM_RESPONSE_LIMIT = 256 * 1024
@@ -1386,12 +1389,13 @@ def create_app(settings: Settings | None = None) -> Flask:
     @app.get("/api/projects/<project_id>/clip-board")
     def clip_board(project_id: str):
         # Read-only ranking from saved analysis; no model, render or project save.
-        unknown = set(request.args) - {"length", "count"}
+        unknown = set(request.args) - {"length", "count", "scope"}
         if unknown:
             raise APIInputError("unknown_field", f"Unknown query field: {sorted(unknown)[0]}.")
         try:
             board = build_clip_board(store.load(project_id), length=request.args.get("length", DEFAULT_CLIP_LENGTH),
-                                     count=request.args.get("count", DEFAULT_CLIP_COUNT))
+                                     count=request.args.get("count", DEFAULT_CLIP_COUNT),
+                                     scope=request.args.get("scope", "source"))
         except ClipBoardError as error:
             raise APIInputError("invalid_field", str(error)) from error
         return jsonify({"board": board})
@@ -1544,6 +1548,32 @@ def create_app(settings: Settings | None = None) -> Flask:
                                  store, settings, language, revision, validate_project=validate, job_identity=payload)
         return jsonify({"job": job.public()}), 202
 
+    @app.post("/api/projects/<project_id>/caption-refresh")
+    def refresh_captions_job(project_id: str):
+        # Export found captions built from another sound: transcribe the routed
+        # audio again. The timeline, cuts and layout are never changed.
+        from cutroom.manual_transcription import refresh_caption_transcript, source_for_caption_refresh
+
+        payload = _json_object()
+        _reject_unknown_fields(payload, {"expected_revision"})
+        revision = payload.get("expected_revision")
+        if type(revision) is not int or revision < 1:
+            raise APIInputError("invalid_revision", "Refresh the project before updating captions.")
+
+        def validate(current):
+            if current["revision"] != revision:
+                raise RuntimeError("revision_conflict")
+            if jobs.active(project_id=project_id, kind="prepare_source"):
+                raise APIInputError("project_busy", "Wait for source preparation to finish, then export.", 409)
+            try:
+                source_for_caption_refresh(current)
+            except ValueError as error:
+                raise APIInputError("caption_refresh_unavailable", str(error), 409) from error
+
+        job = submit_project_job("caption_refresh", project_id, refresh_caption_transcript, project_id,
+                                 store, settings, revision, validate_project=validate, job_identity=payload)
+        return jsonify({"job": job.public()}), 202
+
     @app.get("/api/projects/<project_id>/caption-generation")
     def caption_generation_status(project_id: str):
         from cutroom.caption_generation import readiness
@@ -1616,6 +1646,33 @@ def create_app(settings: Settings | None = None) -> Flask:
             raise APIInputError("marker_unavailable" if error.status==409 else "invalid_marker", str(error), error.status) from error
         return jsonify({"project_id": project_id, "previous_revision": revision, "revision": updated["revision"],
                         "review_markers": updated["review_markers"]})
+
+    @app.post("/api/projects/<project_id>/manual-clips")
+    def write_manual_clip(project_id: str):
+        # Save, rename or remove a hand-marked range. Never cuts the timeline or renders.
+        payload = _json_object()
+        revision = payload.get("expected_revision")
+        if type(revision) is not int or revision < 1:
+            raise APIInputError("invalid_field", "Clips require the displayed project's saved revision.")
+        changed: dict[str, Any] = {}
+        def apply(project):
+            changed["row"] = apply_manual_clip(project, payload)
+        try:
+            with project_job_gate:
+                if project_import_active(project_id) or jobs.active(project_id=project_id):
+                    raise APIInputError("project_busy", "Wait for the current export or processing to finish before changing Clips.", 409)
+                updated = store.update(project_id, apply, expected_revision=revision)
+        except ManualClipError as error:
+            raise APIInputError("clip_unavailable" if error.status == 409 else "invalid_clip", str(error), error.status) from error
+        row = changed.get("row") or {}
+        return jsonify({"project_id": project_id, "previous_revision": revision, "revision": updated["revision"],
+                        "clip_id": row.get("id"), "manual_clips": manual_clip_view(updated)})
+
+    @app.get("/api/projects/<project_id>/manual-clips")
+    def read_manual_clips(project_id: str):
+        # Live statuses for the Clips board, without loading the whole editor projection.
+        project = store.load(project_id)
+        return jsonify({"project_id": project_id, "revision": project.get("revision"), "manual_clips": manual_clip_view(project)})
 
     @app.post("/api/projects/<project_id>/manual/edit")
     def manual_edit(project_id: str):
@@ -3127,7 +3184,7 @@ def create_app(settings: Settings | None = None) -> Flask:
     @app.post("/api/projects/<project_id>/render")
     def render(project_id: str):
         payload = _json_object()
-        _reject_unknown_fields(payload, {"quality", "fps", "resolution", "range"})
+        _reject_unknown_fields(payload, {"quality", "fps", "resolution", "range", "clip"})
         if "resolution" in payload:
             try:
                 validate_export_resolution(payload["resolution"])
@@ -3156,6 +3213,19 @@ def create_app(settings: Settings | None = None) -> Flask:
                 raise APIInputError("invalid_export_range", str(error), 400) from error
 
         require_export_range(project)
+        clip_id = payload.pop("clip", None)
+        if clip_id is not None and "range" not in payload:
+            raise APIInputError("invalid_export_range", "A saved clip exports only its own marked range.", 400)
+        def require_saved_clip(value):
+            if clip_id is None:
+                return None
+            try:
+                return require_exportable_clip(value, clip_id, payload.get("range"))
+            except ManualClipError as error:
+                raise APIInputError("clip_changed" if error.status == 409 else "invalid_clip", str(error), error.status) from error
+        saved_clip = require_saved_clip(project)
+        if saved_clip:
+            payload["_export_name"] = f"{project.get('name') or 'cutroom-edit'} - {saved_clip['name']}".replace("/", "-").replace("\\", "-")
         try:
             layout_fallback = require_layout_coverage(project, payload)
         except LayoutCoverageError as error:
@@ -3169,6 +3239,7 @@ def create_app(settings: Settings | None = None) -> Flask:
             validate_sequence_version(latest)
             validate_layer_tracks(latest)
             require_export_range(latest)
+            require_saved_clip(latest)
             if not latest.get("sources", {}).get("A") or not latest.get("draft"):
                 raise APIInputError("draft_required", "Generate or create a draft before rendering.")
             try:
@@ -3942,6 +4013,7 @@ def _public_project(project: dict[str, Any]) -> dict[str, Any]:
     except TimelineBindingError:
         public["timeline_bindings"] = {"error": PUBLIC_BINDING_ERROR, "id_actions": []}
     _public_captions(project, public)
+    public["manual_clips"] = manual_clip_view(project)
     project_id = public["id"]
     asset_fields = {"id", "name", "kind", "duration", "width", "height", "has_audio", "status", "waveform", "stabilized"}
     for asset_id, asset in public.setdefault("assets", {}).items():

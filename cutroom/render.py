@@ -29,7 +29,7 @@ from .media_render import append_media_graph, library_input_args, library_clips,
 from .render_inventory import RenderInputInventory, chroma_background_slots, compile_render_inputs, qualify_library_pictures
 from .output_review import remaining_picture_gaps, review_export
 from .projects import ProjectStore
-from .sequence import editor_keep_ranges
+from .sequence import editor_keep_ranges, materialize_sequence
 from .source_tracks import has_sequence, has_source_tracks, source_track_clips, timeline_duration, validate_sequence_version
 from .text_clips import validated_text_clips
 from .utils import new_id, now_iso, sanitize_filename
@@ -212,6 +212,7 @@ def _render_plan(project: dict[str, Any], *, layout_coverage: list[dict[str, Any
         )
 
     plan: list[dict[str, Any]] = []
+    output_cursor = 0.0  # finished-output seconds before the current fragment
     for keep in keeps:
         boundaries = {float(keep["start"]), float(keep["end"])}
         if independent:
@@ -240,6 +241,7 @@ def _render_plan(project: dict[str, Any], *, layout_coverage: list[dict[str, Any
         for start, end in zip(ordered, ordered[1:]):
             if end - start < 0.005:
                 continue
+            output_start, output_cursor = output_cursor, output_cursor + end - start
             midpoint = (start + end) / 2.0
             camera = next(
                 (
@@ -265,6 +267,7 @@ def _render_plan(project: dict[str, Any], *, layout_coverage: list[dict[str, Any
                                 for left, right in track_video_ranges["A"]) if independent else
                             _source_has_video(source) and output_end <= math.floor(_source_video_duration(source) * fps + 0.5) / fps + 1e-6)
                 layout_coverage.append({"start": start, "end": end, "camera": camera,
+                                        "output_start": output_start,
                                         "missing_slots": missing_slots,
                                         "fallback_camera": "A" if missing_slots == ["B"] and a_covers else None})
             # A shorter/offset B must not turn part of a camera-only shot black
@@ -332,10 +335,20 @@ class LayoutCoverageError(ValueError):
         return {"error": "layout_coverage_incomplete", "message": str(self), "layout_coverage": self.coverage}
 
 
-def composition_layout_coverage(project: dict[str, Any]) -> dict[str, Any]:
-    """Read-only layout feasibility on the same clocks/boundaries as export."""
+def composition_layout_coverage(project: dict[str, Any], window: tuple[float, float] | None = None) -> dict[str, Any]:
+    """Read-only layout feasibility on the same clocks/boundaries as export.
+
+    ``window`` limits the check to finished-output seconds [start, end), as a
+    marked (Clips) export only renders that part of the timeline.
+    """
     rows: list[dict[str, Any]] = []
     _render_plan(project, layout_coverage=rows)
+    if window is not None:
+        rows = [row for row in rows
+                if row["output_start"] < window[1] - 1e-6
+                and row["output_start"] + row["end"] - row["start"] > window[0] + 1e-6]
+    for row in rows:
+        row.pop("output_start", None)
     missing = [row for row in rows if row["missing_slots"]]
     manual = project.get("manual") or {}
     multi = {"B", "screen", "camera", "stacked", "side_by_side", "pip"}
@@ -364,10 +377,20 @@ def _layout_fallback_notice(coverage: dict[str, Any]) -> dict[str, Any] | None:
                         "The saved edit, duration, captions and selected audio are unchanged. Missing B sound is not replaced.")}
 
 
+def _range_window(options: dict[str, Any] | None) -> tuple[float, float] | None:
+    spec = (options or {}).get("range")
+    try:
+        fps = int(spec["fps"])
+        return (int(spec["start_frame"]) / fps, int(spec["end_frame"]) / fps) if fps > 0 else None
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
 def require_layout_coverage(project: dict[str, Any], options: dict[str, Any] | None = None) -> dict[str, Any] | None:
+    window = _range_window(options)
     if options:
         project = with_export_options(project, options)
-    coverage = composition_layout_coverage(project)
+    coverage = composition_layout_coverage(project, window)
     if coverage["export_blocked"]:
         raise LayoutCoverageError(coverage)
     return _layout_fallback_notice(coverage)
@@ -1420,6 +1443,45 @@ def build_filter_graph(project: dict[str, Any], width: int, height: int, caption
     return ";\n".join(filters), maps, has_audio
 
 
+RANGE_SOURCE_MARGIN = 2.0
+
+
+def _range_source_limits(project: dict[str, Any], scope: ExportRange) -> dict[str, float] | None:
+    """How far into each recording a marked range needs to read.
+
+    Everything the range shows comes from source time at or before the last
+    timeline row that starts before Out. Reading past that only feeds the
+    discarded remainder of the full-timeline graph, which for a short clip of a
+    long recording means decoding hours of footage. Returns None (read all)
+    whenever the sequence cannot be resolved.
+    """
+    try:
+        effective, _ = materialize_sequence(project)
+    except Exception:
+        return None
+    tracks = ((effective.get("manual") or {}).get("source_tracks") or {})
+    limits: dict[str, float] = {}
+    out = scope.end + RANGE_SOURCE_MARGIN
+    for slot in ("A", "B"):
+        rows = tracks.get(slot)
+        if not isinstance(rows, list):
+            return None
+        need = 0.0
+        for row in rows:
+            try:
+                start, end, source = float(row["start"]), float(row["end"]), float(row["source_start"])
+                speed = float(row.get("video_speed") or 1.0)
+            except (KeyError, TypeError, ValueError):
+                return None
+            if not all(math.isfinite(v) for v in (start, end, source, speed)) or speed <= 0:
+                return None
+            if start >= out:
+                continue
+            need = max(need, source + (min(end, out) - start) * speed)
+        limits[slot] = need + RANGE_SOURCE_MARGIN
+    return limits
+
+
 def resolve_export_range(project: dict[str, Any], options: dict[str, Any]) -> ExportRange | None:
     if "range" not in options:
         return None
@@ -1800,7 +1862,9 @@ def _run_ffmpeg_process(context: JobContext, command: list[str], expected_durati
                     newest_seconds = seconds
 
             if newest_seconds is not None:
-                last_seconds = max(last_seconds, newest_seconds)
+                # A marked range's discarded drain output can report the
+                # whole-timeline clock; never show more than the planned length.
+                last_seconds = max(last_seconds, min(newest_seconds, expected_duration) if expected_duration > 0 else newest_seconds)
                 ratio = min(1.0, last_seconds / expected_duration) if expected_duration > 0 else 0.0
                 progress = min(0.95, 0.04 + ratio * 0.91)
                 context.update(progress, f"Rendering... {last_seconds:.1f}s / {expected_duration:.1f}s" if expected_duration > 0 else "Rendering...")
@@ -1851,8 +1915,14 @@ def render_project(context: JobContext, project_id: str, store: ProjectStore, se
     scope = resolve_export_range(project, options)
     saved_input_fingerprint = _render_input_fingerprint(project)
     project = with_export_options(project, options)
-    layout_fallback = (require_layout_coverage(project) if options.get("_require_layout_coverage")
-                       else _layout_fallback_notice(composition_layout_coverage(project)))
+    window = _range_window(options) if scope else None
+    if options.get("_require_layout_coverage"):
+        coverage = composition_layout_coverage(project, window)
+        if coverage["export_blocked"]:
+            raise LayoutCoverageError(coverage)
+        layout_fallback = _layout_fallback_notice(coverage)
+    else:
+        layout_fallback = _layout_fallback_notice(composition_layout_coverage(project, window))
     render_input_fingerprint = _render_input_fingerprint(project)
     if scope:
         render_input_fingerprint = stable_fingerprint("range-export-v1", {"input": render_input_fingerprint, **scope.public()})
@@ -1921,12 +1991,15 @@ def render_project(context: JobContext, project_id: str, store: ProjectStore, se
             graph, maps = scope.mapped_graph(graph, maps, trim_audio=not normalizes_audio(project))
         needs_source_b_input = input_inventory.needs_source_b(graph)
         input_demand = input_inventory.demand(graph, include_source_b=needs_source_b_input)
-        input_args = input_inventory.input_args(store.project_dir(project_id), include_source_b=needs_source_b_input)
+        source_limits = (_range_source_limits(project, scope)
+                         if scope and not normalizes_audio(project) else None)
+        input_args = input_inventory.input_args(store.project_dir(project_id), include_source_b=needs_source_b_input,
+                                                source_limits=source_limits)
     except BaseException:
         if caption_ass is not None:
             caption_ass.unlink(missing_ok=True)
         raise
-    safe_name = sanitize_filename(project.get("name", "cutroom-edit"))
+    safe_name = sanitize_filename(str(options.get("_export_name") or project.get("name", "cutroom-edit")))
     suffix = f"-range-{scope.start_frame}-{scope.end_frame}" if scope else ""
     output = settings.exports_dir / f"{safe_name}{suffix}-{export_id[-8:]}.mp4"
     partial = output.with_suffix(".partial.mp4")
@@ -1972,6 +2045,7 @@ def render_project(context: JobContext, project_id: str, store: ProjectStore, se
         # avoids AAC packet boundaries dropping the final planned video frame.
         "-t", f"{stage_duration:.6f}",
         "-progress", "pipe:1", "-nostats", str(render_target),
+        *(scope.drain_output_args(graph) if scope else []),
     ]
     context.update(0.04, f"Rendering with {encoder}")
     process_returncode = None

@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased - 2026-11-28 - Clips follow your layout
+
+- **Clips → My edit** (the default once there is an edit) finds moments in the finished timeline instead of the raw main recording. Cards, previews and exports show the arranged layout: stacked, side by side, picture in picture or one source, using both recordings and their placement on the timeline. **Whole recording** keeps the previous search across all of source A.
+- A Clips export checks layout coverage only inside its own range, so a clip is no longer blocked by a missing camera section elsewhere in the edit.
+- When captions were built from a different sound than the edit plays (for example the screen recording's audio while the edit uses the camera mic), Export now transcribes the selected sound locally, updates the captions and continues. Cuts, layout and the timeline are not changed; no Draft rebuild is needed.
+
+## Unreleased - 2026-11-27 - Save your own clips while watching
+
+- **Add to Clips** beside the player saves the In/Out range marked on the **Edited video** timeline. It does not cut the timeline, open a window or move the playhead, so you keep watching from the same point and can mark the next range.
+- Saved ranges appear at the top of **Clips** with a **Manual** tag, a name you can change, start, end and length. They are saved in the project and survive closing and reopening. **Play** previews the range inside its card, **Show on timeline** marks it in the editor, and **Remove** takes it off the list without touching the edit. No AI is needed.
+- **Export clip** exports one range as its own MP4 with the project's settings, edit, sound and captions. Tick several and use **Export selected** to export them one after another through the existing export queue. If one fails the rest continue, and **Try again** retries only the failed ones.
+- If a later edit changes what a saved range shows (a cut before it, a trim inside it, new text or captions), it is marked **Needs review** and cannot be exported until you check it. **Keep as is** accepts the range as it is now. A range that now ends after the edit has to be marked again.
+
 ## CUTROOM 1.3 Beta source changes: style families and interface motion
 
 - Edit styles are grouped into five families. Older style IDs and their defaults are unchanged; new Talking Clips and YouTube Explainer styles use speech evidence.
