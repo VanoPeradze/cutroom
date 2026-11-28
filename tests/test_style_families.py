@@ -19,9 +19,9 @@ LEGACY_IDS = {
 }
 
 
-def test_five_families_cover_every_style_exactly_once():
+def test_families_cover_every_style_exactly_once():
     families = public_style_families()
-    assert [family["id"] for family in families] == ["auto", "highlights", "talking", "story", "youtube_long"]
+    assert [family["id"] for family in families] == ["auto", "highlights", "talking", "story", "by_content", "youtube_long"]
     variants = [variant["style"] for family in families for variant in family["variants"]]
     assert sorted(variants) == sorted(style["id"] for style in EDIT_STYLES)
     assert len(variants) == len(set(variants))
@@ -171,3 +171,35 @@ def test_system_exposes_families_and_recommendation_endpoint(tmp_path: Path, mon
     assert advice.status_code == 200
     assert advice.get_json()["recommendation"]["style"] in {"clean_vod", "smart"}
     assert client.get(f"/api/projects/{project['id']}/style-recommendation?goal=nope").status_code == 400
+
+
+NICHES = ("podcast_interview", "expert_tip", "tutorial_steps", "product_review", "lecture_quotes",
+          "vlog_travel", "sports_highlight", "event_montage")
+
+
+def test_content_type_styles_are_executable_with_valid_project_settings():
+    import server
+    from cutroom.captions import CAPTION_STYLE_CHOICES
+
+    family = next(f for f in public_style_families() if f["id"] == "by_content")
+    assert [v["style"] for v in family["variants"]] == list(NICHES)
+    for style_id in NICHES:
+        style = get_edit_style(style_id, strict=True)
+        defaults = style["defaults"]
+        for key, choices in server.SETTING_CHOICES.items():
+            if key in defaults:
+                assert defaults[key] in choices, (style_id, key)
+        assert defaults.get("caption_style", "bold") in CAPTION_STYLE_CHOICES
+        for key, choices in server.AUDIO_CLEANUP_CHOICES.items():
+            assert defaults["audio_cleanup"][key] in choices, (style_id, key)
+        for key, (low, high) in server.AUDIO_CLEANUP_RANGES.items():
+            if key in defaults["audio_cleanup"]:
+                assert low <= defaults["audio_cleanup"][key] <= high, (style_id, key)
+        assert style["framing_policy"]["second_source_layout"] in server.SETTING_CHOICES["layout"]
+        assert style["framing_policy"]["embedded_camera_requires_confirmation"] is True
+        assert style["guidance"] and "invent" in style["guidance"]
+        enriched = enrich_brief_with_style({"edit_style": style_id})
+        assert enriched["edit_style"] == style_id
+        assert style_family(style_id) == "by_content"
+    assert get_edit_style("tutorial_steps")["selection_policy"]["chronology"] == "strict"
+    assert get_edit_style("sports_highlight")["selection_policy"]["protect_action_span"] is True

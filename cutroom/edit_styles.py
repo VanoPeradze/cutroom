@@ -850,6 +850,164 @@ EDIT_STYLES: tuple[dict[str, Any], ...] = (
 )
 
 
+def _niche(style_id, category, name, description, badge, features, defaults, policy, framing, guidance):
+    """A content-type style: what the edit keeps for one kind of creator."""
+    base = {"goal": "short", "aspect": "9:16", "pace": "balanced", "target_duration": 60, "layout": "auto",
+            "quality": "balanced", "resolution": "1080", "auto_reframe": True, "captions": True,
+            "burn_captions": True, "performance_mode": "auto", "audio_cleanup": dict(_BASE_AUDIO)}
+    audio = defaults.pop("audio_cleanup", {})
+    base.update(defaults)
+    base["audio_cleanup"] = {**_BASE_AUDIO, **audio}
+    if "invent" not in guidance:
+        guidance += " Never invent words, claims or moments."
+    return {"id": style_id, "category": category, "name": name, "description": description, "badge": badge,
+            "resource_tier": "lite" if category == "talking" else "balanced", "features": features,
+            "defaults": base, "selection_policy": policy, "framing_policy": framing, "guidance": guidance}
+
+
+# Content types (who the creator is and what the edit keeps). Each reuses the
+# executable policy vocabulary above, so every path that runs a style runs these.
+NICHE_STYLES: tuple[dict[str, Any], ...] = (
+    _niche(
+        "podcast_interview", "talking",
+        {"he": "פודקאסט / ראיון", "en": "Podcast / Interview"},
+        {"he": "שני דוברים ומעלה: שאלה ותשובה שלמה, והמצלמה עוברת לפי מי שמדבר.",
+         "en": "Two or more speakers: a question and its complete answer, with the camera on whoever speaks."},
+        {"he": "ראיון", "en": "Interview"},
+        ["podcast", "interview", "complete_ideas", "speaker_switching", "captions", "vertical"],
+        {"caption_style": "highlight", "audio_cleanup": {"preset": "tight", "silence_min_seconds": 0.55, "silence_keep_seconds": 0.18, "max_remove_ratio": 0.32}},
+        _selection_policy(moment_unit="complete_thought", hook="clear_claim", chronology="premise_then_conclusion",
+                          pre_roll_seconds=1.0, post_roll_seconds=1.5, energy=0.10, speech=0.65, visual_change=0.0,
+                          continuity=0.25, story_structure=("the question", "the complete answer", "the takeaway"), max_moments=1),
+        _framing_policy(default_layout="auto", second_source_layout="stacked"),
+        "Edit this as a podcast or interview clip. Keep one question and its complete answer, so a viewer who saw "
+        "nothing before it understands both. Open on the answer's strongest line if it stands on its own, then the "
+        "question. Never cut an answer mid-thought, never attribute words to the wrong speaker, and remove only "
+        "filler, false starts and dead air.",
+    ),
+    _niche(
+        "expert_tip", "talking",
+        {"he": "טיפ ממומחה", "en": "Expert Tip"},
+        {"he": "מאמן, עו״ד, רופא או יועץ: טיפ אחד שלם, והרעיון שלו כבר במשפט הראשון.",
+         "en": "Coach, lawyer, doctor or advisor: one complete tip, with its idea in the first line."},
+        {"he": "טיפ", "en": "Tip"},
+        ["talking_head", "one_tip", "strong_opening", "key_words", "captions", "vertical"],
+        {"target_duration": 45, "caption_style": "emphasis", "layout": "A",
+         "audio_cleanup": {"preset": "tight", "silence_min_seconds": 0.45, "silence_keep_seconds": 0.14, "max_remove_ratio": 0.38}},
+        _selection_policy(moment_unit="complete_thought", hook="clear_promise", chronology="premise_then_conclusion",
+                          pre_roll_seconds=0.5, post_roll_seconds=1.0, energy=0.05, speech=0.70, visual_change=0.0,
+                          continuity=0.25, story_structure=("the tip as a clear promise", "why or how it works", "the takeaway"), max_moments=1),
+        _framing_policy(default_layout="A", second_source_layout="pip"),
+        "Edit this as one expert tip. Pick a single, complete, practical tip. Open on the line that states the tip or "
+        "its promise, keep the reason or steps that make it work, and end on the takeaway. Keep numbers and specific "
+        "advice exactly as said; never add claims, and remove filler, retakes and dead air.",
+    ),
+    _niche(
+        "tutorial_steps", "general",
+        {"he": "מדריך / Tutorial", "en": "Tutorial"},
+        {"he": "תוכנה, טכנולוגיה, בישול: השלבים בסדר, בלי שקטים וטייקים חוזרים, עם פרקים.",
+         "en": "Software, tech, cooking: every step in order, without pauses or retakes, with chapters."},
+        {"he": "שלבים", "en": "Steps"},
+        ["long_form", "steps_in_order", "chapters", "retakes", "widescreen"],
+        {"goal": "youtube", "aspect": "16:9", "target_duration": 600, "layout": "A", "auto_reframe": False,
+         "captions": False, "burn_captions": False,
+         "audio_cleanup": {"preset": "tight", "silence_min_seconds": 0.6, "silence_keep_seconds": 0.2, "max_remove_ratio": 0.35}},
+        _selection_policy(moment_unit="source_sequence", hook="none", chronology="strict", pre_roll_seconds=0.0,
+                          post_roll_seconds=0.0, energy=0.0, speech=0.55, visual_change=0.20, continuity=0.25),
+        _framing_policy(default_layout="A", second_source_layout="pip"),
+        "Clean up a tutorial. Keep every step in its original order, including the moments where the result of an "
+        "action is shown on screen even if nobody speaks. Remove dead air, filler and repeated takes, keeping the last "
+        "complete take. Do not reorder, skip or summarize steps.",
+    ),
+    _niche(
+        "product_review", "talking",
+        {"he": "מוצר / סקירה", "en": "Product Review"},
+        {"he": "e-commerce וטכנולוגיה: פותח בתוצאה או בפסיקה, מראה את היתרונות ומסיים בקריאה לפעולה.",
+         "en": "E-commerce and tech: opens on the result or verdict, shows the benefits and ends on a call to action."},
+        {"he": "סקירה", "en": "Review"},
+        ["product", "result_first", "benefits", "call_to_action", "captions", "vertical"],
+        {"target_duration": 45, "caption_style": "box",
+         "audio_cleanup": {"preset": "tight", "silence_min_seconds": 0.5, "silence_keep_seconds": 0.15, "max_remove_ratio": 0.36}},
+        _selection_policy(moment_unit="complete_thought", hook="payoff_tease", chronology="setup_then_payoff",
+                          pre_roll_seconds=0.5, post_roll_seconds=1.0, energy=0.10, speech=0.55, visual_change=0.15,
+                          continuity=0.20, story_structure=("the result or verdict", "benefits shown", "the speaker's call to action")),
+        _framing_policy(default_layout="auto", second_source_layout="pip"),
+        "Edit this as a product review. Open on the result or verdict the speaker gives, then the benefits they show "
+        "or describe, and end on their own call to action if they make one. Keep prices, specs and claims exactly as "
+        "said; never invent a verdict or call to action.",
+    ),
+    _niche(
+        "lecture_quotes", "talking",
+        {"he": "הרצאה / וובינר / דרשה", "en": "Lecture / Talk"},
+        {"he": "מרצים וקהילות: ציטוט חזק ושלם, עם ההקשר והתגובה של הקהל.",
+         "en": "Speakers and communities: a strong, complete quote with its context and the audience's reaction."},
+        {"he": "ציטוט", "en": "Quote"},
+        ["lecture", "quotes", "applause", "complete_ideas", "captions", "vertical"],
+        {"caption_style": "clean", "pace": "gentle",
+         "audio_cleanup": {"preset": "natural", "silence_min_seconds": 0.9, "silence_keep_seconds": 0.35, "max_remove_ratio": 0.22}},
+        _selection_policy(moment_unit="complete_thought", hook="clear_claim", chronology="premise_then_conclusion",
+                          pre_roll_seconds=1.5, post_roll_seconds=2.5, energy=0.20, speech=0.60, visual_change=0.0,
+                          continuity=0.20, story_structure=("the strongest quote", "its context", "the audience reaction or applause"), max_moments=1),
+        _framing_policy(default_layout="auto", second_source_layout="pip"),
+        "Edit this from a lecture, webinar or sermon. Choose one strong, quotable idea and keep it complete with the "
+        "context it needs. If the audience laughs or applauds, keep that reaction at the end. Preserve the speaker's "
+        "exact words and pauses for emphasis; remove only dead air and false starts.",
+    ),
+    _niche(
+        "vlog_travel", "general",
+        {"he": "ולוג / טיולים", "en": "Vlog / Travel"},
+        {"he": "לייפסטייל: שוטים קצרים לפי הסדר, שומר על סאונד הסביבה ועל רגעים בלי דיבור.",
+         "en": "Lifestyle: short shots in order, keeping ambient sound and moments without speech."},
+        {"he": "ולוג", "en": "Vlog"},
+        ["vlog", "short_shots", "ambient_sound", "chronological", "vertical"],
+        {"pace": "dynamic", "target_duration": 60, "caption_style": "clean",
+         "audio_cleanup": {"preset": "natural", "silence_action": "keep", "quiet_action": "keep", "max_remove_ratio": 0.15}},
+        _selection_policy(moment_unit="standout_moment", hook="natural_open", chronology="strict", pre_roll_seconds=0.5,
+                          post_roll_seconds=0.5, energy=0.25, speech=0.25, visual_change=0.40, continuity=0.10,
+                          story_structure=("arrival or opening shot", "the day's best moments", "a closing moment")),
+        _framing_policy(default_layout="A", second_source_layout="pip"),
+        "Edit this as a vlog. Keep short, varied shots in the order they happened and the best visual moments even "
+        "when nobody talks. Keep ambient sound; do not cut a sentence the creator says to camera. Add a music track "
+        "from Media if the creator wants one; never invent narration.",
+    ),
+    _niche(
+        "sports_highlight", "general",
+        {"he": "ספורט / כושר", "en": "Sports / Fitness"},
+        {"he": "מאמנים וספורטאים: הפעולה המלאה, הרגע החזק, וההסבר שאחריו.",
+         "en": "Coaches and athletes: the full action, its peak and the explanation after it."},
+        {"he": "אקשן", "en": "Action"},
+        ["sports", "action", "complete_moments", "captions", "vertical"],
+        {"pace": "dynamic", "target_duration": 45, "caption_style": "bold"},
+        _selection_policy(moment_unit="complete_moment", hook="peak_preview", chronology="setup_then_payoff",
+                          pre_roll_seconds=2.0, post_roll_seconds=2.0, energy=0.40, speech=0.20, visual_change=0.40,
+                          continuity=0.0, protect_action_span=True,
+                          story_structure=("the setup", "the full action and its peak", "the explanation or reaction")),
+        _framing_policy(default_layout="auto", second_source_layout="pip"),
+        "Edit this as a sports or fitness highlight. Keep each action complete from its start to its finish; never "
+        "cut inside a rep, play or move. Put the peak first only as a short preview, then the full action, then any "
+        "explanation the coach or athlete gives.",
+    ),
+    _niche(
+        "event_montage", "general",
+        {"he": "מצגת אירוע", "en": "Event Montage"},
+        {"he": "חתונות, בר מצווה, הפקות: הרגעים המרגשים לפי הסדר, מוכנים לפס מוזיקה.",
+         "en": "Weddings, bar and bat mitzvahs, productions: the emotional moments in order, ready for a music track."},
+        {"he": "אירוע", "en": "Event"},
+        ["event", "emotional_moments", "chronological", "music_ready"],
+        {"pace": "gentle", "target_duration": 90, "captions": False, "burn_captions": False,
+         "audio_cleanup": {"preset": "natural", "silence_action": "keep", "max_remove_ratio": 0.10}},
+        _selection_policy(moment_unit="standout_moment", hook="natural_open", chronology="story_arc", pre_roll_seconds=1.0,
+                          post_roll_seconds=1.5, energy=0.30, speech=0.20, visual_change=0.35, continuity=0.15,
+                          story_structure=("arrival and setting", "speeches, vows, laughter and dancing", "a closing emotional moment")),
+        _framing_policy(default_layout="A", second_source_layout="pip"),
+        "Edit this as an event montage. Keep the emotional moments in the order they happened: vows, speeches, "
+        "laughter, applause and dancing. Keep a spoken line complete when it is kept at all. The creator adds the "
+        "music track from Media; never invent words or moments.",
+    ),
+)
+EDIT_STYLES = EDIT_STYLES + NICHE_STYLES
+
+
 _STYLE_BY_ID = {style["id"]: style for style in EDIT_STYLES}
 
 
@@ -902,6 +1060,24 @@ STYLE_FAMILIES: tuple[dict[str, Any], ...] = (
         "variants": (
             ("stream_story", {"he": "הדוק", "en": "Tight"}),
             ("chill_story", {"he": "טבעי", "en": "Natural"}),
+        ),
+    },
+    {
+        "id": "by_content",
+        "name": {"he": "לפי סוג תוכן", "en": "By content type"},
+        "description": {"he": "פודקאסט, טיפ, מדריך, סקירה, הרצאה, ולוג, ספורט או אירוע: העריכה שומרת את מה שחשוב בכל סוג.",
+                        "en": "Podcast, tip, tutorial, review, talk, vlog, sports or event: the edit keeps what matters for each."},
+        "badge": {"he": "חדש", "en": "New"},
+        "goals": ("short", "podcast", "youtube"),
+        "variants": (
+            ("podcast_interview", {"he": "פודקאסט / ראיון", "en": "Podcast / interview"}),
+            ("expert_tip", {"he": "טיפ ממומחה", "en": "Expert tip"}),
+            ("tutorial_steps", {"he": "מדריך", "en": "Tutorial"}),
+            ("product_review", {"he": "מוצר / סקירה", "en": "Product review"}),
+            ("lecture_quotes", {"he": "הרצאה / דרשה", "en": "Lecture / talk"}),
+            ("vlog_travel", {"he": "ולוג / טיולים", "en": "Vlog / travel"}),
+            ("sports_highlight", {"he": "ספורט / כושר", "en": "Sports / fitness"}),
+            ("event_montage", {"he": "אירוע", "en": "Event"}),
         ),
     },
     {
