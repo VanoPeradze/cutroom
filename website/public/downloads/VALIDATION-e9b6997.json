@@ -1,0 +1,64 @@
+{
+  "native": {
+    "run_id": 46119423004,
+    "head_commit": "08fb4968d1364e6d25b7d0a966379a2cc10737f7",
+    "application_source_commit": "e9b69978661fbb3705daeb6770c68b4f0df0812d",
+    "transcription_run": false,
+    "architectures": {
+      "arm64": {
+        "status": "passed",
+        "feature_tests_passed": 357,
+        "required_cases_passed": 50,
+        "skipped": 0,
+        "job_id": 140900478383,
+        "job_url": "https://github.com/VanoPeradze/cutroom/actions/runs/46119423004/job/140900478383",
+        "source_audio_and_caption_checks": "passed",
+        "fresh_app_install": "passed",
+        "missing_pip_recovery": "passed",
+        "restart_persistence": "passed",
+        "combined_archive_sha256": "324710fd470908943c62b96c198e68dda82fad3ce6cdabe901cd6df2775412bd",
+        "installation_checks": {
+          "status": "passed",
+          "launcher_health_and_api": "passed",
+          "restart_persistence": "passed",
+          "repeat_launch": "passed",
+          "different_data_port_collision": "passed",
+          "source_audio_and_caption_checks": "passed",
+          "offline_ready_setup": "passed",
+          "installed_packages_unchanged": "passed",
+          "unicode_and_spaces_path": true
+        }
+      },
+      "x64": {
+        "status": "passed",
+        "feature_tests_passed": 357,
+        "required_cases_passed": 50,
+        "skipped": 0,
+        "job_id": 140900478205,
+        "job_url": "https://github.com/VanoPeradze/cutroom/actions/runs/46119423004/job/140900478205",
+        "source_audio_and_caption_checks": "passed",
+        "fresh_app_install": "passed",
+        "missing_pip_recovery": "passed",
+        "restart_persistence": "passed",
+        "combined_archive_sha256": "324710fd470908943c62b96c198e68dda82fad3ce6cdabe901cd6df2775412bd",
+        "installation_checks": {
+          "status": "passed",
+          "launcher_health_and_api": "passed",
+          "restart_persistence": "passed",
+          "repeat_launch": "passed",
+          "different_data_port_collision": "passed",
+          "source_audio_and_caption_checks": "passed",
+          "offline_ready_setup": "passed",
+          "installed_packages_unchanged": "passed",
+          "unicode_and_spaces_path": true
+        }
+      }
+    }
+  },
+  "known_limits": [
+    "Clean Windows installation and physical Mac UI were not tested.",
+    "FCPXML/EDL exports only main timeline cuts and selected source audio; Resolve import was not tested.",
+    "Translated SRT requires configured, ready Ollama Story AI.",
+    "Gallery screenshots are archival captures of earlier editor versions."
+  ]
+}

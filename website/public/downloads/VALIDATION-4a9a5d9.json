@@ -1,0 +1,190 @@
+{
+  "kind": "CUTROOM public source beta package validation",
+  "application_source_commit": "4a9a5d9d880b584a22f6a8143efc583697bdd15b",
+  "source_tree": "00f5539b6021226a732beccc904b441c376998d8",
+  "pr_head": "dc6302af320dc72932184920f9a313105a69ea01",
+  "merge_commit": "f745a992273ab7861c69cd836a4bdf28dd66953c",
+  "original_pr_check_commit": "74564345112357d157a186ae91402ff9a5f346f4",
+  "windows": {
+    "bytes": 7676289,
+    "sha256": "eb2ca57e2951128ab8905371f77d4ab14c532abd3cff23c3b5321f60d3072fe9",
+    "manifest_sha256": "3f6bff5726b1eadc7ec37d37d7779ef18f96fc5d2ec45ff2c3428eebd1fb4e51",
+    "build_id": "CUTROOM-1.3-beta-20261124-114803",
+    "filename": "CUTROOM-1.3-Beta-Windows-4a9a5d9.zip",
+    "url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.3-beta-20261124-source-b1/CUTROOM-1.3-Beta-Windows-4a9a5d9.zip",
+    "mirrors": [
+      "https://cutroom-studio.expo.app/downloads/CUTROOM-1.3-Beta-Windows-4a9a5d9.zip"
+    ]
+  },
+  "combined": {
+    "bytes": 15422874,
+    "sha256": "a12f0db619fa8ebd75baf9e74573fcceae3b22f0a717649e6b07c181c4698a22",
+    "manifest_sha256": "c441f14aac8186b38fff8bc88ff7e5af55569229c37bf57e87870ac619bca2cc",
+    "build_id": "CUTROOM-1.3-beta-mac-20261124-120855",
+    "filename": "CUTROOM-1.3-Beta-combined-4a9a5d9.zip",
+    "url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.3-beta-20261124-source-b1/CUTROOM-1.3-Beta-combined-4a9a5d9.zip",
+    "mirrors": [
+      "https://cutroom-studio.expo.app/downloads/CUTROOM-1.3-Beta-combined-4a9a5d9.zip"
+    ]
+  },
+  "source": {
+    "sha256": "9b70d83d747b36e07eaa0cfe4af75d8cd7d785d31b88b700bedfc3bdf89f300b",
+    "bytes": 14491105,
+    "filename": "SOURCE-4a9a5d9.zip",
+    "url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.3-beta-20261124-source-b1/SOURCE-4a9a5d9.zip",
+    "mirrors": [
+      "https://cutroom-studio.expo.app/downloads/SOURCE-4a9a5d9.zip"
+    ]
+  },
+  "native": {
+    "run_id": 45391914434,
+    "head_commit": "dc6302af320dc72932184920f9a313105a69ea01",
+    "actual_checked_out_commit": "74564345112357d157a186ae91402ff9a5f346f4",
+    "application_source_commit": "4a9a5d9d880b584a22f6a8143efc583697bdd15b",
+    "transcription_run": false,
+    "normal_merge_commit": "f745a992273ab7861c69cd836a4bdf28dd66953c",
+    "architectures": {
+      "arm64": {
+        "status": "passed",
+        "feature_tests_passed": 357,
+        "required_cases_passed": 50,
+        "skipped": 0,
+        "source_audio_and_caption_checks": "passed",
+        "job_id": 138437556424,
+        "job_url": "https://github.com/VanoPeradze/cutroom/actions/runs/45391914434/job/138437556424",
+        "feature_report_sha256": "f4f32126213e2061b54e7033bad1da60ec8d6b1c73c516643ceb2253634c6b0e",
+        "repair_report_sha256": "76c3e1eec4b064cd546bbe6c06b758c0440f3c5dea0de28470e4dc24e064c9b4",
+        "fresh_app_install": "passed",
+        "fresh_app_install_run_id": 45391914434,
+        "fresh_app_install_job_id": 138437556424,
+        "fresh_app_install_job_url": "https://github.com/VanoPeradze/cutroom/actions/runs/45391914434/job/138437556424",
+        "fresh_app_install_report_sha256": "15484a923f14a148466adfd7bee3d526fad77e15b86ff6ab843a6ad8d1095f2e",
+        "missing_pip_recovery": "passed",
+        "restart_persistence": "passed",
+        "combined_archive_sha256": "a12f0db619fa8ebd75baf9e74573fcceae3b22f0a717649e6b07c181c4698a22",
+        "installation_checks": {
+          "status": "passed",
+          "launcher_health_and_api": "passed",
+          "restart_persistence": "passed",
+          "repeat_launch": "passed",
+          "different_data_port_collision": "passed",
+          "source_audio_and_caption_checks": "passed",
+          "offline_ready_setup": "passed",
+          "installed_packages_unchanged": "passed",
+          "unicode_and_spaces_path": true
+        },
+        "fresh_installation_scenario": "empty_app_install",
+        "recovery_installation_scenario": "partial_runtime_without_pip_recovery",
+        "portrait": {
+          "width": 720,
+          "height": 1280,
+          "duration": 2.0,
+          "has_audio": true
+        },
+        "landscape": {
+          "width": 1280,
+          "height": 720,
+          "duration": 2.0,
+          "has_audio": true
+        }
+      },
+      "x64": {
+        "status": "passed",
+        "feature_tests_passed": 357,
+        "required_cases_passed": 50,
+        "skipped": 0,
+        "source_audio_and_caption_checks": "passed",
+        "job_id": 138437556695,
+        "job_url": "https://github.com/VanoPeradze/cutroom/actions/runs/45391914434/job/138437556695",
+        "feature_report_sha256": "456b6a43441ed09ca8766d24787ceb1d8029db96e09007e32c5c34ccaac828e8",
+        "repair_report_sha256": "a9d28b60ddd75a575730e43a7a391e52768678f463349f46537e3998ee73146c",
+        "fresh_app_install": "passed",
+        "fresh_app_install_run_id": 45391914434,
+        "fresh_app_install_job_id": 138437556695,
+        "fresh_app_install_job_url": "https://github.com/VanoPeradze/cutroom/actions/runs/45391914434/job/138437556695",
+        "fresh_app_install_report_sha256": "25164102ffe74898c89a65d57ba90ac19460bb56d2fee77e5e9f5dd14ee0e6ff",
+        "missing_pip_recovery": "passed",
+        "restart_persistence": "passed",
+        "combined_archive_sha256": "a12f0db619fa8ebd75baf9e74573fcceae3b22f0a717649e6b07c181c4698a22",
+        "installation_checks": {
+          "status": "passed",
+          "launcher_health_and_api": "passed",
+          "restart_persistence": "passed",
+          "repeat_launch": "passed",
+          "different_data_port_collision": "passed",
+          "source_audio_and_caption_checks": "passed",
+          "offline_ready_setup": "passed",
+          "installed_packages_unchanged": "passed",
+          "unicode_and_spaces_path": true
+        },
+        "fresh_installation_scenario": "empty_app_install",
+        "recovery_installation_scenario": "partial_runtime_without_pip_recovery",
+        "portrait": {
+          "width": 720,
+          "height": 1280,
+          "duration": 2.0,
+          "has_audio": true
+        },
+        "landscape": {
+          "width": 1280,
+          "height": 720,
+          "duration": 2.0,
+          "has_audio": true
+        }
+      }
+    }
+  },
+  "windows_smoke": {
+    "application_source_commit": "4a9a5d9d880b584a22f6a8143efc583697bdd15b",
+    "archive_sha256": "eb2ca57e2951128ab8905371f77d4ab14c532abd3cff23c3b5321f60d3072fe9",
+    "validation_url": "https://github.com/VanoPeradze/cutroom/actions/runs/45387405847/job/138421843879",
+    "workflow_commit": "847c8696135c375272b40e05a5c360b2a204fbdf",
+    "report_sha256": "448309897871cf7d29817fe2a298808dafab71dbe9036dc25c312a2bf332a0d1",
+    "environment": "extracted Windows source-beta on hosted Windows runner",
+    "portrait_720x1280": "passed",
+    "two_source_stacked_30_70_pixels": "passed",
+    "selected_source_b_audio_detected": "passed",
+    "full_decode": "passed",
+    "direct_unmodified_setup_without_ollama": "passed",
+    "saved_project_and_export_after_server_restart": "passed",
+    "clean_os_installation": "not_run",
+    "packaged_batch_launcher": "not_run",
+    "human_listening": "not_performed",
+    "model_inference": "not_run",
+    "fixture_checks": {
+      "portrait_width": 720,
+      "portrait_height": 1280,
+      "duration_seconds": 3.0,
+      "two_source_stacked_30_70_pixels": "passed",
+      "source_B_audio_rms": 0.08824547580817554,
+      "source_B_audio_frequency_hz": 655.0,
+      "full_decode": "passed",
+      "direct_setup": "passed_direct_unmodified_setup_without_ollama",
+      "saved_project_and_export_after_server_restart": "passed"
+    },
+    "limits": [
+      "Packaged native batch launcher was not run",
+      "No clean OS install, human listening, model, or physical-device test",
+      "AI disabled in extracted test configuration; archive unmodified"
+    ],
+    "source_b_qualification": {
+      "tests": 17,
+      "status": "passed",
+      "real_portrait_export": "passed",
+      "junit_sha256": "88d6d1f2758f4ea680e56b41223f0db416d2e735f5b6b06e2e064d66856186bd"
+    }
+  },
+  "known_limitations": [
+    "Windows direct setup ran on a configured GitHub-hosted runner. Clean OS, prerequisite installation and the packaged batch launcher were not tested.",
+    "Native automated Mac checks used both Apple Silicon and Intel with the exact candidate. Physical-device UI, Finder/Gatekeeper, Safari and human listening were not performed.",
+    "The qualification used synthetic media; no live transcription, speech accuracy, Story AI quality, peak memory or Cloudflare compatibility was established.",
+    "Cloudflare remains experimental and off by default. Earlier provider tests used mocked responses only; no real audio was uploaded by this qualification.",
+    "Gameplay YouTube uses a target length, not a guarantee. Review suggested chapters and their timecodes after changes to the edit.",
+    "The Mac launcher is source-based, not a signed/notarized application. The first setup requires internet; Linux remains source-only.",
+    "Picture speed changes only the image; sound follows normal source time. Review the final edit and audio before publishing.",
+    "Only mapped ranges can be exported from Clips; CUTROOM does not upload or publish to social platforms.",
+    "The local video map estimates speakers, sound and topics. No human labels, diarization, live model or editorial quality were certified.",
+    "Add Source B is for a saved manual edit with an empty B and an available A. This action does not replace B, change layout or automatically synchronize separate start times. It does not overwrite a saved embedded-camera layout or route audio differently.",
+    "The gallery uses an empty test project and synthetic demo footage. Home and style setup are from 23 November, other captures are archival from 22 November. They predate the Add Source B action and do not certify physical-device acceptance."
+  ]
+}

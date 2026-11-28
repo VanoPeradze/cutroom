@@ -358,5 +358,59 @@
     "sha256": "f5626b399198fc87bae826d4172e2041815861d1ccf5700b9b599c46df2f44b0",
     "url": "https://cutroom-studio--nbymjtivwx.expo.app/downloads/SOURCE-4fc52ae.zip",
     "github_url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.3-beta-20261111-gray1/SOURCE-4fc52ae.zip"
+  },
+  {
+    "filename": "CUTROOM-1.3-Beta-combined-ba67003.zip",
+    "bytes": 12849257,
+    "sha256": "5a406f47f7cb24e49f1967fbcd8e06c2cfb51748379e6938f504433b4e4e7b7c",
+    "url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.3-beta-20261111-hebrew1/CUTROOM-1.3-Beta-combined-ba67003.zip",
+    "mirrors": [
+      "https://cutroom-studio.expo.app/downloads/CUTROOM-1.3-Beta-combined-ba67003.zip"
+    ]
+  },
+  {
+    "filename": "CUTROOM-1.3-Beta-Windows-ba67003.zip",
+    "bytes": 6399567,
+    "sha256": "07b7acecad8ae88e017ddcae03ad2daf04714120a4a734f5a23b304e2b70f51d",
+    "url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.3-beta-20261111-hebrew1/CUTROOM-1.3-Beta-Windows-ba67003.zip",
+    "mirrors": [
+      "https://cutroom-studio.expo.app/downloads/CUTROOM-1.3-Beta-Windows-ba67003.zip"
+    ]
+  },
+  {
+    "filename": "SOURCE-ba67003.zip",
+    "bytes": 9171065,
+    "sha256": "ac612470059964776266a779e55ae0efb491e23dfbf07ff910da88f44099e35a",
+    "url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.3-beta-20261111-hebrew1/SOURCE-ba67003.zip",
+    "mirrors": [
+      "https://cutroom-studio.expo.app/downloads/SOURCE-ba67003.zip"
+    ]
+  },
+  {
+    "filename": "CUTROOM-1.3-Beta-Windows-4a9a5d9.zip",
+    "bytes": 7676289,
+    "sha256": "eb2ca57e2951128ab8905371f77d4ab14c532abd3cff23c3b5321f60d3072fe9",
+    "url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.3-beta-20261124-source-b1/CUTROOM-1.3-Beta-Windows-4a9a5d9.zip",
+    "mirrors": [
+      "https://cutroom-studio.expo.app/downloads/CUTROOM-1.3-Beta-Windows-4a9a5d9.zip"
+    ]
+  },
+  {
+    "filename": "CUTROOM-1.3-Beta-combined-4a9a5d9.zip",
+    "bytes": 15422874,
+    "sha256": "a12f0db619fa8ebd75baf9e74573fcceae3b22f0a717649e6b07c181c4698a22",
+    "url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.3-beta-20261124-source-b1/CUTROOM-1.3-Beta-combined-4a9a5d9.zip",
+    "mirrors": [
+      "https://cutroom-studio.expo.app/downloads/CUTROOM-1.3-Beta-combined-4a9a5d9.zip"
+    ]
+  },
+  {
+    "filename": "SOURCE-4a9a5d9.zip",
+    "bytes": 14491105,
+    "sha256": "9b70d83d747b36e07eaa0cfe4af75d8cd7d785d31b88b700bedfc3bdf89f300b",
+    "url": "https://github.com/VanoPeradze/cutroom/releases/download/v1.3-beta-20261124-source-b1/SOURCE-4a9a5d9.zip",
+    "mirrors": [
+      "https://cutroom-studio.expo.app/downloads/SOURCE-4a9a5d9.zip"
+    ]
   }
 ]

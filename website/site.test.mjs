@@ -45,9 +45,9 @@ test('the 1.3 beta uses exact Windows, shared Mac/combined and source downloads'
     assert.match(mirror[0][2], /mirror/i);
     assert.ok(linksTo(html, `/downloads/${entry.filename}.sha256`).length >= 1);
   }
-  assert.equal(release.filename, 'CUTROOM-1.3-Beta-combined-ba67003.zip');
-  assert.equal(release.platforms.windows.filename, 'CUTROOM-1.3-Beta-Windows-ba67003.zip');
-  assert.equal(release.platforms.mac.filename, 'CUTROOM-1.3-Beta-combined-ba67003.zip');
+  assert.equal(release.filename, 'CUTROOM-1.3-Beta-combined-e9b6997.zip');
+  assert.equal(release.platforms.windows.filename, 'CUTROOM-1.3-Beta-Windows-e9b6997.zip');
+  assert.equal(release.platforms.mac.filename, 'CUTROOM-1.3-Beta-combined-e9b6997.zip');
   assert.equal(release.platforms.mac.filename, release.filename);
   assert.equal(release.platforms.mac.folder,'mac', 'Mac uses the shared combined archive mac folder');
   assert.equal(linksTo(html, release.url).length, 2); // Optional combined ZIP help link, separate from the Mac button.
@@ -56,16 +56,13 @@ test('the 1.3 beta uses exact Windows, shared Mac/combined and source downloads'
   assert.match(html, /Mac uses the combined ZIP\. Extract it, open mac, then run START CUTROOM\.command beside App\./);
   assert.match(region('details', 'install-help'), /The optional combined ZIP has exactly two folders: windows and mac/);
   const source = release.source_archive;
-  assert.equal(source.filename, 'SOURCE-ba67003.zip');
+  assert.equal(source.filename, 'SOURCE-cdd1e83.zip');
   for (const url of [source.url, `/downloads/${source.filename}`, `/downloads/${source.filename}.sha256`]) assert.equal(linksTo(html,url).length,1);
   assert.equal(downloadEntries(release).length,3);
-  assert.match(html, /1\.3 Beta · Hebrew-first speech and independent routing/);
+  assert.match(html, /1\.3 Beta: Transcript editing and animated captions/);
   const update = region('details', 'update-status');
-  assert.match(update, /if FFprobe is missing or unavailable, import explains how to repair and retry/);
-  assert.match(update, /A failed replacement preserves your saved media and edits/);
-  assert.match(update, /Saved silent overlays stay silent until you turn their sound on\./);
-  assert.match(update, /It still flags a draft shorter than requested/);
-  assert.match(update, /Layer sound plays at normal speed from Source in\./);
+  assert.match(update, /Grouped editing controls, transcript edits, animated captions/);
+  assert.match(update, /Export main timeline cuts and selected source audio as FCPXML or EDL/);
   assert.doesNotMatch(html, /In review|public 1\.2 beta until|not in the downloads yet/i);
   assert.doesNotMatch(html, /href="[^"]*Linux[^"\n]*\.zip/i);
   assert.ok(linksTo(html, `${repository}/blob/master/docs/PLATFORMS.md#linux-source-based-development-path`).length);
@@ -73,9 +70,9 @@ test('the 1.3 beta uses exact Windows, shared Mac/combined and source downloads'
 
 test('download metadata pins a dated release and preserves Expo mirrors and provenance', () => {
   const release = JSON.parse(readFileSync(new URL('./release.json', import.meta.url), 'utf8'));
-  assert.equal(release.github_release.tag, 'v1.3-beta-20261111-hebrew1');
-  assert.equal(release.github_release.previous_public_tag, 'v1.3-beta-20261111-gray1');
-  assert.equal(release.github_release.tag_commit, release.source_commit);
+  assert.equal(release.github_release.tag, 'v1.3-beta-20261128-editor1');
+  assert.equal(release.github_release.previous_public_tag, 'v1.3-beta-20261124-source-b1');
+  assert.equal(release.github_release.tag_commit, 'cdd1e834635098f4cfe0ff36dbb0c1ab4f934dd5');
   assert.equal(release.github_release.package_bytes_changed, true);
   assert.equal(release.github_release.url, `${repository}/releases/tag/${release.github_release.tag}`);
   for (const entry of downloadEntries(release)) {
@@ -89,14 +86,13 @@ test('public beta retains exact automated native provenance and visible pending 
   assertPublishable(release);
   assert.equal(release.release_state,'beta');
   assert.equal(release.full_release_qualified,false);
-  assert.equal(release.source_commit,'ba67003726e80e0d394b1927b6b710f191a60157');
-  assert.equal(release.github_release.tag,'v1.3-beta-20261111-hebrew1');
-  assert.equal(release.native_validation.run_id,42977968863);
-  assert.equal(release.validated_pr_head,'ba67003726e80e0d394b1927b6b710f191a60157');
+  assert.equal(release.source_commit,'e9b69978661fbb3705daeb6770c68b4f0df0812d');
+  assert.equal(release.github_release.tag,'v1.3-beta-20261128-editor1');
+  assert.equal(release.native_validation.run_id,46119423004);
+  assert.equal(release.validated_pr_head,'08fb4968d1364e6d25b7d0a966379a2cc10737f7');
   assert.equal(release.native_validation.head_commit,release.validated_pr_head);
   assert.equal(release.native_validation.application_source_commit,release.source_commit);
   assert.equal(release.native_validation.transcription_run,false);
-  assert.equal(release.native_validation.review_record_commit,'acc6ceec1cbad8ac8b5382767df64b48fd1b7ae5');
   for (const architecture of ['arm64','x64']) {
     const checks = release.native_validation.architectures[architecture];
     assert.equal(checks.status,'passed');
@@ -107,28 +103,20 @@ test('public beta retains exact automated native provenance and visible pending 
     assert.equal(checks.required_cases_passed,50);
     assert.equal(checks.skipped,0);
     assert.equal(checks.source_audio_and_caption_checks,'passed');
-    assert.equal(checks.job_id,architecture === 'arm64' ? 130386852359 : 130386852742);
+    assert.equal(checks.job_id,architecture === 'arm64' ? 140900478383 : 140900478205);
     for (const gate of ['fresh_app_install','missing_pip_recovery','restart_persistence']) assert.equal(checks[gate],'passed');
     assert.equal(checks.combined_archive_sha256,release.sha256);
   }
   assert.match(html,/Public beta\./);
   assert.match(html,/Windows requires WinGet and Microsoft Visual C\+\+ x64 runtime first\./);
   assert.match(html,/The required Visual C\+\+ runtime is not installed by the launcher\./);
-  assert.equal(release.windows_fresh_install_acceptance,'not-completed-user-accepted-beta-gap');
-  assert.equal(release.windows_fresh_install.result,'not_performed_for_revised_package');
+  assert.equal(release.windows_fresh_install_acceptance,'not-tested');
+  assert.equal(release.windows_fresh_install.result,'not_run');
   assert.equal(release.windows_fresh_install.status,'not_verified');
   assert.equal(release.windows_fresh_install.guest_report_received,false);
-  assert.equal(release.windows_fresh_install.beta_gate_waiver,'explicitly-accepted-not-passed');
   assert.equal(release.windows_fresh_install.application_source_commit,release.source_commit);
   assert.equal(release.windows_fresh_install.archive_sha256,release.platforms.windows.sha256);
-  const installedWindows = release.windows_installed_validation;
-  assert.equal(installedWindows.application_source_commit,release.source_commit);
-  assert.equal(installedWindows.archive_sha256,release.platforms.windows.sha256);
-  assert.equal(installedWindows.packaged_batch_launcher,'not_run');
-  assert.equal(installedWindows.model_inference,'not_run');
-  assert.equal(installedWindows.clean_os_installation,'not_run');
-  assert.equal(installedWindows.human_listening,'not_performed');
-  for (const gate of ['portrait_720x1280','two_source_stacked_30_70_pixels','selected_source_b_audio_detected','full_decode','direct_unmodified_setup_without_ollama','saved_project_and_export_after_server_restart']) assert.equal(installedWindows[gate],'passed');
+  assert.equal(release.windows_installed_validation,undefined,'Do not attribute historical Windows qualification to this package');
   const resourceAbort = release.historical_windows_validation.find(entry=>entry.application_source_commit==='50843dd178282cf7d55846aad7ec1d8de61aeed7');
   assert.ok(resourceAbort,'Preserve the earlier candidate resource abort without qualifying the revised package');
   assert.equal(resourceAbort.archive_sha256,'4a9fa16ad1894d9837f53f163d41ce25cf852262321ae8f727d7982ef48cb95e');
@@ -220,14 +208,14 @@ test('the concise introduction shows an authentic bilingual dark editor preview'
   lines.forEach(line => { assert.match(line[1], /data-he="[^"]*[\u0590-\u05ff]/); assert.match(line[2], /[A-Za-z]/); });
   const image = hero.match(/<img\b[^>]*id="editorImage"[^>]*>/)?.[0];
   assert.ok(image, 'The first section must show the editor');
-  assert.match(image, /src="\/assets\/studio-edit\.png\?v=20261019"/);
+  assert.match(image, /src="\/assets\/studio-edit\.png\?v=20261122"/);
   assert.match(image, /width="1600" height="900"/);
   assert.match(image, /alt="[^"]+"/);
   assert.match(image, /data-he-alt="[^"]*[\u0590-\u05ff]/);
   assert.match(image, /fetchpriority="high"/);
-  assert.ok(region('dialog', 'imageDialog').includes('src="/assets/studio-edit.png?v=20261019"'), 'Enlargement preserves the original screenshot, without artwork framing');
-  assert.match(hero, /Interface captured 19 October 2026/);
-  assert.match(hero, /Screenshots show an earlier interface, not a new downloadable build\./);
+  assert.ok(region('dialog', 'imageDialog').includes('src="/assets/studio-edit.png?v=20261122"'), 'Enlargement preserves the original screenshot, without artwork framing');
+  assert.match(hero, /Interface captured 22 November 2026/);
+  assert.match(hero, /Captured on 22 November; some tools in the current build are not shown\./);
   assert.doesNotMatch(html, /src="[^"]*showcase|<table\b/);
 });
 
@@ -316,7 +304,7 @@ test('theme text and dual focus colors retain readable contrast', () => {
 
 test('the workspace tour follows the editor order and stays readable without script', () => {
   const tabs = [...html.matchAll(/<button\b[^>]*class="tour-tab"[^>]*id="tab-([a-z]+)"[^>]*aria-controls="panel-\1"[^>]*>([\s\S]*?)<\/button>/g)];
-  assert.deepEqual(tabs.map(tab => tab[1]), ['home', 'media', 'edit', 'layout', 'audio', 'captions', 'output', 'settings', 'projects', 'export']);
+  assert.deepEqual(tabs.map(tab => tab[1]), ['home', 'clips', 'youtube', 'media', 'edit', 'layout', 'audio', 'captions', 'output', 'settings', 'projects', 'export']);
   for (const [, id, label] of tabs) {
     assert.match(label, /<span\b[^>]*data-he="[^"]*[֐-׿]/, `${id} tab needs a Hebrew label`);
     const panel = html.match(new RegExp(`<div\\b[^>]*id="panel-${id}"[^>]*>`))?.[0];
@@ -333,7 +321,7 @@ test('the workspace tour follows the editor order and stays readable without scr
 
 test('every gallery image links to the exact same full-resolution PNG', () => {
   const links = [...html.matchAll(/<a class="workspace-image-link"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g)];
-  assert.equal(links.length, 10);
+  assert.equal(links.length, 13);
   for (const [, href, contents] of links) {
     const src = contents.match(/src="([^"]+)"/)[1];
     assert.equal(src, href);
@@ -346,7 +334,7 @@ test('every gallery image links to the exact same full-resolution PNG', () => {
     assert.equal(bytes.readUInt32BE(20), 900);
   }
   assert.match(css, /\.workspace-shot, \.shot-button img \{ aspect-ratio:auto/);
-  assert.match(html, /Additional windows are not yet pictured here/);
+  assert.match(html, /some tools in the current build are not shown/);
 });
 
 test('sharing metadata uses the actual editor PNG without artwork', () => {
@@ -358,7 +346,7 @@ test('sharing metadata uses the actual editor PNG without artwork', () => {
 });
 
 test('gallery has progressive enhancement, original links and keyboard controls', () => {
-  assert.match(html, /<a id="expandShot" href="\/assets\/studio-edit.png\?v=20261019"/);
+  assert.match(html, /<a id="expandShot" href="\/assets\/studio-edit.png\?v=20261122"/);
   for (const id of ['previousImage', 'nextImage', 'originalImage', 'imageCounter']) assert.ok(html.includes(`id="${id}"`));
   assert.match(script, /event.ctrlKey \|\| event.metaKey/);
   assert.match(script, /expandedImage.src = link.href/);
@@ -576,8 +564,8 @@ test('screenshot dialog follows the selected original, wraps, respects modifiers
 });
 
 test('archived supplemental views and undated AI setup are labeled honestly', () => {
-  assert.match(html, /The AI setup capture date was not recorded/);
-  assert.match(html, /These are archived originals, not new captures/);
+  assert.match(html, /studio-ai-setup\.png/);
+  assert.match(html, /Captured on 22 November; some tools in the current build are not shown/);
   for (const id of ['projects', 'export']) {
     const panel = html.slice(html.indexOf(`id="panel-${id}"`));
     assert.match(panel.slice(0, panel.indexOf('class="original-link"')), /Archived interface from 15 October 2026/);
@@ -588,17 +576,16 @@ test('archived supplemental views and undated AI setup are labeled honestly', ()
 test('current release discloses archival screenshots and preserves preceding Nov6, Nov7 and Nov8 provenance', () => {
   const release = JSON.parse(readFileSync(new URL('./release.json', import.meta.url),'utf8'));
   assert.ok(release.known_limitations.some(text => /[Gg]allery.*archiv/.test(text)));
-  assert.match(html, /Transcription settings were checked in desktop and mobile browser layouts/);
-  assert.match(html, /live Cloudflare, accuracy measurements, physical-device acceptance and human listening remain untested/);
   assert.equal(release.historical_native_validation.find(row=>row.release_tag==='v1.3-beta-20261106-stability1').native_validation.run_id,42291275917);
   assert.equal(release.historical_native_validation.find(row=>row.release_tag==='v1.3-beta-20261107-editor1').native_validation.run_id,42406800822);
   assert.equal(release.historical_native_validation.find(row=>row.release_tag==='v1.3-beta-20261108-studio1').native_validation.run_id,42489336008);
   assert.equal(release.historical_native_validation.find(row=>row.release_tag==='v1.3-beta-20261111-gray1').native_validation.run_id,42965402773);
   const retained = JSON.parse(readFileSync(new URL('./retained-downloads.json', import.meta.url),'utf8'));
-  assert.equal(retained.length,48);
+  assert.equal(retained.length,54);
   for (const entry of retained) {
-    assert.equal(entry.url,`https://cutroom-studio--${entry.filename.includes('4fc52ae') ? 'nbymjtivwx' : entry.filename.includes('d2c6f6f') ? 'oz9pego43i' : entry.filename.includes('2dacba3') ? 'o6r0sixwri' : 'cfqtj1cb86'}.expo.app/downloads/${entry.filename}`);
-    assert.ok(entry.github_url.startsWith('https://github.com/VanoPeradze/cutroom/releases/download/'));
+    assert.ok(new URL(entry.url).protocol==='https:');
+    assert.match(entry.sha256,/^[a-f0-9]{64}$/);
+    if(entry.github_url) assert.ok(entry.github_url.startsWith('https://github.com/VanoPeradze/cutroom/releases/download/'));
   }
 });
 
@@ -630,15 +617,15 @@ test('studio tour supports horizontal navigation, RTL and keyboard boundaries', 
 
 test('studio finish stays local, preserves real imagery and has bounded responsive rules',()=>{
  const finish=readFileSync(new URL('./public/studio.css',import.meta.url),'utf8');
- assert.match(html,/href="\/studio.css\?v=20261122-clips1"/);
- assert.match(finish,/grid-template-columns:repeat\(5,minmax\(0,1fr\)\)/);
+ assert.match(html,/href="\/studio.css\?v=20261123-stylegallery1"/);
+ assert.match(finish,/grid-template-columns:repeat\(6,minmax\(0,1fr\)\)/);
  assert.match(finish,/@media\(max-width:767px\)/);
  assert.match(finish,/@media\(max-width:359px\)/);
  assert.match(finish,/@media\(prefers-reduced-motion:reduce\)/);
  assert.doesNotMatch(finish,/@import|url\(['"]?https?:/);
  assert.match(html,/<span data-he="ה־AI מוצא את הרגעים\.">AI finds the moments\.<\/span>/);
- assert.match(html,/id="clips"[\s\S]*In the next beta[\s\S]*Available now/);
- assert.match(html,/Interface captured 19 October 2026/);
+ assert.match(html,/id="clips"[\s\S]*Available now[\s\S]*Available now/);
+ assert.match(html,/Interface captured 22 November 2026/);
 });
 
 
@@ -691,36 +678,21 @@ test('screening-room surfaces and platform buttons maintain readable contrast',(
 });
 
 
-test('gray and Hebrew release copy is bilingual and limits its accuracy claims', () => {
-  const update = region('details', 'update-status');
-  const note = update.match(/<p data-he="([^"]+)">11 November: ([^<]+)<\/p>/);
-  assert.ok(note, 'The new release needs a localized change note');
-  assert.match(note[1], /[\u0590-\u05ff]/);
-  for (const text of ['neutral gray light-mode surfaces', 'already-cached local model',
-    'preserves the original transcript when the result is weak', 'does not download a new model',
-    'Mixed Hebrew-English caption rendering is corrected', 'Real-speech transcription accuracy has not been measured']) {
-    assert.ok(note[2].includes(text), text);
-  }
-  assert.match(html, /Beta build · 11 November 2026/);
-  assert.match(html, /Beta release notes - build 11 November 2026/);
-  assert.match(html, /Gallery screenshots remain archival/);
-});
-
-
-test('Hebrew-first and optional cloud disclosure remains bilingual and unmeasured', () => {
-  const release = JSON.parse(readFileSync(new URL('./release.json', import.meta.url),'utf8'));
+test('the new editor release copy is bilingual and clearly dated', () => {
   const update = region('details','update-status');
-  const note = update.match(/<p data-he="([^"]+)">New: ([^<]+)<\/p>/);
+  const note = update.match(/<p data-he="([^"]+)">Grouped editing controls,([^<]+)<\/p>/);
   assert.ok(note);
   assert.match(note[1], /[\u0590-\u05ff]/);
-  for (const text of ['ivrit.ai in both Balanced and Quality','memory checks','local speech never uploads audio','experimental and off by default','explicit account/model/future-job consent','No real audio was uploaded','accuracy or billing behavior is not verified']) assert.ok(note[2].includes(text),text);
-  assert.match(update,/prior upload attempts remain visible/);
-  assert.match(update,/not transcription-accuracy certification/);
-  assert.equal(release.local_regression_validation.real_speech_inference,false);
-  assert.equal(release.local_regression_validation.cloud_audio_uploaded,false);
-  assert.equal(release.local_regression_validation.bidi_browser.passed,250);
-  assert.equal(release.local_regression_validation.frontend.passed,919);
-  assert.ok(release.known_limitations.some(text=>/Cloudflare.*experimental.*mocked/.test(text)));
+  for(const text of ['transcript edits','animated captions','vertical copies','FCPXML or EDL']) assert.ok(note[2].includes(text), text);
+  assert.match(html,/Beta build · 28 November 2026/);
+  assert.match(html,/Beta release notes - build 28 November 2026/);
+});
+
+test('published beta limitations do not imply untested workflows are verified', () => {
+  const release = JSON.parse(readFileSync(new URL('./release.json',import.meta.url),'utf8'));
+  assert.ok(release.known_limitations.some(text=>text.includes('Resolve import was not tested')));
+  assert.ok(release.known_limitations.some(text=>text.includes('ready Ollama Story AI')));
+  assert.equal(release.native_validation.transcription_run,false);
 });
 
 
