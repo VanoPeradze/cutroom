@@ -26,6 +26,19 @@ const QUOTE = /^["“”'‘’״׳](.+)["“”'‘’״׳]$/;
 const fmt = (t) => `${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, '0')}`;
 const total = (ranges) => ranges.reduce((s, r) => s + r.end - r.start, 0);
 const KEEP = /^(?:keep only|only keep|supercut(?: of)?|make a supercut of|just keep)\s+(?:the\s+)?(?:(?:parts?|sentences?|bits?|moments?)\s+(?:about|where (?:i|we|they) (?:say|mention|talk about)|with|that mention)\s+)?(.+)$|^(?:השאר|תשאיר|השאירו|תשאירו)\s+רק\s+(?:את\s+)?(?:(?:החלקים|המשפטים|הקטעים|הרגעים)\s+(?:על|עם|שמדברים על|שאומרים|שמוזכר בהם|שבהם)\s+)?(.+)$/i;
+const SHORTEN = /^(?:shorten|trim|cut|make|get)(?: it| the video| this)?(?: down)?(?: to| under| below)\s+(.+)$|^(?:תקצר|קצר|תקצרי|לקצר|תוריד|תחתוך)(?: את הסרטון| אותו)?\s+(?:ל-?|עד\s+)(.+)$/i;
+/** "8 minutes", "8 min", "90 seconds", "1:30", "8 דקות", "דקה" → seconds, or null. */
+export function parseLength(text) {
+  const raw = String(text ?? '').trim().toLowerCase();
+  if (/^(?:a minute|one minute|דקה(?: אחת)?)$/.test(raw)) return 60;
+  const clock = raw.match(/^(\d+):(\d{1,2})$/);
+  if (clock) return Number(clock[1]) * 60 + Number(clock[2]);
+  const m = raw.match(/^(\d+(?:\.\d+)?)\s*(m|min|mins|minutes?|דקות|דק׳|דק'|s|sec|secs|seconds?|שניות)?$/);
+  if (!m) return null;
+  const n = Number(m[1]);
+  return /^(?:s|sec|secs|seconds?|שניות)$/.test(m[2] || '') ? n : m[2] ? n * 60 : n >= 20 ? n : n * 60;
+}
+const ORDER = ['pause', 'hesitation', 'filler', 'retake'];
 const phraseOf = (text) => {
   const bare = text.replace(/^(?:the words?|every|all(?: the)?|each|את המילים|את המילה|המילה|כל ה-?|את כל ה-?|את)\s+/i, '').replace(/\s+(?:everywhere|from the video|מהסרטון|מכל הסרטון)$/i, '').trim();
   return (bare.match(QUOTE)?.[1] ?? bare).trim();
@@ -40,6 +53,29 @@ export function planPrompt(prompt, project) {
   const captions = project?.editor_captions || [];
   const duration = Number(project?.editor_sequence?.duration);
   if (!text) return { kind: 'none', summary: '' };
+  const shorten = text.match(SHORTEN);
+  const target = shorten ? parseLength(shorten[1] ?? shorten[2]) : null;
+  if (shorten && target) {
+    if (!Number.isFinite(duration)) return { kind: 'none', summary: 'Open the edit first.' };
+    if (target >= duration) return { kind: 'none', summary: `The edit is already ${fmt(duration)}, within ${fmt(target)}.` };
+    if (!captions.some((c) => !c.hidden && c.words?.length && !c.estimated_words)) return { kind: 'none', summary: 'This needs a transcript with word timing. Transcribe the recording first.' };
+    // Lightest cleanup first, longest pieces first, until the edit fits.
+    const need = duration - target;
+    const all = findCleanup(captions, duration).sort((a, b) => ORDER.indexOf(a.kind) - ORDER.indexOf(b.kind) || (b.end - b.start) - (a.end - a.start));
+    const chosen = [];
+    let ranges = [];
+    for (const c of all) {
+      chosen.push({ ...c, checked: true });
+      ranges = removalRanges(chosen);
+      if (total(ranges) >= need) break;
+    }
+    if (!ranges.length) return { kind: 'none', summary: `Nothing safe to remove was found. For a ${fmt(target)} version, set the length in AI Director.` };
+    const after = duration - total(ranges);
+    const kinds = [...new Set(chosen.map((c) => ({ pause: 'pauses', hesitation: 'hesitations', filler: 'filler words', retake: 'repeated takes' })[c.kind]))].join(', ');
+    return { kind: 'remove', ranges, summary: after <= target + 0.05
+      ? `Shorten to ${fmt(after)} by removing ${kinds} (${ranges.length} cut${ranges.length === 1 ? '' : 's'}).`
+      : `Removing all ${kinds} gets to ${fmt(after)}, not ${fmt(target)}. For a shorter version, set the length in AI Director.` };
+  }
   const keep = text.match(KEEP);
   if (keep) {
     const query = phraseOf((keep[1] ?? keep[2] ?? '').trim());
@@ -121,7 +157,7 @@ export function planPrompt(prompt, project) {
   return { kind: 'none', summary: "Not sure what to do. Try one of the examples below." };
 }
 
-const EXAMPLES = ['Remove the long pauses', 'Remove um and uh', 'Cut from 0:05 to 0:08', 'Delete every “basically”', 'Find pricing', 'Add an opener', 'Zoom on key words', 'Keep only the parts about pricing', 'תסיר את השתיקות'];
+const EXAMPLES = ['Remove the long pauses', 'Remove um and uh', 'Cut from 0:05 to 0:08', 'Delete every “basically”', 'Find pricing', 'Add an opener', 'Zoom on key words', 'Keep only the parts about pricing', 'Shorten to 8 minutes', 'תסיר את השתיקות'];
 
 export function initPromptEdit(doc = document) {
   const button = doc.getElementById('promptEditButton');

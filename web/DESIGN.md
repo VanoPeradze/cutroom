@@ -144,6 +144,11 @@ words each way) with a little air around it, and removes everything else in
 one Undo step. Typed edits understand "keep only the parts about …",
 "supercut …" and "השאר רק את …".
 
+Typed edits also understand "shorten to 8 minutes" / "תקצר ל-8 דקות": the
+lightest cleanup goes first (pauses, then hesitations, fillers, repeated takes;
+longest pieces first) until the edit fits. When cleanup alone cannot reach the
+length, the plan says how far it gets and points to AI Director's target length.
+
 ## Batch: several recordings at once
 
 Projects → "Process several recordings…" takes many files. Each becomes its

@@ -68,3 +68,30 @@ test('transcript search helpers', async () => {
   assert.equal(parseTime('soon'), null);
   assert.deepEqual(mergeRanges([{ start: 2, end: 3 }, { start: 1, end: 2.01 }, { start: 5, end: 5.05 }]), [{ start: 1, end: 3 }]);
 });
+
+test('shorten to a length removes the lightest cleanup first and is honest when it cannot', async () => {
+  const { planPrompt, parseLength } = await load();
+  assert.equal(parseLength('8 minutes'), 480);
+  assert.equal(parseLength('90 seconds'), 90);
+  assert.equal(parseLength('1:30'), 90);
+  assert.equal(parseLength('8 דקות'), 480);
+  assert.equal(parseLength('8'), 480);
+  assert.equal(parseLength('45'), 45);
+  assert.equal(parseLength('soon'), null);
+  const project = {
+    editor_sequence: { duration: 20 },
+    editor_captions: [
+      { id: 'a', start: 0.5, words: [[0.5, 0.9, 'So'], [0.95, 1.3, 'pricing'], [1.35, 1.8, 'matters.']] },
+      { id: 'b', start: 6, words: [[6, 6.3, 'umm'], [6.6, 7, 'We'], [7.05, 7.4, 'made'], [7.45, 8, 'money.']] },
+      { id: 'c', start: 14, words: [[14, 14.4, 'Thanks'], [14.45, 15, 'everyone']] },
+    ],
+  };
+  assert.match(planPrompt('shorten to 30 seconds', project).summary, /already/);
+  const near = planPrompt('Shorten to 0:17', project);
+  assert.equal(near.kind, 'remove');
+  assert.match(near.summary, /^Shorten to/);
+  assert.ok(20 - near.ranges.reduce((s, r) => s + r.end - r.start, 0) <= 17.05);
+  const far = planPrompt('תקצר ל-5 שניות', project);
+  assert.equal(far.kind, 'remove');
+  assert.match(far.summary, /AI Director/);
+});
