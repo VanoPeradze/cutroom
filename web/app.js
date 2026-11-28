@@ -15,7 +15,7 @@ import { planLayerGroupFrame, verifyLayerGroupFrame } from "./layer-group-frame.
 import { planLayerGroupRelocate, verifyLayerGroupRelocate } from "./layer-group-tracks.js?v=20261116-track-levels2";
 import { applyTranslations, dictionaries } from "./i18n.js?v=1.2-beta";
 import { TimelineView, formatTime, editableClips, timelineDuration, sequenceBlocks, sequenceGaps, sequenceGapClosureIssue, rippleMoveStart } from "./timeline.js?v=20261117-editing-context1-markers1-precision1";
-import { MediaStudio, libraryInsertReadiness, libraryAssetUsage, readLibraryShotMarks } from "./media-studio.js?v=20261117-audio-source1-mixer1-roll1-slide1-take1-ow1-sourceview1-opacity1-ripplechapter1-matchseam1-sourcedrag1-frame1-handoff1";
+import { MediaStudio, libraryInsertReadiness, libraryAssetUsage, readLibraryShotMarks } from "./media-studio.js?v=20261117-audio-source1-mixer1-roll1-slide1-take1-ow1-sourceview1-opacity1-ripplechapter1-matchseam1-sourcedrag1-frame1-voiceclean1-handoff1";
 import { initMediaFrameEditor } from "./viewer-transform.js?v=20261116-transform2";
 import { initTimelineMediaDrop } from "./timeline-media-drop.js?v=20261117-editing-context1-sourcedrag1";
 import { StabilizationStudio } from "./stabilization-studio.js?v=1.2-beta";

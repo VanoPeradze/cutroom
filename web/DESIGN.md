@@ -94,6 +94,14 @@ edit, sized to keep its shape with an even margin in the chosen corner.
 Templates keep caption style, position, size, words per caption, brand colour
 and colour look, and are stored in this app on this computer.
 
+## Voice cleanup
+
+The Audio mixer's “Clean up voice (export)” sets `audio_mixer.voice_cleanup`.
+On export the recorded speech and voiceover buses go through a gentle local
+chain (`VOICE_CLEANUP_FILTER` in `cutroom/media_render.py`: high-pass,
+FFT noise reduction, light compression, presence EQ) before their faders and
+ducking. The preview plays the original sound, and the label says so.
+
 ## Composition
 
 The application launcher presents three real starting actions as compact rows beside the welcome statement, followed by recent projects and optional AI setup. It is not a second marketing landing page.

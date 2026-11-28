@@ -351,3 +351,18 @@ def test_short_picture_long_audio_survives_split_and_undo_without_changing_any_f
         assert p["manual"]["media_clips"] == original
         apply_manual_edit(p, {"action":"redo"})
         assert p["manual"]["media_clips"] == split
+
+
+def test_real_voice_cleanup_removes_rumble_and_keeps_speech(media, tmp_path):
+    from cutroom.media_render import VOICE_CLEANUP_FILTER, append_media_graph
+
+    value = project()
+    value["manual"]["audio_mixer"] = {"voice_cleanup": True}
+    filters, _, audio = append_media_graph(value, 160, 90, 3, "[v]", "[a]")
+    assert any(VOICE_CLEANUP_FILTER in row and "[libbussource]" in row for row in filters)
+    value["manual"]["audio_mixer"] = {"voice_cleanup": False}
+    assert not any(VOICE_CLEANUP_FILTER in row for row in append_media_graph(value, 160, 90, 3, "[v]", "[a]")[0])
+    value["manual"]["audio_mixer"] = {"voice_cleanup": True}
+    output = render(value, media, tmp_path)
+    data = samples(media[1], output)
+    assert tone_level(data, 1.5, 440) > .1  # The speech tone survives the cleanup.
