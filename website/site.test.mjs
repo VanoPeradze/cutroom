@@ -208,14 +208,14 @@ test('the concise introduction shows an authentic bilingual dark editor preview'
   lines.forEach(line => { assert.match(line[1], /data-he="[^"]*[\u0590-\u05ff]/); assert.match(line[2], /[A-Za-z]/); });
   const image = hero.match(/<img\b[^>]*id="editorImage"[^>]*>/)?.[0];
   assert.ok(image, 'The first section must show the editor');
-  assert.match(image, /src="\/assets\/studio-edit\.png\?v=20261122"/);
+  assert.match(image, /src="\/assets\/studio-edit\.png\?v=20261128-clips2"/);
   assert.match(image, /width="1600" height="900"/);
   assert.match(image, /alt="[^"]+"/);
   assert.match(image, /data-he-alt="[^"]*[\u0590-\u05ff]/);
   assert.match(image, /fetchpriority="high"/);
-  assert.ok(region('dialog', 'imageDialog').includes('src="/assets/studio-edit.png?v=20261122"'), 'Enlargement preserves the original screenshot, without artwork framing');
-  assert.match(hero, /Interface captured 22 November 2026/);
-  assert.match(hero, /Captured on 22 November; some tools in the current build are not shown\./);
+  assert.ok(region('dialog', 'imageDialog').includes('src="/assets/studio-edit.png?v=20261128-clips2"'), 'Enlargement preserves the original screenshot, without artwork framing');
+  assert.match(hero, /Interface captured 28 November 2026/);
+  assert.match(hero, /Captured on 28 November with synthetic demo footage\./);
   assert.doesNotMatch(html, /src="[^"]*showcase|<table\b/);
 });
 
@@ -329,12 +329,12 @@ test('every gallery image links to the exact same full-resolution PNG', () => {
     assert.match(contents, /data-he-alt="[^"]*[\u0590-\u05ff]/);
     const bytes = readFileSync(new URL('./public' + src.split('?')[0], import.meta.url));
     assert.equal(bytes.subarray(1, 4).toString(), 'PNG');
-    assert.equal(bytes.readUInt32BE(16), src.includes('20261015') ? 1440 : 1600);
+    assert.equal(bytes.readUInt32BE(16), 1600);
     assert.ok(contents.includes(`width="${bytes.readUInt32BE(16)}"`));
     assert.equal(bytes.readUInt32BE(20), 900);
   }
   assert.match(css, /\.workspace-shot, \.shot-button img \{ aspect-ratio:auto/);
-  assert.match(html, /some tools in the current build are not shown/);
+  assert.match(html, /Actual screenshots from the 28 November 2026 beta/);
 });
 
 test('sharing metadata uses the actual editor PNG without artwork', () => {
@@ -346,7 +346,7 @@ test('sharing metadata uses the actual editor PNG without artwork', () => {
 });
 
 test('gallery has progressive enhancement, original links and keyboard controls', () => {
-  assert.match(html, /<a id="expandShot" href="\/assets\/studio-edit.png\?v=20261122"/);
+  assert.match(html, /<a id="expandShot" href="\/assets\/studio-edit.png\?v=20261128-clips2"/);
   for (const id of ['previousImage', 'nextImage', 'originalImage', 'imageCounter']) assert.ok(html.includes(`id="${id}"`));
   assert.match(script, /event.ctrlKey \|\| event.metaKey/);
   assert.match(script, /expandedImage.src = link.href/);
@@ -565,10 +565,10 @@ test('screenshot dialog follows the selected original, wraps, respects modifiers
 
 test('archived supplemental views and undated AI setup are labeled honestly', () => {
   assert.match(html, /studio-ai-setup\.png/);
-  assert.match(html, /Captured on 22 November; some tools in the current build are not shown/);
+  assert.match(html, /Captured on 28 November with synthetic demo footage/);
   for (const id of ['projects', 'export']) {
     const panel = html.slice(html.indexOf(`id="panel-${id}"`));
-    assert.match(panel.slice(0, panel.indexOf('class="original-link"')), /Archived interface from 15 October 2026/);
+    assert.match(panel, /\?v=20261128-clips2/, 'Projects and export use current beta captures');
   }
 });
 
@@ -625,7 +625,7 @@ test('studio finish stays local, preserves real imagery and has bounded responsi
  assert.doesNotMatch(finish,/@import|url\(['"]?https?:/);
  assert.match(html,/<span data-he="ה־AI מוצא את הרגעים\.">AI finds the moments\.<\/span>/);
  assert.match(html,/id="clips"[\s\S]*Available now[\s\S]*Available now/);
- assert.match(html,/Interface captured 22 November 2026/);
+ assert.match(html,/Interface captured 28 November 2026/);
 });
 
 
@@ -699,4 +699,14 @@ test('published beta limitations do not imply untested workflows are verified', 
 test('active header download keeps dark text on its copper surface',()=>{
  const finish=readFileSync(new URL('./public/studio.css',import.meta.url),'utf8');
  assert.ok(finish.includes('.site-header nav .nav-download[aria-current=location]{color:var(--ink);text-decoration:none}'));
+});
+
+test('Current Clips gallery explains manual and suggested ranges in both languages', () => {
+  const clips = region('section', 'clips');
+  assert.match(clips, /Add to Clips/);
+  assert.match(clips, /layout you chose/);
+  assert.match(clips, /בפריסה שבחרתם/);
+  const panel = region('div','panel-clips');
+  assert.match(html, /studio-clips\.png\?v=20261128-clips2/);
+  assert.match(panel, /Manual ranges/);
 });
