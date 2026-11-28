@@ -212,6 +212,7 @@ def _render_plan(project: dict[str, Any], *, layout_coverage: list[dict[str, Any
         )
 
     plan: list[dict[str, Any]] = []
+    output_cursor = 0.0  # finished-output seconds before the current fragment
     for keep in keeps:
         boundaries = {float(keep["start"]), float(keep["end"])}
         if independent:
@@ -240,6 +241,7 @@ def _render_plan(project: dict[str, Any], *, layout_coverage: list[dict[str, Any
         for start, end in zip(ordered, ordered[1:]):
             if end - start < 0.005:
                 continue
+            output_start, output_cursor = output_cursor, output_cursor + end - start
             midpoint = (start + end) / 2.0
             camera = next(
                 (
@@ -265,6 +267,7 @@ def _render_plan(project: dict[str, Any], *, layout_coverage: list[dict[str, Any
                                 for left, right in track_video_ranges["A"]) if independent else
                             _source_has_video(source) and output_end <= math.floor(_source_video_duration(source) * fps + 0.5) / fps + 1e-6)
                 layout_coverage.append({"start": start, "end": end, "camera": camera,
+                                        "output_start": output_start,
                                         "missing_slots": missing_slots,
                                         "fallback_camera": "A" if missing_slots == ["B"] and a_covers else None})
             # A shorter/offset B must not turn part of a camera-only shot black
@@ -332,10 +335,20 @@ class LayoutCoverageError(ValueError):
         return {"error": "layout_coverage_incomplete", "message": str(self), "layout_coverage": self.coverage}
 
 
-def composition_layout_coverage(project: dict[str, Any]) -> dict[str, Any]:
-    """Read-only layout feasibility on the same clocks/boundaries as export."""
+def composition_layout_coverage(project: dict[str, Any], window: tuple[float, float] | None = None) -> dict[str, Any]:
+    """Read-only layout feasibility on the same clocks/boundaries as export.
+
+    ``window`` limits the check to finished-output seconds [start, end), as a
+    marked (Clips) export only renders that part of the timeline.
+    """
     rows: list[dict[str, Any]] = []
     _render_plan(project, layout_coverage=rows)
+    if window is not None:
+        rows = [row for row in rows
+                if row["output_start"] < window[1] - 1e-6
+                and row["output_start"] + row["end"] - row["start"] > window[0] + 1e-6]
+    for row in rows:
+        row.pop("output_start", None)
     missing = [row for row in rows if row["missing_slots"]]
     manual = project.get("manual") or {}
     multi = {"B", "screen", "camera", "stacked", "side_by_side", "pip"}
@@ -364,10 +377,20 @@ def _layout_fallback_notice(coverage: dict[str, Any]) -> dict[str, Any] | None:
                         "The saved edit, duration, captions and selected audio are unchanged. Missing B sound is not replaced.")}
 
 
+def _range_window(options: dict[str, Any] | None) -> tuple[float, float] | None:
+    spec = (options or {}).get("range")
+    try:
+        fps = int(spec["fps"])
+        return (int(spec["start_frame"]) / fps, int(spec["end_frame"]) / fps) if fps > 0 else None
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
 def require_layout_coverage(project: dict[str, Any], options: dict[str, Any] | None = None) -> dict[str, Any] | None:
+    window = _range_window(options)
     if options:
         project = with_export_options(project, options)
-    coverage = composition_layout_coverage(project)
+    coverage = composition_layout_coverage(project, window)
     if coverage["export_blocked"]:
         raise LayoutCoverageError(coverage)
     return _layout_fallback_notice(coverage)
@@ -1851,8 +1874,14 @@ def render_project(context: JobContext, project_id: str, store: ProjectStore, se
     scope = resolve_export_range(project, options)
     saved_input_fingerprint = _render_input_fingerprint(project)
     project = with_export_options(project, options)
-    layout_fallback = (require_layout_coverage(project) if options.get("_require_layout_coverage")
-                       else _layout_fallback_notice(composition_layout_coverage(project)))
+    window = _range_window(options) if scope else None
+    if options.get("_require_layout_coverage"):
+        coverage = composition_layout_coverage(project, window)
+        if coverage["export_blocked"]:
+            raise LayoutCoverageError(coverage)
+        layout_fallback = _layout_fallback_notice(coverage)
+    else:
+        layout_fallback = _layout_fallback_notice(composition_layout_coverage(project, window))
     render_input_fingerprint = _render_input_fingerprint(project)
     if scope:
         render_input_fingerprint = stable_fingerprint("range-export-v1", {"input": render_input_fingerprint, **scope.public()})

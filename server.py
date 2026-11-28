@@ -1386,12 +1386,13 @@ def create_app(settings: Settings | None = None) -> Flask:
     @app.get("/api/projects/<project_id>/clip-board")
     def clip_board(project_id: str):
         # Read-only ranking from saved analysis; no model, render or project save.
-        unknown = set(request.args) - {"length", "count"}
+        unknown = set(request.args) - {"length", "count", "scope"}
         if unknown:
             raise APIInputError("unknown_field", f"Unknown query field: {sorted(unknown)[0]}.")
         try:
             board = build_clip_board(store.load(project_id), length=request.args.get("length", DEFAULT_CLIP_LENGTH),
-                                     count=request.args.get("count", DEFAULT_CLIP_COUNT))
+                                     count=request.args.get("count", DEFAULT_CLIP_COUNT),
+                                     scope=request.args.get("scope", "source"))
         except ClipBoardError as error:
             raise APIInputError("invalid_field", str(error)) from error
         return jsonify({"board": board})

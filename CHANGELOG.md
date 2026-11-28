@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased - 2026-11-28 - Clips follow your layout
+
+- **Clips → My edit** (the default once there is an edit) finds moments in the finished timeline instead of the raw main recording. Cards, previews and exports show the arranged layout: stacked, side by side, picture in picture or one source, using both recordings and their placement on the timeline. **Whole recording** keeps the previous search across all of source A.
+- A Clips export checks layout coverage only inside its own range, so a clip is no longer blocked by a missing camera section elsewhere in the edit.
+
 ## CUTROOM 1.3 Beta source changes: style families and interface motion
 
 - Edit styles are grouped into five families. Older style IDs and their defaults are unchanged; new Talking Clips and YouTube Explainer styles use speech evidence.

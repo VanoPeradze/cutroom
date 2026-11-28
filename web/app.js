@@ -46,7 +46,7 @@ import { initTrackProtection } from "./track-protection.js?v=1.2-beta";
 import { TextStudio } from "./text-studio.js?v=20261116-caption-preview3";
 import { initNumericScrub } from "./numeric-scrub.js?v=20261116-move2";
 import { ReelProposalReview, supportsReelReview } from "./reel-proposals.js?v=20261022";
-import { ClipBoard } from "./clip-board.js?v=20261123-soundevents1-content1-shorts1";
+import { ClipBoard } from "./clip-board.js?v=20261128-layout1";
 import { AiDraftReview } from "./ai-draft-review.js?v=20261116-ai-review2";
 import { CaptionAlternatives } from "./caption-alternatives.js?v=20261023";
 import { initCaptionPreview, captionPreviewIssue } from "./caption-preview.js?v=20261128-brand1";
@@ -12880,6 +12880,8 @@ function clipTimelineRange(clip) {
   if (!state.project?.draft || !Number.isFinite(start) || !Number.isFinite(end) || end <= start) return null;
   const project = editorProject();
   if (project?.__timelineUnavailable) return null;
+  // "My edit" moments are already on the edit clock: the range is the moment.
+  if (clip.clock === "edit") return state.project.editor_sequence && end <= timelineDuration(project) + 1e-3 ? { start, end } : null;
   if (!hasSourceTracks(project)) return { start, end };
   const pieces = [];
   for (const item of trackClips(project, "A")) {
@@ -12897,6 +12899,43 @@ function clipTimelineRange(clip) {
   // Only one continuous span of the edit that holds (nearly) the whole moment.
   if (merged.length !== 1 || merged[0].end - merged[0].start < (end - start) * .95) return null;
   return merged[0];
+}
+
+// A Clips card shows the composed edit, not one raw recording: for each moment
+// it reports the layout (stacked, side by side, PiP or one source) and where
+// A and B are at that point of the edit, on the same clock as Export.
+function clipComposition(clip, range = clipTimelineRange(clip)) {
+  const project = editorProject();
+  if (!range || !project?.sources?.A || project.__timelineUnavailable) return null;
+  if (!project.sources.B && clip?.clock !== "edit") return null;
+  const mixer = sourceMixerSettings();
+  const [width, height] = previewExportDimensions();
+  const pip = width > 0 && height > 0 ? creatorPipGeometry(width, height, mixer) : null;
+  const independent = hasSourceTracks(project);
+  const plan = Array.isArray(project.draft?.camera_plan) ? project.draft.camera_plan : [];
+  const sourceB = project.sources.B;
+  const durationB = !sourceB ? 0 : Number(sourceB.video_duration) > 0 ? Number(sourceB.video_duration) : Number(sourceB.duration) || 0;
+  const twoSource = ["stacked", "side_by_side", "pip"];
+  return {
+    mixer: { ...mixer, pip: pip && { x: pip.x / width, y: pip.y / height, w: pip.width / width, h: pip.height / height } },
+    at(offset) {
+      const time = Number(range.start) + Math.max(0, Number(offset) || 0);
+      let camera = String(plan.find(row => time >= Number(row.start) && time < Number(row.end))?.camera || "A");
+      if (camera === "screen") camera = mixer.screenSlot;
+      else if (camera === "camera") camera = mixer.cameraSlot;
+      else if (camera === "embedded_stack" && !sourceB) camera = embeddedLayoutConfirmed() ? camera : "A";
+      else if (camera !== "B" && !twoSource.includes(camera)) camera = "A";
+      const a = independent ? trackAt(project, "A", time, mixer.syncOffset)?.sourceTime ?? null : time;
+      const rawB = !sourceB ? null : independent ? trackAt(project, "B", time, mixer.syncOffset)?.sourceTime ?? null : time - mixer.syncOffset;
+      const b = rawB != null && rawB >= 0 && rawB < durationB ? rawB : null;
+      // Same fallbacks as the editor preview and render plan: never a black
+      // panel when one recording is simply absent at this moment.
+      if (a == null && b == null) camera = "black";
+      else if (a == null) camera = "B";
+      else if (b == null && (camera === "B" || twoSource.includes(camera))) camera = "A";
+      return { camera, A: a, B: b };
+    },
+  };
 }
 
 // Marked-range export is a separate capability; without it Export would mean the whole edit.
@@ -13038,6 +13077,9 @@ async function openClipBoard() {
     api, notify: message => toast(message),
     getProject: () => state.project,
     mediaUrl: project => sourceMediaUrl(project.sources.A),
+    mediaUrlB: project => project.sources?.B ? sourceMediaUrl(project.sources.B) : "",
+    composition: clipComposition,
+    canUseEdit: () => Boolean(state.project?.editor_sequence && !state.project.editor_sequence.error && state.project.editor_sequence.duration > 0),
     outputAspect: clipBoardAspect,
     stillLayout: clipStillLayout,
     canExport: clipRangeExportSupported,
@@ -13049,7 +13091,9 @@ async function openClipBoard() {
     placeClip: placeClipFromBoard,
     postingKit: (clip, useAi) => api(`/api/projects/${state.project.id}/posting-kit`, {
       method: "POST",
-      body: JSON.stringify({ start: clip.start, end: clip.end, use_ai: Boolean(useAi), goal: state.project?.settings?.goal === "youtube" ? "youtube" : "short" }),
+      // An edit moment's words come from the source-A seconds it shows.
+      body: JSON.stringify({ ...(clip.clock === "edit" && clip.source_start != null
+        ? { start: clip.source_start, end: clip.source_end } : { start: clip.start, end: clip.end }), use_ai: Boolean(useAi), goal: state.project?.settings?.goal === "youtube" ? "youtube" : "short" }),
     }).then(result => result.kit),
     pauseEditor: () => pauseAllMedia(),
     canMakeShorts: () => Boolean(state.project?.draft && initializeProjectCopies()),
