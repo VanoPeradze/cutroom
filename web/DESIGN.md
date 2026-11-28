@@ -53,6 +53,10 @@ Edit > Cut > Clean up… (also in the command palette) reads the edit's own capt
 
 Media shelf > Sound effects lists seven original sounds (whoosh, swipe, pop, click, ding, hit, riser) synthesized by `scripts/generate_sfx.py` with fixed seeds, so they are Cutroom's own and rebuild byte for byte. Play previews; Add imports the sound into the project media through the normal import, where it is placed and mixed like any audio.
 
+### Style packs (28 November)
+
+Edit > Cut > Style pack… asks "How should it feel?" and offers eight packs (Clean, Bold social, Podcast, Gaming, Minimal, Explainer, Cinematic, Vintage). A pack sets the caption style and the colour look together; the energetic ones also add auto zooms on key words. Each part stays editable in its own control. What the video is (content type) stays with the existing edit styles.
+
 ## Composition
 
 The application launcher presents three real starting actions as compact rows beside the welcome statement, followed by recent projects and optional AI setup. It is not a second marketing landing page.
