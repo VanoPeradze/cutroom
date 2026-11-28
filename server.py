@@ -121,6 +121,7 @@ JSON_BODY_ENDPOINTS = {
     "import_caption_alternative",
     "generate_caption_alternative",
     "generate_manual_transcript_job",
+    "refresh_captions_job",
     "run_director",
     "refine",
     "render",
@@ -133,7 +134,7 @@ JSON_BODY_ENDPOINTS = {
     "preflight_upload",
 }
 UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
-FOREGROUND_JOB_KINDS = {"director", "refine", "render", "caption_alternative", "manual_transcript"}
+FOREGROUND_JOB_KINDS = {"director", "refine", "render", "caption_alternative", "manual_transcript", "caption_refresh"}
 INSTANCE_PROTOCOL_VERSION = 1
 INSTANCE_RESPONSE_LIMIT = 4 * 1024
 LEGACY_SYSTEM_RESPONSE_LIMIT = 256 * 1024
@@ -1543,6 +1544,32 @@ def create_app(settings: Settings | None = None) -> Flask:
 
         job = submit_project_job("manual_transcript", project_id, generate_manual_transcript, project_id,
                                  store, settings, language, revision, validate_project=validate, job_identity=payload)
+        return jsonify({"job": job.public()}), 202
+
+    @app.post("/api/projects/<project_id>/caption-refresh")
+    def refresh_captions_job(project_id: str):
+        # Export found captions built from another sound: transcribe the routed
+        # audio again. The timeline, cuts and layout are never changed.
+        from cutroom.manual_transcription import refresh_caption_transcript, source_for_caption_refresh
+
+        payload = _json_object()
+        _reject_unknown_fields(payload, {"expected_revision"})
+        revision = payload.get("expected_revision")
+        if type(revision) is not int or revision < 1:
+            raise APIInputError("invalid_revision", "Refresh the project before updating captions.")
+
+        def validate(current):
+            if current["revision"] != revision:
+                raise RuntimeError("revision_conflict")
+            if jobs.active(project_id=project_id, kind="prepare_source"):
+                raise APIInputError("project_busy", "Wait for source preparation to finish, then export.", 409)
+            try:
+                source_for_caption_refresh(current)
+            except ValueError as error:
+                raise APIInputError("caption_refresh_unavailable", str(error), 409) from error
+
+        job = submit_project_job("caption_refresh", project_id, refresh_caption_transcript, project_id,
+                                 store, settings, revision, validate_project=validate, job_identity=payload)
         return jsonify({"job": job.public()}), 202
 
     @app.get("/api/projects/<project_id>/caption-generation")
