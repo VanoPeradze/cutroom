@@ -83,8 +83,9 @@ from cutroom.group_split import group_split_receipt
 from cutroom.group_join import group_join_receipt
 from cutroom.range_export import RangeExportError
 from cutroom.review_markers import MarkerError, apply_marker
-from cutroom.render import resolve_export_range, InsufficientStorageError, LayoutCoverageError, available_encoders, ensure_render_storage, project_caption_items, caption_preview_scene, render_project, require_layout_coverage
+from cutroom.render import _dimensions as render_dimensions, _effective_audio_slot as render_audio_slot, resolve_export_range, InsufficientStorageError, LayoutCoverageError, available_encoders, ensure_render_storage, project_caption_items, caption_preview_scene, render_project, require_layout_coverage
 from cutroom.utils import sanitize_filename
+from cutroom.interchange import build_edl, build_fcpxml
 from cutroom.upload_storage import CHUNK_BYTES, UploadStorage, UploadStorageError, is_storage_full
 from cutroom.upload_transport import LEGACY_ASSET_UPLOAD_BYTES, MULTIPART_ALLOWANCE_BYTES
 from cutroom.native_paths import native_io_path
@@ -1392,6 +1393,38 @@ def create_app(settings: Settings | None = None) -> Flask:
         except ClipBoardError as error:
             raise APIInputError("invalid_field", str(error)) from error
         return jsonify({"board": board})
+
+    @app.get("/api/projects/<project_id>/interchange.<kind>")
+    def project_interchange(project_id: str, kind: str):
+        # Read-only hand-off of the main edit to another editor (EDL / FCPXML).
+        if kind not in {"edl", "fcpxml"}:
+            return jsonify({"error": "not_found", "message": "Choose edl or fcpxml."}), 404
+        if request.args:
+            raise APIInputError("unknown_field", f"Unknown query field: {sorted(request.args)[0]}.")
+        project = store.load(project_id)
+        snapshot = editor_sequence_snapshot(project)
+        if not snapshot or not ((snapshot.get("sequence") or {}).get("camera_plan")):
+            raise APIInputError("draft_required", "Make an edit first, then export it for another editor.", 409)
+        fps = (project.get("settings") or {}).get("fps") or 30
+        audio_slot = render_audio_slot(project)
+        stem = sanitize_filename(str(project.get("name") or "CUTROOM edit"))[:110] or "CUTROOM edit"
+        if kind == "edl":
+            body, mime = build_edl(project, snapshot, audio_slot, fps), "text/plain; charset=utf-8"
+        else:
+            paths = {}
+            for slot, source in (project.get("sources") or {}).items():
+                path = _safe_project_child(store.project_dir(project_id), (source or {}).get("relative_path"))
+                if path is not None and path.is_file():
+                    paths[slot] = path
+            try:
+                size = render_dimensions(project)
+            except (ValueError, KeyError, TypeError):
+                size = (1920, 1080)
+            body, mime = build_fcpxml(project, snapshot, audio_slot, paths, fps, size), "application/xml; charset=utf-8"
+        response = Response(body, mimetype=mime.split(";")[0])
+        response.headers["Content-Type"] = mime
+        response.headers["Content-Disposition"] = f"attachment; filename*=UTF-8''{urllib.parse.quote(stem + '.' + kind)}"
+        return response
 
     @app.post("/api/projects/<project_id>/posting-kit")
     def clip_posting_kit(project_id: str):

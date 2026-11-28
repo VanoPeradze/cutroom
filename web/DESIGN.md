@@ -127,6 +127,15 @@ players and library media follow); J plays backwards by stepping the playhead
 (silent), also up to 4×; K stops and returns to 1×. A small badge on the
 preview shows the speed. Pro Tools keeps its own L.
 
+## Finish in another editor (EDL / FCPXML)
+
+The Export dialog links to an FCPXML 1.8 file (Final Cut Pro, DaVinci Resolve,
+Premiere Pro) and a CMX3600 EDL. Both are built on request from the saved edit
+and describe the main edit only: which part of source A or B is seen and heard
+when. Layouts that show A and B together put B on the track above A. Layers,
+captions, colour, zooms and the audio mix stay in CUTROOM and are named in a note
+inside the file, so nothing is silently dropped.
+
 ## Composition
 
 The application launcher presents three real starting actions as compact rows beside the welcome statement, followed by recent projects and optional AI setup. It is not a second marketing landing page.

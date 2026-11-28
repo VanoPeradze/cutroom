@@ -12734,6 +12734,20 @@ function showExportSubtitles(record, previous=false) {
     : (record.range ? "Download range subtitles (.srt)" : "Download subtitles (.srt)");
 }
 
+// Hand the main edit to another editor. The files are built on request from
+// the saved edit; layers, captions, colour and the mix stay in CUTROOM.
+function showExportHandoff() {
+  const row = typeof document !== "undefined" ? document.getElementById("exportHandoff") : null;
+  const id = state.project?.id;
+  if (!row) return;
+  row.hidden = !id || !editorProject()?.draft;
+  if (row.hidden) return;
+  for (const link of row.querySelectorAll("a[data-handoff]")) {
+    link.href = `/api/projects/${encodeURIComponent(id)}/interchange.${link.dataset.handoff}`;
+    link.setAttribute("download", "");
+  }
+}
+
 function outputReviewSnapshot() {
   const project = editorProject();
   const aspect = elements.aspectSelect?.value || state.project?.settings?.aspect || "9:16";
@@ -12838,6 +12852,7 @@ function openExportDialog({ progress = false, requiredRangePlan = null } = {}) {
   }
   elements.confirmExport.disabled = foregroundBusy();
   renderExportReview(progress ? null : latestExport?.review, latestExport?.range ? "Checks of the previous marked range" : "Checks of the previous export");
+  showExportHandoff();
   if (!elements.exportDialog.open) elements.exportDialog.showModal();
 }
 

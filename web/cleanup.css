@@ -99,3 +99,8 @@
   padding: 2px var(--space-2); border-radius: 999px; background: rgba(0, 0, 0, .65); color: #fff; font: 600 var(--fs-12)/1.6 var(--font-ui, sans-serif); pointer-events: none;
 }
 #previewStage[data-reverse]::after { content: "◀ " attr(data-reverse); }
+
+/* Export dialog: hand-off links for other editors. */
+.export-handoff { margin: 10px 0 0; font-size: 13px; color: var(--muted, #9aa3ad); line-height: 1.5; }
+.export-handoff a { color: var(--accent, #7cc4ff); font-weight: 600; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.export-handoff small { display: block; font-size: 12px; opacity: 0.85; }
