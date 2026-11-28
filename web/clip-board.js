@@ -1,6 +1,10 @@
-/* CUTROOM Clips board. Read-only: ranks moments from saved analysis and hands a
-   chosen range to the editor's own selection/export controls. It never edits,
-   saves or renders by itself. Strength is relative to one recording. */
+/* CUTROOM Clips board. Ranks moments from saved analysis and hands a chosen
+   range to the editor's own selection/export controls. It also lists the ranges
+   the user saved by hand (Manual); those are saved, renamed and exported through
+   the host's options, never by cutting the timeline. Strength is relative to one
+   recording. */
+
+import { manualClipRows, manualClipTimes, manualClipLength, manualStatusText, editClock, manualExportItem, batchItemLabel } from "./manual-clips.js?v=20261127-1";
 
 export const CLIP_LENGTHS = Object.freeze([15, 30, 45, 60]);
 
@@ -106,6 +110,8 @@ export class ClipBoard {
     this.playing = null;
     this.stillQueue = [];
     this.thumbs = [];
+    this.manualSelected = new Set();
+    this.manualPlaying = null;
   }
 
   el(tag, className, text) {
@@ -179,7 +185,9 @@ export class ClipBoard {
     this.batchPanel.hidden = true;
     this.thumbPanel = this.el("section", "clip-thumbs");
     this.thumbPanel.hidden = true;
-    body.append(radar, this.batchPanel, this.status, this.grid, this.thumbPanel, foot);
+    this.manualPanel = this.el("section", "clip-manual");
+    this.manualPanel.setAttribute("aria-label", "Your saved clips");
+    body.append(this.manualPanel, radar, this.batchPanel, this.status, this.grid, this.thumbPanel, foot);
     dialog.append(head, body);
     dialog.addEventListener("close", () => this.teardown());
     dialog.addEventListener("cancel", (event) => {
@@ -200,6 +208,11 @@ export class ClipBoard {
     this.previewVideo.preload = "auto";
     this.previewVideo.addEventListener("timeupdate", () => this.trackPreview());
     this.previewVideo.addEventListener("ended", () => this.stopPreview());
+    this.manualVideo = this.el("video", "clip-manual-video");
+    this.manualVideo.playsInline = true;
+    this.manualVideo.preload = "auto";
+    this.manualVideo.addEventListener("timeupdate", () => this.trackManual());
+    this.manualVideo.addEventListener("ended", () => this.stopManual());
   }
 
   async open() {
@@ -215,9 +228,15 @@ export class ClipBoard {
     const url = this.options.mediaUrl(project);
     if (this.stillVideo.dataset.src !== url) { this.stillVideo.src = url; this.stillVideo.dataset.src = url; }
     if (this.previewVideo.dataset.src !== url) { this.previewVideo.src = url; this.previewVideo.dataset.src = url; }
+    if (this.manualVideo.dataset.src !== url) { this.manualVideo.src = url; this.manualVideo.dataset.src = url; }
     this.handingOff = false;
+    this.manualSelected = new Set();
+    this.batchSupported = Boolean(this.options.canBatch?.());
+    this.renderManual();
     if (!this.dialog.open) this.dialog.showModal();
-    await this.load();
+    // Statuses are live: refresh them in case the edit changed since the project loaded.
+    const refreshed = this.options.refreshManual?.().then(() => { if (this.dialog.open && !this.batchRunning) this.renderManual(); }).catch(() => {});
+    await Promise.all([this.load(), refreshed]);
   }
 
   close() {
@@ -226,6 +245,7 @@ export class ClipBoard {
 
   teardown() {
     this.stopPreview();
+    this.stopManual();
     this.stillQueue = [];
     this.request += 1;
     const handedOff = Boolean(this.handingOff);
@@ -653,6 +673,7 @@ export class ClipBoard {
       return;
     }
     this.stopPreview();
+    this.stopManual();
     const card = this.cards.get(clip.id);
     if (!card) return;
     this.options.pauseEditor?.();
@@ -713,7 +734,7 @@ export class ClipBoard {
 
   syncBatchButton() {
     if (!this.batchButton) return;
-    const count = this.selected?.size || 0;
+    const count = (this.selected?.size || 0) + (this.manualSelected?.size || 0);
     this.batchButton.hidden = !this.batchSupported || !count;
     this.batchButton.textContent = `Export ${count} ${count === 1 ? "clip" : "clips"}`;
     this.batchButton.disabled = Boolean(this.batchRunning);
@@ -724,13 +745,21 @@ export class ClipBoard {
     this.dialog.classList.toggle("batch-running", busy);
     this.lengthButtons.forEach(button => { button.disabled = busy; });
     this.grid.querySelectorAll(".clip-actions button, .clip-pick input").forEach(control => { control.disabled = busy; });
+    if (busy) this.manualPanel?.querySelectorAll("button, input").forEach(control => { control.disabled = true; });
+    else this.renderManual();
     this.syncBatchButton();
   }
 
-  async runBatch() {
-    const clips = (this.board?.clips || []).filter(clip => this.selected.has(clip.id));
+  selectedManualItems() {
+    return (manualClipRows(this.options.getProject()?.manual_clips) || [])
+      .filter(row => this.manualSelected.has(row.id) && row.status === "ready").map(manualExportItem);
+  }
+
+  async runBatch(items = null) {
+    const clips = items || [...this.selectedManualItems(), ...(this.board?.clips || []).filter(clip => this.selected?.has(clip.id))];
     if (!clips.length || this.batchRunning) return;
     this.stopPreview();
+    this.stopManual();
     this.batchStopped = false;
     this.setBusy(true);
     const line = this.el("p", "clip-batch-line", `Preparing ${clips.length} ${clips.length === 1 ? "clip" : "clips"}…`);
@@ -749,7 +778,7 @@ export class ClipBoard {
         onProgress: ({ index, total, clip, progress }) => {
           const overall = (index + Math.max(0, Math.min(1, progress))) / total;
           bar.style.setProperty("--progress", `${Math.round(overall * 100)}%`);
-          if (!this.batchStopped) line.textContent = `Exporting clip ${clip.rank} (${index + 1} of ${total}) · ${Math.round(progress * 100)}%`;
+          if (!this.batchStopped) line.textContent = `Exporting ${batchItemLabel(clip)} (${index + 1} of ${total}) · ${Math.round(progress * 100)}%`;
         },
       });
     } catch (error) {
@@ -773,18 +802,205 @@ export class ClipBoard {
     for (const row of results) {
       const item = this.el("li");
       if (row.url) {
-        const link = this.el("a", null, `Clip ${row.clip.rank} · ${formatClock(row.clip.start)}–${formatClock(row.clip.end)}`);
+        const link = this.el("a", null, `${batchItemLabel(row.clip)} · ${formatClock(row.clip.start)}–${formatClock(row.clip.end)}`);
         link.href = row.url;
         if (row.name) link.download = row.name;
         item.append(link);
       } else {
         item.className = "failed";
-        item.textContent = `${row.clip ? `Clip ${row.clip.rank}: ` : ""}${row.error || "Not exported."}`;
+        item.textContent = `${row.clip ? `${batchItemLabel(row.clip)}: ` : ""}${row.error || "Not exported."}`;
       }
       list.append(item);
     }
+    // Try again only the clips that did not export; finished files stay as they are.
+    const failed = results.filter(row => row.clip && !row.url).map(row => row.clip);
+    if (failed.length) {
+      const retry = this.el("button", "button ghost compact", failed.length === 1 ? "Try again" : `Try ${failed.length} again`);
+      retry.type = "button";
+      retry.addEventListener("click", () => this.runBatch(failed.map(clip => this.freshItem(clip)).filter(Boolean)));
+      head.insertBefore(retry, dismiss);
+    }
     this.batchPanel.replaceChildren(head, list);
     this.batchPanel.hidden = false;
+  }
+
+  freshItem(clip) {
+    if (!clip?.manual) return clip;
+    const row = (manualClipRows(this.options.getProject()?.manual_clips) || []).find(item => item.id === clip.id);
+    return row ? manualExportItem(row) : null;
+  }
+
+  // Ranges the user saved with Add to Clips. Shown even when moment analysis is
+  // unavailable, because they come from the edited timeline, not from analysis.
+  renderManual() {
+    const panel = this.manualPanel;
+    if (!panel) return;
+    this.stopManual();
+    const project = this.options.getProject();
+    const rows = manualClipRows(project?.manual_clips);
+    const head = this.el("div", "clip-radar-head");
+    head.append(this.el("span", null, "Your clips"));
+    if (rows === null) {
+      head.append(this.el("small", null, "This saved clip list cannot be read by this version. It was left unchanged."));
+      panel.replaceChildren(head);
+      return;
+    }
+    for (const id of [...this.manualSelected]) if (!rows.some(row => row.id === id && row.status === "ready")) this.manualSelected.delete(id);
+    head.append(this.el("small", null, rows.length
+      ? `${rows.length} saved from the edited timeline. Each one exports as its own MP4 with your edit, sound and captions.`
+      : "Mark In and Out on the Edited video timeline, then press Add to Clips. Your ranges are saved with the project."));
+    const list = this.el("div", "clip-manual-list");
+    rows.forEach(row => list.append(this.manualCard(row)));
+    panel.replaceChildren(head, list);
+    this.syncBatchButton();
+  }
+
+  manualCard(row) {
+    const { start, end } = manualClipTimes(row);
+    const ready = row.status === "ready";
+    const node = this.el("article", "clip-manual-item");
+    node.dataset.clipId = row.id;
+    node.dataset.status = row.status;
+    const top = this.el("div", "clip-manual-top");
+    const pick = this.el("label", "clip-pick");
+    const box = this.el("input");
+    box.type = "checkbox";
+    box.checked = this.manualSelected.has(row.id);
+    box.disabled = !ready || !this.batchSupported;
+    box.setAttribute("aria-label", `Select ${row.name} for export`);
+    box.addEventListener("change", () => {
+      if (box.checked) this.manualSelected.add(row.id); else this.manualSelected.delete(row.id);
+      node.classList.toggle("selected", box.checked);
+      this.syncBatchButton();
+    });
+    node.classList.toggle("selected", box.checked);
+    pick.append(box);
+    const tag = this.el("span", "clip-tag", "Manual");
+    const name = this.el("input", "clip-manual-name");
+    name.type = "text";
+    name.maxLength = 80;
+    name.value = row.name;
+    name.dir = "auto";
+    name.setAttribute("aria-label", "Clip name");
+    const commitName = async () => {
+      const value = name.value.replace(/\s+/g, " ").trim();
+      if (!value || value === row.name) { name.value = row.name; return; }
+      name.disabled = true;
+      try { await this.writeManual({ action: "rename", id: row.id, name: value }); }
+      catch (error) { name.value = row.name; name.disabled = false; this.options.notify?.(error?.message || "The name was not saved."); }
+    };
+    name.addEventListener("keydown", event => {
+      if (event.key === "Enter") { event.preventDefault(); name.blur(); }
+      if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); name.value = row.name; name.blur(); }
+    });
+    name.addEventListener("blur", commitName);
+    const times = this.el("span", "clip-manual-times", `${editClock(start)} – ${editClock(end)} · ${manualClipLength(row)}`);
+    times.title = `Frames ${row.start_frame}–${row.end_frame} at ${row.fps} FPS on the edited timeline`;
+    top.append(pick, tag, name, times);
+
+    const media = this.el("div", "clip-manual-media");
+    const progress = this.el("span", "clip-progress");
+    media.append(progress);
+    media.hidden = true;
+
+    const actions = this.el("div", "clip-actions");
+    const button = (label, handler, className = "button ghost compact") => {
+      const control = this.el("button", className, label);
+      control.type = "button";
+      control.addEventListener("click", handler);
+      actions.append(control);
+      return control;
+    };
+    const play = button("Play", () => this.toggleManual(row, node, media, progress, play));
+    play.disabled = row.status === "outside" || !this.options.manualPieces;
+    play.setAttribute("aria-label", `Play ${row.name}`);
+    const exportButton = button("Export clip", () => { const item = this.freshItem({ manual: true, id: row.id }); if (item) this.runBatch([item]); },
+      ready ? "button primary compact" : "button ghost compact");
+    exportButton.disabled = !ready || !this.batchSupported;
+    if (!this.batchSupported) exportButton.title = "Open the edited timeline to export clips.";
+    if (!ready) exportButton.title = manualStatusText(row.status);
+    if (this.options.showManual) button("Show on timeline", () => { this.stopManual(); this.handingOff = true; this.close(); this.options.showManual(row); });
+    if (row.status === "changed") {
+      button("Keep as is", async () => {
+        try { await this.writeManual({ action: "accept", id: row.id }); }
+        catch (error) { this.options.notify?.(error?.message || "The clip was not updated."); }
+      });
+    }
+    button("Remove", async () => {
+      try { await this.writeManual({ action: "remove", id: row.id }); this.manualSelected.delete(row.id); this.options.notify?.(`${row.name} was removed from Clips. The timeline is unchanged.`); }
+      catch (error) { this.options.notify?.(error?.message || "The clip was not removed."); }
+    }, "button ghost compact danger");
+    node.append(top, media);
+    const note = manualStatusText(row.status);
+    if (note) node.append(this.el("p", "clip-note", note));
+    node.append(actions);
+    return node;
+  }
+
+  async writeManual(body) {
+    if (!this.options.writeManual) throw new Error("Clips cannot be changed right now.");
+    await this.options.writeManual(body);
+    if (this.dialog?.open) this.renderManual();
+  }
+
+  // Quick preview of a saved range: plays the recording pieces the edit shows
+  // there, inside the card, without moving the editor playhead.
+  toggleManual(row, node, media, progress, play) {
+    const video = this.manualVideo;
+    if (this.manualPlaying?.row.id === row.id) {
+      if (video.paused) video.play().catch(() => this.stopManual()); else video.pause();
+      play.textContent = video.paused ? "Play" : "Pause";
+      return;
+    }
+    this.stopPreview();
+    this.stopManual();
+    const { start, end } = manualClipTimes(row);
+    const pieces = this.options.manualPieces?.(row) || [];
+    if (!pieces.length) { this.options.notify?.("This range has no footage to preview."); return; }
+    this.options.pauseEditor?.();
+    this.manualPlaying = { row, node, media, progress, play, pieces, index: 0, start, end };
+    media.hidden = false;
+    media.insertBefore(video, media.firstChild);
+    node.classList.add("playing");
+    play.textContent = "Pause";
+    const begin = () => {
+      if (this.manualPlaying?.row.id !== row.id) return;
+      try { video.currentTime = pieces[0].from; } catch { /* metadata pending */ }
+      video.play().catch(() => this.stopManual());
+    };
+    if (video.readyState >= 1) begin(); else video.addEventListener("loadedmetadata", begin, { once: true });
+    video.onplay = video.onpause = () => { if (this.manualPlaying) this.manualPlaying.play.textContent = video.paused ? "Play" : "Pause"; };
+  }
+
+  trackManual() {
+    const state = this.manualPlaying;
+    if (!state) return;
+    const video = this.manualVideo, piece = state.pieces[state.index];
+    if (!piece) { this.stopManual(); return; }
+    const time = video.currentTime;
+    const editTime = piece.start + Math.max(0, time - piece.from);
+    state.progress.style.setProperty("--progress", `${Math.max(0, Math.min(100, (100 * (editTime - state.start)) / Math.max(0.1, state.end - state.start)))}%`);
+    if (time >= piece.to - 0.04) {
+      state.index += 1;
+      const next = state.pieces[state.index];
+      if (!next) { this.stopManual(); return; }
+      try { video.currentTime = next.from; } catch { this.stopManual(); }
+    }
+  }
+
+  stopManual() {
+    const state = this.manualPlaying;
+    const video = this.manualVideo;
+    if (!video) return;
+    video.pause();
+    video.onplay = video.onpause = null;
+    video.remove();
+    if (!state) return;
+    this.manualPlaying = null;
+    state.node.classList.remove("playing");
+    state.media.hidden = true;
+    state.progress.style.removeProperty("--progress");
+    state.play.textContent = "Play";
   }
 
   async place(clip) {

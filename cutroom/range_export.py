@@ -45,19 +45,19 @@ class ExportRange:
             raise ValueError("The finished output streams cannot be identified.")
         result = list(maps)
         # Keep the full timeline clock through compositing, motion, fades and ASS subtitles.
-        # Let the finite finished streams drain independently. Otherwise, when
-        # both trim filters end inside an early source gap, FFmpeg can stop
-        # requesting a split/concat counterpart and never deliver EOF. The
-        # sink branches create no file and cannot enter the exported maps.
+        # Video uses select, which passes only the marked frames but keeps
+        # reading to the end of the graph, so the picture output never closes
+        # while FFmpeg still has frames to pull. Closing every output early
+        # (trim on both streams, or -t) while a drain still needed input made
+        # FFmpeg 7 abort ("best_input >= 0"); ending both trims inside an early
+        # source gap could also hang. The audio is cut sample-exactly by atrim
+        # and its remainder drains into anullsink. A normalized stage keeps all
+        # unmodified PCM for the second pass.
         paired = trim_audio and len(maps) == 4
-        if not trim_audio and len(maps) == 4:
-            # A normalized stage must carry ALL unmodified PCM for the second
-            # pass. select drains its source to EOF; trim can close the video
-            # input early and truncate a shared decoder's final audio packet.
+        if len(maps) == 4:
             video = f"{maps[1]}select='between(n,{self.start_frame},{self.end_frame - 1})'"
         else:
-            prefix = f"{maps[1]}split=2[vrangedrain][vrangeselect];[vrangedrain]nullsink;[vrangeselect]" if paired else maps[1]
-            video = f"{prefix}trim=start_frame={self.start_frame}:end_frame={self.end_frame}"
+            video = f"{maps[1]}trim=start_frame={self.start_frame}:end_frame={self.end_frame}"
         graph += f";\n{video},settb=1/{self.fps},setpts=N[vrange]"
         result[1] = "[vrange]"
         if paired:

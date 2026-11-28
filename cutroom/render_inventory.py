@@ -173,7 +173,7 @@ class RenderInputInventory:
                      or bool(self.inputs("library") or self.inputs("chroma_background"))))
 
     def input_args(self, project_dir: Path, *, category: str | None = None,
-                   include_source_b: bool = True) -> list[str]:
+                   include_source_b: bool = True, source_limits: dict[str, float] | None = None) -> list[str]:
         self._validate_integrity()
         root = project_dir.resolve()
         result: list[str] = []
@@ -211,6 +211,10 @@ class RenderInputInventory:
                     result.append("-noaccurate_seek")
             if entry.category != "source":
                 result += ["-protocol_whitelist", "file,pipe"]
+            elif source_limits and entry.target in source_limits:
+                # A marked range reads only the recording it shows (plus a
+                # margin); the padded graph supplies the unused remainder.
+                result += ["-t", f"{source_limits[entry.target]:.6f}"]
             result += ["-i", str(path)]
         return result
 

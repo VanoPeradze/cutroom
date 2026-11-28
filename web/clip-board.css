@@ -222,3 +222,33 @@ body.welcome-mode #clipBoardButton { display: none; }
 .clip-content dt { color: var(--text-2); font-weight: 600; }
 .clip-content dd { margin: 0; min-width: 0; color: var(--text-3); line-height: 1.35; }
 .clip-content-meter { align-self: center; height: 6px; box-shadow: inset 0 0 0 1px var(--line); border-radius: 3px; background: linear-gradient(90deg, var(--accent) calc(var(--score) * 1%), var(--surface-3) 0); }
+
+/* Manual clips: ranges saved from the edited timeline with Add to Clips. */
+.clip-manual { margin-bottom: 18px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-inset); }
+.clip-manual .clip-radar-head { margin-bottom: 8px; }
+.clip-manual-list { display: grid; gap: 8px; }
+.clip-manual-list:empty { display: none; }
+.clip-manual-item { display: grid; gap: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-raised); }
+.clip-manual-item.selected { border-color: var(--primary-fill); }
+.clip-manual-item[data-status=changed], .clip-manual-item[data-status=outside] { border-color: var(--warning); }
+.clip-manual-top { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.clip-manual-top .clip-pick { margin-inline-start: 0; }
+.clip-tag { flex: none; padding: 2px 7px; border-radius: 999px; border: 1px solid var(--line-strong); color: var(--paper-dim); font-size: 11px; font-weight: 600; letter-spacing: .02em; }
+.clip-board input.clip-manual-name { flex: 1 1 160px; min-width: 0; padding: 5px 8px; border: 1px solid transparent; border-radius: 6px; background: transparent; box-shadow: none; color: var(--paper); font: inherit; font-size: 14px; font-weight: 600; }
+.clip-board input.clip-manual-name:hover { border-color: var(--line); }
+.clip-board input.clip-manual-name:focus { border-color: var(--line-strong); background: var(--surface-panel); outline: none; }
+.clip-manual-times { flex: none; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.clip-manual-media { position: relative; max-width: 420px; aspect-ratio: var(--clip-aspect); background: var(--ink); border-radius: 6px; overflow: hidden; }
+.clip-manual-media[hidden] { display: none; }
+.clip-manual-video { width: 100%; height: 100%; object-fit: contain; display: block; }
+.clip-manual-item .clip-actions { flex-wrap: wrap; }
+.clip-manual-item .clip-actions .button { flex: 0 0 auto; min-width: 96px; }
+.clip-manual-item .clip-actions .button.danger { margin-inline-start: auto; }
+.clip-actions .button.danger { color: var(--danger); }
+@media (max-width: 640px) {
+  .clip-manual-top { flex-wrap: wrap; }
+  .clip-manual-times { flex-basis: 100%; }
+}
+
+/* Add to Clips beside the player. */
+.preview-controls .add-to-clips { white-space: nowrap; }
