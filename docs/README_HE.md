@@ -4,7 +4,7 @@
 
 עורך וידאו חינמי בקוד פתוח ל־YouTube, ל־Shorts ול־Reels. חיתוך וידאו, עיצוב הפריים, מיקס סאונד וכתוביות. אפשר לערוך ידנית, או להיעזר בטיוטת AI ולשנות אותה בעצמך.
 
-[הורדת הבטא](https://github.com/VanoPeradze/cutroom/releases/tag/v1.3-beta-20261124-source-b1) · [האתר](https://cutroom-studio.expo.app/?lang=he) · [מדריך למשתמש](USER_GUIDE_HE.md) · [English](../README.md)
+[הורדת הבטא](https://github.com/VanoPeradze/cutroom/releases/tag/v1.3-beta-20261128-clips2) · [האתר](https://cutroom-studio.expo.app/?lang=he) · [מדריך למשתמש](USER_GUIDE_HE.md) · [English](../README.md)
 
 [![חלון העריכה של CUTROOM: תצוגה מקדימה, ספריית מדיה, כלי קליפים וציר זמן](images/readme/studio-edit-20261122.png)](images/readme/studio-edit-20261122.png?raw=1)
 
@@ -12,11 +12,16 @@
 
 ## מה חדש
 
-בעדכון מקור B, בפרויקט ידני שמור עם מקור A ומקור B ריק, בוחרים Layout ואז הוסף מקור B. ההקלטה השנייה מצטרפת במקביל בלי לאפס את העריכה. אפשר למסגר את שני המקורות בנפרד ולשנות את הטווח של B בלי לחתוך את A. אם ההקלטות התחילו בנפרד, בודקים את הסנכרון.
+**הקליפים שומרים על הפריסה שסידרת.** אחרי שמסדרים מצלמה וצילום מסך ב־Layout, פותחים את Clips ובוחרים My edit. ההצעות מבוססות על ציר הזמן הערוך. למשל, בפריסה אנכית ביחס 9:16, גם התצוגה המקדימה וגם קובץ ה־MP4 מציגים מצלמה ומסך במקומות שבהם שני המקורות זמינים.
 
-היכולות האלה זמינות ב[בטא 1.3 מ־23 בנובמבר](https://github.com/VanoPeradze/cutroom/releases/tag/v1.3-beta-20261123-style-families1). [יומן השינויים](../CHANGELOG.md) מפרט התנהגות ומגבלות.
+לבחירה ידנית, מסמנים התחלה וסוף באמצעות In/Out בתצוגת Edited video ולוחצים על Add to Clips. ממשיכים לצפות מאותה נקודה, ואחר כך מייצאים קליפ אחד או כמה כקובצי MP4 נפרדים. אם שינית את העריכה בתוך טווח שמור, המערכת תבקש לבדוק אותו לפני היצוא.
 
-- **לוח קליפים (Clips):** מדרג רגעים בני 15, 30, 45 או 60 שניות, עם פריים אמיתי, תצוגה מקדימה והסבר. אפשר לפתוח רגע בעורך ולייצא רגע אחד או כמה שממופים לציר הזמן כקובצי MP4 נפרדים למחשב.
+[בטא הקליפים מ־28 בנובמבר](https://github.com/VanoPeradze/cutroom/releases/tag/v1.3-beta-20261128-clips2) · [יומן השינויים](../CHANGELOG.md) · [צילום מסך של Clips לפני העדכון](images/readme/studio-clips-20261122.png?raw=1)
+
+בעדכון הקודם של [מקור B](https://github.com/VanoPeradze/cutroom/releases/tag/v1.3-beta-20261124-source-b1), בפרויקט ידני שמור עם מקור A ומקור B ריק, בוחרים Layout ואז הוסף מקור B. ההקלטה השנייה מצטרפת במקביל בלי לאפס את העריכה. אפשר למסגר את שני המקורות בנפרד ולשנות את הטווח של B בלי לחתוך את A. אם ההקלטות התחילו בנפרד, בודקים את הסנכרון.
+
+עוד בבטא הנוכחית:
+
 - **ערכת פרסום:** מציעה כותרות, תיאור והאשטגים לפי תמלול שמור או הערות על הגיימפליי. אפשר להעתיק אותם או לבקש ניסוח חלופי מה־AI. את ה־MP4 מעלים בעצמכם; CUTROOM לא מפרסמת ברשתות.
 - **סרטוני גיימינג ארוכים ליוטיוב:** קיצור לכיוון אורך היעד, עם עזרה בהסרת תפריטים, מסכי טעינה ושקט. מתקבלות הצעות לפרקים, לפתיח ולזומים קצרים, שאפשר לבדוק לפני היצוא.
 - **חמש משפחות של סגנונות עריכה:** Auto, Highlights, Talking Clips, Story ו־Long YouTube. נסו Talking Clips לרגע אחד של דיבור, או Long YouTube לסרטון הסבר או לגיימפליי מקוצר. סגנונות שנשמרו לא משתנים.
@@ -40,7 +45,7 @@
 
 ## מתחילים לערוך
 
-1. מורידים את [קובץ ה־ZIP ל־Windows](https://github.com/VanoPeradze/cutroom/releases/download/v1.3-beta-20261124-source-b1/CUTROOM-1.3-Beta-Windows-4a9a5d9.zip) או את [החבילה המשולבת ל־Mac](https://github.com/VanoPeradze/cutroom/releases/download/v1.3-beta-20261124-source-b1/CUTROOM-1.3-Beta-combined-4a9a5d9.zip) ומחלצים את כל ה־ZIP.
+1. מורידים את [קובץ ה־ZIP ל־Windows](https://github.com/VanoPeradze/cutroom/releases/download/v1.3-beta-20261128-clips2/CUTROOM-1.3-Beta-Windows-cdbf6a8.zip) או את [החבילה המשולבת ל־Mac](https://github.com/VanoPeradze/cutroom/releases/download/v1.3-beta-20261128-clips2/CUTROOM-1.3-Beta-combined-cdbf6a8.zip) ומחלצים את כל ה־ZIP.
 2. משאירים את **App**, את **START HERE.html** ואת קובץ ההפעלה יחד. ב־Windows מפעילים **START CUTROOM.bat**, וב־Mac את **START CUTROOM.command**. בחבילה המשולבת פותחים קודם את תיקיית הפלטפורמה המתאימה.
 3. מחכים לסיום ההתקנה ופותחים פרויקט בדפדפן. משאירים את חלון ההפעלה פתוח בזמן העבודה.
 
@@ -54,7 +59,7 @@
 
 ## לפני שמפרסמים
 
-**1.3 Beta היא עדיין גרסת בטא.** שומרים את קובצי המקור, מתחילים בסרטון קצר ובודקים כתוביות, תזמון, סאונד ויצוא. טיוטות AI דורשות בדיקה. מצב הבדיקות והמגבלות מפורטים ב[גרסת מקור B מ־24 בנובמבר](https://github.com/VanoPeradze/cutroom/releases/tag/v1.3-beta-20261124-source-b1), ולא נקבעים לפי הצילומים. [מצב הבטא](BETA_STATUS.md) · [מגבלות ידועות](QUALITY_AND_LIMITS.md).
+**1.3 Beta היא עדיין גרסת בטא.** שומרים את קובצי המקור, מתחילים בסרטון קצר ובודקים כתוביות, תזמון, סאונד ויצוא. טיוטות AI דורשות בדיקה. מצב הבדיקות והמגבלות מפורטים ב[בטא הקליפים מ־28 בנובמבר](https://github.com/VanoPeradze/cutroom/releases/tag/v1.3-beta-20261128-clips2), ולא נקבעים לפי הצילומים. [מצב הבטא](BETA_STATUS.md) · [מגבלות ידועות](QUALITY_AND_LIMITS.md).
 
 [כל המדריכים](README.md) · [קיצורי מקלדת](KEYBOARD_SHORTCUTS.md) · [שינויים](../CHANGELOG.md) · [דיווח על תקלה](https://github.com/VanoPeradze/cutroom/issues/new/choose)
 

@@ -18,8 +18,8 @@
 
 <p align="center">
   <a href="https://cutroom-studio.expo.app/"><strong>Website</strong></a> ·
-  <a href="https://github.com/VanoPeradze/cutroom/releases/download/v1.3-beta-20261124-source-b1/CUTROOM-1.3-Beta-Windows-4a9a5d9.zip"><strong>Windows ZIP</strong></a> ·
-  <a href="https://github.com/VanoPeradze/cutroom/releases/download/v1.3-beta-20261124-source-b1/CUTROOM-1.3-Beta-combined-4a9a5d9.zip"><strong>Mac ZIP</strong></a> ·
+  <a href="https://github.com/VanoPeradze/cutroom/releases/download/v1.3-beta-20261128-clips2/CUTROOM-1.3-Beta-Windows-cdbf6a8.zip"><strong>Windows ZIP</strong></a> ·
+  <a href="https://github.com/VanoPeradze/cutroom/releases/download/v1.3-beta-20261128-clips2/CUTROOM-1.3-Beta-combined-cdbf6a8.zip"><strong>Mac ZIP</strong></a> ·
   <a href="docs/USER_GUIDE_EN.md">User guide</a> ·
   <a href="docs/README_HE.md">Hebrew README</a>
 </p>
@@ -32,13 +32,18 @@
 
 ## What's new
 
-The Source B update lets you add a second recording in parallel from Layout in a saved manual edit. With A available and B empty, choose **Add Source B** without resetting the edit. Frame A and B separately and adjust B-only timing while leaving A intact. Review timing if the recordings started independently.
+**Clips follow your edit.** Set up your camera and screen in **Layout**, then open **Clips → My edit**. Suggested clips use the edited timeline, not just the raw recording. If you've arranged a stacked 9:16 layout, the clip preview and MP4 show both sources where both are present.
 
-These features are available in the [23 November 1.3 Beta](https://github.com/VanoPeradze/cutroom/releases/tag/v1.3-beta-20261123-style-families1). The [changelog](CHANGELOG.md) has the exact behavior and limits.
+To pick your own moments, set **In/Out** in **Edited video** and choose **Add to Clips**. Keep watching without losing your place, then export one saved range or batch-export several as separate MP4s. If a later edit changes what a saved range contains, review it before exporting.
+
+[28 November Clips beta release](https://github.com/VanoPeradze/cutroom/releases/tag/v1.3-beta-20261128-clips2) · [Changelog](CHANGELOG.md)
+
+The earlier [Source B update](https://github.com/VanoPeradze/cutroom/releases/tag/v1.3-beta-20261124-source-b1) lets you add a second recording in parallel from Layout in a saved manual edit. With A available and B empty, choose **Add Source B** without resetting the edit. Frame A and B separately and adjust B-only timing while leaving A intact. Review timing if the recordings started independently.
+
+Also included in this beta:
 
 | Feature | What you get |
 | --- | --- |
-| **Clips board** | Opens from the editor top bar and ranks 15, 30, 45 or 60 second moments of a recording, with a real frame, a preview and the reasons for each. Open a moment in the editor or place it on the timeline; export one or several mapped moments as separate local MP4s. |
 | **Posting kit** | Get suggested titles, a description and hashtags based on saved transcript or gameplay notes. You can copy the text, or use **Write with AI** to draft alternatives. You upload the exported MP4 yourself; CUTROOM does not post to social platforms. |
 | **Gameplay YouTube videos** | Condenses a long recording toward your target length, helps remove menus, loading screens and dead air, and proposes draft chapters, a cold open and short punch-in zooms. Review the suggestions before export. |
 | **Five edit-style families** | Auto, Highlights, Talking Clips, Story and Long YouTube group the available options. Try Talking Clips for a complete spoken moment or Long YouTube for an explainer or condensed gameplay. Saved styles stay unchanged. |
@@ -52,7 +57,7 @@ The 1.3 Beta release also added a neutral-gray light theme, Hebrew-first local t
 ## Highlights
 
 - **Six focused workspaces.** Media, Edit, Layout, Audio, Captions and Output share one player and one timeline.
-- **Clips board for Shorts.** Find the strongest moments of a long recording, then export them with ready titles, description and hashtags.
+- **Clips board for Shorts.** Review suggested moments or save your own ranges, then export in the layout you arranged. Titles, descriptions and hashtags are optional suggestions.
 - **Independent A/B tracks.** Cut, trim and move a camera and a screen recording together or separately, with Undo/Redo and track locks. [Timeline controls](docs/INDEPENDENT_TRACKS.md)
 - **Camera and screen layouts.** Stacked, side by side, picture in picture, camera only or screen only, for a selected range or the entire edit.
 - **Track mixer.** Balance Original, Music, Voiceover, Effects and Master with live level meters. Mute applies to preview and export; Solo is for preview only.
@@ -106,7 +111,7 @@ The 1.3 Beta release also added a neutral-gray light theme, Hebrew-first local t
   </tr>
 </table>
 
-These ten views show the main editing windows. See the [full screen gallery](docs/GALLERY.md) for the capture dates, the Clips and edit-style screens, and what the screenshots do not cover.
+These ten views show the main editing windows. [Open the original Clips screenshot](docs/images/readme/studio-clips-20261122.png?raw=1) (22 November, before the **My edit** and manual range controls). See the [full screen gallery](docs/GALLERY.md) for the capture dates, the Clips and edit-style screens, and what the screenshots do not cover.
 
 ## Quick start
 
@@ -114,8 +119,8 @@ These ten views show the main editing windows. See the [full screen gallery](doc
 
 | Platform | Download | Launcher |
 | --- | --- | --- |
-| **Windows** | [Windows ZIP](https://github.com/VanoPeradze/cutroom/releases/download/v1.3-beta-20261124-source-b1/CUTROOM-1.3-Beta-Windows-4a9a5d9.zip) | **START CUTROOM.bat** |
-| **macOS** | [Mac ZIP](https://github.com/VanoPeradze/cutroom/releases/download/v1.3-beta-20261124-source-b1/CUTROOM-1.3-Beta-combined-4a9a5d9.zip) | **START CUTROOM.command** |
+| **Windows** | [Windows ZIP](https://github.com/VanoPeradze/cutroom/releases/download/v1.3-beta-20261128-clips2/CUTROOM-1.3-Beta-Windows-cdbf6a8.zip) | **START CUTROOM.bat** |
+| **macOS** | [Mac ZIP](https://github.com/VanoPeradze/cutroom/releases/download/v1.3-beta-20261128-clips2/CUTROOM-1.3-Beta-combined-cdbf6a8.zip) | **START CUTROOM.command** |
 
 1. Extract the entire ZIP into a fresh folder. Keep **App**, **START HERE.html** and the launcher together.
 2. Open the launcher beside **App** and let setup finish. In a combined ZIP, open **windows** or **mac** first.
@@ -126,7 +131,7 @@ These ten views show the main editing windows. See the [full screen gallery](doc
 > [!IMPORTANT]
 > Before the first Windows launch, make sure WinGet is available and install the [official Microsoft Visual C++ x64 runtime](https://aka.ms/vc14/vc_redist.x64.exe). The CUTROOM launcher does not install this prerequisite.
 
-The [24 November Source B beta release](https://github.com/VanoPeradze/cutroom/releases/tag/v1.3-beta-20261124-source-b1) includes the exact source, recorded checks and SHA-256 sidecars. Downloads can differ from the current repository. To update, extract a fresh copy separately and back up projects before moving them. The [24 October 1.2 beta](https://github.com/VanoPeradze/cutroom/releases/tag/v1.2-beta-20261024-update1) remains available for rollback.
+The [28 November Clips beta release](https://github.com/VanoPeradze/cutroom/releases/tag/v1.3-beta-20261128-clips2) includes the exact source, recorded checks and SHA-256 sidecars. Downloads can differ from the current repository. To update, extract a fresh copy separately and back up projects before moving them. The [24 October 1.2 beta](https://github.com/VanoPeradze/cutroom/releases/tag/v1.2-beta-20261024-update1) remains available for rollback.
 
 ### Run from source
 
