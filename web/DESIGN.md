@@ -111,6 +111,14 @@ show. An imported image or clip whose file name matches what is said is
 preselected; Place adds it full frame, without its sound, for about 3 s as one
 Undo step. Nothing is searched online.
 
+## Clip content scores
+
+Each Clips card with a transcript also shows Hook, Complete and Clarity
+(`content` from `cutroom/clip_board.py::_content_scores`), each 0–100 with the
+plain reason: what the first line does, whether the clip starts and ends on
+whole sentences, and filler, pace and how much is spoken. They sit beside the
+measured sound/energy strength and never replace it.
+
 ## Composition
 
 The application launcher presents three real starting actions as compact rows beside the welcome statement, followed by recent projects and optional AI setup. It is not a second marketing landing page.

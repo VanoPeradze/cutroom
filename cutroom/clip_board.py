@@ -8,6 +8,7 @@ measured signals relative to this recording, not a prediction of views.
 from __future__ import annotations
 
 import math
+import re
 from typing import Any
 
 from .director import (
@@ -124,6 +125,67 @@ def _events_in(start: float, end: float, events: list[dict[str, Any]]) -> list[s
                    if _finite_number(row.get("start")) < end and _finite_number(row.get("end")) > start})
 
 
+_VIEWER = {"you", "you're", "your", "אתם", "אתה", "את", "שלכם", "שלך"}
+_FILLER = {"um", "umm", "uh", "uhh", "erm", "hmm", "eh", "אממ", "אה", "אהה", "כאילו", "יעני"}
+_WORD = re.compile(r"[^\W_]+(?:'[^\W_]+)?")
+
+
+def _content_scores(start: float, end: float, segments: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """How well the clip works as content, from its transcript alone.
+
+    hook: how strongly the first line grabs attention; complete: whether it
+    starts and ends on whole sentences; clarity: filler, pace and how much is
+    spoken. Each comes with the plain reason, so the score can be checked.
+    """
+    inside = [row for row in segments if _overlaps(start, end, row)]
+    if not inside:
+        return None
+    first, last = inside[0], inside[-1]
+    first_text = str(first.get("text") or "").strip()
+    words = [w.lower() for row in inside for w in _WORD.findall(str(row.get("text") or ""))]
+    if not words:
+        return None
+
+    hook, notes = 30, []
+    if first_text.rstrip().endswith(("?", "؟")):
+        hook += 30; notes.append("opens with a question")
+    if any(ch.isdigit() for ch in first_text):
+        hook += 20; notes.append("a number in the first line")
+    first_words = [w.lower() for w in _WORD.findall(first_text)]
+    if any(w in _VIEWER for w in first_words):
+        hook += 15; notes.append("talks to the viewer")
+    if first_text.rstrip().endswith("!"):
+        hook += 15; notes.append("an exclamation")
+    if sum(1 for w in first_words if len(w) >= 7) >= 2:
+        hook += 10; notes.append("key words up front")
+    hook_note = ", ".join(notes) if notes else "a plain first line"
+
+    starts_clean = _finite_number(first.get("start")) >= start - 0.3
+    ends_clean = _finite_number(last.get("end")) <= end + 0.3 and str(last.get("text") or "").rstrip().endswith((".", "?", "!", "…", "؟"))
+    complete = (50 if starts_clean else 10) + (50 if ends_clean else 10)
+    complete_note = ("starts and ends on whole sentences" if starts_clean and ends_clean else
+                     "starts mid-sentence" if ends_clean else "ends mid-sentence" if starts_clean else "starts and ends mid-sentence")
+
+    spoken = sum(max(0.0, min(end, _finite_number(r.get("end"))) - max(start, _finite_number(r.get("start")))) for r in inside)
+    length = max(0.1, end - start)
+    fillers = sum(1 for w in words if w in _FILLER)
+    pace = len(words) / max(0.5, spoken)
+    clarity, issues = 100, []
+    if fillers:
+        clarity -= min(40, round(400 * fillers / len(words))); issues.append(f"{fillers} filler word{'s' if fillers != 1 else ''}")
+    if pace > 4.2:
+        clarity -= 15; issues.append("very fast speech")
+    if spoken / length < 0.4:
+        clarity -= 20; issues.append("little speech")
+    clarity = max(0, min(100, clarity))
+    clarity_note = ", ".join(issues) if issues else "clear speech with few filler words"
+    return {
+        "hook": {"score": min(100, hook), "note": hook_note},
+        "complete": {"score": complete, "note": complete_note},
+        "clarity": {"score": clarity, "note": clarity_note},
+    }
+
+
 def _reasons(signals: dict[str, Any], strength: int, reactions: int, has_speech: bool,
              sound_events: list[str] | None = None) -> list[dict[str, Any]]:
     reasons: list[dict[str, Any]] = []
@@ -238,5 +300,6 @@ def build_clip_board(project: dict[str, Any], *, length: Any = DEFAULT_LENGTH, c
             "hook": hook,
             "excerpt": excerpt,
             "reasons": _reasons(signals, strength, reactions, bool(excerpt), _events_in(start, end, events)),
+            "content": _content_scores(start, end, segments),
         })
     return {**base, "available": True, "reason": None, "clips": clips}

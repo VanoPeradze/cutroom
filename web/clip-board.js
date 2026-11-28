@@ -13,6 +13,14 @@ export function formatClock(seconds) {
   return hours ? `${hours}:${pad(minutes)}:${pad(rest)}` : `${minutes}:${pad(rest)}`;
 }
 
+/** Hook, completeness and clarity rows from a clip's transcript scores. */
+export function contentRows(content) {
+  if (!content || typeof content !== "object") return [];
+  return [["hook", "Hook"], ["complete", "Complete"], ["clarity", "Clarity"]]
+    .filter(([key]) => Number.isFinite(Number(content[key]?.score)))
+    .map(([key, label]) => ({ key, label, score: Math.max(0, Math.min(100, Math.round(Number(content[key].score)))), note: String(content[key].note || "") }));
+}
+
 export function strengthLabel(strength) {
   const value = Math.max(0, Math.min(100, Math.round(Number(strength) || 0)));
   if (value >= 95) return "Top moment";
@@ -426,6 +434,20 @@ export class ClipBoard {
     }
     reasons.append(this.el("li", "peak", `Peak ${formatClock(clip.peak)}`));
     body.append(reasons);
+    const content = contentRows(clip.content);
+    if (content.length) {
+      const list = this.el("dl", "clip-content");
+      list.setAttribute("aria-label", "How it works as content");
+      for (const row of content) {
+        const item = this.el("div", "clip-content-row");
+        const meter = this.el("span", "clip-content-meter");
+        meter.style.setProperty("--score", String(row.score));
+        meter.setAttribute("aria-hidden", "true");
+        item.append(this.el("dt", null, row.label), meter, this.el("dd", null, `${row.score} · ${row.note}`));
+        list.append(item);
+      }
+      body.append(list);
+    }
 
     const actions = this.el("div", "clip-actions");
     let openButton = this.el("button", "button primary compact", "Open in editor");
